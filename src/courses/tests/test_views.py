@@ -696,6 +696,17 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
+    def test_SemesterList_view__semester_without_dates(self):
+        """The semester list page renders without errors when a semester has a blank
+        name and no first/last day. Regression test for issue #912.
+        """
+        self.client.force_login(self.test_teacher)
+
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        response = self.client.get(reverse('courses:semester_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(semester))
+
     def test_SemesterCreate__without_ExcludedDates__view(self):
         self.client.force_login(self.test_teacher)
 

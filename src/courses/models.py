@@ -282,7 +282,11 @@ class Semester(models.Model):
         ordering = ['first_day']
 
     def __str__(self):
-        return self.name or self.first_day.strftime("%b-%Y")
+        if self.name:
+            return self.name
+        if self.first_day:
+            return self.first_day.strftime("%b-%Y")
+        return f"Semester {self.pk}"
 
     def active_by_date(self):
         # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
@@ -299,6 +303,9 @@ class Semester(models.Model):
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
         excluding weekends and ExcludedDates). '''
+
+        if self.first_day is None or self.last_day is None:
+            return 0
 
         excluded_days = self.excluded_days()
         if upto_today and date.today() < self.last_day:
