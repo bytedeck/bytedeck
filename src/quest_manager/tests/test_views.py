@@ -841,16 +841,52 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertErrorMessage(response)
 
-    def test_quest_not_available(self):
-        """ If a quest is not available to a student, they should not be able to complete it """
-        # TODO
-        # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-        # self.quest.visibel_to_student = False
-        # self.quest.save()
+    def test_quest_not_available__unpublished(self):
+        """ If a quest is unpublished (moved to drafts) while a student's submission is
+        in progress, they should not be able to complete it by entering the completion
+        url directly. Regression test for issue #535.
+        """
+        self.quest.published = False
+        self.quest.save()
 
-        # response = self.post_complete(comment="")
-        # # Should redirect back to the submission with error message
-        # self.assertEqual(response.status_code, 404)
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__archived(self):
+        """ If a quest is archived while a student's submission is in progress, they
+        should not be able to complete it by entering the completion url directly.
+        Regression test for issue #535.
+        """
+        self.quest.archived = True
+        self.quest.save()
+
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__staff_also_404(self):
+        """ Staff also can't complete submissions of unpublished quests: the default
+        QuestSubmission queryset excludes unpublished/archived quests for everyone,
+        so the view's get_object_or_404 lookup fails.
+        """
+        self.client.force_login(self.test_teacher)
+        self.quest.published = False
+        self.quest.save()
+        draft_comment = baker.make(Comment, text="test draft comment")
+        staff_sub = baker.make(QuestSubmission, user=self.test_teacher, quest=self.quest,
+                               draft_comment=draft_comment, semester=self.semester)
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[staff_sub.id]),
+                data={'comment_text': "test comment", 'complete': True}
+            )
+        self.assertEqual(response.status_code, 404)
+        staff_sub.refresh_from_db()
+        self.assertFalse(staff_sub.is_completed)
 
     def test_notifications_own_student(self):
         """ Teacher should NOT be notified when their student complete's a quest, because it
@@ -966,18 +1002,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(self.sub.is_completed)
 
         self.assertErrorMessage(response)
-
-    # def test_quest_not_available(self):
-    #     """ If a quest is not available to a student, they should not be able to complete it """
-    #     # TODO
-    #     # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-    #     # self.quest.visibel_to_student = False
-    #     # self.quest.save()
-
-    #     # response = self.post_complete(button="comment", comment="")
-    #     # # Should redirect back to the submission with error message
-    #     # self.assertEqual(response.status_code, 404)
-    #     pass
 
     def test_comment_button_notifications_own_student(self):
         """ Teacher should be notified when their student comments on an already complete's a quest
