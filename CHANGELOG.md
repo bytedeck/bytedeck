@@ -4,6 +4,47 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.28.0] 2026-07-12 Marcus III
+* New Features:
+ - Deck Requests:
+    - New decks can now be requested directly from the public ByteDeck site instead of by contacting us. Visitors fill in a short reCAPTCHA-protected form (name and email), click the verification link emailed to them (valid for one hour, good for one deck), and are guided through creating their own deck. The new deck's owner then receives a welcome email with their initial login credentials [#1892] [#1903]
+ - Library:
+    - Campaigns can now be exported to the shared Library: a new export button on the campaign detail page (enabled once the campaign has published quests) leads to a confirmation page that lists all of the campaign's quests and flags any that already exist in the Library [#1849] [#1850]
+    - Exporting a campaign whose quests already exist in the Library now copies those quests into the exported campaign instead of blocking the export, so a campaign can be exported even when every quest in it is already in the Library [#1884]
+ - Campaigns:
+    - Publish a campaign and all of the quests inside it in one click with the new publish button on the campaign detail page, instead of publishing each quest one at a time. (Handy before exporting to the Library, since only campaigns with published quests can be exported.) [#1843]
+ - Quests:
+    - New "Student Statuses" page for teachers: a new button among a quest's action buttons opens a table showing every student's status on that quest — including students who haven't started it — with links to their submissions [#918]
+* Tweaks:
+ - Library:
+    - When importing a single quest that already exists on your deck, the confirmation page now shows a prominent red warning explaining that overwriting existing quests individually is not yet supported. (Previously the notice was easy to miss and contradicted the campaign-import message, which says existing quests get overwritten.) [#1876] [#1878]
+ - Quest Approvals:
+    - Search on the Approvals tab now also matches the Group, User, and Status columns, so it behaves the same as search on the other submission tables [#1875]
+ - Campaigns & Badges:
+    - The campaign detail, campaign delete, and badge-type delete pages now show the reason something can't be deleted in a red alert well, instead of only in a tooltip on the disabled delete button [#1861]
+* Refactor/Optimizations:
+ - Django 5.2 preparation: removed APIs dropped between Django 4.2 and 5.2, and fixed two broken unpinned dependencies (namegenerator, redis-py) [#1897]
+ - Eliminated the worst N+1 query patterns across approvals, badge lists, profile pages, the campaigns list, badge detail, ranks list, and popover counts [#1898]
+ - Further N+1 reductions on the profile detail page and the notifications list [#1902]
+ - Hardened rank and rarity caches against signal-less ORM writes [#1898]
+ - New deck owners now receive a secure random initial password (generated once and emailed) instead of a guessable one, and deck-request verification links are opaque single-use nonces that keep the requester's name and email out of the URL [#1903]
+* Bugfixes:
+ - Deck Requests:
+    - Creating a new deck no longer silently fails to set up the deck owner's account (the setup ran in the wrong database schema, which made it a no-op in production), and verification / welcome emails are now sent in the background so the signup pages don't hang while mail goes out [#1903]
+ - Quest Maps:
+    - Maps no longer draw connections for inverted ("NOT") OR-prerequisites: the exclude-NOT option was silently ignored for the OR slot of a prerequisite, so a map could include quests whose only link was a NOT condition [#1900] [#1901]
+ - Library:
+    - Importing from the Library now also checks your archived quests for duplicates, so you can no longer end up with a second copy of a quest you had archived [#1877]
+    - Export-to-Library options are no longer offered while browsing the shared Library deck itself [#1888]
+ - Quests:
+    - Archived quests can now be deleted directly — the delete page previously returned "Not Found" for them, forcing you to unarchive first [#1874]
+* Devops:
+ - Fixed the randomly-flaky CI failures in the prerequisites signal tests (`Rank.DoesNotExist` and missing-map errors):
+    - Tests that create `Prereq` objects now use deterministic content types instead of random ones [#1899]
+    - A custom test runner gives `baker.make(Prereq)` valid generic-foreign-key targets, so it can no longer fabricate dangling prereqs that crash the map-generation signal [#1903]
+    - `PrerequisitesSignalsTest.test_on_quest_badge_save_with_rank_prereq__creation` now wraps its `baker.make` in `captureOnCommitCallbacks(execute=True)` so the map-generation signal can't fire before its Rank is committed (direct commit 7a070fd, no PR)
+
+
 ### [1.27.0] 2025-08-15 Marcus II
 * New Features:
  - New quest tab for Archived quests [#1800] and full rework of process for Archiving quests [#1846]
