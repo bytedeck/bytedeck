@@ -108,6 +108,72 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     return quest.name
 
 
+@app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.grant_badge_assertions_for_badge', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
+def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
+    """When a badge's prerequisites change, grant the badge to all current students who
+    now meet its conditions, and notify their teachers of each auto-grant (issue #1157).
+    This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively, like
+    update_conditions_for_quest.
+
+    Args:
+        badge_id (int): The badge with updated prerequisites (i.e. this badge is the parent_object of an updated Prereq),
+        start_from_user_id (int): user_id to start with for the next bunch of calculations
+    """
+    from badges.models import Badge, BadgeAssertion
+    from notifications.signals import notify
+    from siteconfig.models import SiteConfig
+
+    badge = Badge.objects.filter(id=badge_id).first()
+    if not badge or not badge.published:
+        # If the badge is deleted or unpublished while this task is running/queued.
+        return f"Badge {badge_id} no longer exists or is not published."
+
+    # check if this already started recently, if so, don't need to start a new one.
+    # for example, when prereqs are updated, one might be deleted and two more added, that will result in 3 signals!
+    cache_key = f'grant_badge_assertions_for_badge_{badge_id}_wait'
+    if start_from_user_id == 1 and cache.get(cache_key):
+        return f"Skipping task for badge {badge_id}, already started."
+    cache.set(cache_key, True, 1)
+
+    users = CourseStudent.objects.all_users_for_active_semester()
+    users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
+
+    user = None
+    for user in users:
+        # badges with no prereqs are manually granted only, hence no_prereq_means=False
+        # (matches BadgeManager.get_conditions_met)
+        if (
+            not BadgeAssertion.objects.all_for_user_badge(user, badge, False).exists()
+            and Prereq.objects.all_conditions_met(badge, user, no_prereq_means=False)
+        ):
+            assertion = BadgeAssertion.objects.create_assertion(user, badge)
+
+            # let the student's teachers know the badge was granted automatically
+            deck_ai = SiteConfig.get().deck_ai
+            notify.send(
+                deck_ai,
+                action=assertion,
+                target=badge,
+                recipient=deck_ai,
+                affected_users=list(user.profile.current_teachers()),
+                verb=f"auto-granted {user.get_username()} the badge:",
+                icon="<i class='fa fa-lg fa-certificate text-warning'></i>",
+            )
+
+    if user:
+        # user is the last user that was updated, so continue from the next one.
+        minimum_user_id = user.id + 1
+        if User.objects.filter(id__gte=minimum_user_id).exists():
+            # there are more users, so keep going with the next bunch.
+            self.apply_async(
+                queue='default',
+                countdown=1,  # delay a bit to give some time for the last group to finish, so we don't hog all the resources.
+                kwargs={'badge_id': badge.id, 'start_from_user_id': minimum_user_id}
+            )
+    # Return value is displayed at the end of the celery log
+    return badge.name
+
+
 @app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.update_quest_conditions_for_user', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
 def update_quest_conditions_for_user(self, user_id):
     user = User.objects.filter(id=user_id).first()
