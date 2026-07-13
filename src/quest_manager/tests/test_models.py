@@ -370,6 +370,31 @@ class QuestTestModel(TenantTestCase):
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
 
+    @freeze_time('2018-10-12 00:54:00', tz_offset=0)
+    def test_is_repeat_available__infinite_repeats_per_semester(self):
+        """A quest with unlimited repeats (max_repeats=-1) that is also set to repeat
+        per semester is repeatable after each completion. Regression test for issue
+        #1531 where this combination made the quest never repeatable, causing 404s
+        for returning students.
+        """
+        baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
+        student = baker.make(User)
+        quest = baker.make(Quest, name="quest-infinite-semester-repeatable", max_repeats=-1,
+                           repeat_per_semester=True)
+
+        # in progress, shouldn't be available.
+        sub = QuestSubmission.objects.create_submission(student, quest)
+        self.assertFalse(quest.is_repeat_available(student))
+
+        # available again after completion
+        sub.mark_completed()
+        self.assertTrue(quest.is_repeat_available(student))
+
+        # and still available after more completions this semester (unlimited repeats)
+        sub2 = QuestSubmission.objects.create_submission(student, quest)
+        sub2.mark_completed()
+        self.assertTrue(quest.is_repeat_available(student))
+
     def test_correct_ordinal_submission(self):
         student = baker.make('user')
         quest = baker.make(Quest, max_repeats=-1)

@@ -674,11 +674,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         if not time_of_last:
             return False
 
-        # if haven't maxed out repeats
+        # if haven't maxed out repeats (max_repeats = -1 means unlimited repeats)
         if self.repeat_per_semester:
             # get all completed this semester
             qs = QuestSubmission.objects.all_completed(user=user).filter(quest=self)
-            if qs.count() > self.max_repeats:
+            if qs.count() > self.max_repeats and self.max_repeats != -1:
                 return False
         elif latest_sub.ordinal > self.max_repeats and self.max_repeats != -1:
             return False
