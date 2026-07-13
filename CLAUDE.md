@@ -92,3 +92,4 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 * Call `model.full_clean()` before `model.save()`.
 * Commit messages should reference issues where applicable ("Closes #123").
 * Claude Code (web sessions): after pushing a branch with an open PR, subscribe to the PR's activity (`subscribe_pr_activity`) and follow up on CI failures and review comments until the PR is merged or closed.
+* Claude Code: sign off everything you post to GitHub (PR descriptions, comments, review comments, issues) with "- Claude Code".
