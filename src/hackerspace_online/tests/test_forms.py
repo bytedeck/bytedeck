@@ -135,6 +135,13 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         pass
 
     def get_social_login(self, provider=None):
+        # django-allauth 65 requires SocialLogin.provider for serialize() and
+        # for the login flow's provider.app checks; resolve it from the
+        # SocialApp when setup_social_app() has run.
+        if provider is None:
+            app = SocialApp.objects.filter(provider='google').first()
+            if app:
+                provider = app.get_provider(request=None)
         extra_data = {
             "email": "user@example.com",
         }
@@ -225,8 +232,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         # when a user chooses a google account to sign up. serialize() needs a real
         # provider instance (backed by a SocialApp) since django-allauth 65.
         self.setup_social_app()
-        app = SocialApp.objects.get(provider='google')
-        sociallogin = self.get_social_login(provider=app.get_provider(request=None))
+        sociallogin = self.get_social_login()
         session["socialaccount_sociallogin"] = sociallogin.serialize()
         session.save()
 
@@ -755,7 +761,10 @@ class PublicContactFormTest(TenantTestCase):
     def test_init(self):
         PublicContactForm()
 
-    def test_valid_data(self):
+    @patch("hackerspace_online.forms.ReCaptchaField.clean", return_value="PASSED")
+    def test_valid_data(self, mock_captcha):
+        # django-recaptcha 4 removed the RECAPTCHA_TESTING/'PASSED' test hook,
+        # so mock the field like the deck-request tests do
         form = PublicContactForm(
             data={
                 'name': 'First Last',
@@ -765,3 +774,4 @@ class PublicContactFormTest(TenantTestCase):
             }
         )
         self.assertTrue(form.is_valid())
+        mock_captcha.assert_called()
