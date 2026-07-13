@@ -2,7 +2,7 @@ Django>=4.2.16,<4.3
 
 # All django-* packages below are pinned to ranges that support BOTH Django 4.2
 # and 5.2, so the framework can be flipped to 5.2 LTS without touching them.
-django-allauth>=65.18,<66
+django-allauth[socialaccount]>=65.18,<66  # the extra pulls pyjwt[crypto]/oauthlib/requests, needed by the Google provider
 django-bootstrap-datepicker-plus>=5.0.5,<6.0
 django-celery-beat>=2.8,<3.0
 django-colorful>=1.4,<2.0
