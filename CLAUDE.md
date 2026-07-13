@@ -31,7 +31,9 @@ The site only works via `http://localhost:8000` (not `0.0.0.0`) because the mult
 # Full test suite + style check (expected before every commit/PR)
 python src/manage.py test src && flake8 src
 
-# Faster: parallel, stop on first failure
+# Faster: parallel, stop on first failure. Caveat: when a test fails under --parallel,
+# the runner can crash with "TypeError: cannot pickle 'traceback' object" and hide the
+# real failure — rerun serially to diagnose. CI runs the suite serially.
 python src/manage.py test src --parallel --failfast
 
 # Single app / class / test
@@ -45,6 +47,8 @@ coverage html
 ```
 
 CI (GitHub Actions) also runs `python src/manage.py check` and `python src/manage.py makemigrations --check --dry-run`, so never leave model changes without migrations.
+
+Known order-dependent flakes (they reproduce on a clean `develop`, so rerun the affected app standalone before assuming your change broke them): `QuestPrereqsUpdate.test_post_save_button__*` can fail in some multi-app runs, and running `library` tests before `hackerspace_online` in the same process breaks several `hackerspace_online` test classes in `setUpClass` (tenant-domain signal). CI's alphabetical app discovery avoids the latter ordering.
 
 ### Other useful commands
 
@@ -75,11 +79,12 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 
 ### Other structural notes
 
-* `src/hackerspace_online/` is the Django project package (settings, urls, celery, middleware). A custom test runner (`hackerspace_online/test_runner.py`) patches `model_bakery.baker.make` for the `Prereq` model's GenericForeignKeys — relevant if baker-made `Prereq` objects behave unexpectedly in tests.
+* `src/hackerspace_online/` is the Django project package (settings, urls, celery, middleware). A custom test runner (`hackerspace_online/test_runner.py`) patches `model_bakery.baker.make` for the `Prereq` model's GenericForeignKeys — relevant if baker-made `Prereq` objects behave unexpectedly in tests. The hazard generalizes: for *any* model with a GenericForeignKey or `ForeignKey(ContentType)` (e.g. `Comment`), model_bakery fills an unspecified content type with a random installed model — including table-less throwaway classes leaked into the app registry by other tests — so always pass the GFK target explicitly (or build the object deterministically) in tests.
 * `src/prerequisites/` implements the generic prerequisite system (quests/badges unlocking via GenericForeignKeys), used by `quest_manager` and `badges`.
+* `src/library/` implements the Shared Library: a special tenant schema that acts as a cross-deck library of quests and campaigns (gated by `SiteConfig.enable_shared_library`), with importer/exporter logic for copying content between schemas.
 * `src/djcytoscape/` generates the visual quest map.
 * `src/bytedeck_summernote/` customizes the django-summernote WYSIWYG editor used across content models.
-* Users: `is_superadmin`-type users exist in all schemas (owner of a tenant; on the public schema they can create tenants), `is_staff` = teachers, regular users = students.
+* Users: each deck has an owner (`SiteConfig.deck_owner`, forced to `is_superuser` — see `SiteConfigForm.clean_deck_owner`); `is_staff` = teachers; regular users = students. On the public schema, superusers can create tenants.
 * Local email lands in the `_sent_mail/` directory (used e.g. for the deck-owner confirmation flow).
 
 ## Code Style & PR Conventions
@@ -89,7 +94,8 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 * Bug fixes must be test-driven: include a test that fails without the fix.
 * New server-side code is expected to be 100% covered (all logical branches); verify with coverage before a PR.
 * All methods and classes need docstrings; non-trivial code needs comments explaining why (link sources like Stack Overflow when code is borrowed).
-* Call `model.full_clean()` before `model.save()`.
+* Prefer calling `model.full_clean()` before `model.save()` in new code (much existing code doesn't — match the surrounding style rather than adding drive-by `full_clean()` calls).
 * Commit messages should reference issues where applicable ("Closes #123").
+* Long-running feature branches: the Project Competencies epic (#1905) integrates on the `competencies` branch — sub-issue PRs target `competencies`, not `develop`. The feature branch is synced with `develop` (automated daily merge) and will be merged back when ready.
 * Claude Code (web sessions): after pushing a branch with an open PR, subscribe to the PR's activity (`subscribe_pr_activity`) and follow up on CI failures and review comments until the PR is merged or closed.
 * Claude Code: sign off everything you post to GitHub (PR descriptions, comments, review comments, issues) with "- Claude Code".
