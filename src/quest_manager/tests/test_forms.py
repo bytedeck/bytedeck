@@ -2,7 +2,12 @@ from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 
-from quest_manager.forms import QuestForm
+from quest_manager.forms import (
+    QuestForm,
+    SubmissionQuickReplyForm,
+    SubmissionQuickReplyFormStudent,
+    SubmissionReplyForm,
+)
 
 
 class QuestFormTest(TenantTestCase):
@@ -35,3 +40,32 @@ class QuestFormTest(TenantTestCase):
         form = QuestForm(data=form_data)
         self.assertFalse(form.is_valid())
         self.assertIn("Blocking quests cannot be Hideable.", form.errors['__all__'][0])
+
+
+class QuickReplyFormsEscapeHTMLTest(TenantTestCase):
+    """The plain-text (non-wysiwyg) reply forms are accessible to all users, so
+    all HTML entered in them must be completely escaped. Regression tests for
+    issue #1343 where scripts entered in the quick reply form would execute.
+    """
+
+    xss_payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+    escaped_payload = ('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
+                       '&lt;img src=x onerror=alert(1)&gt;')
+
+    def test_SubmissionQuickReplyFormStudent__escapes_html(self):
+        """All HTML in the student quick reply form is escaped on cleaning."""
+        form = SubmissionQuickReplyFormStudent(data={'comment_text': self.xss_payload})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)
+
+    def test_SubmissionQuickReplyForm__escapes_html(self):
+        """All HTML in the staff quick reply form is escaped on cleaning."""
+        form = SubmissionQuickReplyForm(data={'comment_text': self.xss_payload})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)
+
+    def test_SubmissionReplyForm__escapes_html(self):
+        """All HTML in the reply form is escaped on cleaning."""
+        form = SubmissionReplyForm(data={'comment_text': self.xss_payload})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)

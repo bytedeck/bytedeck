@@ -1,5 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
+from django.utils.html import escape
 
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
@@ -259,7 +260,19 @@ class SubmissionFormStaff(SubmissionForm):
         )
 
 
-class SubmissionReplyForm(forms.Form):
+class EscapeCommentTextMixin:
+    """Completely escapes HTML entered in a form's `comment_text` field.
+
+    Plain-text (non-wysiwyg) comment fields are accessible to all users, so no
+    HTML at all is allowed in them, otherwise scripts can be injected and will
+    execute when the comment is rendered (see issue #1343).
+    """
+
+    def clean_comment_text(self):
+        return escape(self.cleaned_data.get('comment_text', ''))
+
+
+class SubmissionReplyForm(EscapeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
@@ -267,7 +280,7 @@ class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
     pass
 
 
-class SubmissionQuickReplyForm(forms.Form):
+class SubmissionQuickReplyForm(EscapeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
@@ -277,7 +290,7 @@ class SubmissionQuickReplyForm(forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
-class SubmissionQuickReplyFormStudent(forms.Form):
+class SubmissionQuickReplyFormStudent(EscapeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
 
