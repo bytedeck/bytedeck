@@ -740,6 +740,21 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
+    def test_complete_quick_reply_form__escapes_html(self):
+        """HTML entered in the quick reply form is completely escaped when the comment
+        is saved, so scripts can't execute when the comment is rendered. Regression
+        test for issue #1343.
+        """
+        payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+        response = self.post_complete(submission_comment=payload)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertNotIn('<script', comments[0].text)
+        self.assertNotIn('<img', comments[0].text)
+        self.assertIn('&lt;script&gt;', comments[0].text)
+
     def test_complete__no_verification(self):
         """ Checks if a student completing a submission that causes their XP to go over
         the threshold for 'Digital Novice' rank (60 XP) generates a notification
