@@ -89,3 +89,4 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 * All methods and classes need docstrings; non-trivial code needs comments explaining why (link sources like Stack Overflow when code is borrowed).
 * Call `model.full_clean()` before `model.save()`.
 * Commit messages should reference issues where applicable ("Closes #123").
+* Claude Code (web sessions): after pushing a branch with an open PR, subscribe to the PR's activity (`subscribe_pr_activity`) and follow up on CI failures and review comments until the PR is merged or closed.
