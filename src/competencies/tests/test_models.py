@@ -28,6 +28,17 @@ class CompetencyModelTest(TenantTestCase):
     def setUp(self):
         self.competency = baker.make(Competency, name="Communicating")
 
+    def make_assessment(self, competency):
+        """ baker.make(CompetencyAssessment) would fill the generic FK's content type with a
+        random model — any installed model, even table-less throwaway classes leaked into the
+        app registry by other tests — making the suite randomly flaky.
+        Build a deterministic assessment instead. """
+        return CompetencyAssessment.objects.create(
+            user=baker.make(User),
+            competency=competency,
+            level=ProficiencyLevel.PROFICIENT,
+        )
+
     def test_object_creation(self):
         self.assertIsInstance(self.competency, Competency)
         self.assertEqual(str(self.competency), "Communicating")
@@ -41,7 +52,7 @@ class CompetencyModelTest(TenantTestCase):
 
     def test_soft_delete_via_active_flag(self):
         """ Deactivating a competency doesn't remove it or its related objects """
-        assessment = baker.make(CompetencyAssessment, competency=self.competency)
+        assessment = self.make_assessment(self.competency)
         self.competency.active = False
         self.competency.save()
 
@@ -50,7 +61,7 @@ class CompetencyModelTest(TenantTestCase):
 
     def test_delete_protected_when_evidence_exists(self):
         """ A competency referenced by assessment evidence can never be hard-deleted """
-        baker.make(CompetencyAssessment, competency=self.competency)
+        self.make_assessment(self.competency)
         with self.assertRaises(ProtectedError):
             self.competency.delete()
 
