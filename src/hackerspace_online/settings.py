@@ -812,10 +812,12 @@ if TESTING:
         'LOCATION': 'test-loc'
     }
 
-    # django-allauth >= 65 rate-limits failed logins (per IP + per user) via the
-    # cache. Every test shares one client IP, so the suite's many deliberate
-    # wrong-password logins would trip the limiter and 429 unrelated tests.
-    ACCOUNT_RATE_LIMITS = {}
+    # django-allauth >= 65 rate-limits auth flows via the cache: failed logins
+    # per IP/user, and verification-email resends (1 per 3 min per address,
+    # silently skipped when limited). Tests share one client IP and resend
+    # within seconds, so disable rate limits entirely. Note: False is the only
+    # way to disable — a dict (even {}) is merged over allauth's defaults.
+    ACCOUNT_RATE_LIMITS = False
 
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
