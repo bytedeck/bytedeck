@@ -29,12 +29,30 @@ class SiteConfigForm(forms.ModelForm):
         "deck_owner",
         "enable_shared_library",
         "allow_staff_export",
+        "enable_competencies",
+    ]
+
+    # Only shown when the competencies feature is enabled.
+    competency_label_fields = [
+        "competency_label_level_1",
+        "competency_label_level_2",
+        "competency_label_level_3",
+        "competency_label_level_4",
     ]
 
     def __init__(self, *args, **kwargs):
         is_deck_owner = kwargs.pop('is_deck_owner', False)
 
         super().__init__(*args, **kwargs)
+
+        # The proficiency scale labels are meaningless (and just clutter) until
+        # the competencies feature is turned on.
+        self.advanced_fields = list(self.advanced_fields)
+        if self.instance.pk and self.instance.enable_competencies:
+            self.advanced_fields += self.competency_label_fields
+        else:
+            for field_name in self.competency_label_fields:
+                del self.fields[field_name]
 
         if not is_deck_owner:
             for field in self.advanced_fields:
@@ -43,6 +61,7 @@ class SiteConfigForm(forms.ModelForm):
         self.fields['enable_google_signin'].disabled = True
         self.fields['enable_shared_library'].label = self.fields['enable_shared_library'].label + " - EXPERIMENTAL WIP"
         self.fields['allow_staff_export'].label = self.fields['allow_staff_export'].label + " - EXPERIMENTAL WIP"
+        self.fields['enable_competencies'].label = self.fields['enable_competencies'].label + " - EXPERIMENTAL WIP"
 
         submit_btn = '<input type="submit" value="{{ submit_btn_value }}" class="btn btn-success"/> '
 

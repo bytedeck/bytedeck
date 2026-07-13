@@ -289,6 +289,35 @@ class SiteConfig(models.Model):
         help_text="Automatically regenerate maps when contents are changed."
     )
 
+    enable_competencies = models.BooleanField(
+        verbose_name="Enable Competencies", default=False,
+        help_text="If enabled, you can attach competencies to quests and record proficiency-based \
+            assessments (Emerging / Developing / Proficient / Extending) when approving submissions."
+    )
+
+    # Configurable labels for the 4-point proficiency scale (see competencies.models.ProficiencyLevel).
+    # BC's official terms are the defaults; other decks may want different words entirely.
+    competency_label_level_1 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 1", default="Emerging", max_length=50,
+        help_text="The label displayed for the first (lowest) level of the proficiency scale."
+    )
+
+    competency_label_level_2 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 2", default="Developing", max_length=50,
+        help_text="The label displayed for the second level of the proficiency scale."
+    )
+
+    competency_label_level_3 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 3", default="Proficient", max_length=50,
+        help_text="The label displayed for the third level of the proficiency scale. \
+            This is the default level demonstrated by completing a quest."
+    )
+
+    competency_label_level_4 = models.CharField(
+        verbose_name="Proficiency Scale Label, Level 4", default="Extending", max_length=50,
+        help_text="The label displayed for the fourth (highest) level of the proficiency scale."
+    )
+
     def __str__(self):
         return self.site_name
 
@@ -329,6 +358,17 @@ class SiteConfig(models.Model):
             return self.banner_image.url
         else:
             return static('img/banner.png')
+
+    def get_competency_scale_labels(self):
+        """ Returns a dict mapping each proficiency level int (see competencies.models.ProficiencyLevel)
+        to this deck's custom label for that level.
+        """
+        return {
+            1: self.competency_label_level_1,
+            2: self.competency_label_level_2,
+            3: self.competency_label_level_3,
+            4: self.competency_label_level_4,
+        }
 
     def set_active_semester(self, semester):
         from courses.models import Semester  # import here to prevent ciruclar imports

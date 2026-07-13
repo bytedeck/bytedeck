@@ -126,6 +126,7 @@ TENANT_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    'competencies',
 )
 
 
@@ -210,6 +211,7 @@ INSTALLED_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    'competencies',
     'library',
 )
 
