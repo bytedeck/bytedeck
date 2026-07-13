@@ -1,0 +1,71 @@
+{% extends "competencies/base.html" %}
+
+{% block heading_inner %}Import Competencies: Preview{% endblock %}
+
+{% block content %}
+
+    <p>
+        <strong>{{ competency_set.name|default:"Uploaded competency set" }}</strong>
+        {% if competency_set.jurisdiction or competency_set.subject or competency_set.grade %}
+            <br><small>
+                {% if competency_set.jurisdiction %}{{ competency_set.jurisdiction }}{% endif %}
+                {% if competency_set.subject %} &mdash; {{ competency_set.subject }}{% endif %}
+                {% if competency_set.grade %} (Grade {{ competency_set.grade }}){% endif %}
+            </small>
+        {% endif %}
+        {% if competency_set.source_url %}
+            <br><small><a href="{{ competency_set.source_url }}" target="_blank" rel="noopener">{{ competency_set.source_url }}</a></small>
+        {% endif %}
+    </p>
+
+    <p>Select the competencies to import. Entries marked
+        <span class="label label-info">update</span> already exist on this deck and will be
+        updated in place; entries marked <span class="label label-success">new</span> will be created.</p>
+
+    <form action="" method="post">
+        {% csrf_token %}
+
+        <table class="table table-striped">
+            <thead>
+                <tr>
+                    <th><input type="checkbox" id="toggle-all-entries" checked title="Select all"></th>
+                    <th>Competency</th>
+                    <th>Category</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in entries %}
+                    <tr>
+                        <td><input type="checkbox" name="entries" value="{{ forloop.counter0 }}" checked></td>
+                        <td>
+                            {{ entry.name }}
+                            {% if entry.description %}<br><small class="text-muted">{{ entry.description }}</small>{% endif %}
+                            {% if entry.source_id %}<br><small class="text-muted">{{ entry.source_id }}</small>{% endif %}
+                        </td>
+                        <td>{{ entry.category }}</td>
+                        <td>
+                            {% if entry.status == 'update' %}
+                                <span class="label label-info">update</span>
+                            {% else %}
+                                <span class="label label-success">new</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <a href="{% url 'competencies:import' %}" role="button" class="btn btn-danger">Back</a>
+        <input type="submit" value="Import Selected" class="btn btn-success"/>
+    </form>
+
+{% endblock %}
+
+{% block js %}
+    <script>
+        document.getElementById('toggle-all-entries').addEventListener('change', function () {
+            document.querySelectorAll('input[name="entries"]').forEach(cb => cb.checked = this.checked);
+        });
+    </script>
+{% endblock %}

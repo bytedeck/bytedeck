@@ -1,0 +1,119 @@
+{
+    "format": "bytedeck-competency-set",
+    "version": 1,
+    "name": "BC Mathematics 8 Curricular Competencies",
+    "jurisdiction": "BC",
+    "subject": "Mathematics",
+    "grade": "8",
+    "source_url": "https://curriculum.gov.bc.ca/curriculum/mathematics/8/core",
+    "entries": [
+        {
+            "source_id": "bc:math:8:reasoning-1",
+            "name": "Use logic and patterns to solve puzzles and play games",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:reasoning-2",
+            "name": "Use reasoning and logic to explore, analyze, and apply mathematical ideas",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:reasoning-3",
+            "name": "Estimate reasonably",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:reasoning-4",
+            "name": "Demonstrate and apply mental math strategies",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:reasoning-5",
+            "name": "Use tools or technology to explore and create patterns and relationships, and test conjectures",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:reasoning-6",
+            "name": "Model mathematics in contextualized experiences",
+            "description": "",
+            "category": "Reasoning and analyzing"
+        },
+        {
+            "source_id": "bc:math:8:solving-1",
+            "name": "Apply multiple strategies to solve problems in both abstract and contextualized situations",
+            "description": "",
+            "category": "Understanding and solving"
+        },
+        {
+            "source_id": "bc:math:8:solving-2",
+            "name": "Develop, demonstrate, and apply mathematical understanding through play, inquiry, and problem solving",
+            "description": "",
+            "category": "Understanding and solving"
+        },
+        {
+            "source_id": "bc:math:8:solving-3",
+            "name": "Visualize to explore mathematical concepts",
+            "description": "",
+            "category": "Understanding and solving"
+        },
+        {
+            "source_id": "bc:math:8:solving-4",
+            "name": "Engage in problem-solving experiences that are connected to place, story, cultural practices, and perspectives relevant to local First Peoples communities, the local community, and other cultures",
+            "description": "",
+            "category": "Understanding and solving"
+        },
+        {
+            "source_id": "bc:math:8:communicating-1",
+            "name": "Use mathematical vocabulary and language to contribute to mathematical discussions",
+            "description": "",
+            "category": "Communicating and representing"
+        },
+        {
+            "source_id": "bc:math:8:communicating-2",
+            "name": "Explain and justify mathematical ideas and decisions",
+            "description": "",
+            "category": "Communicating and representing"
+        },
+        {
+            "source_id": "bc:math:8:communicating-3",
+            "name": "Communicate mathematical thinking in many ways",
+            "description": "",
+            "category": "Communicating and representing"
+        },
+        {
+            "source_id": "bc:math:8:communicating-4",
+            "name": "Represent mathematical ideas in concrete, pictorial, and symbolic forms",
+            "description": "",
+            "category": "Communicating and representing"
+        },
+        {
+            "source_id": "bc:math:8:connecting-1",
+            "name": "Reflect on mathematical thinking",
+            "description": "",
+            "category": "Connecting and reflecting"
+        },
+        {
+            "source_id": "bc:math:8:connecting-2",
+            "name": "Connect mathematical concepts to each other and to other areas and personal interests",
+            "description": "",
+            "category": "Connecting and reflecting"
+        },
+        {
+            "source_id": "bc:math:8:connecting-3",
+            "name": "Use mathematical arguments to support personal choices",
+            "description": "",
+            "category": "Connecting and reflecting"
+        },
+        {
+            "source_id": "bc:math:8:connecting-4",
+            "name": "Incorporate First Peoples worldviews and perspectives to make connections to mathematical concepts",
+            "description": "",
+            "category": "Connecting and reflecting"
+        }
+    ]
+}
