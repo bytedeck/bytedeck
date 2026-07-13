@@ -159,6 +159,32 @@ class SemesterModelTest(TenantTestCase):
     def test_semester_creation(self):
         self.assertIsInstance(self.semester, Semester)
 
+    def test_str__name_set(self):
+        """`str(semester)` returns the name when one is set."""
+        semester = baker.make(Semester, name='Fall 2019', first_day=self.semester_start)
+        self.assertEqual(str(semester), 'Fall 2019')
+
+    def test_str__name_blank(self):
+        """`str(semester)` falls back to the first day formatted as mmm-YYYY when name is blank."""
+        self.assertEqual(str(self.semester), 'Sep-2019')
+
+    def test_str__name_blank_and_first_day_none(self):
+        """`str(semester)` doesn't crash when name is blank and first_day is None.
+        Regression test for issue #912 where the semester list page raised
+        `'NoneType' object has no attribute 'strftime'`.
+        """
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        self.assertEqual(str(semester), f'Semester {semester.pk}')
+
+    def test_num_days__dates_none(self):
+        """`num_days()` returns 0 instead of crashing when the semester has no
+        first or last day set. Regression test for issue #912 (the semester list
+        page renders num_days for every semester).
+        """
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        self.assertEqual(semester.num_days(), 0)
+        self.assertEqual(semester.num_days(upto_today=True), 0)
+
     def test_is_open(self):
         # before semester starts: False
         before_start = self.semester_start - timedelta(days=1)
