@@ -16,6 +16,18 @@ jobs:
         run: docker ps -a
       - name: Check for potential django problems
         run: docker compose run web python src/manage.py check
+      - name: Check production deployment security settings
+        # Exercises the DEBUG=off (production/staging) config path so the
+        # SECURE_*/cookie-security settings can't silently regress. Overrides
+        # DEBUG and SECRET_KEY because .env.example ships DEBUG=True and an
+        # intentionally-weak key; -e vars win over .env (django-environ uses
+        # setdefault semantics). --fail-level WARNING turns the deploy checks
+        # into a hard gate.
+        run: >
+          docker compose run --rm
+          -e DEBUG=False
+          -e SECRET_KEY=ci-deploy-check-only-not-a-real-secret-key-0123456789abcdef
+          web python src/manage.py check --deploy --fail-level WARNING
       - name: Check for missing migrations
         run: docker compose run web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
