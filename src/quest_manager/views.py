@@ -148,9 +148,18 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy("quests:categories")
 
     def get_context_data(self, **kwargs):
+        """Add the campaign creation form context.
+
+        Args:
+            **kwargs: extra context passed through to the template.
+
+        Returns:
+            dict: template context including the form heading, submit button label,
+            and `cancel_url` — the campaigns list, since a new campaign has no
+            detail view to return to yet.
+        """
         kwargs["heading"] = "Create New Campaign"
         kwargs["submit_btn_value"] = "Create"
-        # a new campaign has no detail view to return to yet, so cancel goes to the list
         kwargs["cancel_url"] = reverse("quests:categories")
 
         return super().get_context_data(**kwargs)
@@ -164,6 +173,16 @@ class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
     # the user to the campaign detail view they started the edit from (issue #1931)
 
     def get_context_data(self, **kwargs):
+        """Add the campaign update form context.
+
+        Args:
+            **kwargs: extra context passed through to the template.
+
+        Returns:
+            dict: template context including the form heading, submit button label,
+            and `cancel_url` — the campaign's detail view, so cancelling returns
+            to the page the edit was started from (issue #1931).
+        """
         kwargs["heading"] = "Update Campaign"
         kwargs["submit_btn_value"] = "Update"
         kwargs["cancel_url"] = self.object.get_absolute_url()
@@ -239,9 +258,11 @@ class CategoryPublish(View):
         link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
         messages.success(request, f'Campaign "{link}" and all quests published.')
 
-        # only follow `next` if it stays on this host, to prevent open redirects
+        # only follow `next` if it stays on this host (and keeps https when the
+        # request came in over https), to prevent open redirects and downgrades
         next_url = request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+        if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
             return redirect(next_url)
         return redirect(category)
 

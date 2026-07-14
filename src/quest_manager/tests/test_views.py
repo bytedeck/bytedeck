@@ -2461,16 +2461,32 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
             data={'next': 'https://evil.example.com/'})
         self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
 
+    def test_CategoryPublish_view__ignores_http_next_url_on_secure_request(self):
+        """A `next` parameter that would downgrade a secure (https) request to plain
+        http must be ignored, falling back to the campaign's detail view.
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]),
+            data={'next': 'http://testserver/quests/campaigns/inactive/'},
+            secure=True)
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
+
     def test_CategoryList_view__publish_button_on_inactive_tab(self):
         """The inactive campaigns list must show the publish button for unpublished
-        campaigns; the available tab (published campaigns) must not show it (issue #1931).
+        campaigns, with a hidden `next` field returning to the list after publishing;
+        the available tab (published campaigns) must not show the button (issue #1931).
         """
         unpublished_campaign = baker.make(Category, published=False)
         published_campaign = baker.make(Category, published=True)
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('quests:categories_inactive'))
+        inactive_url = reverse('quests:categories_inactive')
+        response = self.client.get(inactive_url)
         self.assertContains(response, reverse('quests:category_publish', args=[unpublished_campaign.id]))
+        self.assertContains(response, f'name="next" value="{inactive_url}"')
 
         response = self.client.get(reverse('quests:categories'))
         self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
