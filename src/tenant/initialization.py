@@ -117,8 +117,15 @@ def create_site_config_object():
     config = SiteConfig.objects.create()
     name = Tenant.get().name.replace("_", " ").replace("-", " ").title()
     if name:
-        config.site_name = f"{name} Deck"
-        config.site_name_short = name
+        # Tenant.name allows up to 62 chars (the Postgres schema-name limit), but the
+        # SiteConfig display fields are shorter (site_name=50, site_name_short=20), so
+        # truncate to each field's max_length. Without this, a long deck name raised
+        # "value too long for type character varying(20)" and aborted tenant creation.
+        # Both fields remain editable by the deck owner in Site Config afterwards.
+        site_name_max = SiteConfig._meta.get_field("site_name").max_length
+        site_name_short_max = SiteConfig._meta.get_field("site_name_short").max_length
+        config.site_name = f"{name} Deck"[:site_name_max]
+        config.site_name_short = name[:site_name_short_max]
         config.save()
 
 
