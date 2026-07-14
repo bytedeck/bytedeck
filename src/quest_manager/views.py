@@ -134,6 +134,19 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
             # students shouldn't be able to see inactive quests when they access this view
             quests = Quest.objects.get_active().filter(campaign=self.object)
 
+        # The template reads each quest's icon (which falls back to the campaign
+        # icon), tags, and calls quest.expired() (twice), so select_related the
+        # campaign, prefetch tags and annotate is_expired to avoid a handful of
+        # queries per quest. This mirrors the quest list view (see quest_list()).
+        quests = quests.select_related("campaign").prefetch_related("tags")
+        not_expired_subquery = quests.not_expired().values("id")
+        quests = quests.annotate(
+            is_expired=ExpressionWrapper(
+                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
+                output_field=BooleanField(),
+            )
+        )
+
         kwargs['category_displayed_quests'] = quests
         kwargs['can_export'] = SiteConfig.get().can_user_export_to_library(self.request.user)
 
