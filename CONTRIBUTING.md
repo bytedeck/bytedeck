@@ -15,8 +15,8 @@ You can run tests either locally, or through the web container:
    * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
      `python src/manage.py test src --parallel --failfast`
    * Only run tests from a single app, for example: `python src/manage.py test src/announcements`
-   * Only run tests from a single test class: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests`
-   * Only run a single test: `python src/manage.py test src.announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
+   * Only run tests from a single test class: `python src/manage.py test announcements.tests.test_views.AnnouncementViewTests`
+   * Only run a single test: `python src/manage.py test announcements.tests.test_views.AnnouncementViewTests.test_teachers_have_archive_button`
 1. This project uses git pre-commit hooks, set up with the Python "[pre-commit](https://pre-commit.com/)" module. These hooks trigger a series of checks every time a new commit is made. They ensure that the code is formatted correctly, and some even auto-correct certain simple issues. However, we don't have pre-commit hooks for running our Django tests, so the full test suite must still be ran separately. All pre-commit hooks are defined in the [.pre-commit-config.yaml](.pre-commit-config.yaml) file. Note that if auto-corrections are made, the commit won't complete, and you'll need to run the commit command again. It can also be helpful to run these hooks manually to ensure you have everything setup correctly:
 
    * using venv: `pre-commit run`
