@@ -884,12 +884,17 @@ if not DEBUG and not TESTING:
     # is in place.
     SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", default=False)
 
-    # nginx performs the HTTP->HTTPS redirect at the edge (listen 80 -> 301),
-    # so Django's own redirect is intentionally left off by default (above).
-    # Silence the corresponding deploy-check warning so `check --deploy
-    # --fail-level WARNING` stays green; remove this if SECURE_SSL_REDIRECT is
-    # ever turned on at the Django layer.
-    SILENCED_SYSTEM_CHECKS += ["security.W008"]
+    # Deploy-check warnings we intentionally don't satisfy, silenced so
+    # `check --deploy --fail-level WARNING` stays green:
+    #   security.W008 (SECURE_SSL_REDIRECT): nginx already redirects
+    #     HTTP->HTTPS at the edge (listen 80 -> 301). Remove if the redirect
+    #     is ever turned on at the Django layer.
+    #   security.W021 (SECURE_HSTS_PRELOAD): preload is a deliberate, hard to
+    #     reverse opt-in (every tenant subdomain must stay HTTPS-only, and
+    #     removal from the browser preload list is slow). Enable HSTS first,
+    #     then flip SECURE_HSTS_PRELOAD via env and drop this silence when
+    #     ready to submit to the preload list.
+    SILENCED_SYSTEM_CHECKS += ["security.W008", "security.W021"]
 
     # HSTS: tell browsers to use HTTPS only, for this domain and every tenant
     # subdomain. includeSubDomains matters here because every deck is a
