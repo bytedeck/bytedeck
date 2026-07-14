@@ -7,7 +7,11 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          # This job doesn't push git afterwards, so don't leave the GITHUB_TOKEN
+          # persisted in .git/config where later steps/actions could read it.
+          persist-credentials: false
       - name: Copy sample environment variables
         run: cp .env.example .env
       - name: Build the docker compose stack
@@ -16,6 +20,18 @@ jobs:
         run: docker ps -a
       - name: Check for potential django problems
         run: docker compose run web python src/manage.py check
+      - name: Check production deployment security settings
+        # Exercises the DEBUG=off (production/staging) config path so the
+        # SECURE_*/cookie-security settings can't silently regress. Overrides
+        # DEBUG and SECRET_KEY because .env.example ships DEBUG=True and an
+        # intentionally-weak key; -e vars win over .env (django-environ uses
+        # setdefault semantics). --fail-level WARNING turns the deploy checks
+        # into a hard gate.
+        run: >
+          docker compose run --rm
+          -e DEBUG=False
+          -e SECRET_KEY=ci-deploy-check-only-not-a-real-secret-key-0123456789abcdef
+          web python src/manage.py check --deploy --fail-level WARNING
       - name: Check for missing migrations
         run: docker compose run web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
@@ -24,4 +40,7 @@ jobs:
           docker compose exec -T web coverage combine
           docker compose exec -T web coverage xml
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

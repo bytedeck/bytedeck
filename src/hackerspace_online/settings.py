@@ -859,3 +859,65 @@ if DEBUG and not TESTING:
     # DEBUG_TOOLBAR_CONFIG = {
     #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
     # }
+
+
+# PRODUCTION / STAGING SECURITY SETTINGS ###############################
+# Hardening applied whenever DEBUG is off -- i.e. production AND staging
+# (staging mirrors prod). These are intentionally NOT applied in local
+# development, where the site is served over plain http://localhost, nor
+# during tests. Django's `manage.py check --deploy` verifies these.
+# Docs: https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+if not DEBUG and not TESTING:
+
+    # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
+    # Without this, request.is_secure() is always False behind the proxy,
+    # which would break https-aware redirect logic. This requires nginx to
+    # forward the original scheme to the app: for the uwsgi_pass block, add
+    #   uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
+    # SECURITY: only safe because Django is reachable *only* via nginx (uwsgi
+    # socket on the internal network), so a client cannot spoof this header.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Only ever send the session and CSRF cookies over HTTPS. Safe to enable
+    # unconditionally here because all real traffic is HTTPS; the browser adds
+    # the Secure flag regardless of the proxy header above.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True  # Django default; set explicitly for clarity
+
+    # Redirect plain HTTP to HTTPS from within Django. nginx already does this
+    # at the edge (listen 80 -> 301), so this is defense-in-depth. Left OFF by
+    # default and env-gated: enabling it before nginx forwards the scheme (see
+    # SECURE_PROXY_SSL_HEADER above) would cause an infinite redirect loop.
+    # Flip to True (SECURE_SSL_REDIRECT=True in the env) once the uwsgi_param
+    # is in place.
+    SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", default=False)
+
+    # Deploy-check warnings we intentionally don't satisfy, silenced so
+    # `check --deploy --fail-level WARNING` stays green:
+    #   security.W008 (SECURE_SSL_REDIRECT): nginx already redirects
+    #     HTTP->HTTPS at the edge (listen 80 -> 301). Remove if the redirect
+    #     is ever turned on at the Django layer.
+    #   security.W021 (SECURE_HSTS_PRELOAD): preload is a deliberate, hard to
+    #     reverse opt-in (every tenant subdomain must stay HTTPS-only, and
+    #     removal from the browser preload list is slow). Enable HSTS first,
+    #     then flip SECURE_HSTS_PRELOAD via env and drop this silence when
+    #     ready to submit to the preload list.
+    SILENCED_SYSTEM_CHECKS += ["security.W008", "security.W021"]
+
+    # HSTS: tell browsers to use HTTPS only, for this domain and every tenant
+    # subdomain. includeSubDomains matters here because every deck is a
+    # subdomain. Ramp SECURE_HSTS_SECONDS up gradually; only enable preload
+    # once you're certain every subdomain is HTTPS-only and intend to submit
+    # to the browser preload list.
+    SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=60 * 60 * 24 * 365)  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+
+    # Misc hardening flagged by `check --deploy`. NOSNIFF and the "same-origin"
+    # referrer policy match Django's own defaults; X_FRAME_OPTIONS "DENY" is
+    # already the effective default via XFrameOptionsMiddleware -- set here so
+    # the intent is explicit and the deploy check stays green.
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+    X_FRAME_OPTIONS = "DENY"
