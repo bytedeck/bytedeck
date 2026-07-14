@@ -2326,17 +2326,33 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.title, data['title'])
 
     def test_CategoryUpdate_view(self):
-        """ Admin should be able to update a course """
+        """ Admin should be able to update a course. Saving returns to the campaign's
+        detail view (the page the edit was started from), not the campaigns list
+        (issue #1931). """
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'My Updated Title',
             'published': False,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
-        self.assertRedirects(response, reverse('quests:categories'))
+        self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
+
+    def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
+        """The cancel button on the campaign update form must link back to the
+        campaign's detail view, not the campaigns list (issue #1931)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_update', args=[1]))
+        self.assertContains(response, f'href="{reverse("quests:category_detail", args=[1])}"')
+
+    def test_CategoryCreate_view__cancel_button_returns_to_list(self):
+        """The cancel button on the campaign create form must link back to the
+        campaigns list, since a new campaign has no detail view to return to."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_create'))
+        self.assertContains(response, f'href="{reverse("quests:categories")}"')
 
     def test_CategoryDelete_view(self):
         """
@@ -2425,7 +2441,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         Test CategoryPublish end-to-end:
         - Staff can see the "Publish Campaign and all its Quests" button on an unpublished campaign.
         - Posting to the publish URL as staff sets published=True on the campaign and all related quests,
-            and redirects back to the categories list.
+            and redirects back to the campaign's detail view (issue #1931).
         - After publishing, the button is no longer shown to staff.
         - Non-staff POST to the publish URL is forbidden (403) and does not change publish states.
         """
@@ -2443,8 +2459,8 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         publish_url = reverse('quests:category_publish', args=[campaign.id])
         response = self.client.post(publish_url)
 
-        # Should redirect after successful publish
-        self.assertRedirects(response, reverse('quests:categories'))
+        # Should redirect back to the campaign's detail view after successful publish
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
 
         campaign.refresh_from_db()
         quest_1.refresh_from_db()
@@ -2482,6 +2498,78 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(quest_1.published)
         self.assertFalse(quest_2.published)
         self.assertFalse(archived_quest.published)
+
+    def test_CategoryPublish_view__redirects_to_next_url(self):
+        """Publishing with a safe `next` parameter (e.g. from the campaigns list view)
+        must redirect back to that page instead of the campaign's detail view (issue #1931).
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        next_url = reverse('quests:categories_inactive')
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]), data={'next': next_url})
+        self.assertRedirects(response, next_url)
+
+    def test_CategoryPublish_view__ignores_unsafe_next_url(self):
+        """A `next` parameter pointing off-site must be ignored (open redirect protection),
+        falling back to the campaign's detail view.
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]),
+            data={'next': 'https://evil.example.com/'})
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
+
+    def test_CategoryPublish_view__ignores_http_next_url_on_secure_request(self):
+        """A `next` parameter that would downgrade a secure (https) request to plain
+        http must be ignored, falling back to the campaign's detail view.
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]),
+            data={'next': 'http://testserver/quests/campaigns/inactive/'},
+            secure=True)
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
+
+    def test_CategoryList_view__publish_button_on_inactive_tab(self):
+        """The inactive campaigns list must show the publish button for unpublished
+        campaigns, with a hidden `next` field returning to the list after publishing;
+        the available tab (published campaigns) must not show the button (issue #1931).
+        """
+        unpublished_campaign = baker.make(Category, published=False)
+        published_campaign = baker.make(Category, published=True)
+        self.client.force_login(self.test_teacher)
+
+        inactive_url = reverse('quests:categories_inactive')
+        response = self.client.get(inactive_url)
+        self.assertContains(response, reverse('quests:category_publish', args=[unpublished_campaign.id]))
+        self.assertContains(response, f'name="next" value="{inactive_url}"')
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
+
+    def test_CategoryDetail_view__staff_see_unpublished_quests_of_unpublished_campaign(self):
+        """Staff must see a campaign's unpublished quests on the campaign detail page
+        regardless of whether the campaign itself is published; only archived quests
+        are hidden. Guards the staff quest list of inactive campaigns (issue #1931).
+        """
+        campaign = baker.make(Category, published=False)
+        published_quest = baker.make(Quest, campaign=campaign, published=True)
+        unpublished_quest = baker.make(Quest, campaign=campaign, published=False)
+        archived_quest = baker.make(Quest, campaign=campaign, published=False, archived=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+
+        displayed_quests = list(response.context['category_displayed_quests'])
+        self.assertIn(published_quest, displayed_quests)
+        self.assertIn(unpublished_quest, displayed_quests)
+        self.assertNotIn(archived_quest, displayed_quests)
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):

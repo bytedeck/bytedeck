@@ -19,11 +19,11 @@
     <div class="mb-3">
       {% if "/drafts/" in request.path %}
         <a href="#" class="btn btn-primary" onclick="submitBulkAction('publish')">
-          <i class="fa fa-upload"></i> Publish All Selected
+          <i class="fa fa-eye"></i> Publish All Selected
         </a>
       {% elif "/available/" in request.path %}
         <a href="#" class="btn btn-primary" onclick="submitBulkAction('unpublish')">
-          <i class="fa fa-upload"></i> Unpublish All Selected
+          <i class="fa fa-eye-slash"></i> Unpublish All Selected
         </a>
       {% endif %}
       {% if "/archived/" in request.path %}

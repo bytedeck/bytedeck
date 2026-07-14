@@ -61,6 +61,17 @@
               </a>
             {% endif %}
 
+            {% if not object.published %}
+              <form method="post" action="{% url 'quests:category_publish' object.id %}" class="preview-action-form">
+                {% csrf_token %}
+                {% comment %} return to this list after publishing, instead of the campaign detail default {% endcomment %}
+                <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                <button type="submit" class="btn btn-success" title="Publish Campaign and all its Quests">
+                  <i class="fa fa-fw fa-eye"></i>
+                </button>
+              </form>
+            {% endif %}
+
               <a class="btn btn-danger"
                 {% if object.quest_count != 0 %}
                   disabled

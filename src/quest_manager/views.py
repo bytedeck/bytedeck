@@ -3,6 +3,7 @@ import uuid
 
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -160,8 +161,19 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
     success_url = reverse_lazy("quests:categories")
 
     def get_context_data(self, **kwargs):
+        """Add the campaign creation form context.
+
+        Args:
+            **kwargs: extra context passed through to the template.
+
+        Returns:
+            dict: template context including the form heading, submit button label,
+            and `cancel_url` — the campaigns list, since a new campaign has no
+            detail view to return to yet.
+        """
         kwargs["heading"] = "Create New Campaign"
         kwargs["submit_btn_value"] = "Create"
+        kwargs["cancel_url"] = reverse("quests:categories")
 
         return super().get_context_data(**kwargs)
 
@@ -170,11 +182,23 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
     fields = ("title", "short_description", "icon", "published")
     model = Category
-    success_url = reverse_lazy("quests:categories")
+    # no success_url: UpdateView falls back to the object's get_absolute_url(), returning
+    # the user to the campaign detail view they started the edit from (issue #1931)
 
     def get_context_data(self, **kwargs):
+        """Add the campaign update form context.
+
+        Args:
+            **kwargs: extra context passed through to the template.
+
+        Returns:
+            dict: template context including the form heading, submit button label,
+            and `cancel_url` — the campaign's detail view, so cancelling returns
+            to the page the edit was started from (issue #1931).
+        """
         kwargs["heading"] = "Update Campaign"
         kwargs["submit_btn_value"] = "Update"
+        kwargs["cancel_url"] = self.object.get_absolute_url()
 
         return super().get_context_data(**kwargs)
 
@@ -231,21 +255,29 @@ class CategoryPublish(View):
         with all related quests using the model method `publish_with_quests()`. On success,
         adds a success message linking to the campaign detail. On failure, adds an error message.
 
-        Finally, redirects the user to the campaigns list view.
+        Finally, redirects the user back to the page the publish button was clicked on: the
+        `next` POST parameter if it is a safe local URL (the campaigns list view provides it),
+        otherwise the campaign's detail view (issue #1931).
 
         Args:
             request: The HTTP request object.
             pk: Primary key of the campaign to publish.
 
         Returns:
-            HttpResponseRedirect to the campaigns list page.
+            HttpResponseRedirect to the `next` URL or the campaign detail page.
         """
         category = get_object_or_404(Category, pk=pk)
         category.publish_with_quests()
         link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
         messages.success(request, f'Campaign "{link}" and all quests published.')
 
-        return redirect("quests:categories")
+        # only follow `next` if it stays on this host (and keeps https when the
+        # request came in over https), to prevent open redirects and downgrades
+        next_url = request.POST.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            return redirect(next_url)
+        return redirect(category)
 
 
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
