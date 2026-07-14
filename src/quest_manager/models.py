@@ -722,6 +722,11 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
         """Returns True if the quest has expired, False otherwise.
         See QuestQueryset.expired() for details.
         """
+        # If the queryset annotated ``is_expired`` (as the quest list and campaign
+        # detail views do), reuse it instead of issuing a query. Templates call
+        # this for every quest in a list, so per-row queries add up quickly.
+        if hasattr(self, "is_expired"):
+            return self.is_expired
         # utilize existing code in QuestQuerySet method not_expired()
         return not Quest.objects.filter(id=self.id).not_expired().exists()
 

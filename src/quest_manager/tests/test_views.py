@@ -16,6 +16,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
 from django.utils import timezone
@@ -2264,6 +2266,31 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         displayed_quests = response.context["category_displayed_quests"]
         intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
         self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
+
+    def test_CategoryDetail_view__query_count_flat_as_quests_grow(self):
+        """The campaign detail page prefetches tags and annotates is_expired, so
+        its query count does not grow with the number of quests in the campaign
+        (the template reads tags and calls quest.expired() for every quest)."""
+        self.client.force_login(self.test_teacher)
+        campaign = baker.make(Category)
+        url = reverse('quests:category_detail', kwargs={"pk": campaign.pk})
+
+        def make_quests(n):
+            for _ in range(n):
+                quest = baker.make(Quest, campaign=campaign)
+                quest.tags.add("shared-tag")
+
+        make_quests(2)
+        self.client.get(url)  # warm per-request caches (SiteConfig, content types)
+        with CaptureQueriesContext(connection) as few_queries:
+            self.client.get(url)
+
+        make_quests(4)  # 6 quests total
+        with CaptureQueriesContext(connection) as many_queries:
+            self.client.get(url)
+
+        # without the prefetch + annotation each extra quest adds several queries
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
     def test_CategoryDetail_view__displays_published_status_when_false(self):
         """The Campaign Info panel must display "Published: False" for an unpublished

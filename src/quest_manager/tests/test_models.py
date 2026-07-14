@@ -573,6 +573,34 @@ class SubmissionTestModel(TenantTestCase):
         self.assertIsNone(self.submission.get_minutes_to_complete())
 
 
+class QuestExpiredAnnotationTest(TenantTestCase):
+    """Quest.expired() is called for every quest rendered in list templates, so
+    it reuses an ``is_expired`` annotation from the queryset when one is present
+    instead of issuing a query per call."""
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+    def test_expired__prefers_is_expired_annotation(self):
+        """When the instance carries an is_expired annotation, expired() returns
+        it without issuing a query."""
+        quest = baker.make(Quest)
+
+        quest.is_expired = True  # simulate the queryset annotation
+        with self.assertNumQueries(0):
+            self.assertTrue(quest.expired())
+
+        quest.is_expired = False
+        with self.assertNumQueries(0):
+            self.assertFalse(quest.expired())
+
+    def test_expired__falls_back_to_query_without_annotation(self):
+        """Without the annotation, expired() still computes the value from the DB;
+        a quest with no expiry date has not expired."""
+        quest = baker.make(Quest, date_expired=None)
+        self.assertFalse(quest.expired())
+
+
 class QuestManagerPrefetchTest(TenantTestCase):
     """The Drafts and Archived staff tabs render the same template rows as the
     'Available' tab, which reads each quest's campaign, editor profile and tags.
