@@ -2250,6 +2250,26 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
         self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
 
+    def test_CategoryDetail_view__displays_published_status_when_false(self):
+        """The Campaign Info panel must display "Published: False" for an unpublished
+        campaign. Regression test for the `{% firstof %}` template tag swallowing
+        falsy values, which left the "Published:" line blank when the campaign
+        was unpublished.
+        """
+        campaign = baker.make(Category, published=False)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: False")
+
+    def test_CategoryDetail_view__displays_published_status_when_true(self):
+        """The Campaign Info panel must display "Published: True" for a published campaign."""
+        campaign = baker.make(Category, published=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: True")
+
     def test_CategoryCreate_view(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
