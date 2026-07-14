@@ -8,6 +8,10 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          # This job doesn't push git afterwards, so don't leave the GITHUB_TOKEN
+          # persisted in .git/config where later steps/actions could read it.
+          persist-credentials: false
       - name: Copy sample environment variables
         run: cp .env.example .env
       - name: Build the docker compose stack

@@ -214,12 +214,20 @@ can be rebuilt.
 policy, `SECURE_PROXY_SSL_HEADER`). `manage.py check --deploy` is run in CI
 against the `DEBUG=False` path to prevent regressions.
 
-`SECURE_SSL_REDIRECT` is left **off** by default because nginx already redirects
-HTTP→HTTPS at the edge. To enable it at the Django layer, nginx must forward the
-scheme to uwsgi — add `uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;` to the
-`location /` block in `nginx/bytedeck.aws.conf` — then set
-`SECURE_SSL_REDIRECT=True` in the env. Enabling it *without* that param causes an
-infinite redirect loop.
+nginx **must** forward the request scheme to uwsgi — `nginx/bytedeck.aws.conf`
+sets `uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;` in the `location /` block,
+which pairs with `SECURE_PROXY_SSL_HEADER` in settings. This is required for
+correct behaviour, not just for redirects: without it `request.is_secure()` is
+always `False` behind the proxy, so `build_absolute_uri()` emits `http://` links
+(password-reset emails, OAuth callbacks, pagination) even though the site is
+HTTPS-only.
+
+`SECURE_SSL_REDIRECT` is a separate, optional layer, left **off** by default
+because nginx already redirects HTTP→HTTPS at the edge. To also enforce it inside
+Django, set `SECURE_SSL_REDIRECT=True` in the env — but only with the
+`HTTP_X_FORWARDED_PROTO` param above in place. Enabling it *without* the
+forwarded scheme causes an infinite redirect loop (Django never sees a secure
+request, so it redirects every request forever).
 
 ## Troubleshooting
 
