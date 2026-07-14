@@ -554,7 +554,12 @@ class QuestManager(models.Manager):
             Returns:
                 QuerySet of draft quests if the user is staff or a TA with editable draft quests, empty otherwise.
         """
-        qs = self.get_queryset().filter(published=False)
+        # These quests render the same template rows as the staff "available"
+        # tab, which reads each quest's campaign, editor profile and tags, so
+        # prefetch them here too (the available queryset already does).
+        qs = self.get_queryset().filter(published=False).select_related(
+            "campaign", "editor__profile"
+        ).prefetch_related("tags")
 
         if user.is_staff:
             return qs
@@ -572,7 +577,11 @@ class QuestManager(models.Manager):
             QuerySet of archived quests if user is staff, empty list otherwise
         """
         if user.is_staff:
-            qs = self.get_queryset(include_archived=True).filter(archived=True)
+            # Same template as the "available" tab (see all_drafts), so
+            # prefetch campaign, editor profile and tags to avoid per-row queries.
+            qs = self.get_queryset(include_archived=True).filter(archived=True).select_related(
+                "campaign", "editor__profile"
+            ).prefetch_related("tags")
             return qs
         return self.get_queryset().none()
 

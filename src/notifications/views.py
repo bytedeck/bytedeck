@@ -54,13 +54,9 @@ def list_unread(request):
 @non_public_only_view
 @login_required
 def read_all(request):
-    notifications = Notification.objects.all_unread(request.user)
-
-    for note in notifications:
-        note.unread = False
-        note.time_read = timezone.now()
-        note.save()
-
+    # mark every unread notification read in a single UPDATE instead of
+    # saving each row individually.
+    Notification.objects.all().mark_all_read(request.user)
     return redirect('notifications:list')
 
 
@@ -94,7 +90,12 @@ def ajax(request):
     if request.method == "POST":
 
         limit = 15
-        notifications = Notification.objects.all_unread(request.user)
+        # get_link() reads the sender/action/target generic FKs of each
+        # notification, so prefetch them to avoid 3 extra queries per row
+        # (this endpoint fires on essentially every authenticated page load).
+        notifications = Notification.objects.all_unread(request.user).prefetch_related(
+            'sender_object', 'target_object', 'action_object',
+        )
         count = notifications.count()
         # limit number of items else the list in the menu will go off
         # the bottom of the screen and can't get the links at the bottom...
