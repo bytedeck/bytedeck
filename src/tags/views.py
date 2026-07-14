@@ -108,6 +108,18 @@ class TagDetailStudent(TagDetail):
         return super().get(*args, **kwargs)
 
     def get_quest_submissions(self):
+        """Return this user's approved quest submissions for the current tag,
+        each with an ``is_multiple`` attribute set.
+
+        The queryset is evaluated once (with the quest select_related) and the
+        number of submissions per quest is counted in memory, rather than
+        running a COUNT query for every submission, to determine whether a
+        submission's name needs an ordinal suffix.
+
+        Returns:
+            list[QuestSubmission]: the evaluated submissions, each annotated in
+            Python with a boolean ``is_multiple`` attribute.
+        """
         # select_related the quest since the template reads submission.quest, and
         # evaluate the queryset once so we can count submissions per quest in
         # memory instead of a COUNT query per row.
@@ -127,6 +139,18 @@ class TagDetailStudent(TagDetail):
         return submissions
 
     def get_badge_assertions(self):
+        """Return this user's badge assertions for the current tag, each with an
+        ``is_multiple`` attribute set.
+
+        The queryset is evaluated once (with the badge select_related) and the
+        number of assertions per badge is counted in memory, rather than running
+        a COUNT query for every assertion, to determine whether an assertion's
+        name needs an ordinal suffix.
+
+        Returns:
+            list[BadgeAssertion]: the evaluated assertions, each annotated in
+            Python with a boolean ``is_multiple`` attribute.
+        """
         # select_related the badge since the template reads assertion.badge, and
         # evaluate the queryset once so we can count assertions per badge in
         # memory instead of a COUNT query per row.
