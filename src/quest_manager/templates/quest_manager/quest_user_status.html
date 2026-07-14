@@ -1,0 +1,110 @@
+{% extends "quest_manager/base.html" %}
+{% load utility_tags %}
+
+{% block heading_inner %}Completion Statuses{% endblock %}
+
+{% block content %}
+  <h3>Quest: {{ q.name }}</h3>
+
+  {% include "quest_manager/buttons.html" %}
+
+  <div class="media quest-icon-description">
+    <div class="media-left">
+      <img class="media-object icon-lg img-rounded" src="{{ q.get_icon_url }}" alt="icon" />
+    </div>
+    <div class="media-body">
+      {{ q.short_description }}
+    </div>
+  </div>
+
+  <div id="quest-info-{{q.id}}" class="panel panel-primary panel-top">
+    <div class="panel-heading">
+      <h3 class="panel-title">Quest Info</h3>
+    </div>
+    <div class="panel-body">
+      <div class="row">
+        <div class="col-sm-6">
+          <ul class="list-unstyled">
+            <li><h4>XP: {{q.xp}}{% if q.xp_can_be_entered_by_students %}+ <small>(student entered)</small>{% endif %}</h4></li>
+            <li>Campaign: {% if q.campaign %}{% if user.is_staff %}<a href="{% url 'quests:category_detail' q.campaign.id %}">{{ q.campaign }}</a>{% else %}{{ q.campaign }}{% endif %}{% else %}-{% endif %}</li>
+            <li>Expiry: {{q.date_expired}}</li>
+            <li>Repeatable: {% if q.max_repeats == 0 %}No
+                   {% else %}
+                     {% if q.max_repeats == -1 %} Unlimited
+                     {% else %} {{q.max_repeats}} time{{q.max_repeats|pluralize}} max
+                     {% endif %}
+                     {% if q.hours_between_repeats > 0 %}
+                     - every {{ q.hours_between_repeats}} hrs
+                     {% endif %}
+                  {% endif %}</li>
+          </ul>
+        </div>
+        <div class="col-sm-6">
+          <ul class="list-unstyled">
+            <li>Maps: {% include 'djcytoscape/snippets/map-list.html' %}</li>
+            {% if request.user.is_staff %}
+            <li>{% tag_name %}s: {% with q as object %}{% include 'tags/snippets/tag-list.html' %}{% endwith %}</li>
+            {% else %}
+            <li>{% tag_name %}s: {% with q as object %}{% include 'tags/snippets/tag-list.html' with user_obj=request.user %}{% endwith %}</li>
+            {% endif %}
+            {% if q.max_repeats != 0 %}
+            <li>Maximum total XP: {% if q.max_xp == -1 %} Unlimited
+                {% else %} {{q.max_xp}}
+                {% endif %}
+            </li>
+            {% endif %}
+            <li>Prerequisites:
+                  {% if request.user.is_staff and not dont_edit_prereqs %}<a class="btn btn-info btn-xs" href="{% url 'quests:quest_prereqs_update' q.id %}">Edit</a>{% endif %}
+                  {% with q as object %}{% include 'prerequisites/current_prereq_list.html' %}{% endwith %}
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <h5>Status Breakdown</h5>
+  <table class="table" style="width: 350px;">
+      {% for stat in status_stats %}
+      <tr>
+          <td>{{ stat.status }}:</td>
+          <td>{{ stat.count }} ({{ stat.percent }})</td>
+      </tr>
+      {% endfor %}
+  </table>
+
+  {% if user_status_list %}
+    <table id="user-status-table"
+          class="user-status-table"
+          data-toggle="table"
+          data-classes="table table-striped table-bordered table-hover"
+          data-search="true"
+          data-trim-on-search="false">
+      <thead>
+        <tr>
+          <th data-field="user" data-sortable="true">User</th>
+          <th data-field="status">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in user_status_list %}
+        <tr>
+          <td>
+            <a href="{{ entry.user.profile.get_absolute_url }}">{{ entry.user.username }}</a>
+          </td>
+          <td>
+            {% if entry.submission %}
+              <a href="{{ entry.submission.get_absolute_url }}">{{ entry.status }}</a>
+            {% else %}
+              {{ entry.status }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No active students found.</p>
+  {% endif %}
+{% endblock %}

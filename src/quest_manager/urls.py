@@ -68,6 +68,7 @@ urlpatterns = [
     re_path(r'^(?P<pk>[0-9]+)/archive/$', views.QuestArchive.as_view(), name="quest_archive"),
     re_path(r'^(?P<quest_id>[0-9]+)/unarchive/', views.unarchive, name='unarchive'),
     re_path(r'^bulk-edit/$', views.QuestBulkEditView.as_view(), name='bulk_edit_quests'),
+    re_path(r'^(?P<quest_id>[0-9]+)/user-status/$', views.quest_user_status, name='quest_user_status'),
     re_path(r'^(?P<quest_id>[0-9]+)/start/$', views.start, name='start'),
     re_path(r'^(?P<quest_id>[0-9]+)/hide/$', views.hide, name='hide'),
     re_path(r'^(?P<quest_id>[0-9]+)/unhide/$', views.unhide, name='unhide'),
@@ -96,6 +97,7 @@ urlpatterns = [
     path('campaigns/inactive/', views.CategoryList.as_view(), name='categories_inactive'),
     path('campaigns/add/', views.CategoryCreate.as_view(), name='category_create'),
     path('campaigns/<pk>/', views.CategoryDetail.as_view(), name='category_detail'),
+    path('campaigns/<int:pk>/publish/', views.CategoryPublish.as_view(), name='category_publish'),
     path('campaigns/<pk>/edit/', views.CategoryUpdate.as_view(), name='category_update'),
     path('campaigns/<pk>/delete/', views.CategoryDelete.as_view(), name='category_delete'),
 

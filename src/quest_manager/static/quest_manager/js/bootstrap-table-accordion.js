@@ -134,6 +134,9 @@ function multiKeywordSearch(data, text) {
       row.tags || "",
       row.xp || "",
       row.status_icons || "",
+      row.group_name || "",
+      row.user || "",
+      row.status || "",
     ].join(" ").toLowerCase();
 
     return terms.every(term => searchableText.includes(term));

@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
-from django.db.models import F, ExpressionWrapper, fields, BooleanField, Exists, OuterRef
+from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -25,7 +25,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from courses.models import Block
-from library.utils import from_library_schema_first, get_library_schema_name
+from library.utils import from_library_schema_first
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -33,6 +33,7 @@ from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 from profile_manager.models import Profile
+from collections import Counter
 
 from .forms import (
     QuestForm,
@@ -83,13 +84,25 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         else:
             queryset = queryset.filter(published=True)
 
+        # provide the per-campaign counts the template displays in a single query,
+        # instead of a COUNT/SUM per campaign (see Category.quest_count / xp_sum);
+        # the filter must match Category.current_quests(): published and not archived
+        current_quest_filter = Q(quest__published=True) & ~Q(quest__archived=True)
+        queryset = queryset.annotate(
+            quest_count_annotated=Count('quest', filter=current_quest_filter),
+            xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
+        )
+
         return queryset
 
     def get_context_data(self, *args, **kwargs):
         context_data = super().get_context_data(*args, **kwargs)
 
+        can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
+
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
+        context_data['can_export'] = can_export
 
         return context_data
 
@@ -111,16 +124,18 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         - Staff users will see a complete list of quests currently in the viewed campaign
         - Students or other non-staff users will only see active quests
 
-        Returns a dictionary containing default context info as well as a queryset that contains the
-        appropriate quests a user will see; "category_displayed_quests".
+        Returns:
+            dict: Context info containing the appropriate quests for the user to view,
+            including "category_displayed_quests" and "can_export".
         """
         if self.request.user.is_staff:
-            kwargs['category_displayed_quests'] = Quest.objects.filter(campaign=self.object)
+            quests = Quest.objects.filter(campaign=self.object)
         else:
             # students shouldn't be able to see inactive quests when they access this view
-            # filtering before calling get_active, while likely less costly, changes the object
-            # from type QuestManager to a QuestQueryset, which doesn't have the get_active method
-            kwargs['category_displayed_quests'] = Quest.objects.get_active().filter(campaign=self.object)
+            quests = Quest.objects.get_active().filter(campaign=self.object)
+
+        kwargs['category_displayed_quests'] = quests
+        kwargs['can_export'] = SiteConfig.get().can_user_export_to_library(self.request.user)
 
         return super().get_context_data(**kwargs)
 
@@ -191,9 +206,44 @@ class CategoryDelete(NonPublicOnlyViewMixin, DeleteView):
         return super().delete(request, *args, **kwargs)
 
 
+@method_decorator(staff_member_required, name='dispatch')
+class CategoryPublish(View):
+    http_method_names = ['post']
+
+    def post(self, request, pk):
+        """
+        Handle POST request to publish a campaign and all its associated quests.
+
+        Retrieves the Category by primary key (pk). Attempts to publish the campaign along
+        with all related quests using the model method `publish_with_quests()`. On success,
+        adds a success message linking to the campaign detail. On failure, adds an error message.
+
+        Finally, redirects the user to the campaigns list view.
+
+        Args:
+            request: The HTTP request object.
+            pk: Primary key of the campaign to publish.
+
+        Returns:
+            HttpResponseRedirect to the campaigns list page.
+        """
+        category = get_object_or_404(Category, pk=pk)
+        category.publish_with_quests()
+        link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
+        messages.success(request, f'Campaign "{link}" and all quests published.')
+
+        return redirect("quests:categories")
+
+
 class QuestDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, DeleteView):
     def test_func(self):
         return self.get_object().is_editable(self.request.user)
+
+    def get_queryset(self):
+        """
+        Include archived quests so that archived quests can be deleted using this views.
+        """
+        return Quest.objects.all_including_archived()
 
     model = Quest
     success_url = reverse_lazy("quests:quests")
@@ -795,12 +845,7 @@ def ajax_quest_info(request, quest_id=None):
 
         with from_library_schema_first(request):
             is_library_view = (request.POST.get('use_schema') == 'library')
-            site_config = SiteConfig.get()
-            current_schema = getattr(request.tenant, "schema_name", None)
-            can_export = (
-                (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
-                and current_schema != get_library_schema_name()
-            )
+            can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
                 if request.user.is_staff:
@@ -808,7 +853,6 @@ def ajax_quest_info(request, quest_id=None):
                 else:
                     quest = get_object_or_404(Quest, pk=quest_id)
 
-                template = 'quest_manager/preview_content_quests_avail.html'
                 quest_info_html = render_to_string(template,
                                                    {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
                                                    request=request)
@@ -907,12 +951,7 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
-    site_config = SiteConfig.get()
-    current_schema = getattr(request.tenant, "schema_name", None)
-    can_export = (
-        (request.user == site_config.deck_owner or (site_config.allow_staff_export and request.user.is_staff))
-        and current_schema != get_library_schema_name()
-    )
+    can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
     context = {
         "heading": q.name,
@@ -923,6 +962,98 @@ def detail(request, quest_id):
     }
 
     return render(request, "quest_manager/detail.html", context)
+
+
+@non_public_only_view
+@staff_member_required
+def quest_user_status(request, quest_id):
+    """
+    Display the status of all active students for a given quest.
+
+    Retrieves all active student profiles and their latest submission for the specified quest.
+    For each student, determines their submission status, including:
+    - Not Started (no submission)
+    - Approved (approved submission)
+    - Returned (submission returned for revisions)
+    - Awaiting Approval (submission pending review)
+    - In Progress (submission in progress but not yet approved/returned)
+
+    Passes the quest and a list of user statuses with their submissions to the template
+    for rendering.
+
+    Args:
+        request (HttpRequest): The HTTP request object.
+        quest_id (int): The primary key of the quest.
+
+    Returns:
+        HttpResponse: Rendered page showing the user status list for the quest.
+    """
+    quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
+
+    active_students = Profile.objects.all_active().students_only().select_related('user')
+    user_ids = active_students.values_list('user_id', flat=True)
+
+    submissions = (
+        QuestSubmission.objects.filter(
+            quest=quest,
+            user_id__in=user_ids,
+        )
+        .select_related('user')
+        # Latest attempt first per user
+        .order_by('user_id', '-time_approved', '-id')
+    )
+
+    # Map each user to their latest submission using the first occurrence in the ordered queryset.
+    latest_sub_by_user = {}
+    for sub in submissions:
+        if sub.user_id not in latest_sub_by_user:
+            latest_sub_by_user[sub.user_id] = sub
+
+    user_status_list = []
+    for profile in active_students:
+        sub = latest_sub_by_user.get(profile.user_id)
+        if sub is None:
+            status = "Not Started"
+        elif sub.is_approved:
+            status = "Approved"
+        elif sub.is_returned():
+            status = "Returned"
+        elif sub.is_awaiting_approval():
+            status = "Awaiting Approval"
+        else:
+            status = "In Progress"
+
+        user_status_list.append({"user": profile.user, "status": status, "submission": sub})
+
+    total_students = len(user_status_list)
+    status_counts = Counter(user['status'] for user in user_status_list)
+    STATUS_ORDER = ["Approved", "Returned", "Awaiting Approval", "In Progress", "Not Started"]
+    status_stats = []
+
+    for status in STATUS_ORDER:
+        count = status_counts.get(status, 0)
+        percent = (count / total_students * 100) if total_students else 0
+        status_stats.append({
+            "status": status,
+            "count": count,
+            "percent": f"{percent:.0f}%"
+        })
+
+    status_order_index = {status: i for i, status in enumerate(STATUS_ORDER)}
+
+    # sort user-status_list by the desired status order
+    user_status_list.sort(key=lambda x: status_order_index.get(x['status'], 99))
+
+    context = {
+        "q": quest,
+        "maps": CytoScape.objects.get_related_maps(quest),
+        "user_status_list": user_status_list,
+        "status_stats": status_stats,
+        "no_details": False,
+        "is_library_view": False,
+    }
+
+    return render(request, "quest_manager/quest_user_status.html", context)
 
 
 #######################################

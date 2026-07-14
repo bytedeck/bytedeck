@@ -334,7 +334,6 @@ SELECT2_THEME = 'bootstrap'  # This doesn't actually work, why?
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'America/Vancouver'
 USE_I18N = True
-USE_L10N = True
 USE_TZ = True
 
 
@@ -425,14 +424,20 @@ if USE_S3:
     # S3 Static Files
     STATICFILES_LOCATION = 'static'
     STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{STATICFILES_LOCATION}/'
-    STATICFILES_STORAGE = 'storage.custom_storages.StaticStorage'
 
     # Media Files
 
     # S3 public media files
     PUBLIC_MEDIAFILES_LOCATION = 'public_media'
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIAFILES_LOCATION}/'
-    DEFAULT_FILE_STORAGE = 'storage.custom_storages.PublicMediaStorage'
+
+    # STORAGES replaces the STATICFILES_STORAGE and DEFAULT_FILE_STORAGE settings,
+    # which are removed in Django 5.1. When STORAGES is not defined (the non-S3
+    # branch below), Django's defaults apply: FileSystemStorage + StaticFilesStorage.
+    STORAGES = {
+        "default": {"BACKEND": "storage.custom_storages.PublicMediaStorage"},
+        "staticfiles": {"BACKEND": "storage.custom_storages.StaticStorage"},
+    }
 
     # S3 private media files
     # For any implementation in future, Refer https://testdriven.io/blog/storing-django-static-and-media-files-on-amazon-s3/
@@ -777,6 +782,12 @@ TAGGIT_CASE_INSENSITIVE = True
 
 TESTING = 'test' in sys.argv
 if TESTING:
+    # Custom runner installs a model_bakery patch so baker.make(Prereq) builds
+    # valid GenericForeignKey targets instead of random dangling ones (which
+    # made the prerequisites signal tests intermittently crash). See
+    # hackerspace_online.test_runner.patch_baker_make_for_prereq.
+    TEST_RUNNER = 'hackerspace_online.test_runner.BytedeckTestRunner'
+
     # Use weaker password hasher for speeding up tests
     PASSWORD_HASHERS = [
         'django.contrib.auth.hashers.MD5PasswordHasher',

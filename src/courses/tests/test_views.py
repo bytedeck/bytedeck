@@ -613,7 +613,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # get response from list view and assert all default existing MarkRanges are displayed
         response = self.client.get(reverse('courses:markranges'))
-        self.assertQuerysetEqual(response.context['object_list'], MarkRange.objects.all())
+        self.assertQuerySetEqual(response.context['object_list'], MarkRange.objects.all())
 
     def test_MarkRangeCreate_view(self):
         """Staff users can create new MarkRange objects through the create view form"""

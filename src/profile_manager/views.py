@@ -184,11 +184,13 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         context['courses_old'] = CourseStudent.objects.all_for_user_active(profile.user, False)
         context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile.user, blocking=True)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile.user)
-        context['badge_assertions_by_type'] = BadgeAssertion.objects.get_by_type_for_user(profile.user)
+        # get_by_type_for_user() was called only for its side effect of granting
+        # any newly-earned badges; its returned list was never used in the
+        # template. Call that side effect directly and skip building the list.
+        BadgeAssertion.objects.check_for_new_assertions(profile.user)
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
         context['xp_per_course'] = profile.xp_per_course()
         context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
-        context['tags'] = get_user_tags_and_xp(profile.user)
 
         tags_xp = get_user_tags_and_xp(profile.user)
 

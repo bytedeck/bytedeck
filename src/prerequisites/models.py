@@ -1,4 +1,6 @@
 import json
+from collections import defaultdict
+
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
@@ -12,7 +14,13 @@ class HasPrereqsMixin:
     """
 
     def prereqs(self):
-        """ A queryset of all the object's prerequisites """
+        """ A queryset (or a pre-populated list) of all the object's prerequisites.
+
+        PrereqManager.prefetch_for_parents() can populate _prereqs_cache to serve
+        this from memory instead of a query per object (e.g. when rendering many
+        badge popovers on the profile page)."""
+        if hasattr(self, '_prereqs_cache'):
+            return self._prereqs_cache
         return Prereq.objects.all_parent(self)
 
     def add_simple_prereqs(self, prereq_objects_list):
@@ -267,11 +275,17 @@ class PrereqQuerySet(models.query.QuerySet):
         return qs
 
     def get_all_for_or_prereq_object(self, prereq_object, exclude_NOT=False):
+        """Return all Prereqs that have the given object as their alternate (OR) requirement.
+
+        :param prereq_object: the object to look for in the OR requirement slot
+        :param exclude_NOT: if True, omit Prereqs whose OR requirement is inverted (NOT)
+        :return: a queryset of matching Prereqs
+        """
         ct = ContentType.objects.get_for_model(prereq_object)
         qs = self.filter(or_prereq_content_type__pk=ct.id,
                          or_prereq_object_id=prereq_object.id)
         if exclude_NOT:
-            qs.exclude(or_prereq_invert=True)
+            qs = qs.exclude(or_prereq_invert=True)
         return qs
 
         # object matching sender, target or action object
@@ -292,6 +306,39 @@ class PrereqManager(models.Manager):
 
     def all_parent(self, parent_object):
         return self.get_queryset().get_all_for_parent_object(parent_object)
+
+    def prefetch_for_parents(self, parent_objects):
+        """Populate each parent object's prereqs() cache in a single query.
+
+        All parents must be instances of the same model (they share one
+        content type). Each object gets a ``_prereqs_cache`` list that
+        HasPrereqsMixin.prereqs() returns, avoiding a query per object.
+
+        :param parent_objects: an iterable of same-model objects to populate
+        :return: the parent objects as a list
+        """
+        parent_objects = list(parent_objects)
+        if not parent_objects:
+            return parent_objects
+
+        # all parents share one content type; a mixed list would silently drop
+        # the prereqs of every object whose model isn't the first one's
+        model = type(parent_objects[0])
+        if any(type(obj) is not model for obj in parent_objects):
+            raise ValueError("prefetch_for_parents requires all parent_objects to be the same model")
+
+        ct = ContentType.objects.get_for_model(parent_objects[0])
+        prereqs_by_parent = defaultdict(list)
+        matching_prereqs = self.get_queryset().filter(
+            parent_content_type=ct,
+            parent_object_id__in=[obj.pk for obj in parent_objects],
+        )
+        for prereq in matching_prereqs:
+            prereqs_by_parent[prereq.parent_object_id].append(prereq)
+
+        for obj in parent_objects:
+            obj._prereqs_cache = prereqs_by_parent[obj.pk]
+        return parent_objects
 
     def all_reliant_on(self, prereq_object, exclude_NOT=False):
         qs = self.get_queryset().get_all_for_prereq_object(prereq_object, exclude_NOT=exclude_NOT)

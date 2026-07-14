@@ -419,7 +419,7 @@ class SubmissionManagerTest(TenantTestCase):
 
         # Default parameters, all submissions this semester, as would be shown in staff "Approved" tab
         all_approved = QuestSubmission.objects.all_approved()
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             all_approved,
             [sub_approved, sub_approved_no_xp, sub_approved_different_quest, sub_approved_user],
             ordered=False
@@ -427,7 +427,7 @@ class SubmissionManagerTest(TenantTestCase):
 
         # active_semester_only=False should include sub_approved_other_semester
         all_approved = QuestSubmission.objects.all_approved(active_semester_only=False)
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             all_approved,
             [sub_approved, sub_approved_different_quest, sub_approved_other_semester, sub_approved_no_xp, sub_approved_user],
             ordered=False
@@ -435,7 +435,7 @@ class SubmissionManagerTest(TenantTestCase):
 
         # quest=quest should not include sub_approved_different_quest
         all_approved = QuestSubmission.objects.all_approved(quest=quest)
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             all_approved,
             [sub_approved, sub_approved_no_xp, sub_approved_user],
             ordered=False
@@ -443,7 +443,7 @@ class SubmissionManagerTest(TenantTestCase):
 
         # user=test_user should only include sub_approved_user
         all_approved = QuestSubmission.objects.all_approved(user=user)
-        self.assertQuerysetEqual(
+        self.assertQuerySetEqual(
             all_approved,
             [sub_approved_user],
             ordered=False

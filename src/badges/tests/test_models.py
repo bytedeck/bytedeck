@@ -176,7 +176,7 @@ class BadgeAssertionManagerTest(TenantTestCase):
         # this should only return three, not the duplicate badge_assertion of badge1
         # and they should be sorted by badge.sort_order
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-        self.assertQuerysetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
+        self.assertQuerySetEqual(qs, [badge_assertion, badge_assertion2, badge_assertion3])
 
     def test_all_for_user_distinct__badge_type_order_correct(self):
         """
@@ -200,7 +200,7 @@ class BadgeAssertionManagerTest(TenantTestCase):
         badge_assertion3 = baker.make(BadgeAssertion, user=self.student, badge=badge3)
 
         qs = BadgeAssertion.objects.all_for_user_distinct(user=self.student)
-        self.assertQuerysetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
+        self.assertQuerySetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
 
 
 class BadgeAssertionTestModel(TenantTestCase):
@@ -264,7 +264,28 @@ class BadgeAssertionTestModel(TenantTestCase):
             values.append(badge_assertion)
 
         qs = badge_assertion.get_duplicate_assertions()
-        self.assertQuerysetEqual(list(qs), values, )
+        self.assertQuerySetEqual(list(qs), values, )
+
+    def test_badge_assertions_dict_items_prefetches_duplicates(self):
+        """badge_assertions_dict_items pre-populates each distinct badge's
+        duplicate assertions, so get_duplicate_assertions() serves them from
+        memory with no query per badge (the profile page renders one popover
+        per badge)."""
+        badge_a = Recipe(Badge, name='Badge A').make()
+        badge_b = Recipe(Badge, name='Badge B').make()
+        baker.make(BadgeAssertion, user=self.student, badge=badge_a, _quantity=2)
+        baker.make(BadgeAssertion, user=self.student, badge=badge_b, _quantity=3)
+
+        items = BadgeAssertion.objects.badge_assertions_dict_items(self.student)
+        distinct_assertions = [a for _badge_type, assertions in items for a in assertions]
+
+        duplicate_counts = {}
+        with self.assertNumQueries(0):
+            for assertion in distinct_assertions:
+                duplicate_counts[assertion.badge_id] = len(list(assertion.get_duplicate_assertions()))
+
+        self.assertEqual(duplicate_counts[badge_a.id], 2)
+        self.assertEqual(duplicate_counts[badge_b.id], 3)
 
     def test_badge_assertion_manager_create_assertion(self):
 
@@ -349,3 +370,60 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(notifications.count(), 4)
         self.assertEqual(notifications.filter(verb__contains='granted').count(), 3)
         self.assertEqual(notifications.filter(verb__contains='promoted').count(), 1)
+
+
+class BadgeRarityCacheInvalidationTest(TenantTestCase):
+    """get_rarity() reads from the cached rarity list, so every ORM write path
+    must invalidate it: save/create and deletes via the post_save/post_delete
+    signals, update()/bulk_create()/bulk_update() via the BadgeRarityQuerySet
+    overrides (those fire no signals)."""
+
+    def setUp(self):
+        """Start each test with a cold rarity cache."""
+        from django.core.cache import cache
+        cache.delete(BadgeRarity.objects.rarities_cache_key())
+
+    def assert_cache_matches_db(self):
+        """Assert the cached rarity list matches the table, comparing (pk, percentile) in percentile order."""
+        cached = [(r.pk, r.percentile) for r in BadgeRarity.objects.get_rarities_cached()]
+        db = [(r.pk, r.percentile) for r in BadgeRarity.objects.all().order_by('percentile')]
+        self.assertEqual(cached, db)
+
+    def warm_cache(self):
+        """Populate the rarity cache so the test's write can be shown to invalidate it."""
+        BadgeRarity.objects.get_rarities_cached()
+
+    def test_save_invalidates_cache(self):
+        """Creating a BadgeRarity (via save) must invalidate the cache (post_save signal)."""
+        self.warm_cache()
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.assertEqual(BadgeRarity.objects.get_rarity(0.1).pk, rarity.pk)
+        self.assert_cache_matches_db()
+
+    def test_queryset_delete_invalidates_cache(self):
+        """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        BadgeRarity.objects.filter(pk=rarity.pk).delete()
+        self.assert_cache_matches_db()
+
+    def test_queryset_update_invalidates_cache(self):
+        """Queryset .update() fires no signals; the BadgeRarityQuerySet.update override must invalidate the cache."""
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        BadgeRarity.objects.filter(pk=rarity.pk).update(percentile=0.456)
+        self.assert_cache_matches_db()
+
+    def test_bulk_create_invalidates_cache(self):
+        """bulk_create() fires no signals; the BadgeRarityQuerySet.bulk_create override must invalidate the cache."""
+        self.warm_cache()
+        BadgeRarity.objects.bulk_create([BadgeRarity(name='Bulk Rarity', percentile=0.123)])
+        self.assert_cache_matches_db()
+
+    def test_bulk_update_invalidates_cache(self):
+        """bulk_update() fires no signals; the BadgeRarityQuerySet.bulk_update override must invalidate the cache."""
+        rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
+        self.warm_cache()
+        rarity.percentile = 0.456
+        BadgeRarity.objects.bulk_update([rarity], ['percentile'])
+        self.assert_cache_matches_db()

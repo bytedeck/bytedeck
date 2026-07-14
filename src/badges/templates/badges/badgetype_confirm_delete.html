@@ -6,15 +6,18 @@
 {% block content %}
   {% if not has_badges %}
     <form action="" method="post">{% csrf_token %}
-      <p>Are you sure you want to delete this {{ config.custom_name_for_badge }} type? You can't delete types that have {{ config.custom_name_for_badge }} assigned to them.<p>
+      <p>Are you sure you want to delete this {{ config.custom_name_for_badge }} type? You can't delete types that have {{ config.custom_name_for_badge }} assigned to them.</p>
       <div class="well">
-        <p>{{ config.custom_name_for_badge }} Type Name: {{object.name}}</p>
-        <p>{{ config.custom_name_for_badge }} Type ID: {{object.id}}</p>
+        <p>{{ config.custom_name_for_badge }} Type Name: {{ object.name }}</p>
+        <p>{{ config.custom_name_for_badge }} Type ID: {{ object.id }}</p>
       </div>
       <a href="{% url 'badges:badge_types' %}" role="button" class="btn btn-info">Cancel</a>
       <input type="submit" value="Delete" class="btn btn-danger" />
     </form>
   {% else %}
-    <p>Unable to delete {{ config.custom_name_for_badge|lower }} type '{{ object.name }}' as it still has {{ config.custom_name_for_badge }}s assigned to it. See a list of current {{ config.custom_name_for_badge }}s <a href="{% url 'badges:list' %}">here.</a></p>
+    <div class="alert alert-danger">
+      Unable to delete {{ config.custom_name_for_badge|lower }} type '{{ object.name }}' as it still has {{ config.custom_name_for_badge }}s assigned to it.
+      See a list of current {{ config.custom_name_for_badge }}s <a href="{% url 'badges:list' %}">here</a>.
+    </div>
   {% endif %}
 {% endblock %}

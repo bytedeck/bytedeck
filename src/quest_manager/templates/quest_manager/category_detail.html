@@ -6,12 +6,43 @@
 {% block heading %}<i class="fa fa-compass pull-right"></i>{% block heading_inner %} {{ object.title }} Campaign{% endblock %}{% endblock %}
 
 {% block content %}
+    {% if object.quest_count != 0 and request.user.is_staff %}
+        <div class="alert alert-danger mb-3">
+            Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first.
+        </div>
+    {% endif %}
+
     {% if request.user.is_staff %}
         <div class="pull-right">
             <a class="btn btn-warning" href="{% url 'quests:category_update' object.id %}" role="button"
-                title = "Edit this campaign" >
-            <i class="fa fa-edit"></i>
+                title="Edit this campaign">
+                <i class="fa fa-edit"></i>
             </a>
+
+            {% if can_export %}
+              <a class="btn btn-default" role="button"
+                {% if object.quest_count != 0 %}
+                  href="{% url 'library:export_category' object.import_id %}"
+                  title="Export this Campaign to the Library"
+                {% else %}
+                  title="Cannot export without any published quests"
+                  disabled
+                  tabindex="-1"
+                  aria-disabled="true"
+                {% endif %}
+              >
+                <i class="fa fa-fw fa-upload"></i>
+              </a>
+            {% endif %}
+
+            {% if not object.published %}
+                <form method="post" action="{% url 'quests:category_publish' object.id %}" class="preview-action-form">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-success" title="Publish Campaign and all its Quests">
+                        <i class="fa fa-upload"></i>
+                    </button>
+                </form>
+            {% endif %}
 
             <a class="btn btn-danger"
                 {% if object.quest_count != 0 %}
@@ -20,14 +51,15 @@
                     aria-disabled="true"
                     title="Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first"
                 {% else %}
-                    href="{% url 'quests:category_delete' object.id %}" title="Delete this campaign"
+                    href="{% url 'quests:category_delete' object.id %}"
                     title="Delete this campaign"
                 {% endif %}
                 role="button">
-            <i class="fa fa-trash-o"></i>
+                <i class="fa fa-trash-o"></i>
             </a>
         </div>
     {% endif %}
+
     {% if object.published or request.user.is_staff %}
         {% with object as category %}
             {% include "quest_manager/category_detail_content.html" %}
@@ -37,6 +69,6 @@
     {% endif %}
 {% endblock %}
 
-{% block js%}
+{% block js %}
   {{ block.super }}
 {% endblock %}
