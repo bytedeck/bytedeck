@@ -52,4 +52,10 @@ def handle_tenant_site_domain_update(tenant, **kwargs):
 
     with tenant_context(tenant):
         domain = tenant.get_primary_domain().domain
-        Site.objects.update(name=domain, domain=domain)
+        # Site.name is varchar(50) but Site.domain is varchar(100); a long deck
+        # subdomain can exceed 50 chars, so cap the human-readable name to the
+        # field's max_length. allauth builds URLs from Site.domain (not name), so
+        # truncating the label is harmless. Without this, creating a deck with a
+        # long name raised "value too long for type character varying(50)".
+        name_max = Site._meta.get_field("name").max_length
+        Site.objects.update(name=domain[:name_max], domain=domain)
