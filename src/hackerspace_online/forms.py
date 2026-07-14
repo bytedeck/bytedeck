@@ -77,8 +77,8 @@ class PublicContactForm(forms.Form):
         help_text='We will never share your email with anyone else.')
     message = forms.CharField(widget=forms.Textarea, required=True)
 
-    # Not using because our recaptcha key is currently set up for checkbox only
-    # and doesn't also support the invisible widget.
+    # The site's reCAPTCHA keys are for the v2 invisible widget; all captcha fields
+    # must use this widget type since a single key pair is configured globally.
     captcha = ReCaptchaField(
         label='',
         widget=ReCaptchaV2Invisible

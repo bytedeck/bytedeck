@@ -6,10 +6,25 @@ from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
 
-from tenant.forms import TenantForm
+from django_recaptcha.widgets import ReCaptchaV2Invisible
+
+from tenant.forms import DeckRequestForm, TenantForm
 from tenant.models import Tenant
 
 User = get_user_model()
+
+
+class DeckRequestFormTest(TenantTestCase):
+    """Tests for the public `DeckRequestForm`."""
+
+    def test_captcha_uses_invisible_recaptcha_widget(self):
+        """The deck request captcha must use the same reCAPTCHA widget type as the rest
+        of the site (v2 invisible). A single key pair is configured globally
+        (RECAPTCHA_PUBLIC_KEY/RECAPTCHA_PRIVATE_KEY) and Google's keys are widget-type
+        specific, so a checkbox widget can't validate with the site's invisible keys.
+        """
+        form = DeckRequestForm()
+        self.assertIsInstance(form.fields['captcha'].widget, ReCaptchaV2Invisible)
 
 
 class TenantFormTest(TenantTestCase):

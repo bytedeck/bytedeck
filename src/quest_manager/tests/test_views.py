@@ -10,6 +10,8 @@ or they could be moved into a `test_urls.py` module.
 
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -168,6 +170,21 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_sidebar_approvals_link__points_to_default_submitted_tab(self):
+        """The sidebar 'Quest Approvals' menu button links to the default approvals view
+        (the Submitted tab), not the In Progress tab. Regression test for issue #1895.
+        """
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        response = self.client.get(reverse('quests:quests'))
+        content = response.content.decode()
+
+        # grab the href of the anchor inside the sidebar's approvals menu
+        match = re.search(r'id="lg-menu-approvals".*?href="([^"]+)"', content, re.DOTALL)
+        self.assertIsNotNone(match, "Sidebar approvals menu not found in the rendered page")
+        self.assertEqual(match.group(1), reverse('quests:approvals'))
 
     def test_start(self):
         # log in a student from setUp
@@ -723,6 +740,21 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
+    def test_complete_quick_reply_form__escapes_html(self):
+        """HTML entered in the quick reply form is completely escaped when the comment
+        is saved, so scripts can't execute when the comment is rendered. Regression
+        test for issue #1343.
+        """
+        payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+        response = self.post_complete(submission_comment=payload)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertNotIn('<script', comments[0].text)
+        self.assertNotIn('<img', comments[0].text)
+        self.assertIn('&lt;script&gt;', comments[0].text)
+
     def test_complete__no_verification(self):
         """ Checks if a student completing a submission that causes their XP to go over
         the threshold for 'Digital Novice' rank (60 XP) generates a notification
@@ -841,16 +873,52 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertErrorMessage(response)
 
-    def test_quest_not_available(self):
-        """ If a quest is not available to a student, they should not be able to complete it """
-        # TODO
-        # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-        # self.quest.visibel_to_student = False
-        # self.quest.save()
+    def test_quest_not_available__unpublished(self):
+        """ If a quest is unpublished (moved to drafts) while a student's submission is
+        in progress, they should not be able to complete it by entering the completion
+        url directly. Regression test for issue #535.
+        """
+        self.quest.published = False
+        self.quest.save()
 
-        # response = self.post_complete(comment="")
-        # # Should redirect back to the submission with error message
-        # self.assertEqual(response.status_code, 404)
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__archived(self):
+        """ If a quest is archived while a student's submission is in progress, they
+        should not be able to complete it by entering the completion url directly.
+        Regression test for issue #535.
+        """
+        self.quest.archived = True
+        self.quest.save()
+
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__staff_also_404(self):
+        """ Staff also can't complete submissions of unpublished quests: the default
+        QuestSubmission queryset excludes unpublished/archived quests for everyone,
+        so the view's get_object_or_404 lookup fails.
+        """
+        self.client.force_login(self.test_teacher)
+        self.quest.published = False
+        self.quest.save()
+        draft_comment = baker.make(Comment, text="test draft comment")
+        staff_sub = baker.make(QuestSubmission, user=self.test_teacher, quest=self.quest,
+                               draft_comment=draft_comment, semester=self.semester)
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[staff_sub.id]),
+                data={'comment_text': "test comment", 'complete': True}
+            )
+        self.assertEqual(response.status_code, 404)
+        staff_sub.refresh_from_db()
+        self.assertFalse(staff_sub.is_completed)
 
     def test_notifications_own_student(self):
         """ Teacher should NOT be notified when their student complete's a quest, because it
@@ -966,18 +1034,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(self.sub.is_completed)
 
         self.assertErrorMessage(response)
-
-    # def test_quest_not_available(self):
-    #     """ If a quest is not available to a student, they should not be able to complete it """
-    #     # TODO
-    #     # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-    #     # self.quest.visibel_to_student = False
-    #     # self.quest.save()
-
-    #     # response = self.post_complete(button="comment", comment="")
-    #     # # Should redirect back to the submission with error message
-    #     # self.assertEqual(response.status_code, 404)
-    #     pass
 
     def test_comment_button_notifications_own_student(self):
         """ Teacher should be notified when their student comments on an already complete's a quest
@@ -2193,6 +2249,26 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         displayed_quests = response.context["category_displayed_quests"]
         intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
         self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
+
+    def test_CategoryDetail_view__displays_published_status_when_false(self):
+        """The Campaign Info panel must display "Published: False" for an unpublished
+        campaign. Regression test for the `{% firstof %}` template tag swallowing
+        falsy values, which left the "Published:" line blank when the campaign
+        was unpublished.
+        """
+        campaign = baker.make(Category, published=False)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: False")
+
+    def test_CategoryDetail_view__displays_published_status_when_true(self):
+        """The Campaign Info panel must display "Published: True" for a published campaign."""
+        campaign = baker.make(Category, published=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: True")
 
     def test_CategoryCreate_view(self):
         """ Admin should be able to create a course """

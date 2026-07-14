@@ -1,5 +1,5 @@
 from django_recaptcha.fields import ReCaptchaField
-from django_recaptcha.widgets import ReCaptchaV2Checkbox
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from django import forms
 from django.contrib.auth import get_user_model
@@ -145,4 +145,7 @@ class DeckRequestForm(forms.Form):
         label="Your Email",
         widget=forms.EmailInput(attrs={"placeholder": "you@example.com"})
     )
-    captcha = ReCaptchaField(widget=ReCaptchaV2Checkbox)
+    # Must match the widget type of the site's reCAPTCHA keys: a single key pair is
+    # configured globally and Google's keys are widget-type specific, so use the same
+    # invisible widget as the public contact form (see hackerspace_online/forms.py).
+    captcha = ReCaptchaField(label='', widget=ReCaptchaV2Invisible)
