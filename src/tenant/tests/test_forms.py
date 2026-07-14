@@ -136,7 +136,7 @@ class TenantFormTest(TenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
-    def test_deck_name_too_long(self):
+    def test_clean_name__deck_name_too_long(self):
         """A deck name longer than MAX_DECK_NAME_LENGTH is rejected on the form with a
         clear error, so the user gets feedback instead of the name being silently
         truncated (into SiteConfig.site_name_short etc.) when the deck is created.
@@ -155,7 +155,7 @@ class TenantFormTest(TenantTestCase):
         form = TenantForm({**base, "name": at_limit})
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_duplicate_deck_name_is_rejected(self):
+    def test_clean_name__duplicate_deck_name_is_rejected(self):
         """A deck name that already exists is rejected on the form (via the unique
         constraint), so the user is warned before the deck is created rather than
         hitting an error afterwards.

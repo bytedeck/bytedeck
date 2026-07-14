@@ -28,6 +28,19 @@ class TenantBaseForm(ModelForm):
         fields = ["name"]
 
     def clean_name(self):
+        """Validate the deck name.
+
+        Enforces the deck-name length cap (``MAX_DECK_NAME_LENGTH``), rejects the
+        reserved ``public`` name, and rejects a name whose schema already exists in
+        the database without a matching tenant object.
+
+        Returns:
+            str: The cleaned deck name.
+
+        Raises:
+            forms.ValidationError: If the name is too long, is reserved, or collides
+                with an existing orphaned schema.
+        """
         name = self.cleaned_data["name"]
         # has already validated the model field (format, uniqueness) at this point
         if len(name) > MAX_DECK_NAME_LENGTH:

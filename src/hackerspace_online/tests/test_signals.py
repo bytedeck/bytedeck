@@ -39,6 +39,7 @@ class SignalTest(ViewTestUtilsMixin, TenantTestCase):
         long_name = "a" * 55
         with schema_context(get_public_schema_name()):
             tenant = Tenant(schema_name="longsitename", name=long_name)
+            tenant.full_clean()
             tenant.save()
 
         with tenant_context(tenant):
