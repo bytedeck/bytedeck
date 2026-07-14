@@ -206,6 +206,21 @@ class QuestForm(forms.ModelForm):
                 "either turn Hidable off or turn Blocking off."
             )
 
+        # make sure repeat_per_semester isn't combined with unlimited repeats (issue #1531):
+        # unlimited repeats never run out, so a per-semester reset would do nothing, and the
+        # combination made the quest never repeatable, causing 404s for returning students.
+        max_repeats = cleaned_data.get('max_repeats')
+        repeat_per_semester = cleaned_data.get('repeat_per_semester')
+
+        if max_repeats == -1 and repeat_per_semester:
+            raise ValidationError(
+                "A quest with unlimited repeats (Max Repeats = -1) cannot also use "
+                "'Repeat per semester', because unlimited repeats never run out and a "
+                "new semester would have nothing to reset. Either set Max Repeats to "
+                "the number of repeats allowed each semester, or turn off 'Repeat per "
+                "semester' (in the Advanced section) to keep unlimited repeats."
+            )
+
 
 class TAQuestForm(QuestForm):
     """ Modified QuestForm that removes some fields TAs should not be able to set. """
