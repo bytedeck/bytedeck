@@ -7,7 +7,7 @@ jobs:
     name: Build and Test
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Copy sample environment variables
         run: cp .env.example .env
       - name: Build the docker compose stack
@@ -24,4 +24,7 @@ jobs:
           docker compose exec -T web coverage combine
           docker compose exec -T web coverage xml
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

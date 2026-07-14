@@ -70,8 +70,9 @@ _`<user_id>` & `<group_id>` are the `uid` and `gid` of the user preferred to run
 
 
 ### Production setup
-- settings can be found inside ``src/hackerspace_online/settings``
-- for production settings create a file named ``production_hackerspace.py`` inside settings directory which should include ``src/hackerspace_online/settings/base.py`` on top and extend those configuration
+- Settings live in a single module: ``src/hackerspace_online/settings.py``. There is no ``settings/`` package or ``base.py`` / ``production_hackerspace.py`` split.
+- The module reads all environment-specific configuration from environment variables (via ``django-environ``), so production behaviour is controlled by the ``.env`` file on the server rather than by a separate settings file. See ``.env.example.aws`` for the production template.
+- Key production toggles set through the environment: ``DEBUG`` (must be ``False``), ``SECRET_KEY``, ``ALLOWED_HOSTS`` / ``ROOT_DOMAIN``, ``USE_S3`` (S3/CloudFront static & media), the ``POSTGRES_*`` database settings, and ``REDIS_HOST`` / ``REDIS_PORT`` for caching and Celery.
 
 
 ### SSL setup using let's encrypt
