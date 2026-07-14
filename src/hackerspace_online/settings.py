@@ -40,6 +40,15 @@ if not ALLOWED_HOSTS:
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
 
+# In production TLS is terminated at nginx, which then forwards to uWSGI over
+# plain HTTP. Trust the forwarded scheme so request.is_secure() — and every
+# absolute URL built from it, e.g. the verification/welcome email links from
+# request.build_absolute_uri() — reflects the original https request instead of
+# the internal http hop. nginx sets this from its own $scheme (see
+# nginx/uwsgi_params), overwriting any client-supplied value, so it can't be
+# spoofed in the standard deployment. Harmless in dev (runserver never sends it).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
