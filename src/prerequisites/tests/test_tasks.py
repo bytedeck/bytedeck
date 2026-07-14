@@ -2,11 +2,14 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.cache import cache
+from django.test import override_settings
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
+from courses.models import CourseStudent
 from notifications.models import Notification
 from prerequisites.models import Prereq
 from prerequisites.tasks import grant_badge_assertions_for_badge
@@ -96,3 +99,56 @@ class GrantBadgeAssertionsForBadgeTest(TenantTestCase):
         self.assertFalse(
             BadgeAssertion.objects.all_for_user_badge(self.student, self.badge, False).exists()
         )
+
+    def test_grant_badge_assertions_for_badge__deleted_badge(self):
+        """The task bails out gracefully if the badge was deleted while it was queued."""
+        deleted_badge_id = self.badge.id
+        self.badge.delete()
+
+        result = grant_badge_assertions_for_badge(badge_id=deleted_badge_id, start_from_user_id=1)
+
+        self.assertIn("no longer exists", result)
+
+    def test_grant_badge_assertions_for_badge__skips_if_already_started(self):
+        """The task skips itself when another run for the same badge started recently
+        (multiple prereq-change signals can fire for a single form save).
+        """
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        cache.set(f'grant_badge_assertions_for_badge_{self.badge.id}_wait', True, 1)
+
+        result = self.run_task()
+
+        self.assertIn("already started", result)
+        self.assertFalse(
+            BadgeAssertion.objects.all_for_user_badge(self.student, self.badge, False).exists()
+        )
+
+    def test_grant_badge_assertions_for_badge__no_current_students(self):
+        """The task completes without granting anything when there are no students
+        registered in a course in the active semester.
+        """
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        CourseStudent.objects.all().delete()
+
+        result = self.run_task()
+
+        self.assertEqual(result, self.badge.name)
+        self.assertFalse(
+            BadgeAssertion.objects.all_for_user_badge(self.student, self.badge, False).exists()
+        )
+
+    @override_settings(CELERY_TASKS_BUNCH_SIZE=1)
+    def test_grant_badge_assertions_for_badge__processes_users_in_bunches(self):
+        """When there are more users than the bunch size, the task re-queues itself to
+        continue with the next bunch of users.
+        """
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        # a second student, so the first bunch (of 1) doesn't cover everyone
+        student2 = baker.make(User)
+        baker.make('courses.CourseStudent', user=student2,
+                   semester=SiteConfig.get().active_semester)
+
+        with patch.object(grant_badge_assertions_for_badge, 'apply_async') as recursive_call:
+            self.run_task()
+
+        self.assertEqual(recursive_call.call_count, 1)
