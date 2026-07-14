@@ -398,7 +398,11 @@ class Semester(models.Model):
         Profile.objects.bulk_update(profiles, ['xp_cached'])
 
     def get_student_mark_list(self, students_only=False):
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=students_only)
+        # select_related the profile since we read profile.mark_cached for every
+        # student below; without it that is a query per student.
+        students = CourseStudent.objects.all_users_for_active_semester(
+            students_only=students_only
+        ).select_related('profile')
         mark_list = []
         for student in students:
             mark_list.append(student.profile.mark_cached)
