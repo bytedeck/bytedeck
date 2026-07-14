@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django.urls import reverse_lazy
 from django.http import JsonResponse
 from django.utils.decorators import method_decorator
@@ -106,26 +108,38 @@ class TagDetailStudent(TagDetail):
         return super().get(*args, **kwargs)
 
     def get_quest_submissions(self):
-        submissions = get_quest_submission_by_tag(self.user, [self.object.name]).order_by('quest', 'ordinal')
+        # select_related the quest since the template reads submission.quest, and
+        # evaluate the queryset once so we can count submissions per quest in
+        # memory instead of a COUNT query per row.
+        submissions = list(
+            get_quest_submission_by_tag(self.user, [self.object.name]).order_by('quest', 'ordinal').select_related('quest')
+        )
+        quest_counts = Counter(submission.quest_id for submission in submissions)
 
         # inject 'is_multiple' var into QuestSubmission object (basically the same as annotate)
         # conditional if there are multiple submissions pointing to quest
         for submission in submissions:
             ordinal_check = submission.ordinal > 1
-            multiple = submissions.filter(quest__id=submission.quest.id).count() > 1
+            multiple = quest_counts[submission.quest_id] > 1
 
             submission.is_multiple = ordinal_check or multiple
 
         return submissions
 
     def get_badge_assertions(self):
-        assertions = get_badge_assertion_by_tags(self.user, [self.object.name]).order_by('badge', 'ordinal')
+        # select_related the badge since the template reads assertion.badge, and
+        # evaluate the queryset once so we can count assertions per badge in
+        # memory instead of a COUNT query per row.
+        assertions = list(
+            get_badge_assertion_by_tags(self.user, [self.object.name]).order_by('badge', 'ordinal').select_related('badge')
+        )
+        badge_counts = Counter(assertion.badge_id for assertion in assertions)
 
         # inject 'is_multiple' var into BadgeAssertion object (basically the same as annotate)
         # conditional if there are multiple assertions pointing to badge
         for assertion in assertions:
             ordinal_check = assertion.ordinal > 1
-            multiple = assertions.filter(badge__id=assertion.badge.id).count() > 1
+            multiple = badge_counts[assertion.badge_id] > 1
 
             assertion.is_multiple = ordinal_check or multiple
 
