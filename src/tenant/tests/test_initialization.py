@@ -1,10 +1,13 @@
 from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
 from badges.models import Badge, BadgeRarity, BadgeType
 from courses.models import Block, Course, Grade, MarkRange, Rank
 from quest_manager.models import Category, Quest
+from siteconfig.models import SiteConfig
+from tenant.models import Tenant
 from utilities.models import MenuItem
 
 
@@ -165,8 +168,37 @@ class TenantInitializationTest(TenantTestCase):
     def test_site_config_created(self):
         """ Test that the SiteConfig object exists and the Deck name has expected defaults.
         """
-        from siteconfig.models import SiteConfig
         site_config = SiteConfig.get()
         self.assertTrue(site_config is not None)
         self.assertEqual(site_config.site_name, "My Byte Deck")
         self.assertEqual(site_config.site_name_short, "Deck")
+
+
+class CreateSiteConfigObjectTest(TenantTestCase):
+    """Tests for deriving a new tenant's SiteConfig display names from its deck name."""
+
+    def test_create_site_config__long_deck_name_does_not_overflow(self):
+        """A deck name longer than SiteConfig's display fields must not crash
+        tenant creation.
+
+        Tenant.name allows up to 62 chars (the Postgres schema-name limit), but
+        site_name_short is only 20 (and site_name 50), so a long name previously
+        raised "value too long for type character varying(20)" while seeding the
+        new tenant. The display names are truncated to fit and stay editable by
+        the owner afterwards.
+        """
+        # A realistic, valid deck name (subdomain) that is longer than the 20-char
+        # site_name_short field; creating it fires post_schema_sync, which seeds
+        # the new tenant via create_site_config_object. Tenants can only be created
+        # from the public schema.
+        deck_name = "timberline-secondary-hackerspace"  # 32 chars
+        with schema_context(get_public_schema_name()):
+            tenant = Tenant(schema_name="timberline_secondary_hackerspace", name=deck_name)
+            tenant.save()
+
+        with tenant_context(tenant):
+            config = SiteConfig.get()
+
+        expected_title = deck_name.replace("-", " ").title()  # "Timberline Secondary Hackerspace"
+        self.assertEqual(config.site_name_short, expected_title[:20])
+        self.assertEqual(config.site_name, f"{expected_title} Deck"[:50])
