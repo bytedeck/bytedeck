@@ -437,6 +437,21 @@ class SubmissionViewTests(TenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertEqual(response.status_code, 200)
 
+    def test_submission_view__staff_buttons_include_completion_statuses_link(self):
+        """The staff quick-link button group on the submission detail page must include
+        a link to the quest's Completion Statuses page, like it does for past submissions
+        and summary data (issue #1934). Students must not see the link.
+        """
+        status_url = reverse('quests:quest_user_status', args=[self.quest1.id])
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, status_url)
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, status_url)
+
     def test_student_can_drop_completed_submission_when_hidden(self):
         """
         Make sure student can drop a submission from a quest when an admin decides
