@@ -6,101 +6,101 @@ This file chronologically records all notable changes to this website, including
 
 ### [1.28.0] 2026-07-12 Marcus III
 * New Features:
- - Deck Requests:
-    - New decks can now be requested directly from the public ByteDeck site instead of by contacting us. Visitors fill in a short reCAPTCHA-protected form (name and email), click the verification link emailed to them (valid for one hour, good for one deck), and are guided through creating their own deck. The new deck's owner then receives a welcome email with their initial login credentials [#1892] [#1903]
- - Library:
-    - Campaigns can now be exported to the shared Library: a new export button on the campaign detail page (enabled once the campaign has published quests) leads to a confirmation page that lists all of the campaign's quests and flags any that already exist in the Library [#1849] [#1850]
-    - Exporting a campaign whose quests already exist in the Library now copies those quests into the exported campaign instead of blocking the export, so a campaign can be exported even when every quest in it is already in the Library [#1884]
- - Campaigns:
-    - Publish a campaign and all of the quests inside it in one click with the new publish button on the campaign detail page, instead of publishing each quest one at a time. (Handy before exporting to the Library, since only campaigns with published quests can be exported.) [#1843]
- - Quests:
-    - New "Student Statuses" page for teachers: a new button among a quest's action buttons opens a table showing every student's status on that quest — including students who haven't started it — with links to their submissions [#918]
+  - Deck Requests:
+    - New decks can now be requested directly from the public ByteDeck site instead of by contacting us. Visitors fill in a short reCAPTCHA-protected form (name and email), click the verification link emailed to them (valid for one hour, good for one deck), and are guided through creating their own deck. The new deck's owner then receives a welcome email with their initial login credentials [#1892](https://github.com/bytedeck/bytedeck/issues/1892) [#1903](https://github.com/bytedeck/bytedeck/issues/1903)
+  - Library:
+    - Campaigns can now be exported to the shared Library: a new export button on the campaign detail page (enabled once the campaign has published quests) leads to a confirmation page that lists all of the campaign's quests and flags any that already exist in the Library [#1849](https://github.com/bytedeck/bytedeck/issues/1849) [#1850](https://github.com/bytedeck/bytedeck/issues/1850)
+    - Exporting a campaign whose quests already exist in the Library now copies those quests into the exported campaign instead of blocking the export, so a campaign can be exported even when every quest in it is already in the Library [#1884](https://github.com/bytedeck/bytedeck/issues/1884)
+  - Campaigns:
+    - Publish a campaign and all of the quests inside it in one click with the new publish button on the campaign detail page, instead of publishing each quest one at a time. (Handy before exporting to the Library, since only campaigns with published quests can be exported.) [#1843](https://github.com/bytedeck/bytedeck/issues/1843)
+  - Quests:
+    - New "Student Statuses" page for teachers: a new button among a quest's action buttons opens a table showing every student's status on that quest — including students who haven't started it — with links to their submissions [#918](https://github.com/bytedeck/bytedeck/issues/918)
 * Tweaks:
- - Library:
-    - When importing a single quest that already exists on your deck, the confirmation page now shows a prominent red warning explaining that overwriting existing quests individually is not yet supported. (Previously the notice was easy to miss and contradicted the campaign-import message, which says existing quests get overwritten.) [#1876] [#1878]
- - Quest Approvals:
-    - Search on the Approvals tab now also matches the Group, User, and Status columns, so it behaves the same as search on the other submission tables [#1875]
- - Campaigns & Badges:
-    - The campaign detail, campaign delete, and badge-type delete pages now show the reason something can't be deleted in a red alert well, instead of only in a tooltip on the disabled delete button [#1861]
+  - Library:
+    - When importing a single quest that already exists on your deck, the confirmation page now shows a prominent red warning explaining that overwriting existing quests individually is not yet supported. (Previously the notice was easy to miss and contradicted the campaign-import message, which says existing quests get overwritten.) [#1876](https://github.com/bytedeck/bytedeck/issues/1876) [#1878](https://github.com/bytedeck/bytedeck/issues/1878)
+  - Quest Approvals:
+    - Search on the Approvals tab now also matches the Group, User, and Status columns, so it behaves the same as search on the other submission tables [#1875](https://github.com/bytedeck/bytedeck/issues/1875)
+  - Campaigns & Badges:
+    - The campaign detail, campaign delete, and badge-type delete pages now show the reason something can't be deleted in a red alert well, instead of only in a tooltip on the disabled delete button [#1861](https://github.com/bytedeck/bytedeck/issues/1861)
 * Refactor/Optimizations:
- - Django 5.2 preparation: removed APIs dropped between Django 4.2 and 5.2, and fixed two broken unpinned dependencies (namegenerator, redis-py) [#1897]
- - Eliminated the worst N+1 query patterns across approvals, badge lists, profile pages, the campaigns list, badge detail, ranks list, and popover counts [#1898]
- - Further N+1 reductions on the profile detail page and the notifications list [#1902]
- - Hardened rank and rarity caches against signal-less ORM writes [#1898]
- - New deck owners now receive a secure random initial password (generated once and emailed) instead of a guessable one, and deck-request verification links are opaque single-use nonces that keep the requester's name and email out of the URL [#1903]
+  - Django 5.2 preparation: removed APIs dropped between Django 4.2 and 5.2, and fixed two broken unpinned dependencies (namegenerator, redis-py) [#1897](https://github.com/bytedeck/bytedeck/issues/1897)
+  - Eliminated the worst N+1 query patterns across approvals, badge lists, profile pages, the campaigns list, badge detail, ranks list, and popover counts [#1898](https://github.com/bytedeck/bytedeck/issues/1898)
+  - Further N+1 reductions on the profile detail page and the notifications list [#1902](https://github.com/bytedeck/bytedeck/issues/1902)
+  - Hardened rank and rarity caches against signal-less ORM writes [#1898](https://github.com/bytedeck/bytedeck/issues/1898)
+  - New deck owners now receive a secure random initial password (generated once and emailed) instead of a guessable one, and deck-request verification links are opaque single-use nonces that keep the requester's name and email out of the URL [#1903](https://github.com/bytedeck/bytedeck/issues/1903)
 * Bugfixes:
- - Deck Requests:
-    - Creating a new deck no longer silently fails to set up the deck owner's account (the setup ran in the wrong database schema, which made it a no-op in production), and verification / welcome emails are now sent in the background so the signup pages don't hang while mail goes out [#1903]
- - Quest Maps:
-    - Maps no longer draw connections for inverted ("NOT") OR-prerequisites: the exclude-NOT option was silently ignored for the OR slot of a prerequisite, so a map could include quests whose only link was a NOT condition [#1900] [#1901]
- - Library:
-    - Importing from the Library now also checks your archived quests for duplicates, so you can no longer end up with a second copy of a quest you had archived [#1877]
-    - Export-to-Library options are no longer offered while browsing the shared Library deck itself [#1888]
- - Quests:
-    - Archived quests can now be deleted directly — the delete page previously returned "Not Found" for them, forcing you to unarchive first [#1874]
+  - Deck Requests:
+    - Creating a new deck no longer silently fails to set up the deck owner's account (the setup ran in the wrong database schema, which made it a no-op in production), and verification / welcome emails are now sent in the background so the signup pages don't hang while mail goes out [#1903](https://github.com/bytedeck/bytedeck/issues/1903)
+  - Quest Maps:
+    - Maps no longer draw connections for inverted ("NOT") OR-prerequisites: the exclude-NOT option was silently ignored for the OR slot of a prerequisite, so a map could include quests whose only link was a NOT condition [#1900](https://github.com/bytedeck/bytedeck/issues/1900) [#1901](https://github.com/bytedeck/bytedeck/issues/1901)
+  - Library:
+    - Importing from the Library now also checks your archived quests for duplicates, so you can no longer end up with a second copy of a quest you had archived [#1877](https://github.com/bytedeck/bytedeck/issues/1877)
+    - Export-to-Library options are no longer offered while browsing the shared Library deck itself [#1888](https://github.com/bytedeck/bytedeck/issues/1888)
+  - Quests:
+    - Archived quests can now be deleted directly — the delete page previously returned "Not Found" for them, forcing you to unarchive first [#1874](https://github.com/bytedeck/bytedeck/issues/1874)
 * Devops:
- - Fixed the randomly-flaky CI failures in the prerequisites signal tests (`Rank.DoesNotExist` and missing-map errors):
-    - Tests that create `Prereq` objects now use deterministic content types instead of random ones [#1899]
-    - A custom test runner gives `baker.make(Prereq)` valid generic-foreign-key targets, so it can no longer fabricate dangling prereqs that crash the map-generation signal [#1903]
-    - `PrerequisitesSignalsTest.test_on_quest_badge_save_with_rank_prereq__creation` now wraps its `baker.make` in `captureOnCommitCallbacks(execute=True)` so the map-generation signal can't fire before its Rank is committed (direct commit 7a070fd, no PR)
+  - Fixed the randomly-flaky CI failures in the prerequisites signal tests (`Rank.DoesNotExist` and missing-map errors):
+    - Tests that create `Prereq` objects now use deterministic content types instead of random ones [#1899](https://github.com/bytedeck/bytedeck/issues/1899)
+    - A custom test runner gives `baker.make(Prereq)` valid generic-foreign-key targets, so it can no longer fabricate dangling prereqs that crash the map-generation signal [#1903](https://github.com/bytedeck/bytedeck/issues/1903)
+    - `PrerequisitesSignalsTest.test_on_quest_badge_save_with_rank_prereq__creation` now wraps its `baker.make` in `captureOnCommitCallbacks(execute=True)` so the map-generation signal can't fire before its Rank is committed (direct commit [7a070fd](https://github.com/bytedeck/bytedeck/commit/7a070fd), no PR)
 
 
 ### [1.27.0] 2025-08-15 Marcus II
 * New Features:
- - New quest tab for Archived quests [#1800] and full rework of process for Archiving quests [#1846]
- - New Detail view for Campaigns [#1794]
- - "Returned" tab for teachers renamed to "In Progress" and includes all in-progress quests as well as returned, with returned quests sorted at the top by default [#1820]
- - Ability to import full Campaigns [#1842] [#1833]
- - Ability to export individual quests to the Library [#1860] and [#1848]
- - Option to Bulk Edit quests from the quest list (bulk editing options are context dependant to which tab you are on) [#1758]
+  - New quest tab for Archived quests [#1800](https://github.com/bytedeck/bytedeck/issues/1800) and full rework of process for Archiving quests [#1846](https://github.com/bytedeck/bytedeck/issues/1846)
+  - New Detail view for Campaigns [#1794](https://github.com/bytedeck/bytedeck/issues/1794)
+  - "Returned" tab for teachers renamed to "In Progress" and includes all in-progress quests as well as returned, with returned quests sorted at the top by default [#1820](https://github.com/bytedeck/bytedeck/issues/1820)
+  - Ability to import full Campaigns [#1842](https://github.com/bytedeck/bytedeck/issues/1842) [#1833](https://github.com/bytedeck/bytedeck/issues/1833)
+  - Ability to export individual quests to the Library [#1860](https://github.com/bytedeck/bytedeck/issues/1860) and [#1848](https://github.com/bytedeck/bytedeck/issues/1848)
+  - Option to Bulk Edit quests from the quest list (bulk editing options are context dependant to which tab you are on) [#1758](https://github.com/bytedeck/bytedeck/issues/1758)
 * Tweaks:
- - Rearrange Library menu items [#1806]
- - Link to quests in Library import message [#1830]
- - Improve consistancy between Badge and Quest detail pages [#1821]
- - Trigger regeneration of a map when the Map form is updated.
- - Only allow deletion of a CCmapign if it has no quests [#1824]
- - Auto-increment date and copy label when adding new excluded dates to a Semester [#1419]
+  - Rearrange Library menu items [#1806](https://github.com/bytedeck/bytedeck/issues/1806)
+  - Link to quests in Library import message [#1830](https://github.com/bytedeck/bytedeck/issues/1830)
+  - Improve consistancy between Badge and Quest detail pages [#1821](https://github.com/bytedeck/bytedeck/issues/1821)
+  - Trigger regeneration of a map when the Map form is updated.
+  - Only allow deletion of a CCmapign if it has no quests [#1824](https://github.com/bytedeck/bytedeck/issues/1824)
+  - Auto-increment date and copy label when adding new excluded dates to a Semester [#1419](https://github.com/bytedeck/bytedeck/issues/1419)
 * Refactor/Optimizations:
- - Rename Quest's `visible_to_students` field and Badge and Category/Campaign `active` fields all to `published` consistancy accross models [#1818] and [#1839]
+  - Rename Quest's `visible_to_students` field and Badge and Category/Campaign `active` fields all to `published` consistancy accross models [#1818](https://github.com/bytedeck/bytedeck/issues/1818) and [#1839](https://github.com/bytedeck/bytedeck/issues/1839)
 * Bugfixes:
- - Campaign import filter so only campaigns with published quests appear [#1812]
- - Fix campaign info displayed in the Library [#1801]
- - Fix number of quests/campaigns shown on Library tabs [#1829]
- - Check if quest already exists in Archived quests before importing it from Library [#1834]
- - Importing a single quest within a campaign no longer imports the campaign as well [#1810]
- - Another attempt to fix auto-linkification of urls within lists [#1826]
+  - Campaign import filter so only campaigns with published quests appear [#1812](https://github.com/bytedeck/bytedeck/issues/1812)
+  - Fix campaign info displayed in the Library [#1801](https://github.com/bytedeck/bytedeck/issues/1801)
+  - Fix number of quests/campaigns shown on Library tabs [#1829](https://github.com/bytedeck/bytedeck/issues/1829)
+  - Check if quest already exists in Archived quests before importing it from Library [#1834](https://github.com/bytedeck/bytedeck/issues/1834)
+  - Importing a single quest within a campaign no longer imports the campaign as well [#1810](https://github.com/bytedeck/bytedeck/issues/1810)
+  - Another attempt to fix auto-linkification of urls within lists [#1826](https://github.com/bytedeck/bytedeck/issues/1826)
 * Devops:
- - Library views converted to CBV [#1813]
- - Fiddle with build and tests automation [#1869], [#1868], [#1870]
+  - Library views converted to CBV [#1813](https://github.com/bytedeck/bytedeck/issues/1813)
+  - Fiddle with build and tests automation [#1869](https://github.com/bytedeck/bytedeck/issues/1869), [#1868](https://github.com/bytedeck/bytedeck/issues/1868), [#1870](https://github.com/bytedeck/bytedeck/issues/1870)
 
 
 ### [1.26.0] 2025-07-10 Marcus I
 * New Features:
- - New Campaign 'Description' field [#1772](https://github.com/bytedeck/bytedeck/issues/1772)
- - Add optional start and end times to youtube video insert widget [#1556](https://github.com/bytedeck/bytedeck/issues/1556)
- - Preview quests on the Library tab [#1757](https://github.com/bytedeck/bytedeck/issues/1757)
+  - New Campaign 'Description' field [#1772](https://github.com/bytedeck/bytedeck/issues/1772)
+  - Add optional start and end times to youtube video insert widget [#1556](https://github.com/bytedeck/bytedeck/issues/1556)
+  - Preview quests on the Library tab [#1757](https://github.com/bytedeck/bytedeck/issues/1757)
 * Tweaks:
- - Redirect to bytedeck.com when deck name isn't found (or typo) [#1583](https://github.com/bytedeck/bytedeck/issues/1583)
- - Extend email confirmation link to 90 days [#1767](https://github.com/bytedeck/bytedeck/issues/1767)
- - Remove 'active' column from campaign list (redundant since only active campaigns will appear in this tab) [#1749](https://github.com/bytedeck/bytedeck/issues/1749)
- - Announcement notifications can now be removed from the New Notifications menu [#1233](https://github.com/bytedeck/bytedeck/issues/1233)
- - Improve the "form already submitted" alert message [#1778](https://github.com/bytedeck/bytedeck/issues/1778)
- - Prevent deletion of Campaign if it has quests in it [#1773](https://github.com/bytedeck/bytedeck/issues/1773)
- - Quest (and other) search fields now search on all words seperately [#1791](https://github.com/bytedeck/bytedeck/issues/1791)
- - Avatar styling on profile page [#822](https://github.com/bytedeck/bytedeck/issues/822)
+  - Redirect to bytedeck.com when deck name isn't found (or typo) [#1583](https://github.com/bytedeck/bytedeck/issues/1583)
+  - Extend email confirmation link to 90 days [#1767](https://github.com/bytedeck/bytedeck/issues/1767)
+  - Remove 'active' column from campaign list (redundant since only active campaigns will appear in this tab) [#1749](https://github.com/bytedeck/bytedeck/issues/1749)
+  - Announcement notifications can now be removed from the New Notifications menu [#1233](https://github.com/bytedeck/bytedeck/issues/1233)
+  - Improve the "form already submitted" alert message [#1778](https://github.com/bytedeck/bytedeck/issues/1778)
+  - Prevent deletion of Campaign if it has quests in it [#1773](https://github.com/bytedeck/bytedeck/issues/1773)
+  - Quest (and other) search fields now search on all words seperately [#1791](https://github.com/bytedeck/bytedeck/issues/1791)
+  - Avatar styling on profile page [#822](https://github.com/bytedeck/bytedeck/issues/822)
 * Refactor/Optimizations:
 * Bugfixes:
- - Add rate limit 429 error page [#1766](https://github.com/bytedeck/bytedeck/issues/1766)
- - Handle empty 'XP Requested' field [#1561](https://github.com/bytedeck/bytedeck/issues/1561)
- - Add blank values for Quests in Campaign and Total XP available on Campaign detail view [#1748](https://github.com/bytedeck/bytedeck/issues/1748)
- - Fix user access to the Library tab.  Only authenticated staff can access [#1789](https://github.com/bytedeck/bytedeck/issues/1789)
- - Fix automated link creation of urls in comments [#930](https://github.com/bytedeck/bytedeck/issues/930)
- - Remove uneccessary notification for a submission on a quest when the teacher is set to be notified already [#699](https://github.com/bytedeck/bytedeck/issues/699)
- - Fix various campaign import issues [#1764](https://github.com/bytedeck/bytedeck/issues/1764)
+  - Add rate limit 429 error page [#1766](https://github.com/bytedeck/bytedeck/issues/1766)
+  - Handle empty 'XP Requested' field [#1561](https://github.com/bytedeck/bytedeck/issues/1561)
+  - Add blank values for Quests in Campaign and Total XP available on Campaign detail view [#1748](https://github.com/bytedeck/bytedeck/issues/1748)
+  - Fix user access to the Library tab.  Only authenticated staff can access [#1789](https://github.com/bytedeck/bytedeck/issues/1789)
+  - Fix automated link creation of urls in comments [#930](https://github.com/bytedeck/bytedeck/issues/930)
+  - Remove uneccessary notification for a submission on a quest when the teacher is set to be notified already [#699](https://github.com/bytedeck/bytedeck/issues/699)
+  - Fix various campaign import issues [#1764](https://github.com/bytedeck/bytedeck/issues/1764)
 * Devops:
- - Upgrade database to Postgres 16
- - Update automated testing to use Ubuntu 22.04
- - Update CodeQL Analysis to V2 [#1784](https://github.com/bytedeck/bytedeck/issues/1784)
+  - Upgrade database to Postgres 16
+  - Update automated testing to use Ubuntu 22.04
+  - Update CodeQL Analysis to V2 [#1784](https://github.com/bytedeck/bytedeck/issues/1784)
 
 
 ### [1.25.2] 2025-02-19
