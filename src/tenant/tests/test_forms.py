@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
 
-from captcha.widgets import ReCaptchaV2Invisible
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from tenant.forms import MAX_DECK_NAME_LENGTH, DeckRequestForm, TenantForm
 from tenant.models import Tenant

@@ -80,10 +80,11 @@ SHARED_APPS = (
 
     'django.contrib.sites',
 
-    'captcha',
+    'django_recaptcha',
 
     'grappelli',
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
     'bootstrap_datepicker_plus',
     'embed_video',
     'django_select2',
@@ -167,13 +168,14 @@ INSTALLED_APPS = (
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
     'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
-    'captcha',
+    'django_recaptcha',
 
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
@@ -234,6 +236,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # required by django-allauth >= 0.56
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -472,6 +475,10 @@ STATICFILES_DIRS = env(
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
+# django-crispy-forms 2.x ships no template packs of its own; bootstrap3 comes
+# from the crispy-bootstrap3 package and must be explicitly allowed.
+CRISPY_ALLOWED_TEMPLATE_PACKS = ('bootstrap3',)
+
 # https://django-crispy-forms.readthedocs.io/en/latest/crispy_tag_forms.html#make-crispy-forms-fail-loud
 CRISPY_FAIL_SILENTLY = not DEBUG  # logs crispy-forms failures as exceptions when True
 
@@ -521,12 +528,12 @@ else:
 
 
 # Google provides default keys in development that always validate, but results in this error:
-#  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+#  django_recaptcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
 #
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
-SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
+SILENCED_SYSTEM_CHECKS += ['django_recaptcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
@@ -564,9 +571,14 @@ LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = 'account_login'
 ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
-ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username,
-# e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
+ACCOUNT_LOGIN_METHODS = {"username"}  # ({"username"} | {"email"} | {"username", "email"})
+# Specifies the login method to use - whether the user logs in by entering their username,
+# e-mail address, or either one of both. Renamed from ACCOUNT_AUTHENTICATION_METHOD in django-allauth 65.0.
+ACCOUNT_SIGNUP_FIELDS = ["username*", "email", "password1*", "password2*"]
+# Which fields are presented on the signup form ("*" = required). Replaces the removed
+# ACCOUNT_EMAIL_REQUIRED / ACCOUNT_USERNAME_REQUIRED settings and preserves their old
+# defaults here: username required, email optional (providing + verifying an email
+# lets users reset their own password).
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
 # ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL #(=settings.LOGIN_URL)
@@ -808,6 +820,13 @@ if TESTING:
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'test-loc'
     }
+
+    # django-allauth >= 65 rate-limits auth flows via the cache: failed logins
+    # per IP/user, and verification-email resends (1 per 3 min per address,
+    # silently skipped when limited). Tests share one client IP and resend
+    # within seconds, so disable rate limits entirely. Note: False is the only
+    # way to disable — a dict (even {}) is merged over allauth's defaults.
+    ACCOUNT_RATE_LIMITS = False
 
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################

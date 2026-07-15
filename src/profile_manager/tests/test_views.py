@@ -528,7 +528,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.test_student1.refresh_from_db()
         self.assertEqual(self.test_student1.email, email)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(message, f"Confirmation e-mail sent to {email}.")
+        self.assertEqual(message, f"Confirmation email sent to {email}.")
 
         # begin test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
         self.client.logout()
@@ -645,7 +645,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         # Should now use the new email
         self.assertEqual(self.test_student1.email, new_email)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertEqual(message, f"Confirmation e-mail sent to {new_email}.")
+        self.assertEqual(message, f"Confirmation email sent to {new_email}.")
 
         # Revert back to the original email, ignore the confirmation email
         form_data = generate_form_data(model_form=ProfileForm)

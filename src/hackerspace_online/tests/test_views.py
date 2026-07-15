@@ -1,11 +1,13 @@
+from allauth.socialaccount.models import SocialApp
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 # from django.core import mail
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
-from django_tenants.utils import get_public_schema_name
+from django_tenants.utils import get_public_schema_name, schema_context
 from unittest.mock import patch
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
@@ -121,7 +123,20 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
         """
         Test to verify that Google sign in button is showing in the page when it is enabled
         """
+        # django-allauth 65's {% get_providers %} only lists providers that are
+        # actually configured with a SocialApp, so set one up the way
+        # production decks get one (public app propagated to the tenant).
+        with schema_context(get_public_schema_name()):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret',
+            )
+            app.sites.add(Site.objects.get_current())
+
         config = SiteConfig.get()
+        config._propagate_google_provider()
         config.enable_google_signin = True
         config.save()
 

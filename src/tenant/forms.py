@@ -1,5 +1,5 @@
-from captcha.fields import ReCaptchaField
-from captcha.widgets import ReCaptchaV2Invisible
+from django_recaptcha.fields import ReCaptchaField
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from django import forms
 from django.contrib.auth import get_user_model

@@ -298,8 +298,10 @@ class QuestResource(resources.ModelResource):
         quest.full_clean()
         quest.save()
 
-    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        if not dry_run:
+    def after_import(self, dataset, result, **kwargs):
+        # django-import-export 4.x passes using_transactions/dry_run via kwargs
+        # https://django-import-export.readthedocs.io/en/latest/release_notes.html#version-4-0
+        if not kwargs.get("dry_run", False):
             # Store local visibility info to preserve quest visibility during import
             local_visibility_map = kwargs.get('local_visibility_map', {})
             self.local_visibility_map = local_visibility_map
@@ -318,7 +320,7 @@ class QuestResource(resources.ModelResource):
 
 
 class QuestAdmin(NonPublicSchemaOnlyAdminAccessMixin, ByteDeckSummernoteAdvancedModelAdmin, ImportExportActionModelAdmin):  # use SummenoteModelAdmin
-    resource_class = QuestResource
+    resource_classes = [QuestResource]  # replaces resource_class, removed in django-import-export 4.0
     list_display = ('id', 'name', 'xp', 'archived', 'published', 'blocking', 'sort_order', 'max_repeats', 'date_expired',
                     'editor', 'specific_teacher_to_notify', 'common_data', 'campaign')
     list_filter = ['archived', 'published', 'max_repeats', 'verification_required', 'editor',
