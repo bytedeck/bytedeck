@@ -21,7 +21,7 @@ django-select2>=8.4,<8.5
 django-storages[boto3]>=1.14,<2
 django-summernote>=0.8,<0.9
 django-taggit>=6.1,<7.0
-django-tenants>=3.10,<3.11
+django-tenants>=3.10.2,<3.11
 django-url-or-relative-url-field>=0.2.0,<0.3.0
 tenant-schemas-celery>=4.0,<4.1
 
