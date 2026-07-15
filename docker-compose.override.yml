@@ -26,7 +26,7 @@ services:
     - 5432:5432  # Expose port so app can connect to db when developing locally with `python src/manage.py [runserver|test src]
 
   redis:
-    image: "redis:5.0-alpine"
+    image: "redis:7-alpine"
     env_file: .env
     sysctls:
       # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.

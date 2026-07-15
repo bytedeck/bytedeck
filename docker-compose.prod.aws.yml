@@ -21,9 +21,54 @@ services:
       # - media_data:/app/media
       # - socket_data:/bytedeck-volume
     user: $WUID:$WGID
+    depends_on:
+      redis:
+        condition: service_healthy
 
   celery:
     user: $WUID:$WGID
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Self-hosted Redis (Celery broker on db 0, Django cache on db 1/2), replacing
+  # AWS ElastiCache. It is reachable ONLY on the internal backend-network — no
+  # published port — so in this single-host setup it needs no password.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # - maxmemory caps RAM so Redis can't OOM the shared app host (override with
+    #   REDIS_MAXMEMORY in .env; size it to the instance and working set).
+    # - noeviction: never drop keys under memory pressure, so queued Celery/beat
+    #   tasks are never silently lost. (If cache churn makes the cap tight,
+    #   raise REDIS_MAXMEMORY, or switch to volatile-lru — cache entries carry a
+    #   TTL and broker keys do not, so only cache keys would be evicted.)
+    # - persistence disabled: the broker queue and cache are both disposable.
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "${REDIS_MAXMEMORY:-256mb}"
+      - "--maxmemory-policy"
+      - "noeviction"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+    sysctls:
+      # Silence the "somaxconn 128 < 511" warning (matches the dev redis service).
+      net.core.somaxconn: 512
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend-network
 
   nginx:
     build:
