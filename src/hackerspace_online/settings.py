@@ -68,8 +68,10 @@ def _validate_deployment_settings(root_domain, debug, secret_key):
 
 
 # Fail fast on insecure example defaults in a real deployment. Skipped during
-# tests, where DEBUG/SECRET_KEY are intentionally weak.
-if 'test' not in sys.argv:
+# tests, where DEBUG/SECRET_KEY are intentionally weak. This bootstrap line is
+# excluded from coverage because it only runs outside the test harness; the
+# logic itself is covered directly by DeploymentSettingsGuardTest.
+if 'test' not in sys.argv:  # pragma: no cover
     _validate_deployment_settings(ROOT_DOMAIN, DEBUG, SECRET_KEY)
 
 # In production TLS is terminated at nginx, which then forwards to uWSGI over
