@@ -11,8 +11,11 @@ The fix is a partial unique constraint forbidding more than one *in-progress*
 ``create_submission()`` catching the resulting ``IntegrityError`` and returning
 the submission that won the race instead of a duplicate.
 """
+import importlib
+
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -21,6 +24,12 @@ from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
+
+# The migration module starts with a digit, so it can't be imported with a
+# plain ``import`` statement.
+migration_0049 = importlib.import_module(
+    "quest_manager.migrations.0049_inprogress_submission_unique_constraint"
+)
 
 
 class DoubleStartRaceTest(TenantTestCase):
@@ -112,3 +121,72 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
         self.assertEqual(
             QuestSubmission.objects.filter(quest=self.quest, user=self.student).count(), 2,
         )
+
+
+class MigrationDedupTest(TenantTestCase):
+    """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
+    it must delete duplicate in-progress rows (keeping the earliest), skip
+    NULL-semester rows, and leave completed submissions untouched."""
+
+    def _constraint(self):
+        return next(
+            c for c in QuestSubmission._meta.constraints
+            if c.name == "unique_inprogress_submission_per_quest_semester"
+        )
+
+    def _run_dedup(self):
+        with connection.schema_editor() as schema_editor:
+            migration_0049.remove_duplicate_in_progress_submissions(
+                django_apps, schema_editor,
+            )
+
+    def test_migration_dedup_removes_duplicate_in_progress_rows(self):
+        """Duplicate in-progress rows (the historical pre-constraint state) are
+        deleted keeping the earliest; completed and NULL-semester rows survive."""
+        student = baker.make(User, is_staff=False)
+        quest = baker.make(Quest, published=True, archived=False)
+        active = SiteConfig.get().active_semester
+
+        # Recreate the historical duplicate state by dropping the constraint first.
+        with connection.schema_editor() as schema_editor:
+            schema_editor.remove_constraint(QuestSubmission, self._constraint())
+        try:
+            keeper = baker.make(
+                QuestSubmission, user=student, quest=quest, semester=active, is_completed=False,
+            )
+            duplicate = baker.make(
+                QuestSubmission, user=student, quest=quest, semester=active, is_completed=False,
+            )
+            completed = baker.make(
+                QuestSubmission, user=student, quest=quest, semester=active, is_completed=True,
+            )
+            # NULL-semester rows are skipped by the dedup (NULLs never violate
+            # the partial unique index).
+            null_sem_1 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
+            null_sem_2 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
+
+            self._run_dedup()
+
+            self.assertTrue(QuestSubmission.objects.filter(pk=keeper.pk).exists())
+            self.assertFalse(QuestSubmission.objects.filter(pk=duplicate.pk).exists())
+            self.assertTrue(QuestSubmission.objects.filter(pk=completed.pk).exists())
+            self.assertTrue(QuestSubmission.objects.filter(pk=null_sem_1.pk).exists())
+            self.assertTrue(QuestSubmission.objects.filter(pk=null_sem_2.pk).exists())
+        finally:
+            # The dedup's deletes leave deferred trigger events pending in the
+            # test transaction, and Postgres refuses CREATE INDEX while they
+            # exist -- force them to fire before re-adding the constraint.
+            with connection.cursor() as cursor:
+                cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            with connection.schema_editor() as schema_editor:
+                schema_editor.add_constraint(QuestSubmission, self._constraint())
+
+    def test_migration_dedup_noop_when_no_duplicates(self):
+        """With no duplicate rows the dedup deletes nothing (the empty branch)."""
+        student = baker.make(User, is_staff=False)
+        quest = baker.make(Quest, published=True, archived=False)
+        sub = QuestSubmission.objects.create_submission(student, quest)
+
+        self._run_dedup()
+
+        self.assertTrue(QuestSubmission.objects.filter(pk=sub.pk).exists())
