@@ -407,6 +407,12 @@ POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
 POSTGRES_USER = env('POSTGRES_USER')
 POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
+# Persist database connections across requests instead of opening a new one each time
+# (Django's default of 0 closes the connection at the end of every request).
+# Env-configurable so it can be tuned per deployment or pinned to 0 where a connection
+# pooler (e.g. pgbouncer in transaction mode) makes persistent connections undesirable.
+CONN_MAX_AGE = env.int('CONN_MAX_AGE', default=60)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
@@ -414,7 +420,8 @@ DATABASES = {
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
         'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
+        'PORT': POSTGRES_PORT,
+        'CONN_MAX_AGE': CONN_MAX_AGE,
     }
 }
 
