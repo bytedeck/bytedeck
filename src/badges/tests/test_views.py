@@ -3,12 +3,11 @@ import uuid
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion, BadgeType
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 from notifications.models import Notification
@@ -19,26 +18,25 @@ import json
 User = get_user_model()
 
 
-class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
+
+        # needed because BadgeAssertions use a default that might not exist yet
+        cls.sem = SiteConfig.get().active_semester
+
+        cls.test_badge = baker.make(Badge, name="badge", xp=5)
+        cls.test_badge.tags.add('tag')
+        cls.test_badge_type = baker.make(BadgeType)
+        cls.test_assertion = baker.make(BadgeAssertion)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
-
-        # needed because BadgeAssertions use a default that might not exist yet
-        self.sem = SiteConfig.get().active_semester
-
-        self.test_badge = baker.make(Badge, name="badge", xp=5)
-        self.test_badge.tags.add('tag')
-        self.test_badge_type = baker.make(BadgeType)
-        self.test_assertion = baker.make(BadgeAssertion)
 
     def test_all_badge_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home  '''
@@ -61,8 +59,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_all_badge_page_status_codes_for_students(self):
 
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         b_pk = self.test_badge.pk
         # a_pk = self.test_assertion.pk
@@ -86,8 +83,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_badge_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
@@ -107,8 +103,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_badge_create(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         form_data = {
             'name': "badge test",
@@ -143,8 +138,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_badge_copy__POST(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         form_data = {
             'name': "badge copy test",
@@ -169,8 +163,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Ensure that the create and delete views properly add and remove the badges from the users profile
         and adds/subtracts XP."""
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # should be zero, but this avoids problems with any future changes to setUp etc.
         xp_initial = self.test_student1.profile.xp_cached
@@ -210,8 +203,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_assertion_create_no_xp(self):
         """Don't grant XP for this badge assertion"""
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # No XP granted for this badge
         form_data = {
@@ -231,8 +223,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_bulk_assertion_create(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # compare total granted before to after:
         badge_assertions_before = BadgeAssertion.objects.all().count()
@@ -296,8 +287,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         Badge list view should have two buttons in header for badge creation and badge type creation, both should use custom label
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -331,8 +321,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -347,19 +336,18 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, "CustomBadge Type")
 
 
-class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+
+        cls.badge_type = baker.make(BadgeType)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        self.badge_type = baker.make(BadgeType)
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -450,8 +438,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_badge to a non-default option
         config = SiteConfig.get()
@@ -470,39 +457,43 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Delete CustomBadge Type')
 
 
-class BadgeAjaxTests(ViewTestUtilsMixin, TenantTestCase):
+class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_badge_popup/
     + ajax/on_close_badge_popup/
     """
 
-    def create_assertion_notification(self, badge):
+    @classmethod
+    def create_assertion_notification(cls, badge):
         """ Creates a notification by triggering the post_save signal
         for BadgeAssertion
         """
         prepped = baker.prepare(
             BadgeAssertion,
             badge=badge,
-            user=self.student,
+            user=cls.student,
         )
         prepped.full_clean()
         prepped.save()
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
 
         # create multiple assertions of the same badge
-        self.badge_type1 = baker.make(BadgeType)
-        self.badge_multiple = baker.make(Badge, badge_type=self.badge_type1)
-        self.create_assertion_notification(self.badge_multiple)
-        self.create_assertion_notification(self.badge_multiple)
-        self.create_assertion_notification(self.badge_multiple)
+        cls.badge_type1 = baker.make(BadgeType)
+        cls.badge_multiple = baker.make(Badge, badge_type=cls.badge_type1)
+        cls.create_assertion_notification(cls.badge_multiple)
+        cls.create_assertion_notification(cls.badge_multiple)
+        cls.create_assertion_notification(cls.badge_multiple)
 
         # create single assertion
-        self.badge_type2 = baker.make(BadgeType)
-        self.badge_single = baker.make(Badge, badge_type=self.badge_type2)
-        self.create_assertion_notification(self.badge_single)
+        cls.badge_type2 = baker.make(BadgeType)
+        cls.badge_single = baker.make(Badge, badge_type=cls.badge_type2)
+        cls.create_assertion_notification(cls.badge_single)
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_status_codes(self):
         ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`

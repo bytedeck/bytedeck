@@ -2,12 +2,12 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from notifications.models import Notification
 from prerequisites.models import Prereq
@@ -15,13 +15,14 @@ from prerequisites.models import Prereq
 User = get_user_model()
 
 
-class BadgeRarityModelTest(TenantTestCase):
-    def setUp(self):
+class BadgeRarityModelTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
         # clear default mark range variables
         BadgeRarity.objects.all().delete()
-        self.common = baker.make(BadgeRarity, percentile=90.0)
-        self.rare = baker.make(BadgeRarity, percentile=80.0)
-        self.ultrarare = baker.make(BadgeRarity, percentile=70.0)
+        cls.common = baker.make(BadgeRarity, percentile=90.0)
+        cls.rare = baker.make(BadgeRarity, percentile=80.0)
+        cls.ultrarare = baker.make(BadgeRarity, percentile=70.0)
 
     def test_badge_rarity_creation(self):
         self.assertIsInstance(self.common, BadgeRarity)
@@ -41,9 +42,10 @@ class BadgeRarityModelTest(TenantTestCase):
         self.assertEqual(BadgeRarity.objects.get_rarity(110), ubercommon)
 
 
-class BadgeTypeModelTest(TenantTestCase):
-    def setUp(self):
-        self.badge_type = baker.make(BadgeType)
+class BadgeTypeModelTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.badge_type = baker.make(BadgeType)
 
     def test_badge_type_creation(self):
         self.assertIsInstance(self.badge_type, BadgeType)
@@ -61,20 +63,24 @@ class BadgeTypeModelTest(TenantTestCase):
         self.assertRaises(Exception, self.badge_type.delete)
 
 
-class BadgeSeriesTestModel(TenantTestCase):
-    def setUp(self):
-        self.badge_series = baker.make(BadgeSeries)
+class BadgeSeriesTestModel(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.badge_series = baker.make(BadgeSeries)
 
     def test_badge_series_creation(self):
         self.assertIsInstance(self.badge_series, BadgeSeries)
         self.assertEqual(str(self.badge_series), self.badge_series.name)
 
 
-class BadgeTestModel(TenantTestCase):
+class BadgeTestModel(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.badge = baker.make(Badge)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.badge = baker.make(Badge)
 
     def test_badge_creation(self):
         self.assertIsInstance(self.badge, Badge)
@@ -120,18 +126,21 @@ class BadgeTestModel(TenantTestCase):
         self.assertEqual(result, '<span class="badge-icon">Icon</span>')
 
 
-class BadgeAssertionManagerTest(TenantTestCase):
+class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sem = SiteConfig.get().active_semester
+
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        # cls.assertion = baker.make(BadgeAssertion, semester=cls.sem)
+        # cls.badge = Recipe(Badge, xp=20).make()
+
+        # cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.sem = SiteConfig.get().active_semester
-
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        # self.assertion = baker.make(BadgeAssertion, semester=self.sem)
-        # self.badge = Recipe(Badge, xp=20).make()
-
-        # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
 
     def test_user_badge_assertion_count(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
@@ -204,18 +213,21 @@ class BadgeAssertionManagerTest(TenantTestCase):
         self.assertQuerySetEqual(qs, [badge_assertion3, badge_assertion2, badge_assertion])
 
 
-class BadgeAssertionTestModel(TenantTestCase):
+class BadgeAssertionTestModel(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.sem = SiteConfig.get().active_semester
+
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        cls.assertion = baker.make(BadgeAssertion, semester=cls.sem)
+        cls.badge = Recipe(Badge, xp=20).make()
+
+        cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.sem = SiteConfig.get().active_semester
-
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        self.assertion = baker.make(BadgeAssertion, semester=self.sem)
-        self.badge = Recipe(Badge, xp=20).make()
-
-        self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge, semester=self.sem)
 
     def test_badge_assertion_creation(self):
         self.assertIsInstance(self.assertion, BadgeAssertion)
@@ -401,7 +413,7 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(notifications.filter(verb__contains='promoted').count(), 1)
 
 
-class BadgeRarityCacheInvalidationTest(TenantTestCase):
+class BadgeRarityCacheInvalidationTest(ByteDeckTenantTestCase):
     """get_rarity() reads from the cached rarity list, so every ORM write path
     must invalidate it: save/create and deletes via the post_save/post_delete
     signals, update()/bulk_create()/bulk_update() via the BadgeRarityQuerySet

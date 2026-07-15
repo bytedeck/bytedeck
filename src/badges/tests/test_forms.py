@@ -1,14 +1,14 @@
 from django.contrib.auth import get_user_model
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
 from badges.forms import BadgeAssertionForm, BulkBadgeAssertionForm
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class BadgeAssertionFormTest(TenantTestCase):
+class BadgeAssertionFormTest(ByteDeckTenantTestCase):
 
     def test_badge_assertion_form(self):
         """ Form with a badge and user is valid. """

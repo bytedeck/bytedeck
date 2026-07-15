@@ -6,12 +6,11 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from courses.models import Block, CourseStudent
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
@@ -20,26 +19,30 @@ from profile_manager.models import Profile
 from hackerspace_online.tests.utils import generate_form_data
 
 
-class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
+class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
         User = get_user_model()
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+        # test_student1 needs a known password so tests can POST the real login form (e.g. test_profile_update_email);
+        # everything else uses force_login()
+        cls.test_password = "password"
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student', password=cls.test_password)
+        cls.test_student2 = baker.make(User)
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
-        self.active_sem = SiteConfig.get().active_semester
+        cls.active_sem = SiteConfig.get().active_semester
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def tearDown(self):
         cache.clear()
@@ -57,8 +60,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_all_profile_page_status_codes_for_students(self):
 
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s_pk = self.test_student1.profile.pk
         s2_pk = self.test_student2.profile.pk
@@ -88,8 +90,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_profile_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         s_pk = self.test_student1.profile.pk
         # s2_pk = self.test_student2.pk
@@ -128,8 +129,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         spk = self.test_student1.profile.pk
 
         # login as teacher/admin and check if 'add course' doesnt exists
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
@@ -141,8 +141,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, 'Not applicable to staff users.')
 
         # login as student and check if 'add course' and 'course' exists
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # no course
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
@@ -160,8 +159,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
 
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # View profile page
         s_pk = self.test_student1.profile.pk
@@ -246,8 +244,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
 
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.assert404('courses:my_marks')
 
@@ -256,8 +253,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         Student marks page should be accessible if site admin has enabled it.
         """
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         config = SiteConfig.get()
         config.display_marks_calculation = True
@@ -388,15 +384,14 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
             quick test to see if staff can change their user's password using passwordchange form
         """
         User = get_user_model()
-        user_instance = User.objects.create_user(username="username", password=self.test_password)
+        user_instance = User.objects.create_user(username="username")
 
         form_data = {
             'new_password1': 'xXxnewwordpassxXx123@',
             'new_password2': 'xXxnewwordpassxXx123@',
         }
 
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # test if view accepts form data without errors
         self.client.post(reverse("profiles:change_password", kwargs={"pk": user_instance.pk}), data=form_data)
@@ -662,8 +657,7 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
     def test_update_profile__custom_label_displayed(self):
         """student profile update view should change instances of "student" to match custom label set in siteconfig"""
         # Login a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Change custom_name_for_student to a non-default option
         config = SiteConfig.get()
@@ -678,22 +672,25 @@ class ProfileViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(request, "Your marks will be visible to other customstudents through the customstudent list.")
 
 
-class ProfileDeleteTests(TenantTestCase):
+class ProfileDeleteTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         """
         Create test data using model_bakery.
         Since Profile is auto-created via a post_save signal, we only create Users.
         """
-        self.User = get_user_model()
-        self.client = TenantClient(self.tenant)
+        cls.User = get_user_model()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
-        self.student = self.User.objects.create_user('test_student')
+        cls.teacher = cls.User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = cls.User.objects.create_user('test_student')
 
         # URL for deleting the student's profile
-        self.delete_url = reverse("profiles:profile_delete", kwargs={"pk": self.student.profile.pk})
+        cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_teacher_can_delete_profile(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""

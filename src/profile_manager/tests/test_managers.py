@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
-from django_tenants.test.cases import TenantTestCase
 
 from model_bakery import baker
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from profile_manager.models import Profile
 from siteconfig.models import SiteConfig
@@ -10,41 +11,42 @@ from courses.models import CourseStudent, Course
 User = get_user_model()
 
 
-class ProfileManagerTest(TenantTestCase):
+class ProfileManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.course = baker.make(Course)
-        self.active_semester = SiteConfig().get().active_semester
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = baker.make(Course)
+        cls.active_semester = SiteConfig().get().active_semester
 
         # staff
-        self.staff_set = list(User.objects.filter(is_staff=True)) + [baker.make(User, username='teacher', is_staff=True)]
+        cls.staff_set = list(User.objects.filter(is_staff=True)) + [baker.make(User, username='teacher', is_staff=True)]
 
         # for naming students so when qs isn't equal the names are readable
         names = [f'user-{index}' for index in range(8)][::-1]  # reverse for pop method
 
         # students not in active sem
-        self.active_inactive_semester_students = baker.make(User, username=names.pop, _quantity=2)
-        self.inactive_inactive_semester_students = baker.make(User, username=names.pop, _quantity=2, is_active=False)
-        self.inactive_semester_students = self.active_inactive_semester_students + self.inactive_inactive_semester_students
+        cls.active_inactive_semester_students = baker.make(User, username=names.pop, _quantity=2)
+        cls.inactive_inactive_semester_students = baker.make(User, username=names.pop, _quantity=2, is_active=False)
+        cls.inactive_semester_students = cls.active_inactive_semester_students + cls.inactive_inactive_semester_students
 
-        for user in self.inactive_semester_students:
+        for user in cls.inactive_semester_students:
             baker.make(
                 CourseStudent,
                 user=user,
-                course=self.course
+                course=cls.course
             )
 
         # students in active sem
-        self.active_active_semester_students = baker.make(User, username=names.pop, _quantity=2)
-        self.inactive_active_semester_students = baker.make(User, username=names.pop, _quantity=2, is_active=False)
-        self.active_semester_students = self.active_active_semester_students + self.inactive_active_semester_students
+        cls.active_active_semester_students = baker.make(User, username=names.pop, _quantity=2)
+        cls.inactive_active_semester_students = baker.make(User, username=names.pop, _quantity=2, is_active=False)
+        cls.active_semester_students = cls.active_active_semester_students + cls.inactive_active_semester_students
 
-        for user in self.active_semester_students:
+        for user in cls.active_semester_students:
             baker.make(
                 CourseStudent,
                 user=user,
-                course=self.course,
-                semester=self.active_semester
+                course=cls.course,
+                semester=cls.active_semester
             )
 
     def test_all_for_active_semester_qs(self):
