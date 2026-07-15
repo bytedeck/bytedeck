@@ -5,16 +5,15 @@ from django.contrib.auth import get_user_model
 from django.core import mail
 from django.shortcuts import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 
 User = get_user_model()
 
 
-class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, TenantTestCase):
+class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """
     Custom `non_public_only_view` decorator was applied on every `allauth` views.
     """
@@ -63,14 +62,16 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('account_reset_password_from_key_done')  # ok
 
 
-class ResetPasswordViewTests(ViewTestUtilsMixin, TenantTestCase):
+class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_email = 'test_email@bytedeck.com'
+        cls.test_password = 'password'
+        cls.test_student1 = User.objects.create_user('test_student', email=cls.test_email, password=cls.test_password)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        self.test_email = 'test_email@bytedeck.com'
-        self.test_password = 'password'
-        self.test_student1 = User.objects.create_user('test_student', email=self.test_email, password=self.test_password)
 
     def test_user_cannot_request_password_reset(self):
         """ User should not be able to request password reset if they registered without an email """

@@ -58,24 +58,24 @@ class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 
 class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
+    @classmethod
+    def setUpTestData(cls):
+        with library_schema_context():
+            # Create a quest in the library tenant
+            cls.shared_quest = baker.make(Quest)
+            cls.library_quest = baker.make(Quest)
+
+        cls.local_quest = baker.make(Quest)
+        baker.make(Quest, import_id=cls.shared_quest.import_id)
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student', is_staff=False)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
-
-        self.test_password = 'password'
-
-        with library_schema_context():
-            # Create a quest in the library tenant
-            self.shared_quest = baker.make(Quest)
-            self.library_quest = baker.make(Quest)
-
-        self.local_quest = baker.make(Quest)
-        baker.make(Quest, import_id=self.shared_quest.import_id)
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
 
     def test_library_tenant_exists(self):
         """
@@ -423,30 +423,30 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
+    @classmethod
+    def setUpTestData(cls):
+        cls.local_category = baker.make(Category)
+        cls.shared_category = baker.make(Category)
+
+        baker.make(Quest, campaign=cls.local_category, published=True)
+        baker.make(Quest, campaign=cls.local_category, published=True)
+
+        with library_schema_context():
+            # Create a category in the library tenant
+            cls.library_category = baker.make(Category)
+            cls.library_quest = baker.make(Quest, campaign=cls.library_category, published=True)
+            baker.make(Category, import_id=cls.shared_category.import_id)
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student', is_staff=False)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
-        self.test_password = 'password'
-
         self.config = SiteConfig.get()
         self.deck_owner = self.config.deck_owner
-
-        self.local_category = baker.make(Category)
-        self.shared_category = baker.make(Category)
-
-        baker.make(Quest, campaign=self.local_category, published=True)
-        baker.make(Quest, campaign=self.local_category, published=True)
-
-        with library_schema_context():
-            # Create a category in the library tenant
-            self.library_category = baker.make(Category)
-            self.library_quest = baker.make(Quest, campaign=self.library_category, published=True)
-            baker.make(Category, import_id=self.shared_category.import_id)
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
 
     def test_all_library_category_page_status_codes_for_anonymous(self):
         """
@@ -963,19 +963,20 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
 
 class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_password = 'password'
-
+    @classmethod
+    def setUpTestData(cls):
         with library_schema_context():
             # Set up a campaign to test with later
-            self.library_campaign = baker.make(Category, published=True)
+            cls.library_campaign = baker.make(Category, published=True)
             # Set up a quest to test with later
-            self.library_quest = baker.make(Quest, campaign=self.library_campaign)
+            cls.library_quest = baker.make(Quest, campaign=cls.library_campaign)
 
         # Need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password, is_staff=False)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student', is_staff=False)
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_library_overview_redirects_anonymous(self):
         """

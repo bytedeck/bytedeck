@@ -2,14 +2,15 @@ from unittest.mock import patch
 
 from django.db import connection
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from tenant.models import Tenant
 from tenant.signals import initialize_tenant_with_data
 
 
-class InitializeTenantWithDataTest(TenantTestCase):
+class InitializeTenantWithDataTest(ByteDeckTenantTestCase):
     """Tests for the `post_schema_sync` handler that seeds a new tenant's schema."""
 
     @patch("tenant.signals.load_initial_tenant_data")

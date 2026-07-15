@@ -3,7 +3,6 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
@@ -12,15 +11,18 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form
 from courses.forms import BlockForm, CourseStudentForm
 
 
-class Utils_generate_form_data_Test(TenantTestCase):
+class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
     """
         Specialized test cases for hackerspace_online.tests.utils.generate_form_data_test()
         Test to see if data generated is form_valid and can be used in post requests with different forms and models
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = get_user_model().objects.create(username="teacher", is_staff=True,)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.teacher = get_user_model().objects.create(username="teacher", password="password", is_staff=True,)
 
     def test_valid_SiteConfigModel(self):
         """

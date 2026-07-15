@@ -7,8 +7,9 @@ from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
 
@@ -73,7 +74,7 @@ class InitDbTest(TestCase, CommandMixin):
             Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
 
 
-class GenerateContentTest(TenantTestCase, CommandMixin):
+class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
     """ generate_content adds items to an existing tenant.
     Dont need extensive testing as tests exist in "test_shell_utils.py"
     """

@@ -11,12 +11,11 @@ from django.shortcuts import reverse
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from tenant.views import non_public_only_view, public_only_view, TenantCreate, TenantForm, EmailVerificationRequiredMixin
 from tenant.models import Tenant
 from tenant.utils import DeckRequestService
@@ -36,7 +35,7 @@ def view_accessible_by_non_public_only(request):
     return HttpResponse(status=200)
 
 
-class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
+class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         self.factory = RequestFactory()
         # generate an empty request instance so we can call our views directly
@@ -69,42 +68,45 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
             view_accessible_by_non_public_only(self.request)
 
 
-class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
+class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Various tests for `TenantCreate` view class."""
 
-    def setUp(self):
-        """Build a public schema, superuser, and TenantClient, and clear the
-        per-email throttle cache so each test starts from a clean slate."""
-        self.factory = RequestFactory()
-        # isolate the per-email request throttle between tests
-        cache.clear()
-
+    @classmethod
+    def setUpTestData(cls):
+        """Build a public schema and superuser shared by all tests in the class."""
         # Create the public schema
-        self.public_tenant = Tenant(schema_name="public", name="public")
-        with tenant_context(self.public_tenant):
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
             # create superuser account
-            self.superuser = User.objects.create_superuser(
+            cls.superuser = User.objects.create_superuser(
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding triggering
-            # django signals (post_save and pre_save) can save us a lot of time.
-            Tenant.objects.bulk_create([self.public_tenant])
-            self.public_tenant.refresh_from_db()
+            # avoiding triggering django signals (post_save and pre_save)
+            # can save us a lot of time.
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
             # Use 'testserver' as the domain for environment-agnostic testing
-            self.public_tenant.domains.create(domain="testserver", is_primary=True)
+            cls.public_tenant.domains.create(domain="testserver", is_primary=True)
 
-        # Create client for the tenant
-        self.client = TenantClient(self.public_tenant, host="testserver")
-
-        self.form_data = {
+        cls.form_data = {
             "name": "default",
             "first_name": "John",
             "last_name": "Doe",
             "email": "john.doe@example.com",
             "captcha": "dummy",
         }
+
+    def setUp(self):
+        """Build a TenantClient, and clear the per-email throttle cache so each
+        test starts from a clean slate."""
+        self.factory = RequestFactory()
+        # isolate the per-email request throttle between tests
+        cache.clear()
+
+        # Create client for the tenant
+        self.client = TenantClient(self.public_tenant, host="testserver")
 
     def test_anonymous_denied_without_verified_deck_request(self):
         """Anonymous users without a verified deck request are denied access."""

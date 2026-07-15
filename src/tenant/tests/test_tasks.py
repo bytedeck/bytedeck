@@ -1,11 +1,11 @@
 from django.core import mail
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from tenant import tasks
 
 
-class TenantTasksTests(TenantTestCase):
+class TenantTasksTests(ByteDeckTenantTestCase):
     """ Run tasks (from tenant module) asyncronously with apply() """
 
     def test_send_email_message(self):
