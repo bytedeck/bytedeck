@@ -855,28 +855,34 @@ class QuestSubmissionManagerTest(TenantTestCase):
         that can be gained in a repeatable quest
         """
         quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
+        # is_completed=True: approved submissions are always completed, and only
+        # one *in-progress* submission per quest/semester is allowed (issue #1345).
         baker.make(
             QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
-            semester=self.active_semester, is_approved=True, _quantity=3
+            semester=self.active_semester, is_completed=True, is_approved=True, _quantity=3
         )
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
         # Perform additional submission but xp remains the same
-        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
+            semester=self.active_semester, is_completed=True, is_approved=True,
+        )
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
     def test_calculate_xp__ith_xp_requested_and_max_xp(self):
         """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
         """
-        # Create an approved submission
-        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+        # Create an approved submission (approved submissions are always completed;
+        # only one in-progress submission per quest/semester is allowed -- #1345).
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, quest__xp=10)
 
         # Create a repeatable quest with custom xp.
         quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=17)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=8)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=10)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, xp_requested=8)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, xp_requested=10)
 
         xp = QuestSubmission.objects.calculate_xp(self.student)
         # Should be the max_xp value + 10 (17+10) = 27), since request XP 10 + 8 = 18 is greater than the max_xp of 17
@@ -885,8 +891,8 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # Create a 2nd repeatable quest with custom xp.
         quest = baker.make(Quest, xp=1, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=3)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=1)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=5)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, xp_requested=1)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, xp_requested=5)
 
         # despite 1 + 5, should only add 3 xp since max_xp is 3 for this repeatable quest
         xp = QuestSubmission.objects.calculate_xp(self.student)
