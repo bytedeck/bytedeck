@@ -367,6 +367,14 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         """Surface the deck-request timeouts as friendly strings, derived from
         ``DeckRequestService``'s settings so the on-page copy can't drift from
         the values actually enforced.
+
+        Args:
+            **kwargs: Keyword arguments from the URLconf, passed through to the
+                base ``TemplateView`` implementation.
+
+        Returns:
+            dict: The template context, with ``verification_validity`` and
+            ``resend_cooldown`` duration strings added to the base context.
         """
         context = super().get_context_data(**kwargs)
         context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)

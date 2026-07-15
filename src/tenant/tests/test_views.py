@@ -132,7 +132,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
     @patch.object(DeckRequestService, "send_verification_email")
-    def test_successful_deck_request_sends_email_and_redirects_to_confirmation(self, mock_send_email, mock_captcha):
+    def test_RequestNewDeck_form_valid__sends_email_and_redirects_to_confirmation(self, mock_send_email, mock_captcha):
         """A valid deck request sends the verification email and redirects to the
         dedicated confirmation page (not back to the form with a flash message)."""
         form_data = {
@@ -169,7 +169,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
     @patch.object(DeckRequestService, "send_verification_email")
-    def test_deck_request_redirect_identical_whether_or_not_email_sent(self, mock_send_email, mock_captcha):
+    def test_RequestNewDeck_form_valid__redirect_identical_whether_or_not_email_sent(self, mock_send_email, mock_captcha):
         """The response must not reveal whether an email was actually sent: both a
         first (email-sending) request and a throttled second request for the same
         address redirect to the same confirmation page."""
@@ -190,7 +190,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(first.url, confirmation_url)
         self.assertEqual(second.url, confirmation_url)
 
-    def test_confirmation_page_renders_workflow_and_timeouts(self):
+    def test_RequestNewDeckSubmitted_get__renders_workflow_and_timeouts(self):
         """The confirmation page renders through the public base template and lays
         out the 3-step onboarding workflow plus the validity window, single-use
         constraint, spam reminder, and resend cooldown."""
@@ -211,7 +211,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "one deck")
         self.assertContains(response, "5 minutes")
 
-    def test_confirmation_page_timeouts_track_configured_values(self):
+    def test_RequestNewDeckSubmitted_get_context_data__timeouts_track_configured_values(self):
         """The timeout copy is derived from DeckRequestService's settings, not
         hard-coded: changing the configured values changes the rendered page."""
         with patch.object(DeckRequestService, "TOKEN_MAX_AGE", 7200), \
