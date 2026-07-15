@@ -40,6 +40,40 @@ if not ALLOWED_HOSTS:
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
 
+
+def _validate_deployment_settings(root_domain, debug, secret_key):
+    """Refuse to boot a real deployment that is still using the shipped example
+    defaults, so a miscopied .env (e.g. from .env.example.aws) can't silently
+    expose the site.
+
+    A real deployment is anything whose ROOT_DOMAIN is not ``localhost``
+    (production, staging, etc.). Local development (``localhost``) is never
+    blocked, and the caller skips this entirely during tests. Raises
+    ``ImproperlyConfigured`` on an unsafe configuration.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if debug:
+        raise ImproperlyConfigured(
+            f"DEBUG must be False for a real deployment (ROOT_DOMAIN={root_domain!r}). "
+            "Set DEBUG=False in the environment."
+        )
+    if secret_key == 'Change.Me!':
+        raise ImproperlyConfigured(
+            "SECRET_KEY is still the example default ('Change.Me!'). Generate a "
+            "unique, random SECRET_KEY in the environment before deploying."
+        )
+
+
+# Fail fast on insecure example defaults in a real deployment. Skipped during
+# tests, where DEBUG/SECRET_KEY are intentionally weak. This bootstrap line is
+# excluded from coverage because it only runs outside the test harness; the
+# logic itself is covered directly by DeploymentSettingsGuardTest.
+if 'test' not in sys.argv:  # pragma: no cover
+    _validate_deployment_settings(ROOT_DOMAIN, DEBUG, SECRET_KEY)
+
 # In production TLS is terminated at nginx, which then forwards to uWSGI over
 # plain HTTP. Trust the forwarded scheme so request.is_secure() — and every
 # absolute URL built from it, e.g. the verification/welcome email links from
