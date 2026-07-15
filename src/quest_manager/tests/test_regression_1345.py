@@ -16,6 +16,7 @@ import importlib
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -122,6 +123,36 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
             QuestSubmission.objects.filter(quest=self.quest, user=self.student).count(), 2,
         )
 
+    def test_returning_old_submission_while_new_one_in_progress_is_allowed(self):
+        """A teacher can return an old submission of a repeatable quest while the
+        student already has a new one in progress (two "in progress" rows, only
+        one never-completed) -- the constraint must not break this workflow.
+
+        ``mark_returned()`` flips ``is_completed`` back to False, but the
+        returned row keeps its ``first_time_completed``, which exempts it from
+        the partial unique constraint.
+        """
+        first = QuestSubmission.objects.create_submission(self.student, self.quest)
+        first.mark_completed()
+        first.mark_approved()
+
+        second = QuestSubmission.objects.create_submission(self.student, self.quest)
+        self.assertFalse(second.is_completed)
+
+        # The reviewer-raised scenario: returning the old submission while the
+        # new one is in progress must not raise IntegrityError.
+        first.mark_returned()
+
+        first.refresh_from_db()
+        self.assertFalse(first.is_completed)
+        self.assertIsNotNone(first.first_time_completed)  # what exempts it
+        self.assertEqual(
+            QuestSubmission.objects.filter(
+                quest=self.quest, user=self.student, is_completed=False,
+            ).count(),
+            2,
+        )
+
 
 class MigrationDedupTest(TenantTestCase):
     """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
@@ -160,6 +191,13 @@ class MigrationDedupTest(TenantTestCase):
             completed = baker.make(
                 QuestSubmission, user=student, quest=quest, semester=active, is_completed=True,
             )
+            # A *returned* submission (in progress again, but first_time_completed
+            # set) must be skipped by the dedup even alongside a fresh in-progress
+            # row -- it's exempt from the constraint.
+            returned = baker.make(
+                QuestSubmission, user=student, quest=quest, semester=active,
+                is_completed=False, first_time_completed=timezone.now(),
+            )
             # NULL-semester rows are skipped by the dedup (NULLs never violate
             # the partial unique index).
             null_sem_1 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
@@ -170,6 +208,7 @@ class MigrationDedupTest(TenantTestCase):
             self.assertTrue(QuestSubmission.objects.filter(pk=keeper.pk).exists())
             self.assertFalse(QuestSubmission.objects.filter(pk=duplicate.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=completed.pk).exists())
+            self.assertTrue(QuestSubmission.objects.filter(pk=returned.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=null_sem_1.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=null_sem_2.pk).exists())
         finally:

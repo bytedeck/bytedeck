@@ -4,16 +4,21 @@ from django.db import migrations, models
 
 
 def remove_duplicate_in_progress_submissions(apps, schema_editor):
-    """Delete duplicate *in-progress* submissions before adding the unique
-    constraint (issue #1345).
+    """Delete duplicate *never-yet-completed* in-progress submissions before
+    adding the unique constraint (issue #1345).
 
     A concurrent "double start" could historically create more than one
-    in-progress (``is_completed=False``) submission for the same
-    ``(user, quest, semester)``. Those rows would violate the new partial
+    in-progress (``is_completed=False``, never completed) submission for the
+    same ``(user, quest, semester)``. Those rows would violate the new partial
     unique constraint, so keep the earliest (lowest pk) of each group and
-    delete the rest. Completed submissions are untouched, and rows with a
-    NULL semester are skipped (the partial index treats NULLs as distinct, so
-    they can't violate the constraint anyway).
+    delete the rest.
+
+    Untouched (they can't violate the partial index):
+    - completed submissions;
+    - *returned* submissions (``is_completed=False`` but ``first_time_completed``
+      set) -- a teacher returning an old submission of a repeatable quest while
+      a new one is in progress is a legitimate state;
+    - rows with a NULL semester (the index treats NULLs as distinct).
     """
     QuestSubmission = apps.get_model("quest_manager", "QuestSubmission")
     db_alias = schema_editor.connection.alias
@@ -22,7 +27,7 @@ def remove_duplicate_in_progress_submissions(apps, schema_editor):
     duplicate_pks = []
     in_progress = (
         QuestSubmission.objects.using(db_alias)
-        .filter(is_completed=False)
+        .filter(is_completed=False, first_time_completed__isnull=True)
         .order_by("pk")
         .values_list("pk", "user_id", "quest_id", "semester_id")
     )
@@ -53,7 +58,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="questsubmission",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("is_completed", False)),
+                condition=models.Q(("is_completed", False), ("first_time_completed__isnull", True)),
                 fields=("user", "quest", "semester"),
                 name="unique_inprogress_submission_per_quest_semester",
             ),
