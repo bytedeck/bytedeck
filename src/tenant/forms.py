@@ -9,6 +9,14 @@ from .models import Tenant
 
 User = get_user_model()
 
+# The deck name is used verbatim as SiteConfig.site_name_short (max_length 20)
+# and also seeds the other name-derived display fields (site_name, the Site
+# name). Capping the name here — at the shortest of those limits — means the
+# user gets a clear error at form time instead of a valid-looking long name
+# being silently truncated when the deck is created. (The creation code still
+# truncates defensively for non-form paths like the admin / management commands.)
+MAX_DECK_NAME_LENGTH = 20
+
 
 class TenantBaseForm(ModelForm):
     """
@@ -20,8 +28,27 @@ class TenantBaseForm(ModelForm):
         fields = ["name"]
 
     def clean_name(self):
+        """Validate the deck name.
+
+        Enforces the deck-name length cap (``MAX_DECK_NAME_LENGTH``), rejects the
+        reserved ``public`` name, and rejects a name whose schema already exists in
+        the database without a matching tenant object.
+
+        Returns:
+            str: The cleaned deck name.
+
+        Raises:
+            forms.ValidationError: If the name is too long, is reserved, or collides
+                with an existing orphaned schema.
+        """
         name = self.cleaned_data["name"]
-        # has already validated the model field at this point
+        # has already validated the model field (format, uniqueness) at this point
+        if len(name) > MAX_DECK_NAME_LENGTH:
+            raise forms.ValidationError(
+                f"Deck names can be at most {MAX_DECK_NAME_LENGTH} characters "
+                "(your deck name is also shown as your site's short name). "
+                "Please choose a shorter name for your deck."
+            )
         if name == "public":
             raise forms.ValidationError("The public tenant is restricted and cannot be used.")
         else:
