@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from unittest.mock import patch
@@ -10,28 +9,29 @@ from unittest.mock import patch
 from djcytoscape.models import CytoScape
 
 from profile_manager.models import Profile
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
 
 
-class ViewTests(ViewTestUtilsMixin, TenantTestCase):
+class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher and a student so tests can log in as each via force_login()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+
+        # Ensure profiles exist without duplicating them (in case a signal already created them)
+        Profile.objects.get_or_create(user=cls.test_teacher)
+        Profile.objects.get_or_create(user=cls.test_student1)
+
+        cls.map = baker.make('djcytoscape.CytoScape')
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        # Ensure profiles exist without duplicating them (in case a signal already created them)
-        Profile.objects.get_or_create(user=self.test_teacher)
-        Profile.objects.get_or_create(user=self.test_student1)
-
-        self.map = baker.make('djcytoscape.CytoScape')
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
@@ -52,8 +52,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('djcytoscape:delete', args=[1])
 
     def test_all_page_status_codes_for_students(self):
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.assert200('djcytoscape:index')
         self.assert200('djcytoscape:quest_map_personalized', args=[self.map.id, self.test_student1.id])
@@ -72,8 +71,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         self.assert200('djcytoscape:index')
         self.assert200('djcytoscape:quest_map_personalized', args=[self.map.id, self.test_student1.id])
@@ -154,7 +152,7 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         mock_regenerate.assert_called_once()
 
 
-class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
+class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_initial_map_generated_on_first_view(self):
         # shouldn't be any maps from the start
@@ -162,9 +160,8 @@ class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # log in anoyone
         self.client = TenantClient(self.tenant)
-        anyone = User.objects.create_user('anyone', password="password")
-        success = self.client.login(username=anyone.username, password="password")
-        self.assertTrue(success)
+        anyone = User.objects.create_user('anyone')
+        self.client.force_login(anyone)
 
         # Access the primary map view
         self.assert200('djcytoscape:primary')
@@ -174,14 +171,18 @@ class PrimaryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(CytoScape.objects.filter(name="Main").exists())
 
 
-class RegenerateViewTests(ViewTestUtilsMixin, TenantTestCase):
+class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         from .test_models import generate_real_primary_map
 
-        self.map = generate_real_primary_map()
+        # regeneration in tests only touches the DB, which is rolled back per test
+        cls.map = generate_real_primary_map()
+        cls.staff_user = User.objects.create_user(username="test_staff_user", is_staff=True)
+
+    def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
         self.client.force_login(self.staff_user)
 
     def test_regenerate(self):

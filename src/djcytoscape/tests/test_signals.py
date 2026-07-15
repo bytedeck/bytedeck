@@ -1,9 +1,8 @@
-from django_tenants.test.cases import TenantTestCase
-
 from unittest.mock import patch
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from badges.models import Badge
 from quest_manager.models import Quest
@@ -12,7 +11,7 @@ from prerequisites.models import Prereq
 
 
 @patch('djcytoscape.tasks.regenerate_map.apply_async')
-class TestRegenerateMapSignals(TenantTestCase):
+class TestRegenerateMapSignals(ByteDeckTenantTestCase):
 
     def assert_regenerates_map_on_object_change(self, object_, scape, task):
         """ Helper function that checks if the `regenerate_map` task is triggered

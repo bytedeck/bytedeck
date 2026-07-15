@@ -9,7 +9,6 @@ from django.urls import reverse
 
 from django.utils.text import slugify
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
@@ -20,7 +19,7 @@ from taggit.forms import TagField
 from taggit.models import Tag
 from siteconfig.models import SiteConfig
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
 
 User = get_user_model()
 
@@ -31,12 +30,14 @@ class TaggitSelect2WidgetForm(forms.Form):
     )
 
 
-class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AutoResponseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        Tag.objects.create(name="test-tag")
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        Tag.objects.create(name="test-tag")
 
     def test_autocomplete_view(self):
         """ Make sure our custom django-select2 view for tag widget is accessible"""
@@ -73,16 +74,17 @@ class AutoResponseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(data['results'][0]['text'], 'test-tag')
 
 
-class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
+class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+        cls.tag = Tag.objects.create(name="test-tag")
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        self.test_password = "password"
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password)
-
-        self.tag = Tag.objects.create(name="test-tag")
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""

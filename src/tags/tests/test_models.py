@@ -1,4 +1,3 @@
-from django_tenants.test.cases import TenantTestCase
 from django.contrib.auth import get_user_model
 from django.db.utils import ProgrammingError
 
@@ -9,6 +8,7 @@ from tags.models import (
     total_xp_by_tags, get_tags_from_user, get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags,
     get_quest_submission_total_xp, get_badge_assertion_total_xp,
 )
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
@@ -61,12 +61,13 @@ class TagHelper:
         return badge, badge_assertion
 
 
-class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTestCase):
+class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for both get_quest_submission_by_tags and get_badge_assertion_by_tags
     """
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make(User)
 
     def test_multiple_quest_submission_tagged(self):
         """  check if multiple tags can be caught by get_quest_submission_by_tag """
@@ -162,13 +163,14 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, TenantTes
         self.assertTrue(assertion_2 in badge_assertion_qs)
 
 
-class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
+class Tag_get_user_tags_and_xp_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing get_user_tags_and_xp function
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make(User)
 
     def test_unique_tag_quest_badges(self):
         """
@@ -282,13 +284,14 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, TenantTestCase):
         self.assertEqual(total_xp, 17)  # sanity check
 
 
-class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
+class Tag_get_tags_from_user_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing get_tags_from_user function
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make(User)
 
     def test_unique_tag_per_quest_badges(self):
         """
@@ -352,7 +355,7 @@ class Tag_get_tags_from_user_Tests(TagHelper, TenantTestCase):
         self.assertEqual(tag_names, unpacked_tag_tuples)
 
 
-class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTestCase):
+class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, ByteDeckTenantTestCase):
     """
         Specialized TestClass for testing function:
             total_xp_by_tags
@@ -360,8 +363,9 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, TenantTest
             get_badge_assertion_total_xp
     """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make(User)
 
     # MISC. TEST
 

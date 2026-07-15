@@ -1,15 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
-
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from utilities.forms import MenuItemForm
 
 
 User = get_user_model()
 
 
-class MenuItemFormTest(TenantTestCase):
+class MenuItemFormTest(ByteDeckTenantTestCase):
 
     def test_MenuItem_form_allow_relative_urls(self):
         """ Form accepts a relative (path-only) url. """

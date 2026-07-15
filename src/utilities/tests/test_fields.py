@@ -3,9 +3,9 @@ from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 
-from django_tenants.test.cases import TenantTestCase
 from queryset_sequence import QuerySetSequence
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from utilities.fields import GFKChoiceField, RestrictedFileFormField
 from utilities.models import RestrictedFileField
 
@@ -13,12 +13,13 @@ from utilities.models import RestrictedFileField
 User = get_user_model()
 
 
-class GFKChoiceFieldTest(TenantTestCase):
+class GFKChoiceFieldTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.user1 = User.objects.create(username="johndoe", first_name="John", last_name="Doe")
-        self.user2 = User.objects.create(username="janedoe", first_name="Jane", last_name="Doe")
-        self.group1 = Group.objects.create(name="Editors")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user1 = User.objects.create(username="johndoe", first_name="John", last_name="Doe")
+        cls.user2 = User.objects.create(username="janedoe", first_name="Jane", last_name="Doe")
+        cls.group1 = Group.objects.create(name="Editors")
 
     def _ct_pk(self, obj):
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
@@ -60,10 +61,11 @@ class GFKChoiceFieldTest(TenantTestCase):
         self.assertEqual(f.clean(self._ct_pk(self.group1)).name, "Editors")
 
 
-class RestrictedFileFieldTest(TenantTestCase):
-    def setUp(self):
-        self.default_file_field = RestrictedFileField()
-        self.image_file_field = RestrictedFileField(content_types=['image/jpeg', 'image/png'])
+class RestrictedFileFieldTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.default_file_field = RestrictedFileField()
+        cls.image_file_field = RestrictedFileField(content_types=['image/jpeg', 'image/png'])
 
     def test_content_type(self):
         "Ensure the default content type is 'All', and that the content type can be set correctly."
@@ -75,10 +77,11 @@ class RestrictedFileFieldTest(TenantTestCase):
         self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
 
 
-class RestrictedFileFormFieldTest(TenantTestCase):
-    def setUp(self):
-        self.default_file_field = RestrictedFileFormField()
-        self.image_file_field = RestrictedFileFormField(content_types=['image/jpeg', 'image/png'])
+class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.default_file_field = RestrictedFileFormField()
+        cls.image_file_field = RestrictedFileFormField(content_types=['image/jpeg', 'image/png'])
 
     def test_content_type(self):
         "Ensure the default content type is 'All', and that the content type can be set correctly."

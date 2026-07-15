@@ -1,8 +1,9 @@
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class TestByteDeckSummernoteSafeWidget(TenantTestCase):
+class TestByteDeckSummernoteSafeWidget(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
     def test_widget(self):
@@ -46,7 +47,7 @@ class TestByteDeckSummernoteSafeWidget(TenantTestCase):
         assert '"codeviewFilter": true' in html
 
 
-class TestByteDeckSummernoteAdvancedWidget(TenantTestCase):
+class TestByteDeckSummernoteAdvancedWidget(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
 
     def test_widget(self):
