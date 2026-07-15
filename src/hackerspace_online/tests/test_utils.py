@@ -1,12 +1,13 @@
 from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
-from hackerspace_online.tests.utils import generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 from courses.forms import BlockForm, CourseStudentForm
 
@@ -125,3 +126,43 @@ class Utils_generate_form_data_Test(TenantTestCase):
 
         # assert changes
         self.assertTrue(CourseStudent.objects.count(), 1)
+
+
+class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
+    """Regression tests for ByteDeckTenantTestCase's setUpTestData support.
+
+    django-tenants' stock TenantTestCase.setUpClass skips Django TestCase's
+    class-level setup, so setUpTestData never runs there. These tests prove that
+    our base class (1) runs setUpTestData with the tenant schema active, and
+    (2) preserves per-test isolation of the class-level data.
+
+    Note: test methods run in alphabetical order; test_a_* mutates class data and
+    test_b_* verifies the mutation did not leak into the next test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Class-level fixture that would silently never run on stock TenantTestCase."""
+        cls.category = baker.make('quest_manager.Category', title='setuptestdata-probe')
+
+    def test_setuptestdata_ran_in_tenant_schema(self):
+        """setUpTestData ran, its data is queryable, and it was created in the test tenant's schema."""
+        self.assertEqual(connection.schema_name, self.tenant.schema_name)
+        self.assertTrue(
+            apps.get_model('quest_manager', 'Category').objects.filter(title='setuptestdata-probe').exists()
+        )
+
+    def test_a_mutations_of_class_data_are_visible_within_a_test(self):
+        """A test may freely mutate class-level data; changes are visible inside that test."""
+        self.category.title = 'mutated'
+        self.category.save()
+        self.assertTrue(
+            apps.get_model('quest_manager', 'Category').objects.filter(title='mutated').exists()
+        )
+
+    def test_b_mutations_of_class_data_do_not_leak_between_tests(self):
+        """DB rows and in-memory attributes are restored between tests (runs after test_a_*)."""
+        self.assertEqual(self.category.title, 'setuptestdata-probe')
+        Category = apps.get_model('quest_manager', 'Category')
+        self.assertFalse(Category.objects.filter(title='mutated').exists())
+        self.assertTrue(Category.objects.filter(title='setuptestdata-probe').exists())

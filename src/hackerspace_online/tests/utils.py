@@ -1,12 +1,77 @@
 from django.contrib import messages
 from django.conf import settings
 from django.core import serializers
+from django.db import connection
 from django.shortcuts import reverse
+
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_tenant_model, get_tenant_domain_model
 
 from model_bakery import baker
 
 import json
 import warnings
+
+
+class ByteDeckTenantTestCase(TenantTestCase):
+    """A TenantTestCase whose ``setUpTestData`` hook actually runs.
+
+    django-tenants' ``TenantTestCase.setUpClass`` never calls ``super().setUpClass()``,
+    which silently skips all of Django ``TestCase``'s class-level setup — most
+    importantly the class-wide atomic transaction and the ``setUpTestData`` hook.
+    A ``setUpTestData`` method defined on a plain ``TenantTestCase`` subclass is
+    therefore never called, and tests depending on its data fail (or worse, pass
+    while asserting nothing).
+
+    This class restores the standard Django behavior: it performs the same tenant
+    setup as ``TenantTestCase.setUpClass`` (creating and migrating the ``test``
+    schema, then pointing the connection at it), and *then* runs Django's
+    ``TestCase.setUpClass``, so ``setUpTestData`` executes once per class inside a
+    class-level transaction with the tenant schema active. Django rolls each test
+    back to a savepoint, and (since Django 3.2) hands each test a fresh deep copy
+    of in-memory objects assigned in ``setUpTestData``, so per-test isolation is
+    preserved exactly as documented for regular Django ``TestCase``.
+
+    Use this as the base class for all tenant tests. Fixtures that no test needs
+    to rebuild per-method belong in ``setUpTestData``; ``self.client = TenantClient
+    (self.tenant)`` and ``force_login`` calls stay in ``setUp``.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Create/migrate the test tenant, then run Django's class-level setup."""
+        # Tenant setup below is copied verbatim from django-tenants 3.10's
+        # TenantTestCase.setUpClass (which we can't call, because it both skips
+        # TestCase.setUpClass and can't have it run *before* the tenant exists).
+        cls.sync_shared()
+        cls.add_allowed_test_domain()
+        cls.tenant = get_tenant_model()(schema_name=cls.get_test_schema_name())
+        cls.setup_tenant(cls.tenant)
+        cls.tenant.save(verbosity=cls.get_verbosity())
+
+        tenant_domain = cls.get_test_tenant_domain()
+        cls.domain = get_tenant_domain_model()(tenant=cls.tenant, domain=tenant_domain)
+        cls.setup_domain(cls.domain)
+        cls.domain.save()
+
+        connection.set_tenant(cls.tenant)
+
+        # Standard Django TestCase class setup: enters the class-wide atomic
+        # block and calls setUpTestData with the tenant schema active.
+        # super(TenantTestCase, cls) skips django-tenants' override.
+        super(TenantTestCase, cls).setUpClass()
+
+    @classmethod
+    def tearDownClass(cls):
+        """Roll back class-level data, then drop the test tenant."""
+        # Rolls back the class-wide atomic block (i.e. everything created in
+        # setUpTestData) before the schema is dropped.
+        super(TenantTestCase, cls).tearDownClass()
+
+        connection.set_schema_to_public()
+        cls.domain.delete()
+        cls.tenant.delete(force_drop=True)
+        cls.remove_allowed_test_domain()
 
 
 def generate_form_data(model=None, model_form=None, **kwargs):
