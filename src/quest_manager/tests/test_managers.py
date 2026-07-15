@@ -701,7 +701,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         """
         first = baker.make(QuestSubmission, quest__published=True)
         baker.make(QuestSubmission, quest__published=False)
-        qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
+        qs = QuestSubmission.objects.order_by('id').exclude_quests_not_published().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
     def test_for_teacher_only(self):

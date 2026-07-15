@@ -1177,16 +1177,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.post_complete(button="non_existant_button")
         self.assertEqual(response.status_code, 404)
 
-    def test_invalid_submission_form(self):
-        """ I don't think thie form CAN be invalid... how? None of the fields are required. """
-        # with patch('profile_manager.models.Profile.current_teachers', return_value=self.test_teacher):
-        #     response = self.client.post(
-        #         reverse('quests:complete', args=[self.sub.id]),
-        #         data={}
-        #     )
-        # # bad form, just rerender
-        # self.assertEqual(response.status_code, 200)
-
 
 class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
     def setUp(self):
@@ -3595,9 +3585,6 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(response.context['current_teacher_only'])
         self.assertEqual(response.context['quest'], self.quest)
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
-
-    def test_approved_for_quest_all(self):
-        """ Approved submissions of only this specific quest, regardless of teacher """
 
     def test_approvals__my_groups_all_button_rendered(self):
         """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""

@@ -12,7 +12,6 @@ from django_tenants.utils import tenant_context, get_public_schema_name, schema_
 
 from model_bakery import baker
 
-# from hackerspace_online.management.commands import find_replace
 from quest_manager.models import Quest, Category
 from tenant.models import Tenant
 
@@ -46,33 +45,6 @@ class CommandMixin:
             **kwargs,
         )
         return out.getvalue()
-
-
-class FindReplaceTest(TestCase, CommandMixin):
-    name = "find_replace"
-
-    # def setUp(self):
-    #     self.tenant = Tenant(
-    #         domain_url='testdeck.localhost',
-    #         schema_name='testdeck',
-    #         name='testdeck'
-    #     )
-    #     self.tenant.save()
-
-    def test_tenants_all(self):
-        # Constant error, not sure why Category table is empty:
-        # django.db.utils.IntegrityError: null value in column "title" violates not-null constraint
-        # DETAIL:  Failing row contains (1, null, , t).
-        pass
-        # "All tenants"
-        # for tenant in Tenant.objects.all():
-        #     print(tenant.name)
-        # # print(tenants)
-        # # # requires
-        # # pass
-        # out = self.call_command(self.tenant.name)
-        # print(out)
-        # self.assertEqual(out, "In dry run mode (--write not passed)\n")
 
 
 class InitDbTest(TestCase, CommandMixin):

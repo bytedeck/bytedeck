@@ -19,10 +19,6 @@ class SignalTest(ViewTestUtilsMixin, TenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
 
-    def change_domain_urls_signal(self):
-        # TODO
-        pass
-
     def test_handle_tenant_site_domain_update__long_domain_truncates_site_name(self):
         """A tenant whose full domain exceeds Site.name's 50-char limit is still
         created successfully.

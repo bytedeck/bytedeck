@@ -10,6 +10,7 @@ from model_bakery.recipe import Recipe
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
 from siteconfig.models import SiteConfig
 from notifications.models import Notification
+from prerequisites.models import Prereq
 
 User = get_user_model()
 
@@ -318,13 +319,35 @@ class BadgeAssertionTestModel(TenantTestCase):
         self.assertEqual(xp, self.badge.xp)
 
     def test_badge_assertion_manager_get_by_type_for_user(self):
+        """ get_by_type_for_user should return one entry per BadgeType, where the entry for the
+        granted badge's type contains the user's assertion and all other entries are empty. """
+        assertion = self.badge_assertion_recipe.make()
         badge_list_by_type = BadgeAssertion.objects.get_by_type_for_user(self.student)
-        self.assertIsInstance(badge_list_by_type, list)
-        # TODO need to test this properly
+        self.assertEqual(len(badge_list_by_type), BadgeType.objects.count())
+        for entry in badge_list_by_type:
+            if entry['badge_type'] == self.badge.badge_type:
+                self.assertQuerySetEqual(entry['list'], [assertion])
+            else:
+                self.assertQuerySetEqual(entry['list'], [])
 
     def test_badge_assertion_manager_check_for_new_assertions(self):
+        """ check_for_new_assertions should grant badges whose prerequisites the user meets,
+        including badges unlocked by a badge granted in the same call (recursion). """
+        # chain: self.badge -> badge_a -> badge_b
+        badge_a = Recipe(Badge, xp=1).make()
+        badge_b = Recipe(Badge, xp=1).make()
+        Prereq.add_simple_prereq(badge_a, self.badge)
+        Prereq.add_simple_prereq(badge_b, badge_a)
+
+        # student hasn't earned self.badge yet, so nothing should be granted
         BadgeAssertion.objects.check_for_new_assertions(self.student)
-        # TODO need to tefrom django.contrib.auth import get_user_model
+        self.assertFalse(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
+
+        # grant the root badge; both dependent badges should now be granted recursively
+        self.badge_assertion_recipe.make()
+        BadgeAssertion.objects.check_for_new_assertions(self.student)
+        self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
+        self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_b, False).exists())
 
     def test_fraction_of_active_users_granted_this(self):
         num_students_with_badge = 3

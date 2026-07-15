@@ -113,12 +113,6 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(Badge.objects.filter(name="Green Team").exists())
         self.assertTrue(Badge.objects.filter(name="Blue Team").exists())
 
-    def test_default_badge_icons(self):
-        """
-            Empty because Django tests involving static files are prone to breakage.
-            Come back to this once testing static files is made clearer.
-        """
-
     def test_default_campaign_created(self):
         """ Initialization script should create a default Category (Campaign) object. """
         self.assertTrue(Category.objects.filter(title="Orientation").exists())
@@ -131,12 +125,6 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(Quest.objects.filter(name="Screenshots").exists())
         self.assertTrue(Quest.objects.filter(name="Who owns your creations?").exists())
         self.assertTrue(Quest.objects.filter(name="Send your teacher a Message").exists())
-
-    def test_default_quest_icons(self):
-        """
-            Empty because Django tests involving static files are prone to breakage.
-            Come back to this once testing static files is made clearer.
-        """
 
     def test_default_message_quest_notifies_owner(self):
         """ The quest "Send your teacher a Message" should have the deck owner assigned as the specific teacher to notify by default. """

@@ -79,9 +79,6 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         baker.make(QuestSubmission, quest=quest1, user=user, is_completed=True, is_approved=True)
         self.assertTrue(self.category.condition_met_as_prerequisite(user))
 
-    def test_category_icon(self):
-        pass
-
     def test_category_url(self):
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
 
@@ -143,9 +140,6 @@ class QuestTestModel(TenantTestCase):
     def test_quest_creation(self):
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
-
-    def test_quest_icon(self):
-        pass
 
     def test_quest_url(self):
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
