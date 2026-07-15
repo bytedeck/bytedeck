@@ -66,6 +66,24 @@ Postgres runs on **AWS RDS** (not a compose service), reached via the
 `POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
 above, reached via `REDIS_HOST` / `REDIS_PORT`.
 
+The shared service config lives in `docker-compose.yml`; the AWS file layers
+production concerns on top. In production every service has
+**`restart: unless-stopped`** (a crashed container comes back automatically,
+including after a host reboot) and a **healthcheck**:
+
+- `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
+  to cover the `migrate_schemas`/`collectstatic` startup run.
+- `celery`: `celery inspect ping` against the worker over the broker — catches
+  hung/disconnected workers, not just dead processes.
+- `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
+  beat silently stops all periodic tasks.
+- `redis`: `redis-cli ping`.
+
+Check health at a glance with `docker compose ps` (the STATUS column shows
+`(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
+container that turns *unhealthy* — the healthcheck is a monitoring signal, while
+`restart:` handles crashes/exits.
+
 ## Deployment runbook
 
 Deployment is **manual** (SSH to the host). There is currently no
