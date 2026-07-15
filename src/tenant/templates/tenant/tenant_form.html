@@ -37,9 +37,10 @@
   document.getElementById("form").addEventListener("submit", function(){
     // Allow a delay before showing the progress bar.  This prevents it from flashing up when the form invalidates.
     setTimeout(function() {
-      // set the new deck url in the title
+      // set the new deck url in the title. Use textContent (not innerHTML) so the
+      // user-entered deck name is shown as plain text and can't inject markup.
       tenantName = document.getElementById('id_name').value;
-      document.getElementById('urlSpan').innerHTML = tenantName + ".bytedeck.com";
+      document.getElementById('urlSpan').textContent = tenantName + ".bytedeck.com";
 
       progressModal.show();
       animateProgressBar();
