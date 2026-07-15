@@ -422,6 +422,13 @@ DATABASES = {
         'HOST': POSTGRES_HOST,
         'PORT': POSTGRES_PORT,
         'CONN_MAX_AGE': CONN_MAX_AGE,
+        # Companion to CONN_MAX_AGE: verify a persistent connection is still
+        # alive at the start of each request and transparently reconnect if it
+        # died while idle (RDS failover, network blip, server-side timeout).
+        # Without this, a dead pooled connection surfaces as an intermittent
+        # InterfaceError/OperationalError on whatever request draws it.
+        # https://docs.djangoproject.com/en/4.2/ref/settings/#conn-health-checks
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
