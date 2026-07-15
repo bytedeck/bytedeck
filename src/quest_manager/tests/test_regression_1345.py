@@ -6,12 +6,16 @@ same non-repeatable quest before either submission is committed) could create tw
 in-progress submissions of the same quest. Both could then be completed and
 approved, granting XP twice.
 
-The fix is a partial unique constraint forbidding more than one *in-progress*
-(``is_completed=False``) submission per ``(user, quest, semester)``, plus
-``create_submission()`` catching the resulting ``IntegrityError`` and returning
-the submission that won the race instead of a duplicate.
+The fix is a partial unique constraint forbidding more than one
+*never-yet-completed* in-progress (``is_completed=False`` and
+``first_time_completed IS NULL``) submission per ``(user, quest, semester)``,
+plus ``create_submission()`` catching the resulting ``IntegrityError`` and
+returning the submission that won the race instead of a duplicate. Returned
+submissions (``first_time_completed`` set) are exempt, so a teacher returning an
+old submission of a repeatable quest while a new one is in progress stays legal.
 """
 import importlib
+from unittest import mock
 
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
@@ -37,6 +41,8 @@ class DoubleStartRaceTest(TenantTestCase):
     """The concurrent-double-start vector from issue #1345."""
 
     def setUp(self):
+        """Create a student and a non-repeatable published quest, and grab the
+        active semester the submissions will land in."""
         self.student = baker.make(User, is_staff=False)
         self.quest = baker.make(
             Quest, name="One-time quest", xp=10,
@@ -46,13 +52,15 @@ class DoubleStartRaceTest(TenantTestCase):
         self.active_semester = SiteConfig.get().active_semester
 
     def _in_progress_count(self):
+        """Return how many in-progress (not completed) submissions of the test
+        quest the test student currently has."""
         return QuestSubmission.objects.filter(
             quest=self.quest, user=self.student, is_completed=False,
         ).count()
 
-    def test_unique_constraint_forbids_second_in_progress_submission(self):
-        """Saving a second in-progress submission of the same quest/semester
-        raises IntegrityError (the DB-level guard)."""
+    def test_save__second_fresh_in_progress_submission_raises_integrity_error(self):
+        """Saving a second never-completed in-progress submission of the same
+        quest/semester raises IntegrityError (the DB-level guard)."""
         QuestSubmission.objects.create_submission(self.student, self.quest)
 
         duplicate = QuestSubmission(
@@ -62,9 +70,12 @@ class DoubleStartRaceTest(TenantTestCase):
         with self.assertRaises(IntegrityError):
             # Wrapped so the failed statement doesn't poison the test transaction.
             with transaction.atomic():
+                # Constraint validation skipped so the DB constraint itself
+                # (the behaviour under test) raises, not full_clean.
+                duplicate.full_clean(validate_constraints=False)
                 duplicate.save()
 
-    def test_create_submission_twice_returns_existing_and_makes_no_duplicate(self):
+    def test_create_submission__twice_returns_existing_and_makes_no_duplicate(self):
         """Two ``create_submission()`` calls (the double-start race) leave exactly
         one in-progress submission; the second call returns the first one."""
         first = QuestSubmission.objects.create_submission(self.student, self.quest)
@@ -73,7 +84,7 @@ class DoubleStartRaceTest(TenantTestCase):
         self.assertEqual(self._in_progress_count(), 1)
         self.assertEqual(first.pk, second.pk)
 
-    def test_double_start_cannot_grant_xp_twice(self):
+    def test_create_submission__double_start_cannot_grant_xp_twice(self):
         """The exact reported symptom: a non-repeatable quest cannot be completed
         twice via a double start, so XP is granted only once."""
         first = QuestSubmission.objects.create_submission(self.student, self.quest)
@@ -96,10 +107,12 @@ class DoubleStartRaceTest(TenantTestCase):
 
 class RepeatableQuestFlowRegressionTest(TenantTestCase):
     """Guard that the constraint is a no-op for legitimate flows: a repeatable
-    quest can still accumulate completed submissions, because completing a
-    submission moves it out of the constraint's (``is_completed=False``) scope."""
+    quest can still accumulate completed submissions (completing a submission
+    moves it out of the constraint's scope), and a teacher can still *return* an
+    old submission while a new one is in progress."""
 
     def setUp(self):
+        """Create a student and an infinitely repeatable published quest."""
         self.student = baker.make(User, is_staff=False)
         self.quest = baker.make(
             Quest, name="Repeatable quest", xp=5,
@@ -107,7 +120,7 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
             published=True, archived=False,
         )
 
-    def test_repeatable_quest_can_start_again_after_completion(self):
+    def test_create_submission__repeatable_quest_can_start_again_after_completion(self):
         """Completing ordinal 1 then starting ordinal 2 is allowed (the previous
         submission is is_completed=True, so it doesn't collide)."""
         first = QuestSubmission.objects.create_submission(self.student, self.quest)
@@ -123,7 +136,7 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
             QuestSubmission.objects.filter(quest=self.quest, user=self.student).count(), 2,
         )
 
-    def test_returning_old_submission_while_new_one_in_progress_is_allowed(self):
+    def test_mark_returned__allowed_while_new_submission_in_progress(self):
         """A teacher can return an old submission of a repeatable quest while the
         student already has a new one in progress (two "in progress" rows, only
         one never-completed) -- the constraint must not break this workflow.
@@ -156,24 +169,30 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
 
 class MigrationDedupTest(TenantTestCase):
     """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
-    it must delete duplicate in-progress rows (keeping the earliest), skip
-    NULL-semester rows, and leave completed submissions untouched."""
+    it must delete duplicate never-completed in-progress rows (keeping the
+    earliest, flushing deletes in bounded batches) and spare completed,
+    returned, and NULL-semester rows."""
 
     def _constraint(self):
+        """Return the partial unique constraint object from QuestSubmission's
+        Meta, so tests can drop and re-add it via the schema editor."""
         return next(
             c for c in QuestSubmission._meta.constraints
             if c.name == "unique_inprogress_submission_per_quest_semester"
         )
 
     def _run_dedup(self):
+        """Invoke the migration's dedup function against the current (test)
+        schema, exactly as RunPython would."""
         with connection.schema_editor() as schema_editor:
             migration_0049.remove_duplicate_in_progress_submissions(
                 django_apps, schema_editor,
             )
 
-    def test_migration_dedup_removes_duplicate_in_progress_rows(self):
-        """Duplicate in-progress rows (the historical pre-constraint state) are
-        deleted keeping the earliest; completed and NULL-semester rows survive."""
+    def test_remove_duplicate_in_progress_submissions__removes_duplicates_spares_rest(self):
+        """Duplicate fresh in-progress rows (the historical pre-constraint state)
+        are deleted keeping the earliest -- in bounded batches -- while completed,
+        returned, and NULL-semester rows survive."""
         student = baker.make(User, is_staff=False)
         quest = baker.make(Quest, published=True, archived=False)
         active = SiteConfig.get().active_semester
@@ -185,8 +204,11 @@ class MigrationDedupTest(TenantTestCase):
             keeper = baker.make(
                 QuestSubmission, user=student, quest=quest, semester=active, is_completed=False,
             )
-            duplicate = baker.make(
-                QuestSubmission, user=student, quest=quest, semester=active, is_completed=False,
+            # Three duplicates + a batch size of 2 (patched below) exercises both
+            # the mid-loop batch flush and the final leftover flush.
+            duplicates = baker.make(
+                QuestSubmission, user=student, quest=quest, semester=active,
+                is_completed=False, _quantity=3,
             )
             completed = baker.make(
                 QuestSubmission, user=student, quest=quest, semester=active, is_completed=True,
@@ -203,10 +225,12 @@ class MigrationDedupTest(TenantTestCase):
             null_sem_1 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
             null_sem_2 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
 
-            self._run_dedup()
+            with mock.patch.object(migration_0049, "DEDUP_BATCH_SIZE", 2):
+                self._run_dedup()
 
             self.assertTrue(QuestSubmission.objects.filter(pk=keeper.pk).exists())
-            self.assertFalse(QuestSubmission.objects.filter(pk=duplicate.pk).exists())
+            for duplicate in duplicates:
+                self.assertFalse(QuestSubmission.objects.filter(pk=duplicate.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=completed.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=returned.pk).exists())
             self.assertTrue(QuestSubmission.objects.filter(pk=null_sem_1.pk).exists())
@@ -220,7 +244,7 @@ class MigrationDedupTest(TenantTestCase):
             with connection.schema_editor() as schema_editor:
                 schema_editor.add_constraint(QuestSubmission, self._constraint())
 
-    def test_migration_dedup_noop_when_no_duplicates(self):
+    def test_remove_duplicate_in_progress_submissions__noop_when_no_duplicates(self):
         """With no duplicate rows the dedup deletes nothing (the empty branch)."""
         student = baker.make(User, is_staff=False)
         quest = baker.make(Quest, published=True, archived=False)

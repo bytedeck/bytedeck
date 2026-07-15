@@ -871,7 +871,7 @@ class QuestSubmissionManagerTest(TenantTestCase):
         )
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
-    def test_calculate_xp__ith_xp_requested_and_max_xp(self):
+    def test_calculate_xp__with_xp_requested_and_max_xp(self):
         """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
         """
         # Create an approved submission (approved submissions are always completed;

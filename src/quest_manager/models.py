@@ -944,6 +944,26 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
+        """Create and return a new in-progress QuestSubmission of ``quest`` for ``user``.
+
+        The submission is placed in the active semester, with an ordinal
+        continuing from the user's last submission of this quest (1 for a first
+        attempt).
+
+        Concurrency (issue #1345): the partial unique constraint on
+        QuestSubmission forbids a second *never-yet-completed* in-progress
+        submission of the same quest per user/semester -- exactly what a
+        concurrent "double start" (e.g. two browser tabs) would create. If this
+        call loses that race, the existing in-progress submission is returned
+        instead of a duplicate.
+
+        :param user: the student starting the quest.
+        :param quest: the Quest being started.
+        :returns: the newly created ``QuestSubmission``, or the existing
+            in-progress one if a concurrent request already created it.
+        :raises IntegrityError: if the save fails for a reason other than the
+            double-start race (no matching in-progress submission exists).
+        """
         last_submission = self.last_submission(user, quest)
 
         if last_submission:
@@ -960,22 +980,30 @@ class QuestSubmissionManager(models.Manager):
         )
         try:
             # Wrapped in atomic() so a constraint violation doesn't break the
-            # surrounding transaction (issue #1345). The partial unique
-            # constraint on QuestSubmission forbids a second *never-yet-completed*
-            # in-progress submission of the same quest for the same user/semester,
-            # which is what a concurrent "double start" (two browser tabs) would
-            # otherwise create.
+            # surrounding transaction (issue #1345).
             with transaction.atomic():
+                # Constraint validation is skipped so the DB-level unique
+                # constraint (and its race-losing IntegrityError path below)
+                # stays authoritative.
+                new_submission.full_clean(validate_constraints=False)
                 new_submission.save()
         except IntegrityError:
             # Lost the race: another request already created the in-progress
             # submission. Return the existing one instead of a duplicate, so the
-            # student is simply sent to the submission that won.
-            return (
-                self.all_for_user_quest(user, quest, active_semester_only=True)
-                .filter(is_completed=False, first_time_completed__isnull=True, semester_id=active_semester_pk)
-                .first()
-            )
+            # student is simply sent to the submission that won. Use the
+            # unfiltered base manager (the default manager excludes archived and
+            # unpublished quests, which would hide the row) and re-raise if
+            # nothing matches -- then the error wasn't the double-start race.
+            existing_submission = self.model._base_manager.filter(
+                user=user,
+                quest=quest,
+                semester_id=active_semester_pk,
+                is_completed=False,
+                first_time_completed__isnull=True,
+            ).first()
+            if existing_submission is None:
+                raise
+            return existing_submission
         return new_submission
 
     def calculate_xp(self, user):
