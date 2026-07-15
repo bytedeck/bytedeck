@@ -112,6 +112,24 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
+    def test_create_deck_page_extends_public_base_and_keeps_progress_modal(self):
+        """The Create New Deck page shares the public onboarding chrome: it renders
+        through public/base.html (same navbar/branding as the Request a New Deck
+        page) rather than as a standalone document, and still includes the
+        deck-generation progress modal that animates on submit. Staff bypass the
+        email-verification gate, so the superuser can load the form directly."""
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("tenant:new"))
+        self.assertEqual(response.status_code, 200)
+        # rendered through the shared public base template (the extension), not standalone
+        self.assertTemplateUsed(response, "tenant/tenant_form.html")
+        self.assertTemplateUsed(response, "public/base.html")
+        # public chrome is present: the navbar brand image only comes from public/base.html
+        self.assertContains(response, "pixels-4-icon.png")
+        # the progress modal and its form are preserved
+        self.assertContains(response, 'id="modalProgress"')
+        self.assertContains(response, 'id="form"')
+
     def test_form__errors_for_missing_fields(self):
         """Form errors occur if first_name, last_name, or invalid email are missing."""
         self.client.force_login(self.superuser)
