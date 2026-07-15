@@ -1,9 +1,8 @@
-from django_tenants.test.cases import TenantTestCase
-
 from comments.forms import CommentForm
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class CommentFormTest(TenantTestCase):
+class CommentFormTest(ByteDeckTenantTestCase):
     """The plain-text (non-wysiwyg) comment form is accessible to all users, so
     all HTML entered in it must be completely escaped. Regression tests for
     issue #1343 where scripts entered in plain-text comment fields would execute.

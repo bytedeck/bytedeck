@@ -4,9 +4,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import IsAPrereqMixin, Prereq, PrereqAllConditionsMet
 
 from psycopg2.errors import UndefinedTable
@@ -14,23 +14,24 @@ from psycopg2.errors import UndefinedTable
 User = get_user_model()
 
 
-class HasPrereqsMixinTest(TenantTestCase):
-    def setUp(self):
-        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
-        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
-        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+class HasPrereqsMixinTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        cls.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        cls.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
 
-        self.prereq_with_or = Prereq.objects.create(
-            parent_object=self.quest_parent,
-            prereq_object=self.quest_prereq,
-            or_prereq_object=self.quest_or_prereq
+        cls.prereq_with_or = Prereq.objects.create(
+            parent_object=cls.quest_parent,
+            prereq_object=cls.quest_prereq,
+            or_prereq_object=cls.quest_or_prereq
         )
 
-        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+        cls.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
 
-        self.prereq_without_or = Prereq.objects.create(
-            parent_object=self.quest_parent,
-            prereq_object=self.quest_prereq2,
+        cls.prereq_without_or = Prereq.objects.create(
+            parent_object=cls.quest_parent,
+            prereq_object=cls.quest_prereq2,
         )
 
     def test_prereqs(self):
@@ -104,23 +105,24 @@ class HasPrereqsMixinTest(TenantTestCase):
         self.assertTrue(self.quest_parent.has_inverted_prereq())
 
 
-class IsAPrereqMixinTest(TenantTestCase):
-    def setUp(self):
-        self.quest_parent = baker.make('quest_manager.Quest', name="parent")
-        self.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
-        self.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
+class IsAPrereqMixinTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.quest_parent = baker.make('quest_manager.Quest', name="parent")
+        cls.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
+        cls.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
 
-        self.prereq_with_or = Prereq.objects.create(
-            parent_object=self.quest_parent,
-            prereq_object=self.quest_prereq,
-            or_prereq_object=self.quest_or_prereq
+        cls.prereq_with_or = Prereq.objects.create(
+            parent_object=cls.quest_parent,
+            prereq_object=cls.quest_prereq,
+            or_prereq_object=cls.quest_or_prereq
         )
 
-        self.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
+        cls.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
 
-        self.prereq_without_or = Prereq.objects.create(
-            parent_object=self.quest_parent,
-            prereq_object=self.quest_prereq2,
+        cls.prereq_without_or = Prereq.objects.create(
+            parent_object=cls.quest_parent,
+            prereq_object=cls.quest_prereq2,
         )
 
     def test_is_used_prereq(self):
@@ -265,14 +267,15 @@ class IsAPrereqMixinTest(TenantTestCase):
         self.assertFalse(IsAPrereqMixin.model_is_registered(TestClassNotRegsistered))
 
 
-class PrereqModelTest(TenantTestCase):
-    def setUp(self):
-        self.student = baker.make(User, username='student', is_staff=False)
-        self.quest_parent = baker.make('quest_manager.Quest')
-        self.quest_prereq = baker.make('quest_manager.Quest')
-        self.prereq = Prereq(
-            parent_object=self.quest_parent,
-            prereq_object=self.quest_prereq
+class PrereqModelTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User, username='student', is_staff=False)
+        cls.quest_parent = baker.make('quest_manager.Quest')
+        cls.quest_prereq = baker.make('quest_manager.Quest')
+        cls.prereq = Prereq(
+            parent_object=cls.quest_parent,
+            prereq_object=cls.quest_prereq
         )
 
     def test_object_creation(self):
@@ -319,13 +322,14 @@ class PrereqModelTest(TenantTestCase):
             Prereq.add_simple_prereq(quest3, some_object)
 
 
-class PrereqAllConditionsMetModelTest(TenantTestCase):
+class PrereqAllConditionsMetModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User, username='student', is_staff=False)
-        self.prereq_cache = baker.make(
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User, username='student', is_staff=False)
+        cls.prereq_cache = baker.make(
             PrereqAllConditionsMet,
-            user=self.student,
+            user=cls.student,
             model_name='fake_model_name'
         )
 
@@ -370,7 +374,7 @@ class PrereqAllConditionsMetModelTest(TenantTestCase):
         self.assertEqual(len(self.prereq_cache.get_ids()), len(ids))
 
 
-class AddSimplePrereqAllRegisteredModelsTest(TenantTestCase):
+class AddSimplePrereqAllRegisteredModelsTest(ByteDeckTenantTestCase):
     """Prereq.add_simple_prereq must work for every registered prereq model —
     the models that implement IsAPrereqMixin, which are the only models that
     are supposed to be used in a Prereq's generic foreign keys."""
@@ -398,16 +402,17 @@ class AddSimplePrereqAllRegisteredModelsTest(TenantTestCase):
                 self.assertEqual(new_prereq.get_prereq(), prereq_object)
 
 
-class PrereqPrefetchTest(TenantTestCase):
+class PrereqPrefetchTest(ByteDeckTenantTestCase):
     """PrereqManager.prefetch_for_parents batches prereqs() for many same-model
     objects into a single query (used by the profile page's badge popovers)."""
 
-    def setUp(self):
-        self.parent1 = baker.make('quest_manager.Quest')
-        self.parent2 = baker.make('quest_manager.Quest')
-        self.requirement = baker.make('quest_manager.Quest')
-        Prereq.add_simple_prereq(self.parent1, self.requirement)
-        Prereq.add_simple_prereq(self.parent2, self.requirement)
+    @classmethod
+    def setUpTestData(cls):
+        cls.parent1 = baker.make('quest_manager.Quest')
+        cls.parent2 = baker.make('quest_manager.Quest')
+        cls.requirement = baker.make('quest_manager.Quest')
+        Prereq.add_simple_prereq(cls.parent1, cls.requirement)
+        Prereq.add_simple_prereq(cls.parent2, cls.requirement)
 
     def test_prereqs_without_prefetch_returns_queryset(self):
         """Objects that were not prefetched keep the normal queryset API."""

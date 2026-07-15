@@ -2,16 +2,16 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from comments.models import Comment, clean_html
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class CommentManagerTest(TenantTestCase):
+class CommentManagerTest(ByteDeckTenantTestCase):
 
     def test_create_comment__with_required_parameters(self):
         user = baker.make(User)
@@ -90,11 +90,12 @@ class CleanHTMLTests(TestCase):
         self.assertEqual(cleaned_text, expected_output)
 
 
-class CommentModelTest(TenantTestCase):
+class CommentModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
 
     def test_comment_creation(self):
         comment = baker.make(Comment)

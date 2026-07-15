@@ -2,21 +2,22 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 
 from django_celery_beat.models import PeriodicTask
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
 from announcements.models import Announcement
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 PUBLIC_SCHEMA = get_public_schema_name()
 
 
-class AnnouncementsSignalsTest(TenantTestCase):
+class AnnouncementsSignalsTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
 
     def test_save_announcement_signal(self):
         """
