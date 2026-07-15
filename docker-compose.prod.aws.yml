@@ -21,42 +21,17 @@ services:
       # - media_data:/app/media
       # - socket_data:/bytedeck-volume
     user: $WUID:$WGID
+    # Restart policies are production/staging-only on purpose: in development a
+    # crashed process should stay down and visible, not quietly loop-restart.
+    # (Healthchecks are shared and live in docker-compose.yml.)
     restart: unless-stopped
-    # Liveness: uwsgi listening on its socket. TCP connect is enough (it speaks
-    # the uwsgi protocol, not HTTP). The long start_period covers the
-    # migrate_schemas + collectstatic run before uwsgi binds -- failures during
-    # start_period don't count against the container.
-    healthcheck:
-      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=5).close()"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 10m
 
   celery:
     user: $WUID:$WGID
     restart: unless-stopped
-    # Liveness: ask this worker to answer a ping over the broker. Catches a
-    # worker that is running but disconnected/hung, not just a dead process.
-    # Deliberately infrequent -- each check runs a full celery client.
-    healthcheck:
-      test: ["CMD-SHELL", "cd /app/src && celery -A hackerspace_online inspect ping -d celery@$$HOSTNAME -t 10 | grep -q pong"]
-      interval: 60s
-      timeout: 30s
-      retries: 3
-      start_period: 2m
 
   celery-beat:
     restart: unless-stopped
-    # Liveness: beat has no ping command, so check the scheduler process exists
-    # (procps/pgrep is installed in the app image). A dead beat silently stops
-    # all periodic tasks, so even a coarse signal is worth surfacing.
-    healthcheck:
-      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null"]
-      interval: 60s
-      timeout: 10s
-      retries: 3
-      start_period: 2m
 
   # Production/staging additions to the shared redis service (image, healthcheck,
   # network — see docker-compose.yml). Self-hosted on this EC2 host, replacing

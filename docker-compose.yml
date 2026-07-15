@@ -29,6 +29,17 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Liveness: something is listening on :8000 (uwsgi in prod, runserver in
+    # dev; TCP connect covers both). The long start_period covers the
+    # migrate_schemas (+ collectstatic in prod) run before the server binds --
+    # failures during start_period don't count against the container. Shown as
+    # (healthy)/(unhealthy) in `docker compose ps`.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=5).close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 10m
 
   celery:
     build:
@@ -44,6 +55,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Liveness: ask this worker to answer a ping over the broker. Catches a
+    # worker that is running but disconnected/hung, not just a dead process.
+    # Deliberately infrequent -- each check runs a full celery client.
+    healthcheck:
+      test: ["CMD-SHELL", "cd /app/src && celery -A hackerspace_online inspect ping -d celery@$$HOSTNAME -t 10 | grep -q pong"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 2m
 
   celery-beat:
     build:
@@ -59,6 +79,15 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    # Liveness: beat has no ping command, so check the scheduler process exists
+    # (procps/pgrep is installed in the app image). A dead beat silently stops
+    # all periodic tasks, so even a coarse signal is worth surfacing.
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'celery.*beat' > /dev/null"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 2m
 
   # Redis: Celery broker (db 0) and Django cache (dbs 1/2), used by every
   # environment. Common config lives here; environment specifics are layered on

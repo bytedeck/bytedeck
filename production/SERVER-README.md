@@ -67,9 +67,12 @@ Postgres runs on **AWS RDS** (not a compose service), reached via the
 above, reached via `REDIS_HOST` / `REDIS_PORT`.
 
 The shared service config lives in `docker-compose.yml`; the AWS file layers
-production concerns on top. In production every service has
+production concerns on top. In production every service additionally has
 **`restart: unless-stopped`** (a crashed container comes back automatically,
-including after a host reboot) and a **healthcheck**:
+including after a host reboot). Restart policies are deliberately
+production-only — in development a crashed process should stay down and
+visible, not quietly loop-restart. **Healthchecks** are shared (defined in
+`docker-compose.yml`, so development gets them too):
 
 - `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
   to cover the `migrate_schemas`/`collectstatic` startup run.
