@@ -3,7 +3,17 @@ FROM nginx:stable
 # nginx configs
 COPY uwsgi_params /etc/nginx/uwsgi_params
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY bytedeck.aws.conf /etc/nginx/sites-available/bytedeck.conf
+
+# Render the site config from a single template shared by production and
+# staging. envsubst is restricted to '${DOMAIN}' so it substitutes only the
+# domain and leaves nginx's own $host/$scheme/$request_uri/$1 variables intact.
+# DOMAIN is a build arg wired to ROOT_DOMAIN (see docker-compose.prod.aws.yml);
+# the build happens per-host, so each environment bakes in its own domain.
+ARG DOMAIN=bytedeck.com
+COPY bytedeck.conf.template /tmp/bytedeck.conf.template
+RUN mkdir -p /etc/nginx/sites-available \
+    && envsubst '${DOMAIN}' < /tmp/bytedeck.conf.template > /etc/nginx/sites-available/bytedeck.conf \
+    && rm /tmp/bytedeck.conf.template
 
 # SSL details
 # SSL now provided via mounted container during runtime, so cerbot can update from host
