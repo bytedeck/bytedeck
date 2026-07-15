@@ -19,7 +19,7 @@ class SecureProxySSLHeaderTest(SimpleTestCase):
         so build_absolute_uri produces https:// links instead of http://."""
         request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https")
         self.assertTrue(request.is_secure())
-        self.assertTrue(request.build_absolute_uri("/decks/new/").startswith("https://"))
+        self.assertTrue(request.build_absolute_uri("/decks/request/new/").startswith("https://"))
 
     def test_forwarded_http_request_is_not_secure(self):
         """Without the https forwarded scheme, the request stays plain HTTP so the
