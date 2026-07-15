@@ -142,12 +142,8 @@ def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
 
     user = None
     for user in users:
-        # badges with no prereqs are manually granted only, hence no_prereq_means=False
-        # (matches BadgeManager.get_conditions_met)
-        if (
-            not BadgeAssertion.objects.all_for_user_badge(user, badge, False).exists()
-            and Prereq.objects.all_conditions_met(badge, user, no_prereq_means=False)
-        ):
+        # same qualification rule as the grant-check preview (Badge.students_who_qualify_ungranted)
+        if badge.student_qualifies_ungranted(user):
             assertion = BadgeAssertion.objects.create_assertion(user, badge)
 
             # let the student's teachers know the badge was granted automatically

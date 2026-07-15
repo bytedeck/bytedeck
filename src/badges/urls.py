@@ -12,7 +12,7 @@ urlpatterns = [
     path('<int:badge_id>/all/', views.detail_all, name='badge_detail_all'),  # show assertions of all students
     re_path(r'^(?P<pk>[0-9]+)/edit/$', views.BadgeUpdate.as_view(), name='badge_update'),
     re_path(r'^(?P<pk>[0-9]+)/prereqs/edit/$', views.BadgePrereqsUpdate.as_view(), name='badge_prereqs_update'),
-    path('<int:badge_id>/grant-qualifying/', views.badge_grant_qualifying, name='grant_qualifying'),
+    path('<int:badge_id>/grant-qualifying/', views.BadgeGrantQualifying.as_view(), name='grant_qualifying'),
     re_path(r'^(?P<badge_id>[0-9]+)/copy/$', views.badge_copy, name='badge_copy'),
     re_path(r'^(?P<pk>[0-9]+)/delete/$', views.BadgeDelete.as_view(), name='badge_delete'),
 

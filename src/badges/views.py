@@ -90,40 +90,53 @@ class BadgePrereqsUpdate(ObjectPrereqsFormView):
         return response
 
 
-@non_public_only_view
-@staff_member_required
-def badge_grant_qualifying(request, badge_id):
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeGrantQualifying(NonPublicOnlyViewMixin, View):
     """Teacher-initiated grant-check for a badge (issue #1157).
 
-    GET shows how many current students currently meet the badge's prerequisites but
-    haven't been granted it, and asks the teacher to confirm. POST queues
-    grant_badge_assertions_for_badge, which grants the badge to those students (in bunches)
-    and notifies their teachers. Badges are auto-granted on demand this way rather than
-    automatically on prereq changes, so a badge is never granted while still being built.
+    GET shows how many current students meet the badge's prerequisites but haven't been
+    granted it, and asks the teacher to confirm. POST queues grant_badge_assertions_for_badge,
+    which grants the badge to those students (in bunches) and notifies their teachers.
+    Granting happens on demand this way rather than automatically on prereq changes, so a
+    badge is never granted while it is still being built. Published badges only.
     """
-    badge = get_object_or_404(Badge, pk=badge_id)
-    badge_name = SiteConfig.get().custom_name_for_badge
+    template_name = "badges/badge_grant_qualifying_confirm.html"
 
-    if not badge.published:
-        messages.warning(request, f"This {badge_name.lower()} is not published, so it cannot be granted to students.")
-        return redirect(badge.get_absolute_url())
+    def get(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
 
-    if request.method == 'POST':
+        context = {
+            "heading": f"Grant {SiteConfig.get().custom_name_for_badge}: {badge.name}",
+            "badge": badge,
+            "qualifying_students": badge.students_who_qualify_ungranted(),
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
+
         grant_badge_assertions_for_badge.apply_async(
             kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
         messages.success(
             request,
-            f"Granting {badge_name.lower()} \"{badge}\" to all qualifying students. "
-            "This may take a moment to complete."
+            f'Granting {SiteConfig.get().custom_name_for_badge.lower()} "{badge}" to all '
+            'qualifying students. This may take a moment to complete.'
         )
         return redirect(badge.get_absolute_url())
 
-    context = {
-        "heading": f"Grant {badge_name}: {badge.name}",
-        "badge": badge,
-        "qualifying_students": badge.students_who_qualify_ungranted(),
-    }
-    return render(request, "badges/badge_grant_qualifying_confirm.html", context)
+    @staticmethod
+    def _unpublished_redirect(request, badge):
+        """An unpublished badge can't be granted; warn and send the teacher back to it."""
+        messages.warning(
+            request,
+            f"This {SiteConfig.get().custom_name_for_badge.lower()} is not published, "
+            "so it cannot be granted to students."
+        )
+        return redirect(badge.get_absolute_url())
 
 
 class BadgeDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):

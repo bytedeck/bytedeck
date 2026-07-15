@@ -43,7 +43,7 @@
             {% if badge.published %}
             <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
                href="{% url 'badges:grant_qualifying' badge.id %}">
-              <i class="fa fa-check-circle-o"></i>
+              <i class="fa fa-fw fa-users"></i>
             </a>
             {% endif %}
           </div>

@@ -296,16 +296,16 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
     def test_badge_grant_qualifying__unpublished_badge_does_not_grant(self, task):
-        """An unpublished badge can't be granted: the view redirects with a warning and
-        never queues the grant task.
+        """An unpublished badge can't be granted: both GET and POST redirect with a warning
+        and never queue the grant task.
         """
         self.client.force_login(self.test_teacher)
         self.test_badge.published = False
         self.test_badge.save()
 
-        response = self.client.post(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
-
-        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        self.assertRedirects(self.client.get(url), self.test_badge.get_absolute_url())
+        self.assertRedirects(self.client.post(url), self.test_badge.get_absolute_url())
         task.assert_not_called()
 
     def test_badge_prereqs_update__prompts_to_grant_qualifying(self):
