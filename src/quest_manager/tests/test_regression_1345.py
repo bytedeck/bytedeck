@@ -75,6 +75,18 @@ class DoubleStartRaceTest(TenantTestCase):
                 duplicate.full_clean(validate_constraints=False)
                 duplicate.save()
 
+    def test_create_submission__reraises_integrity_error_when_not_the_race(self):
+        """An IntegrityError that is NOT the double-start race (no matching
+        in-progress submission exists to recover) is re-raised, not swallowed."""
+        with mock.patch.object(
+            QuestSubmission, "save", side_effect=IntegrityError("not the double-start race"),
+        ):
+            with self.assertRaises(IntegrityError):
+                QuestSubmission.objects.create_submission(self.student, self.quest)
+
+        # Nothing was created and nothing was silently returned.
+        self.assertEqual(self._in_progress_count(), 0)
+
     def test_create_submission__twice_returns_existing_and_makes_no_duplicate(self):
         """Two ``create_submission()`` calls (the double-start race) leave exactly
         one in-progress submission; the second call returns the first one."""
