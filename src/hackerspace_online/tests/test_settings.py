@@ -1,5 +1,8 @@
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
 from django.test import RequestFactory, SimpleTestCase
+
+from hackerspace_online.settings import _validate_deployment_settings
 
 
 class SecureProxySSLHeaderTest(SimpleTestCase):
@@ -23,3 +26,29 @@ class SecureProxySSLHeaderTest(SimpleTestCase):
         header can't be used to fake a secure request."""
         request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="http")
         self.assertFalse(request.is_secure())
+
+
+class DeploymentSettingsGuardTest(SimpleTestCase):
+    """A real (non-localhost) deployment must not boot with the shipped example
+    defaults; `_validate_deployment_settings` raises to prevent it, while leaving
+    local development untouched."""
+
+    def test_local_development_is_never_blocked(self):
+        """localhost is local dev, so the example DEBUG=True + default SECRET_KEY are allowed."""
+        # Should not raise.
+        _validate_deployment_settings("localhost", True, "Change.Me!")
+
+    def test_real_deployment_rejects_debug_true(self):
+        """DEBUG=True on a real domain is refused, so debug pages can't leak in production."""
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_deployment_settings("bytedeck.com", True, "a-real-random-secret-key")
+
+    def test_real_deployment_rejects_default_secret_key(self):
+        """The example 'Change.Me!' SECRET_KEY is refused on a real domain."""
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_deployment_settings("bytedeck.com", False, "Change.Me!")
+
+    def test_properly_configured_deployment_is_allowed(self):
+        """DEBUG=False with a unique SECRET_KEY on a real domain passes the guard."""
+        # Should not raise.
+        _validate_deployment_settings("bytedeck.com", False, "a-real-random-secret-key")
