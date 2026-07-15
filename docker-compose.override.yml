@@ -26,18 +26,8 @@ services:
     - 5432:5432  # Expose port so app can connect to db when developing locally with `python src/manage.py [runserver|test src]
 
   redis:
-    image: "redis:7-alpine"
-    env_file: .env
-    sysctls:
-      # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
-      net.core.somaxconn: 512
-    networks:
-      - backend-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 1s
-      timeout: 3s
-      retries: 30
+    # Common config (image, healthcheck, sysctls, network) lives in
+    # docker-compose.yml; development only adds the published port.
     ports:
     - 6379:6379  # Expose port so app can connect to redis when developing locally with `python src/manage.py [runserver|test src]
 
@@ -54,8 +44,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # (redis dependency is declared in docker-compose.yml)
 
   celery:
     environment:
@@ -64,8 +53,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # (redis dependency is declared in docker-compose.yml)
 
   celery-beat:
     environment:
@@ -74,8 +62,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      redis:
-        condition: service_healthy
+      # (redis dependency is declared in docker-compose.yml)
 
   pg-admin:
     image: dpage/pgadmin4

@@ -18,7 +18,7 @@ services:
       #   WUID: $WUID
       #   WGID: $WGID
     env_file: .env
-    # command: # see docker-compose.overide.yml or docker-compose.prod.yml
+    # command: # see docker-compose.overide.yml or docker-compose.prod.aws.yml
     volumes:
       - .:/app
     ports:
@@ -26,6 +26,9 @@ services:
     networks:
       - backend-network
       - frontend-network
+    depends_on:
+      redis:
+        condition: service_healthy
 
   celery:
     build:
@@ -38,6 +41,9 @@ services:
       - .:/app
     networks:
       - backend-network
+    depends_on:
+      redis:
+        condition: service_healthy
 
   celery-beat:
     build:
@@ -48,6 +54,27 @@ services:
                       celery -A hackerspace_online beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler"
     volumes:
       - .:/app
+    networks:
+      - backend-network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Redis: Celery broker (db 0) and Django cache (dbs 1/2), used by every
+  # environment. Common config lives here; environment specifics are layered on
+  # top — the dev override publishes the port for local runserver/tests, and the
+  # AWS file adds the production memory cap / eviction policy / restart policy.
+  # Internal-only by default: no published port, backend-network only.
+  redis:
+    image: redis:7-alpine
+    sysctls:
+      # Resolve -> # WARNING: The TCP backlog setting of 511 cannot be enforced because /proc/sys/net/core/somaxconn is set to the lower value of 128.
+      net.core.somaxconn: 512
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
     networks:
       - backend-network
 
