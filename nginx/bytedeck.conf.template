@@ -1,4 +1,12 @@
 # /etc/nginx/sites-enabled/bytedeck.conf
+#
+# TEMPLATE: this file is rendered at image build time by `envsubst` in
+# nginx/Dockerfile, which substitutes ONLY ${DOMAIN} (nginx's own $host,
+# $scheme, $request_uri, $1 etc. are left intact). ${DOMAIN} comes from the
+# DOMAIN build arg, wired to ROOT_DOMAIN in docker-compose.prod.aws.yml, so
+# production (bytedeck.com) and staging (bytedeck-staging.com) share this one
+# source of truth instead of maintaining divergent copies. Do not edit the
+# generated /etc/nginx/sites-available/bytedeck.conf directly.
 
 # the upstream uwsgi component nginx needs to connect to
 upstream django {
@@ -12,13 +20,13 @@ server {
     listen 8088 ssl http2; # managed by Certbot
     listen [::]:8088 ssl http2;
 
-    server_name bytedeck.com *.bytedeck.com;
+    server_name ${DOMAIN} *.${DOMAIN};
 
     resolver 8.8.8.8 8.8.4.4 valid=300s;
     resolver_timeout 5s;
 
     ## Deny illegal Host headers
-    if ($host !~* ^(bytedeck.com|.+\.bytedeck.com)$ ) {
+    if ($host !~* ^(${DOMAIN}|.+\.${DOMAIN})$ ) {
         return 444;
     }
 
@@ -78,8 +86,8 @@ server {
         uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
     }
 
-    ssl_certificate /etc/letsencrypt/live/bytedeck.com/fullchain.pem; # managed by Certbot
-    ssl_certificate_key /etc/letsencrypt/live/bytedeck.com/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
 
     ssl_session_timeout 1d;
@@ -101,7 +109,7 @@ server {
     ssl_stapling_verify on;
 
     # verify chain of trust of OCSP response using Root CA and Intermediate certs
-    ssl_trusted_certificate /etc/letsencrypt/live/bytedeck.com/chain.pem;
+    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
 
     # GZIP SETTINGS: https://www.nginx.com/blog/help-the-world-by-healing-your-nginx-configuration/#Enabling-Gzip-Compression-for-HTML-CSS-and-JavaScript-Files
     gzip on;
@@ -117,7 +125,7 @@ server {
     # redirect all http requests to port 443 (https)
     listen 8080;
     listen [::]:8080;
-    server_name bytedeck.com *.bytedeck.com;
+    server_name ${DOMAIN} *.${DOMAIN};
     return 301 https://$host$request_uri;
 }
 

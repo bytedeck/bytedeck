@@ -119,9 +119,19 @@ systemctl status snap.certbot.renew.service
 cat /etc/systemd/system/snap.certbot.renew.service.d/snap.certbot.renew.service.override.conf
 ```
 
-nginx TLS config (`nginx/bytedeck.aws.conf`): TLS 1.2/1.3, Mozilla-intermediate
-ciphers, OCSP stapling, HSTS, gzip. It denies illegal `Host` headers (returns
-`444`) and drops connections to unknown server names.
+nginx TLS config (`nginx/bytedeck.conf.template`): TLS 1.2/1.3,
+Mozilla-intermediate ciphers, OCSP stapling, HSTS, gzip. It denies illegal
+`Host` headers (returns `444`) and drops connections to unknown server names.
+
+The config is a **single template** shared by production and staging. The domain
+(`server_name`, the `Host`-check regex, and the Let's Encrypt cert paths) is the
+only thing that differs between environments, so it is a `${DOMAIN}` placeholder
+rendered at image build time by `envsubst` (see `nginx/Dockerfile`). `DOMAIN` is
+a build arg wired to `ROOT_DOMAIN` in `docker-compose.prod.aws.yml`, so staging
+needs no modified nginx file — it just sets `ROOT_DOMAIN=bytedeck-staging.com` in
+its `.env` (and has its wildcard cert at `/etc/letsencrypt/live/bytedeck-staging.com/`).
+`envsubst` is restricted to `${DOMAIN}`, so nginx's own `$host`/`$scheme`/`$1`
+variables are left untouched.
 
 ## Static & media
 
@@ -129,7 +139,7 @@ ciphers, OCSP stapling, HSTS, gzip. It denies illegal `Host` headers (returns
 **S3** and they are served through **CloudFront**. nginx does not serve app
 media in normal operation.
 
-> Legacy detail: `nginx/bytedeck.aws.conf` still contains a hardcoded
+> Legacy detail: `nginx/bytedeck.conf.template` still contains a hardcoded
 > `location ~ /media/(.*)$` that 301-redirects to a specific CloudFront
 > distribution (`d10ge8y4vx8iud.cloudfront.net/public_media/$1`). It's a
 > workaround for old hardcoded `/media/...` URLs and causes a redundant redirect
@@ -214,9 +224,9 @@ can be rebuilt.
 policy, `SECURE_PROXY_SSL_HEADER`). `manage.py check --deploy` is run in CI
 against the `DEBUG=False` path to prevent regressions.
 
-nginx **must** forward the request scheme to uwsgi — `nginx/bytedeck.aws.conf`
-sets `uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;` in the `location /` block,
-which pairs with `SECURE_PROXY_SSL_HEADER` in settings. This is required for
+nginx **must** forward the request scheme to uwsgi — `nginx/uwsgi_params`
+sets `uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;`, which pairs with
+`SECURE_PROXY_SSL_HEADER` in settings. This is required for
 correct behaviour, not just for redirects: without it `request.is_secure()` is
 always `False` behind the proxy, so `build_absolute_uri()` emits `http://` links
 (password-reset emails, OAuth callbacks, pagination) even though the site is
