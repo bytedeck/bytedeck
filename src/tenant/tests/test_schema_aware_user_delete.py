@@ -16,8 +16,11 @@ mirrors ``tenant.tests.test_admin.PublicTenantTestAdminPublic``.
 from allauth.account.models import EmailAddress
 
 from django.conf import settings
+from django.contrib import admin as django_admin
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
+from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -126,6 +129,38 @@ class SchemaAwareUserDeleteAdminPublicTest(TenantTestCase):
         self.assertEqual(perms_needed, set())
         self.assertEqual(protected, [])
 
+    def test_get_deleted_objects__reports_perms_needed_without_delete_permission(self):
+        """When the requesting user lacks delete permission on a collected
+        (admin-registered) model, its verbose name is reported in
+        ``perms_needed`` -- the ``has_delete_permission`` branch."""
+        with tenant_context(self.public_tenant):
+            staff = User.objects.create_user("staff_nodel", "s@e.com", "pw", is_staff=True)
+            request = RequestFactory().get("/")
+            request.user = staff  # staff, but no auth.delete_user permission
+
+            _, _, perms_needed, _ = schema_aware_get_deleted_objects(
+                [self.target], request, django_admin.site,
+            )
+        self.assertIn(User._meta.verbose_name, perms_needed)
+
+    def test_get_deleted_objects__unresolvable_change_url_falls_back_to_plain_label(self):
+        """When a collected object's admin change URL can't be reversed,
+        ``format_callback`` falls back to a plain (unlinked) label -- the
+        ``NoReverseMatch`` guard.  An ``AdminSite`` whose URLs aren't wired into
+        the URLconf makes ``reverse()`` fail for its registered models."""
+        with tenant_context(self.public_tenant):
+            unwired = AdminSite(name="unwired_site")
+            unwired.register(User)  # registered, but "unwired_site:..." isn't in urls
+            request = RequestFactory().get("/")
+            request.user = self.superuser
+
+            to_delete, _, _, _ = schema_aware_get_deleted_objects(
+                [self.target], request, unwired,
+            )
+        # Falls back to "User: target" with no <a href> link.
+        self.assertIn("target", str(to_delete))
+        self.assertNotIn("href", str(to_delete))
+
 
 class SchemaAwareUserDeleteAdminTenantTest(TenantTestCase):
     """Regression guard: on a tenant schema every table exists, so
@@ -151,6 +186,33 @@ class SchemaAwareUserDeleteAdminTenantTest(TenantTestCase):
         self.client.force_login(self.superuser)
         url = reverse("admin:auth_user_delete", args=(student.pk,))
         response = self.client.post(url, {"post": "yes"})
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=student.pk).exists())
+        self.assertFalse(QuestSubmission.objects.filter(pk=sub.pk).exists())
+
+    def test_delete_queryset__tenant_schema_bulk_delete_still_cascades(self):
+        """The ``delete_selected`` bulk action on a tenant schema falls through
+        to Django's default ``delete_queryset`` and still cascades to the
+        selected users' QuestSubmission rows."""
+        student = baker.make(User)
+        quest = baker.make(Quest)
+        sub = baker.make(
+            QuestSubmission, user=student, quest=quest,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        self.client.force_login(self.superuser)
+        changelist_url = reverse("admin:auth_user_changelist")
+        action_data = {
+            "action": "delete_selected",
+            ACTION_CHECKBOX_NAME: [str(student.pk)],
+        }
+        confirm = self.client.post(changelist_url, action_data)
+        self.assertEqual(confirm.status_code, 200)
+
+        action_data["post"] = "yes"
+        response = self.client.post(changelist_url, action_data)
 
         self.assertEqual(response.status_code, 302)
         self.assertFalse(User.objects.filter(pk=student.pk).exists())
