@@ -28,11 +28,29 @@ class SkipMissingSchemaTablesMixin:
 
     @cached_property
     def _visible_tables(self):
-        # Tables visible on the current search_path.  On the public schema this
-        # excludes the TENANT_APPS tables.
+        """Return the set of table names visible on the current Postgres schema.
+
+        ``connection.introspection.table_names()`` respects the active
+        ``search_path`` (via ``pg_table_is_visible``), so on the public schema
+        this set excludes the ``TENANT_APPS`` tables.  Cached because a single
+        collect walks many related models and the set is stable for the life of
+        the collector.
+        """
         return set(connection.introspection.table_names())
 
     def related_objects(self, related_model, related_fields, objs):
+        """Collect related objects, skipping models whose table isn't visible.
+
+        Overrides ``Collector.related_objects``.  If ``related_model``'s table
+        is absent from the current schema (e.g. a ``TENANT_APPS`` table on the
+        public schema), return an empty queryset so no query is issued and
+        nothing is cascaded for it; otherwise defer to the default behaviour.
+
+        :param related_model: the model on the far side of the reverse relation.
+        :param related_fields: the fields linking ``related_model`` to ``objs``.
+        :param objs: the objects whose related rows are being collected.
+        :returns: a queryset of related objects (empty when the table is absent).
+        """
         if related_model._meta.db_table not in self._visible_tables:
             # Empty queryset -- no DB hit, nothing to cascade for this model.
             return related_model._base_manager.none()

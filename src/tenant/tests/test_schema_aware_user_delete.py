@@ -1,88 +1,157 @@
 """Tests for schema-aware user deletion (issue #691).
 
 Deleting a user on the *public* schema used to fail because Django's deletion
-collector queried TENANT_APPS tables (e.g. quest_manager_questsubmission) that
-don't exist there.  The schema-aware collectors skip absent tables on the public
-schema, while remaining a no-op on tenant schemas (where every table exists and
-cascades must still work).
+collector queried ``TENANT_APPS`` tables (e.g. ``quest_manager_questsubmission``)
+that don't exist there.  ``CustomUserAdmin`` routes deletion through the
+schema-aware collectors on the public schema, which skip absent tables, while
+remaining a no-op on tenant schemas (where every table exists and cascades must
+still work).
+
+These tests drive the *actual* admin endpoints with ``TenantClient`` -- the
+delete-confirmation page, single-object delete, and bulk ``delete_selected``
+action -- so they exercise the registered ``CustomUserAdmin`` overrides and would
+fail if it were unregistered or dispatched incorrectly.  The public-schema setup
+mirrors ``tenant.tests.test_admin.PublicTenantTestAdminPublic``.
 """
 from allauth.account.models import EmailAddress
 
-from django.contrib import admin as django_admin
+from django.conf import settings
+from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.auth import get_user_model
-from django.db import router
-from django.test import RequestFactory
+from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
-from django_tenants.utils import get_public_schema_name, schema_context
+from django_tenants.test.client import TenantClient
+from django_tenants.utils import tenant_context
 from model_bakery import baker
 
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
-from tenant.deletion import (
-    SchemaAwareCollector,
-    SchemaAwareNestedObjects,
-    schema_aware_get_deleted_objects,
-)
+from tenant.deletion import schema_aware_get_deleted_objects
+from tenant.models import Tenant
 
 User = get_user_model()
 
 
-class SchemaAwareUserDeleteTest(TenantTestCase):
+class SchemaAwareUserDeleteAdminPublicTest(TenantTestCase):
+    """Public-schema user deletion through the Django admin (issue #691).
 
-    def test_public_schema_user_delete_succeeds(self):
-        """A user (with an allauth EmailAddress) can be deleted on the public
-        schema even though tenant-app tables are absent there (#691)."""
-        with schema_context(get_public_schema_name()):
-            user = User.objects.create_user("pub_del", "p@e.com", "pw")
-            EmailAddress.objects.create(user=user, email="p@e.com", verified=True, primary=True)
-            uid = user.pk
+    On the public schema the ``TENANT_APPS`` tables are absent, so the default
+    admin delete cascade raises ``relation "..." does not exist``.  These tests
+    confirm ``CustomUserAdmin`` makes the confirmation page and the delete paths
+    succeed there.
+    """
 
-            collector = SchemaAwareCollector(using=router.db_for_write(User))
-            collector.collect([user])   # would raise relation-does-not-exist without the fix
-            collector.delete()
+    def setUp(self):
+        # Build the public tenant + a superuser to drive the admin, mirroring
+        # tenant.tests.test_admin.PublicTenantTestAdminPublic.
+        self.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(self.public_tenant):
+            self.superuser = User.objects.create_superuser(
+                username="admin",
+                password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
+            )
+            # Bulk-create to skip the tenant post_save/pre_save signals (fast).
+            Tenant.objects.bulk_create([self.public_tenant])
+            self.public_tenant.refresh_from_db()
+            self.public_tenant.domains.create(domain="localhost", is_primary=True)
 
+            # The user we'll delete, plus an allauth EmailAddress -- the original
+            # #691 failure surfaced first as a missing account_emailaddress table.
+            self.target = User.objects.create_user("target", "target@example.com", "pw")
+            EmailAddress.objects.create(
+                user=self.target, email="target@example.com", verified=True, primary=True,
+            )
+
+        self.client = TenantClient(self.public_tenant)
+
+    def test_get_deleted_objects__public_schema_confirmation_page_renders(self):
+        """The delete-confirmation page renders on the public schema (it would
+        raise ``relation ... does not exist`` without the schema-aware fix)."""
+        # Everything runs inside the public-schema context so force_login's
+        # last_login save (and the admin request) target the schema where the
+        # superuser and target actually live.
+        with tenant_context(self.public_tenant):
+            self.client.force_login(self.superuser)
+            url = reverse("admin:auth_user_delete", args=(self.target.pk,))
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "target")
+
+    def test_delete_model__public_schema_single_user_delete_succeeds(self):
+        """POSTing the delete-confirmation form deletes the user (and its
+        EmailAddress) on the public schema via ``delete_model``."""
+        with tenant_context(self.public_tenant):
+            self.client.force_login(self.superuser)
+            uid = self.target.pk
+            url = reverse("admin:auth_user_delete", args=(uid,))
+            response = self.client.post(url, {"post": "yes"})
+
+            self.assertEqual(response.status_code, 302)
             self.assertFalse(User.objects.filter(pk=uid).exists())
             self.assertFalse(EmailAddress.objects.filter(user_id=uid).exists())
 
-    def test_public_schema_nested_collect_does_not_raise(self):
-        """The admin delete-confirmation collector also skips absent tables."""
-        with schema_context(get_public_schema_name()):
-            user = User.objects.create_user("pub_nested", "n@e.com", "pw")
-            EmailAddress.objects.create(user=user, email="n@e.com", verified=True, primary=True)
+    def test_delete_queryset__public_schema_bulk_delete_succeeds(self):
+        """The ``delete_selected`` admin action deletes users on the public
+        schema via ``delete_queryset``."""
+        with tenant_context(self.public_tenant):
+            self.client.force_login(self.superuser)
+            uid = self.target.pk
+            changelist_url = reverse("admin:auth_user_changelist")
+            action_data = {
+                "action": "delete_selected",
+                ACTION_CHECKBOX_NAME: [str(uid)],
+            }
+            # First POST renders the "are you sure?" confirmation page.
+            confirm = self.client.post(changelist_url, action_data)
+            self.assertEqual(confirm.status_code, 200)
+            self.assertContains(confirm, "target")
 
-            collector = SchemaAwareNestedObjects(using=router.db_for_write(User))
-            collector.collect([user])  # would raise without the fix
-            self.assertIn(user, [o for objs in collector.model_objs.values() for o in objs])
+            # Second POST (with post=yes) actually performs the delete.
+            action_data["post"] = "yes"
+            response = self.client.post(changelist_url, action_data)
 
-    def test_public_schema_get_deleted_objects(self):
-        """schema_aware_get_deleted_objects builds the confirmation data without
-        querying tenant tables."""
-        with schema_context(get_public_schema_name()):
-            superuser = User.objects.create_superuser("pub_su", "su@e.com", "pw")
-            user = User.objects.create_user("pub_gdo", "g@e.com", "pw")
-            EmailAddress.objects.create(user=user, email="g@e.com", verified=True, primary=True)
+            self.assertEqual(response.status_code, 302)
+            self.assertFalse(User.objects.filter(pk=uid).exists())
 
-            request = RequestFactory().get("/")
-            request.user = superuser
+    def test_get_deleted_objects__empty_object_list_returns_empty(self):
+        """``schema_aware_get_deleted_objects`` handles an empty selection
+        (the ``IndexError`` guard) without touching the database."""
+        with tenant_context(self.public_tenant):
             to_delete, model_count, perms_needed, protected = schema_aware_get_deleted_objects(
-                [user], request, django_admin.site,
+                [], object(), None,
             )
-            self.assertIn("pub_gdo", str(to_delete))
+        self.assertEqual(to_delete, [])
+        self.assertEqual(model_count, {})
+        self.assertEqual(perms_needed, set())
+        self.assertEqual(protected, [])
 
-    def test_tenant_schema_user_delete_still_cascades(self):
-        """On a tenant schema every table exists, so the schema-aware collector
-        cascades exactly like the default (a regression guard for the fix)."""
-        user = baker.make(User)
+
+class SchemaAwareUserDeleteAdminTenantTest(TenantTestCase):
+    """Regression guard: on a tenant schema every table exists, so
+    ``CustomUserAdmin`` falls through to Django's default and the delete cascade
+    still removes related tenant rows (e.g. QuestSubmission)."""
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.superuser = User.objects.create_superuser(
+            username="tenant_admin", email="ta@example.com", password="pw",
+        )
+
+    def test_delete_model__tenant_schema_still_cascades_to_submissions(self):
+        """Deleting a user through the admin on a tenant schema cascades to the
+        user's QuestSubmission rows exactly like the default admin."""
+        student = baker.make(User)
         quest = baker.make(Quest)
         sub = baker.make(
-            QuestSubmission, user=user, quest=quest,
+            QuestSubmission, user=student, quest=quest,
             semester=SiteConfig.get().active_semester,
         )
 
-        collector = SchemaAwareCollector(using=router.db_for_write(User))
-        collector.collect([user])
-        collector.delete()
+        self.client.force_login(self.superuser)
+        url = reverse("admin:auth_user_delete", args=(student.pk,))
+        response = self.client.post(url, {"post": "yes"})
 
-        self.assertFalse(User.objects.filter(pk=user.pk).exists())
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(User.objects.filter(pk=student.pk).exists())
         self.assertFalse(QuestSubmission.objects.filter(pk=sub.pk).exists())
