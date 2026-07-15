@@ -137,21 +137,18 @@ class PrerequisitesSignalsTest(TenantTestCase):
         prereq.save()  # update
         self.assertEqual(task.call_count, 0)
 
-    @patch('prerequisites.signals.grant_badge_assertions_for_badge.apply_async')
-    def test_badge_granting_triggered_by_badge_prereq_changes(self, task):
-        """Creation, update and deletion of a prereq where the parent is a badge should
-        each trigger the badge-granting task, so students who meet the badge's new
-        conditions are granted it automatically. Regression test for issue #1157.
+    @patch('prerequisites.tasks.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_prereq_changes_do_not_auto_grant(self, task):
+        """Creating, updating or deleting a prereq whose parent is a badge must NOT trigger
+        the badge-granting task: a teacher may tweak a badge's prereqs while building it,
+        so granting is teacher-initiated from the badge page instead (issue #1157).
         """
         badge = baker.make(Badge)
         prereq = baker.make(Prereq, prereq_invert=True, parent_object=badge)  # creation
         prereq.prereq_invert = False
         prereq.save()  # update
-        self.assertEqual(task.call_count, 2)
-        task.assert_called_with(kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
-
-        prereq.delete()  # deletion (removing a prereq can also make more users meet conditions)
-        self.assertEqual(task.call_count, 3)
+        prereq.delete()  # deletion
+        self.assertEqual(task.call_count, 0)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_cache_triggered_by_quest_prereq_changes(self, task):

@@ -40,6 +40,12 @@
             <a class="btn btn-success" title="Bulk grant to multiple student" href="{% url 'badges:bulk_grant_badge' badge.id %}">
               <i class="fa fa-users"></i>
             </a>
+            {% if badge.published %}
+            <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
+               href="{% url 'badges:grant_qualifying' badge.id %}">
+              <i class="fa fa-check-circle-o"></i>
+            </a>
+            {% endif %}
           </div>
         </div>
         {% endif %}

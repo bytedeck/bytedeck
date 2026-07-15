@@ -111,7 +111,7 @@ class GrantBadgeAssertionsForBadgeTest(TenantTestCase):
 
     def test_grant_badge_assertions_for_badge__skips_if_already_started(self):
         """The task skips itself when another run for the same badge started recently
-        (multiple prereq-change signals can fire for a single form save).
+        (e.g. a teacher double-clicking the grant button).
         """
         Prereq.add_simple_prereq(self.badge, self.quest)
         cache.set(f'grant_badge_assertions_for_badge_{self.badge.id}_wait', True, 1)

@@ -110,8 +110,10 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
 
 @app.task(base=TransactionAwareTask, bind=True, name='prerequisites.tasks.grant_badge_assertions_for_badge', max_retries=settings.CELERY_TASK_MAX_RETRIES)  # noqa
 def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
-    """When a badge's prerequisites change, grant the badge to all current students who
-    now meet its conditions, and notify their teachers of each auto-grant (issue #1157).
+    """Grant a badge to all current students who meet its conditions, and notify their
+    teachers of each grant (issue #1157). This is triggered on demand by a teacher from
+    the badge page (badges.views.badge_grant_qualifying) rather than automatically on
+    prereq changes, so a badge is never granted while it is still being built.
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively, like
     update_conditions_for_quest.
 
@@ -128,8 +130,8 @@ def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
         # If the badge is deleted or unpublished while this task is running/queued.
         return f"Badge {badge_id} no longer exists or is not published."
 
-    # check if this already started recently, if so, don't need to start a new one.
-    # for example, when prereqs are updated, one might be deleted and two more added, that will result in 3 signals!
+    # check if this already started recently, if so, don't need to start a new one
+    # (e.g. a teacher double-clicking the grant button).
     cache_key = f'grant_badge_assertions_for_badge_{badge_id}_wait'
     if start_from_user_id == 1 and cache.get(cache_key):
         return f"Skipping task for badge {badge_id}, already started."

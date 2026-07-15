@@ -1,0 +1,49 @@
+{% extends "badges/base.html" %}
+
+{% block heading_inner %}Grant {{ config.custom_name_for_badge }}: {{ badge.name }}{% endblock %}
+
+{% block content %}
+  <div class="media">
+    <div class="media-left">
+      <img class="media-object icon-lg img-rounded" src="{{ badge.get_icon_url }}" alt="icon" />
+    </div>
+    <div class="media-body">
+      {{ badge.short_description|safe }}
+    </div>
+  </div>
+  <p></p>
+
+  {% if qualifying_students %}
+    <div class="well">
+      <p>
+        <strong>{{ qualifying_students|length }}</strong>
+        student{{ qualifying_students|length|pluralize }} currently
+        {{ qualifying_students|length|pluralize:"meets,meet" }} this
+        {{ config.custom_name_for_badge|lower }}'s prerequisites but
+        {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet:
+      </p>
+      <ul>
+        {% for student in qualifying_students %}
+          <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <form action="" method="post">{% csrf_token %}
+      <p>
+        Grant this {{ config.custom_name_for_badge|lower }} to the
+        {{ qualifying_students|length }} student{{ qualifying_students|length|pluralize }} above?
+        Their teachers will be notified.
+      </p>
+      <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Cancel</a>
+      <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
+    </form>
+  {% else %}
+    <div class="well">
+      <p>
+        No current students meet this {{ config.custom_name_for_badge|lower }}'s prerequisites
+        without already having it, so there is nothing to grant.
+      </p>
+    </div>
+    <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Back to {{ config.custom_name_for_badge|lower }}</a>
+  {% endif %}
+{% endblock %}

@@ -6,7 +6,6 @@ from django.dispatch import receiver
 from badges.models import Badge
 from prerequisites.models import Prereq, HasPrereqsMixin
 from prerequisites.tasks import (
-    grant_badge_assertions_for_badge,
     update_conditions_for_quest,
     update_quest_conditions_all_users,
     update_quest_conditions_for_user,
@@ -88,16 +87,16 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
 
-    If the parent is a badge, check whether the badge should now be auto-granted to
-    students who meet its changed conditions (issue #1157).
+    Badge prereq changes are intentionally NOT auto-granted here: a teacher may tweak a
+    badge's prerequisites several times while building it, and auto-granting on each change
+    could grant the badge before it is ready. Instead the teacher runs a grant-check on
+    demand from the badge page (see badges.views.badge_grant_qualifying, issue #1157).
     """
     if isinstance(instance.parent_object, Quest):
         # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
         # Cover this instance in a post_delete signal receiver for Quest objects.
         if instance.parent_object:
             update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
-    elif isinstance(instance.parent_object, Badge):
-        grant_badge_assertions_for_badge.apply_async(kwargs={'badge_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
 
 
 @receiver(post_save, sender=Prereq)

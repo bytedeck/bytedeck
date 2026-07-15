@@ -7,8 +7,9 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
+from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import RedirectView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -26,6 +27,8 @@ from djcytoscape.models import CytoScape
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
+
+from prerequisites.tasks import grant_badge_assertions_for_badge
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
@@ -66,6 +69,61 @@ def badge_list(request):
 
 class BadgePrereqsUpdate(ObjectPrereqsFormView):
     model = Badge
+
+    def form_valid(self, form):
+        """After a teacher saves a badge's prerequisites, prompt them to run a grant-check
+        (rather than auto-granting on every edit, which could grant a badge before it is
+        ready — issue #1157). The prompt links to badge_grant_qualifying, which confirms
+        the count before granting. Only published badges can be auto-granted.
+        """
+        response = super().form_valid(form)
+        if self.object.published:
+            badge_name = SiteConfig.get().custom_name_for_badge.lower()
+            grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
+            messages.info(
+                self.request,
+                mark_safe(
+                    f'Prerequisites changed. '
+                    f'<a href="{grant_url}">Check and grant this {badge_name} to qualifying students?</a>'
+                )
+            )
+        return response
+
+
+@non_public_only_view
+@staff_member_required
+def badge_grant_qualifying(request, badge_id):
+    """Teacher-initiated grant-check for a badge (issue #1157).
+
+    GET shows how many current students currently meet the badge's prerequisites but
+    haven't been granted it, and asks the teacher to confirm. POST queues
+    grant_badge_assertions_for_badge, which grants the badge to those students (in bunches)
+    and notifies their teachers. Badges are auto-granted on demand this way rather than
+    automatically on prereq changes, so a badge is never granted while still being built.
+    """
+    badge = get_object_or_404(Badge, pk=badge_id)
+    badge_name = SiteConfig.get().custom_name_for_badge
+
+    if not badge.published:
+        messages.warning(request, f"This {badge_name.lower()} is not published, so it cannot be granted to students.")
+        return redirect(badge.get_absolute_url())
+
+    if request.method == 'POST':
+        grant_badge_assertions_for_badge.apply_async(
+            kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
+        messages.success(
+            request,
+            f"Granting {badge_name.lower()} \"{badge}\" to all qualifying students. "
+            "This may take a moment to complete."
+        )
+        return redirect(badge.get_absolute_url())
+
+    context = {
+        "heading": f"Grant {badge_name}: {badge.name}",
+        "badge": badge,
+        "qualifying_students": badge.students_who_qualify_ungranted(),
+    }
+    return render(request, "badges/badge_grant_qualifying_confirm.html", context)
 
 
 class BadgeDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):
