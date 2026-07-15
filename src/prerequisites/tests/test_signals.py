@@ -144,8 +144,10 @@ class PrerequisitesSignalsTest(TenantTestCase):
         so granting is teacher-initiated from the badge page instead (issue #1157).
         """
         badge = baker.make(Badge)
-        prereq = baker.make(Prereq, prereq_invert=True, parent_object=badge)  # creation
+        quest = baker.make('quest_manager.quest')
+        prereq = baker.make(Prereq, prereq_invert=True, parent_object=badge, prereq_object=quest)  # creation
         prereq.prereq_invert = False
+        prereq.full_clean()
         prereq.save()  # update
         prereq.delete()  # deletion
         self.assertEqual(task.call_count, 0)

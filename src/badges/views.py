@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
-from django.utils.safestring import mark_safe
+from django.utils.html import format_html
 from django.views import View
 from django.views.generic import RedirectView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -80,11 +80,13 @@ class BadgePrereqsUpdate(ObjectPrereqsFormView):
         if self.object.published:
             badge_name = SiteConfig.get().custom_name_for_badge.lower()
             grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
+            # format_html escapes the interpolated values (badge_name comes from SiteConfig)
             messages.info(
                 self.request,
-                mark_safe(
-                    f'Prerequisites changed. '
-                    f'<a href="{grant_url}">Check and grant this {badge_name} to qualifying students?</a>'
+                format_html(
+                    'Prerequisites changed. <a href="{}">Check and grant this {} to qualifying students?</a>',
+                    grant_url,
+                    badge_name,
                 )
             )
         return response

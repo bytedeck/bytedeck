@@ -6,6 +6,7 @@ from django.core.cache import cache
 from django.test import override_settings
 
 from django_tenants.test.cases import TenantTestCase
+from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
@@ -25,6 +26,8 @@ class GrantBadgeAssertionsForBadgeTest(TenantTestCase):
     """
 
     def setUp(self):
+        """Set up a teacher, a current-semester student who has completed a quest, and a badge."""
+        self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         baker.make('courses.CourseStudent', user=self.student,
@@ -92,6 +95,7 @@ class GrantBadgeAssertionsForBadgeTest(TenantTestCase):
         """An unpublished badge is never auto-granted."""
         Prereq.add_simple_prereq(self.badge, self.quest)
         self.badge.published = False
+        self.badge.full_clean()
         self.badge.save()
 
         self.run_task()

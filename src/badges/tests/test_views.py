@@ -301,6 +301,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         self.client.force_login(self.test_teacher)
         self.test_badge.published = False
+        self.test_badge.full_clean()
         self.test_badge.save()
 
         url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
@@ -341,6 +342,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
         self.client.force_login(self.test_teacher)
         self.test_badge.published = False
+        self.test_badge.full_clean()
         self.test_badge.save()
 
         prereq_quest = baker.make(Quest)
