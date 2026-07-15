@@ -5,21 +5,22 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db.models import ProtectedError
 
-from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
 
 from courses.models import Block, Course, CourseStudent, ExcludedDate, MarkRange, Rank, Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class MarkRangeModelTest(TenantTestCase):
+class MarkRangeModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+    @classmethod
+    def setUpTestData(cls):
+        cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
     def test_mark_range_creation(self):
         self.assertIsInstance(self.mr_50, MarkRange)
@@ -29,13 +30,14 @@ class MarkRangeModelTest(TenantTestCase):
         self.assertEqual(str(self.mr_50), expected_str)
 
 
-class MarkRangeManagerTest(TenantTestCase):
-    def setUp(self):
-        # clear default mark range variables
+class MarkRangeManagerTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # clear default mark range variables (every test in this class expects the defaults gone)
         MarkRange.objects.all().delete()
 
-        self.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
-        self.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
+        cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
+        cls.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
 
     def test_get_range(self):
         mr_100 = baker.make(MarkRange, minimum_mark=100.0)
@@ -84,7 +86,7 @@ class MarkRangeManagerTest(TenantTestCase):
             self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
 
-class BlockModelManagerTest(TenantTestCase):
+class BlockModelManagerTest(ByteDeckTenantTestCase):
 
     def test_grouped_teachers_blocks_equals_one(self):
         """
@@ -126,11 +128,12 @@ class BlockModelManagerTest(TenantTestCase):
         self.assertListEqual(group[teacher2.id], [block_c.name, block_d.name])
 
 
-class SemesterModelManagerTest(TenantTestCase):
-    def setUp(self):
-        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
-        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
-        self.semester1 = baker.make(Semester, first_day=self.semester_start, last_day=self.semester_end)
+class SemesterModelManagerTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        cls.semester1 = baker.make(Semester, first_day=cls.semester_start, last_day=cls.semester_end)
 
     def test_get_current(self):
         """ Get's the current semester as defined by SiteConfig """
@@ -141,16 +144,17 @@ class SemesterModelManagerTest(TenantTestCase):
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
 
-class SemesterModelTest(TenantTestCase):
+class SemesterModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.semester_start = date(2019, 9, 1)  # Sep 1st 2019
-        self.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
-        self.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
-        self.semester = baker.make(Semester,
-                                   first_day=self.semester_start,
-                                   last_day=self.semester_end
-                                   )
+    @classmethod
+    def setUpTestData(cls):
+        cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
+        cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
+        cls.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
+        cls.semester = baker.make(Semester,
+                                  first_day=cls.semester_start,
+                                  last_day=cls.semester_end
+                                  )
 
     def test_semester_creation(self):
         self.assertIsInstance(self.semester, Semester)
@@ -304,10 +308,11 @@ class SemesterModelTest(TenantTestCase):
         self.assertEqual(student.profile.xp_cached, 0)
 
 
-class CourseModelTest(TenantTestCase):
+class CourseModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.course = baker.make(Course)
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = baker.make(Course)
 
     def test_course_creation(self):
         self.assertIsInstance(self.course, Course)
@@ -342,12 +347,13 @@ class CourseModelTest(TenantTestCase):
         self.assertRaises(ProtectedError, self.course.delete)
 
 
-class CourseStudentManagerTest(TenantTestCase):
+class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User, username='test_student')
-        self.course = baker.make(Course)
-        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User, username='test_student')
+        cls.course = baker.make(Course)
+        cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
     def test_current_course(self):
         """ Currently returns the first course in the active semester, if there are more than one"""
@@ -423,12 +429,13 @@ class CourseStudentManagerTest(TenantTestCase):
         self.assertEqual(CourseStudent.objects.all_users_for_active_semester(students_only=True).count(), 0)
 
 
-class CourseStudentModelTest(TenantTestCase):
+class CourseStudentModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User)
-        self.course = baker.make(Course)
-        self.course_student = baker.make(CourseStudent, user=self.student, course=self.course, semester=SiteConfig.get().active_semester)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+        cls.course = baker.make(Course)
+        cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
     def test_course_student_creation(self):
         self.assertIsInstance(self.course_student, CourseStudent)
@@ -480,11 +487,12 @@ class CourseStudentModelTest(TenantTestCase):
         self.assertEqual(xp_per_day, 0)
 
 
-class BlockModelTest(TenantTestCase):
+class BlockModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User)
-        self.block = baker.make(Block)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+        cls.block = baker.make(Block)
 
     def test_model_protection(self):
         """
@@ -520,10 +528,7 @@ class BlockModelTest(TenantTestCase):
         self.assertTrue(self.block.condition_met_as_prerequisite(self.student))
 
 
-class RankManagerTest(TenantTestCase):
-
-    def setUp(self):
-        pass
+class RankManagerTest(ByteDeckTenantTestCase):
 
     def test_get_rank(self):
         """ Test that the correct rank is returned for a given XP value"""
@@ -569,11 +574,13 @@ class RankManagerTest(TenantTestCase):
         self.assertIsNone(rank_1000)
 
 
-class RankModelTest(TenantTestCase):
+class RankModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
+        # every test in this class expects the default ranks gone, with only TestRank remaining
         Rank.objects.all().delete()
-        self.rank = baker.make(Rank, name="TestRank", xp=0)
+        cls.rank = baker.make(Rank, name="TestRank", xp=0)
 
     def test_rank_creation(self):
         self.assertIsInstance(self.rank, Rank)
@@ -592,7 +599,7 @@ class RankModelTest(TenantTestCase):
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
 
 
-class RankCacheInvalidationTest(TenantTestCase):
+class RankCacheInvalidationTest(ByteDeckTenantTestCase):
     """get_rank()/get_next_rank() read from the cached rank list, so every ORM
     write path must invalidate it: save/create and deletes are covered by the
     post_save/post_delete signals, while update()/bulk_create()/bulk_update()
