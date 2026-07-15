@@ -1,0 +1,45 @@
+{% extends "public/base.html" %}
+
+{% block content %}
+<div class="container my-5" style="max-width: 720px;">
+    <h1 class="mb-3">Thanks &mdash; check your email to continue</h1>
+    <p class="lead">
+        We've sent a verification link to the email address you entered. Follow the
+        steps below to finish setting up your new deck.
+    </p>
+
+    <h2 class="h4 mt-4">What happens next</h2>
+    <ol class="mb-4">
+        <li class="mb-2">
+            <strong>Verify your email.</strong> Click the verification link in the
+            email we just sent you.
+            <span class="text-muted">(No email? Check your spam or junk folder.)</span>
+        </li>
+        <li class="mb-2">
+            <strong>Name &amp; create your deck.</strong> The link opens a short form
+            where you choose a name and create your deck.
+        </li>
+        <li class="mb-2">
+            <strong>Sign in.</strong> Once your deck is created, you'll get a
+            <strong>welcome email</strong> with your initial login credentials, and
+            you can sign in at your deck's own web address.
+        </li>
+    </ol>
+
+    <div class="alert alert-info" role="alert">
+        <h2 class="h5 alert-heading">Good to know</h2>
+        <ul class="mb-0">
+            <li>
+                The verification link is valid for <strong>{{ verification_validity }}</strong>
+                and can be used to create <strong>one deck</strong>.
+            </li>
+            <li>
+                Didn't get the email? You can request another after about
+                <strong>{{ resend_cooldown }}</strong> (one email per address in that window).
+            </li>
+        </ul>
+    </div>
+
+    <a class="btn btn-outline-primary mt-2" href="{% url 'decks:request_new_deck' %}">Back to the request form</a>
+</div>
+{% endblock %}
