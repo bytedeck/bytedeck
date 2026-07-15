@@ -34,7 +34,7 @@ services:
         # Domain baked into the nginx config template (server_name, host check,
         # and cert paths). Reuses ROOT_DOMAIN from .env so production and
         # staging build the same image from one template.
-        DOMAIN: ${ROOT_DOMAIN}
+        DOMAIN: $ROOT_DOMAIN
     volumes:
         - /etc/letsencrypt:/etc/letsencrypt
     #   - static_data:/var/www/bytedeck/static
