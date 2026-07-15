@@ -4,11 +4,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.db import connection
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import schema_exists
-from django_tenants.utils import tenant_context
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import export_campaign_and_copy_quests
@@ -23,25 +21,24 @@ from tenant.models import TenantDomain
 User = get_user_model()
 
 
-class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, TenantTestCase):
+class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     library_tenant = None
     library_domain = None
 
     @classmethod
     def setUpClass(cls):
-        # Save current tenant
-        _public_tenant = connection.tenant
-
-        super().setUpClass()
-
-        # Need to do this since the setupClass sets the current tenant connection to
-        # cls.tenant. We cannot create the library tenant if we are not using the public schema
-        # But check first if the library tenant already exists
+        # Create (or reuse) the library tenant BEFORE super().setUpClass(): the
+        # ByteDeckTenantTestCase base enters Django's class-wide atomic block at
+        # the end of its setUpClass, and the library tenant must be committed
+        # outside that transaction so it survives the class-level rollback and
+        # can be reused by every test class that needs it. At this point the
+        # connection is still on the public schema, where Tenant rows live.
         cls.library_tenant = Tenant.objects.filter(schema_name=get_library_schema_name()).first()
 
         if not cls.library_tenant:
-            with tenant_context(_public_tenant):
-                cls._setup_library_tenant()
+            cls._setup_library_tenant()
+
+        super().setUpClass()
 
     @classmethod
     def get_library_tenant_domain(cls):
