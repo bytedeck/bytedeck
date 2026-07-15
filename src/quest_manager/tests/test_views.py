@@ -23,13 +23,12 @@ from django.http import JsonResponse
 from django.utils import timezone
 
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
 from courses.models import Block, Rank
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from prerequisites.models import Prereq
@@ -60,32 +59,32 @@ def create_two_test_files():
     return [test_file1, test_file2]
 
 
-class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
+class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.sem = SiteConfig.get().active_semester
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
+    @classmethod
+    def setUpTestData(cls):
+        cls.sem = SiteConfig.get().active_semester
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
 
         # put the student in a course in the active semester
-        baker.make('courses.CourseStudent', user=self.test_student1, semester=SiteConfig.get().active_semester)
+        baker.make('courses.CourseStudent', user=cls.test_student1, semester=SiteConfig.get().active_semester)
 
-        self.quest1 = baker.make(Quest)
-        self.quest2 = baker.make(Quest)
-        self.archived_quest = baker.make(Quest, archived=True)
+        cls.quest1 = baker.make(Quest)
+        cls.quest2 = baker.make(Quest)
+        cls.archived_quest = baker.make(Quest, archived=True)
 
-        # self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-        # self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
+        # cls.sub1 = baker.make(QuestSubmission, user=cls.test_student1, quest=cls.quest1)
+        # cls.sub2 = baker.make(QuestSubmission, quest=cls.quest1)
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_all_quest_page_status_codes_for_anonymous(self):
         """ If not logged in then all views should redirect to home page  """
@@ -93,8 +92,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_quest_page_status_codes_for_students(self):
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
@@ -148,8 +146,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_quest_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         q_pk = self.quest1.pk
         q2_pk = self.quest2.pk
@@ -177,8 +174,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         """The sidebar 'Quest Approvals' menu button links to the default approvals view
         (the Submitted tab), not the In Progress tab. Regression test for issue #1895.
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('quests:quests'))
         content = response.content.decode()
@@ -190,8 +186,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_start(self):
         # log in a student from setUp
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # if the quest is unavailable to the student, then should get a 404 if there is no submission started yet
         # but we don't care about implementation of `is_available()` here, so just patch it to return False
@@ -238,8 +233,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         user = self.test_student1
 
         # login
-        success = self.client.login(username=user.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(user)
 
         # condition to see any of the 4
         self.assertTrue(user.profile.has_current_course and not user.is_staff)
@@ -353,42 +347,41 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(archived_quest.archived)
 
 
-class SubmissionViewTests(TenantTestCase):
+class SubmissionViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
         User = get_user_model()
 
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
         # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
 
-        self.quest1 = baker.make(Quest)
-        self.quest2 = baker.make(Quest)
-        self.quest3 = baker.make(Quest, published=False)
+        cls.quest1 = baker.make(Quest)
+        cls.quest2 = baker.make(Quest)
+        cls.quest3 = baker.make(Quest, published=False)
 
-        self.sub1 = baker.make(QuestSubmission, user=self.test_student1, quest=self.quest1)
-        self.sub2 = baker.make(QuestSubmission, quest=self.quest1)
-        self.sub3 = baker.make(QuestSubmission, quest=self.quest2)
-        self.sub4 = baker.make(
+        cls.sub1 = baker.make(QuestSubmission, user=cls.test_student1, quest=cls.quest1)
+        cls.sub2 = baker.make(QuestSubmission, quest=cls.quest1)
+        cls.sub3 = baker.make(QuestSubmission, quest=cls.quest2)
+        cls.sub4 = baker.make(
             QuestSubmission,
-            user=self.test_student1,
-            quest=self.quest3,
+            user=cls.test_student1,
+            quest=cls.quest3,
             is_completed=True,
             semester=SiteConfig.get().active_semester
         )
 
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
     def test_all_submission_page_status_codes_for_students(self):
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s1_pk = self.sub1.pk
         s2_pk = self.sub2.pk
@@ -431,8 +424,7 @@ class SubmissionViewTests(TenantTestCase):
         Make sure user can view quest even when published is False
         and a student has a submission to it.
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s4_pk = self.sub4.pk
 
@@ -460,8 +452,7 @@ class SubmissionViewTests(TenantTestCase):
         to hide it.
         """
 
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s4_pk = self.sub4.pk
 
@@ -473,8 +464,7 @@ class SubmissionViewTests(TenantTestCase):
         Make sure that submit for approval button is hidden since it's not available
         for students to submit anymore.
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         s4_pk = self.sub4.pk
 
@@ -485,8 +475,7 @@ class SubmissionViewTests(TenantTestCase):
         """
         Make sure drop button is not visible when quest submission is already approved
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.sub4.is_approved = True
         self.sub4.save()
@@ -499,8 +488,7 @@ class SubmissionViewTests(TenantTestCase):
         """
         Make sure a student cannot drop an approved submission
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.sub4.is_approved = True
         self.sub4.save()
@@ -529,8 +517,7 @@ class SubmissionViewTests(TenantTestCase):
 
     def test_all_submission_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         s1_pk = self.sub1.pk
         # s2_pk = self.sub2.pk
@@ -572,8 +559,7 @@ class SubmissionViewTests(TenantTestCase):
     def test_submission_when_quest_not_visible(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Unpublish quest
         self.quest1.published = False
@@ -586,8 +572,7 @@ class SubmissionViewTests(TenantTestCase):
     def test_submission_xp_entered_remains_even_when_submission_returned(self):
 
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.quest1.xp_can_be_entered_by_students = True
         self.quest1.save()
@@ -700,7 +685,7 @@ class SubmissionViewTests(TenantTestCase):
         self.assertEqual(response.status_code, 200)
 
 
-class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
+class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for view.py :
 
         def complete(request, submission_id)
@@ -711,19 +696,22 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+        cls.semester = SiteConfig.get().active_semester
+        cls.quest = baker.make(Quest, xp=5)
+        cls.draft_comment = baker.make(Comment, text="test draft comment")
+        cls.sub = baker.make(QuestSubmission, user=cls.test_student, quest=cls.quest,
+                             draft_comment=cls.draft_comment, semester=cls.semester)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password="password")
 
         # log in the student for all tests here
         self.client.force_login(self.test_student)
-
-        self.semester = SiteConfig.get().active_semester
-        self.quest = baker.make(Quest, xp=5)
-        self.draft_comment = baker.make(Comment, text="test draft comment")
-        self.sub = baker.make(QuestSubmission, user=self.test_student, quest=self.quest,
-                              draft_comment=self.draft_comment, semester=self.semester)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -994,7 +982,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         since it's already visible there.
         Likewise no notification should be sent to the student's current teacher.
         """
-        special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
+        special_teacher = User.objects.create_user('special_teacher', is_staff=True)
         self.sub.quest.specific_teacher_to_notify = special_teacher
         self.sub.quest.save()
 
@@ -1092,7 +1080,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         """ If comment is left on an already completed quest that has a specific teacher linked to it,
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
         """
-        special_teacher = User.objects.create_user('special_teacher', password="password", is_staff=True)
+        special_teacher = User.objects.create_user('special_teacher', is_staff=True)
         self.sub.quest.specific_teacher_to_notify = special_teacher
         self.sub.quest.save()
 
@@ -1178,16 +1166,19 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
+class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
+        cls.url = reverse("quests:bulk_edit_quests")
+        # create test quests here
+        cls.quest1 = baker.make(Quest, published=False)
+        cls.quest2 = baker.make(Quest, published=True)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.client.login(username="test_teacher", password="password")
-
-        self.url = reverse("quests:bulk_edit_quests")
-        # create test quests here
-        self.quest1 = baker.make(Quest, published=False)
-        self.quest2 = baker.make(Quest, published=True)
+        self.client.force_login(self.test_teacher)
 
     def test_bulk_edit__redirects_if_no_ids(self):
         """
@@ -1311,23 +1302,26 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "Delete All Selected")
 
 
-class QuestUserStatusViewTests(ViewTestUtilsMixin, TenantTestCase):
+class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # staff user to login as
+        cls.staff_user = baker.make(User, username='staff', is_staff=True)
+
+        # create a quest
+        cls.quest = baker.make(Quest, name="Test Quest")
+
+        # create 3 student users (Profiles auto-created by signal)
+        cls.students = baker.make(User, _quantity=3, username=baker.seq("student"))
+        cls.student1, cls.student2, cls.student3 = cls.students
+
+        for u in cls.students:
+            baker.make('courses.CourseStudent', user=u, semester=SiteConfig.get().active_semester)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        # staff user to login as
-        self.staff_user = baker.make(User, username='staff', password='pass', is_staff=True)
         self.client.force_login(self.staff_user)
-
-        # create a quest
-        self.quest = baker.make(Quest, name="Test Quest")
-
-        # create 3 student users (Profiles auto-created by signal)
-        self.students = baker.make(User, _quantity=3, username=baker.seq("student"))
-        self.student1, self.student2, self.student3 = self.students
-
-        for u in self.students:
-            baker.make('courses.CourseStudent', user=u, semester=SiteConfig.get().active_semester)
 
     def test_view_displays_users_and_statuses(self):
         """
@@ -1446,7 +1440,7 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(statuses[self.student1.username], 'Awaiting Approval')
 
 
-class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
         class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, CreateView)
@@ -1454,12 +1448,12 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
         class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateView)
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password="password")
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
 
-        self.minimal_valid_form_data = {
+        cls.minimal_valid_form_data = {
             'name': "Test Quest",  # only blank required field
             # these fields are required but they have defaults
             'xp': 0,
@@ -1470,6 +1464,9 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
             'date_available': "2006-10-25",
             'time_available': "14:30:59",
         }
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_teacher_can_create_and_delete_quests(self):
         # simulate a logged in teacher
@@ -1687,7 +1684,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, TenantTestCase):
 
 
 # Can't test any forms with this DAL widget because content_types isn't available yet.
-class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
+class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ These tests are mostly of the prerequisites app's ObjectPrereqsFormView and PrereqFormInline,
     However, the QuestPrereqsUpdate view is where those are both used.
 
@@ -1695,14 +1692,17 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
     """
     form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         """ Tests start with a parent_quest that has a single simple prereq --> prereq_quest"""
+        cls.test_student = User.objects.create_user('test_student')
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.parent_quest = baker.make(Quest, name="Test Parent Quest")
+        cls.prereq_quest = baker.make(Quest, name="Test Prereq Quest")
+        cls.parent_quest.add_simple_prereqs([cls.prereq_quest])
+
+    def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.parent_quest = baker.make(Quest, name="Test Parent Quest")
-        self.prereq_quest = baker.make(Quest, name="Test Prereq Quest")
-        self.parent_quest.add_simple_prereqs([self.prereq_quest])
 
     def build_formset_form_data(self, form_prefix, form_number, **data):
         """ https://stackoverflow.com/a/62744916/2700631
@@ -1841,7 +1841,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, TenantTestCase):
         # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
 
 
-class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
             def quest_copy(request, quest_id):
@@ -1851,29 +1851,32 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
             url(r'^(?P<quest_id>[0-9]+)/copy/$', views.quest_copy, name='quest_copy'),
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
-        self.quest = baker.make(Quest, name="Test Quest")
-        self.quest.tags.add('tag')
+        cls.quest = baker.make(Quest, name="Test Quest")
+        cls.quest.tags.add('tag')
 
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        self.test_ta = User.objects.create_user('test_ta')
-        self.test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        self.test_ta.profile.save()
+        cls.test_ta = User.objects.create_user('test_ta')
+        cls.test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
+        cls.test_ta.profile.save()
 
-        self.valid_copy_form_data = generate_form_data(model=Quest)
-        self.valid_copy_form_data.update({
+        cls.valid_copy_form_data = generate_form_data(model=Quest)
+        cls.valid_copy_form_data.update({
             # for testing
             'name': 'Test Quest - COPY',
             'tags': [1],
-            'new_quest_prerequisite': self.quest.id,
+            'new_quest_prerequisite': cls.quest.id,
 
             # validation error
             'date_available': '2006-10-25',
         })
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_teacher_copy_quest_GET(self):
         """ initial values in form GET is the same as the self.quest (quest that is being copied)  """
@@ -1987,18 +1990,21 @@ class QuestCopyViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
 
-class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
+class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
         def quest_list(request, quest_id=None, submission_id=None, template="quest_manager/quests.html"):
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+        cls.quest1 = baker.make(Quest)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password="password")
-
-        self.quest1 = baker.make(Quest)
 
     def test_quest_id_provided_to_view(self):
         """
@@ -2204,19 +2210,18 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertListEqual(intended_order, displayed_order)
 
 
-class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+
+        # cls.category = baker.make('quests_manager.category', name="testcat")
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        # self.category = baker.make('quests_manager.category', name="testcat")
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -2590,7 +2595,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertNotIn(archived_quest, displayed_quests)
 
 
-class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
+class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
     def ajax_submission_count(request, quest_id=None)
 
@@ -2599,15 +2604,18 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
     url(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.quest = baker.make(Quest, name="Test Quest")
+        # put the student in a course in the active semester
+        teacher_block = baker.make('courses.Block', current_teacher=cls.test_teacher)
+        baker.make('courses.CourseStudent', block=teacher_block,
+                   user=cls.test_student, semester=SiteConfig.get().active_semester)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.quest = baker.make(Quest, name="Test Quest")
-        # put the student in a course in the active semester
-        teacher_block = baker.make('courses.Block', current_teacher=self.test_teacher)
-        baker.make('courses.CourseStudent', block=teacher_block,
-                   user=self.test_student, semester=SiteConfig.get().active_semester)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2672,7 +2680,7 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.json()['count'], 2)
 
 
-class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
+class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
@@ -2684,12 +2692,15 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
     url(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.quest = baker.make(Quest)
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
-        self.quest = baker.make(Quest)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2785,7 +2796,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, TenantTestCase):
             self.assertNotIn('id="export-quest"', html)
 
 
-class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
+class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Tests for:
     def ajax_approval_info(request, submission_id=None)
 
@@ -2795,13 +2806,16 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.quest = baker.make(Quest)
+        cls.submission = baker.make(QuestSubmission)
+        # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
-        self.quest = baker.make(Quest)
-        self.submission = baker.make(QuestSubmission)
-        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2845,7 +2859,7 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
+class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Tests for:
     def ajax_submission_info(request, submission_id=None)
 
@@ -2858,13 +2872,16 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
     url(r'^ajax_submission_info/$', views.ajax_submission_info, name='ajax_submission_root'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.quest = baker.make(Quest)
+        cls.submission = baker.make(QuestSubmission, user=cls.test_student)
+        # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
-        self.quest = baker.make(Quest)
-        self.submission = baker.make(QuestSubmission, user=self.test_student)
-        # self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
     def test_get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -2951,7 +2968,7 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.context['past'], True)
 
 
-class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
+class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
             def detail(request, quest_id):
@@ -2961,13 +2978,16 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
             url(r'^(?P<quest_id>[0-9]+)/$', views.detail, name='quest_detail'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+        cls.quest = baker.make(Quest, name="Test Quest")
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password="password")
         self.client.force_login(self.test_student)
-
-        self.quest = baker.make(Quest, name="Test Quest")
 
     def test_quest_is_available(self):
         with patch('quest_manager.models.Quest.is_available', return_value=True):
@@ -3053,7 +3073,7 @@ class DetailViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(response.context['can_export'])
 
 
-class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
+class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
             def approve(request, submission_id):
@@ -3063,14 +3083,17 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
             url(r'^submission/(?P<submission_id>[0-9]+)/approve/$', views.approve, name='approve'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = User.objects.create_user('test_student')
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
+        cls.quest = baker.make(Quest, name="Test Quest")
+        cls.sub = baker.make(QuestSubmission, quest=cls.quest, user=cls.test_student)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.test_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
         self.client.force_login(self.test_teacher)
-
-        self.quest = baker.make(Quest, name="Test Quest")
-        self.sub = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
 
     def test_get_404(self):
         """ This view is only accessible via POST """
@@ -3397,7 +3420,7 @@ class ApproveViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
+class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
             def approvals(request, quest_id=None):
@@ -3419,27 +3442,28 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
             # url(r'^approvals/skipped/(?P<quest_id>[0-9]+)/$', views.approvals, name='skipped_for_quest'), # Not used
     """
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
+    @classmethod
+    def setUpTestData(cls):
         # A teacher with a student (connected by the Block in the CourseStudent)
-        self.test_student = User.objects.create_user('test_student', password="password")
-        self.current_teacher = User.objects.create_user('test_current_teacher', password="password", is_staff=True)
-        # current_teacher_block = baker.make('courses.Block', current_teacher=self.current_teacher)
-        # baker.make('courses.CourseStudent', block=current_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
-
-        self.client.force_login(self.current_teacher)
+        cls.test_student = User.objects.create_user('test_student')
+        cls.current_teacher = User.objects.create_user('test_current_teacher', is_staff=True)
+        # current_teacher_block = baker.make('courses.Block', current_teacher=cls.current_teacher)
+        # baker.make('courses.CourseStudent', block=current_teacher_block, user=cls.test_student, semester=SiteConfig.get().active_semester)
 
         # Don't need these, just patch where needed
         # A different student with a different teacher (in a different Block)
-        # self.test_student_of_other_teacher = User.objects.create_user('test_student_of_other_teacher', password="password")
-        # self.other_teacher = User.objects.create_user('test_other_teacher', password="password", is_staff=True)
-        # other_teacher_block = baker.make('courses.Block', current_teacher=self.other_teacher)
-        # baker.make('courses.CourseStudent', block=other_teacher_block, user=self.test_student, semester=SiteConfig.get().active_semester)
+        # cls.test_student_of_other_teacher = User.objects.create_user('test_student_of_other_teacher')
+        # cls.other_teacher = User.objects.create_user('test_other_teacher', is_staff=True)
+        # other_teacher_block = baker.make('courses.Block', current_teacher=cls.other_teacher)
+        # baker.make('courses.CourseStudent', block=other_teacher_block, user=cls.test_student, semester=SiteConfig.get().active_semester)
 
-        self.semester = SiteConfig.get().active_semester
-        self.quest = baker.make(Quest, name="Test Quest")
-        self.sub = baker.make(QuestSubmission, quest=self.quest)
+        cls.semester = SiteConfig.get().active_semester
+        cls.quest = baker.make(Quest, name="Test Quest")
+        cls.sub = baker.make(QuestSubmission, quest=cls.quest)
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.current_teacher)
 
     def test_submitted(self):
         """ Completed quests awaiting approval for current teacher (teachers are connected by Block)
@@ -3638,11 +3662,12 @@ class ApprovalsViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, 'class="active"')
 
 
-class Is_staff_or_TA_test(TenantTestCase):
+class Is_staff_or_TA_test(ByteDeckTenantTestCase):
     """ Test is_staff_or_TA() test_func function """
 
-    def setUp(self):
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = baker.make(User)
 
     def test_is_staff_or_TA___staff(self):
         """ User is staff, return True """
@@ -3671,13 +3696,16 @@ class Is_staff_or_TA_test(TenantTestCase):
         self.assertFalse(is_staff_or_TA(AnonymousUser()))
 
 
-class CommonDataViewTest(ViewTestUtilsMixin, TenantTestCase):
+class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = baker.make(User, is_staff=True)
+
+        cls.cqi = baker.make(CommonData)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.teacher = baker.make(User, is_staff=True)
-
-        self.cqi = baker.make(CommonData)
 
     def test_page_status_code__anonymous(self):
         self.assertRedirectsLogin("quest_manager:commonquestinfo_list")
@@ -3760,22 +3788,25 @@ class CommonDataViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(CommonData.objects.count(), 1)
 
 
-class QuestArchiveViewTest(TenantTestCase):
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.staff_user = User.objects.create_user(username='staff', password='pass', is_staff=True)
-        self.client.force_login(self.staff_user)
+class QuestArchiveViewTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff_user = User.objects.create_user(username='staff', is_staff=True)
 
         # Quest A: This quest will be used as a prerequisite for another quest (Quest B).
         # It should NOT be archivable.
-        self.quest_a = baker.make(Quest, name="Quest A", archived=False, published=True)
+        cls.quest_a = baker.make(Quest, name="Quest A", archived=False, published=True)
 
         # Quest B: This quest depends on Quest A (has it as a prerequisite),
         # but is not itself a prerequisite for anything. It SHOULD be archivable.
-        self.quest_b = baker.make(Quest, name="Quest B", archived=False, published=True)
+        cls.quest_b = baker.make(Quest, name="Quest B", archived=False, published=True)
 
         # Set up the prerequisite link: Quest B requires Quest A
-        Prereq.add_simple_prereq(parent_object=self.quest_b, prereq_object=self.quest_a)
+        Prereq.add_simple_prereq(parent_object=cls.quest_b, prereq_object=cls.quest_a)
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.staff_user)
 
     def test_get_context__includes_prereq_of(self):
         """

@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
@@ -13,16 +12,20 @@ from model_bakery.recipe import Recipe
 from comments.models import Comment
 
 from courses.models import Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class CategoryTestModel(TenantTestCase):  # aka Campaigns
+class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
+    @classmethod
+    def setUpTestData(cls):
+        cls.category = baker.make(Category, title="Test Campaign")
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.category = baker.make(Category, title="Test Campaign")
 
     def test_category_type_creation(self):
         self.assertIsInstance(self.category, Category)
@@ -122,20 +125,24 @@ class CategoryTestModel(TenantTestCase):  # aka Campaigns
         self.assertEqual(self.category.quest_count(), 2)
 
 
-class CommonDataTestModel(TenantTestCase):
-    def setUp(self):
-        self.common_data = baker.make(CommonData)
+class CommonDataTestModel(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.common_data = baker.make(CommonData)
 
     def test_badge_series_creation(self):
         self.assertIsInstance(self.common_data, CommonData)
         self.assertEqual(str(self.common_data), self.common_data.title)
 
 
-class QuestTestModel(TenantTestCase):
+class QuestTestModel(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.quest = baker.make(Quest)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.quest = baker.make(Quest)
 
     def test_quest_creation(self):
         self.assertIsInstance(self.quest, Quest)
@@ -386,11 +393,14 @@ class QuestTestModel(TenantTestCase):
         self.assertEqual(submission3.ordinal, 3)
 
 
-class SubmissionManagerTest(TenantTestCase):
+class SubmissionManagerTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.active_semester = SiteConfig.get().active_semester
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.active_semester = SiteConfig.get().active_semester
 
     def test_all_approved(self):
         """ Tests of QuestSubmissionManager.all_approved()
@@ -444,17 +454,20 @@ class SubmissionManagerTest(TenantTestCase):
         )
 
 
-class SubmissionTestModel(TenantTestCase):
+class SubmissionTestModel(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.semester = baker.make(Semester)
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        cls.submission = baker.make(QuestSubmission, quest__name="Test")
+        # cls.badge = Recipe(Badge, xp=20).make()
+
+        # cls.badge_assertion_recipe = Recipe(QuestSubmission, user=cls.student, badge=cls.badge)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.semester = baker.make(Semester)
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        self.submission = baker.make(QuestSubmission, quest__name="Test")
-        # self.badge = Recipe(Badge, xp=20).make()
-
-        # self.badge_assertion_recipe = Recipe(QuestSubmission, user=self.student, badge=self.badge)
 
     def test_submission_creation(self):
         self.assertIsInstance(self.submission, QuestSubmission)
@@ -567,7 +580,7 @@ class SubmissionTestModel(TenantTestCase):
         self.assertIsNone(self.submission.get_minutes_to_complete())
 
 
-class QuestExpiredAnnotationTest(TenantTestCase):
+class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
     """Quest.expired() is called for every quest rendered in list templates, so
     it reuses an ``is_expired`` annotation from the queryset when one is present
     instead of issuing a query per call."""
@@ -595,17 +608,20 @@ class QuestExpiredAnnotationTest(TenantTestCase):
         self.assertFalse(quest.expired())
 
 
-class QuestManagerPrefetchTest(TenantTestCase):
+class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
     """The Drafts and Archived staff tabs render the same template rows as the
     'Available' tab, which reads each quest's campaign, editor profile and tags.
     all_drafts() and all_archived() must prefetch those relations so a page of
     quests does not issue a query per row."""
 
+    @classmethod
+    def setUpTestData(cls):
+        # a teacher is needed both as staff caller and as each quest's editor
+        cls.teacher = User.objects.create_user('teacher', is_staff=True)
+        cls.campaign = baker.make(Category, title="Test Campaign")
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        # a teacher is needed both as staff caller and as each quest's editor
-        self.teacher = User.objects.create_user('teacher', is_staff=True)
-        self.campaign = baker.make(Category, title="Test Campaign")
 
     def _make_quests(self, **kwargs):
         """Create three quests with a campaign, editor and tags set, so the
