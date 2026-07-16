@@ -159,26 +159,45 @@ class AllowedGFKChoiceField(GFKChoiceField):
     widget = GFKSelect2Widget
 
     def __init__(self, *args, **kwargs):
+        querysetsequence = self._build_querysetsequence()
+        super().__init__(querysetsequence, *args, **kwargs)
+        self._configure_widget_search_fields()
+
+    def _build_querysetsequence(self):
+        """Resolve the allowed-models QuerySetSequence from the *current* DB state.
+
+        The allowed models are looked up from the content-types table, so this
+        can only succeed once that table exists and is queryable in the active
+        schema. A field declared on a form class is constructed at *import time*
+        (Django evaluates ``prereq_object = PrereqGFKChoiceField()`` when the
+        form class body runs), which may happen before the database/tenant
+        schema is ready — e.g. while the test runner is importing test modules
+        to collect them. When that early lookup comes back empty the field would
+        otherwise cache an empty (all-invalid) choice list for the life of the
+        process, so every form instance copied from it rejects valid selections.
+
+        To avoid that, this is called again from ``__deepcopy__``: Django copies
+        the declared field into each form instance (``BaseForm.__init__`` does
+        ``self.fields = copy.deepcopy(self.base_fields)``), so rebuilding on copy
+        means every real form instance resolves its choices against the live
+        schema at request time, regardless of when the field was first imported.
+        """
         model_classes = []
         try:
             model_classes = self.get_allowed_model_classes()
-        except ContentType.DoesNotExist:
-            # table doesn't exist yet
-            pass
-        except ProgrammingError:
-            # django.db.utils.ProgrammingError: no such table:
-            # django_content_type (e.g. postgresql)
-            pass
-        except OperationalError:
-            # django.db.utils.OperationalError: no such table:
-            # django_content_type (e.g. sqlite)
+        except (ContentType.DoesNotExist, ProgrammingError, OperationalError):
+            # The content-types table isn't queryable yet (imported before
+            # migrations, or no such table on postgres/sqlite). Leave the choice
+            # list empty for now; the __deepcopy__ into a form instance rebuilds
+            # it once the schema is available.
             pass
 
-        querysetsequence = self.overridden_querysetsequence(
+        return self.overridden_querysetsequence(
             QuerySetSequence(*[x.objects.all() for x in model_classes])
         )
-        super().__init__(querysetsequence, *args, **kwargs)
 
+    def _configure_widget_search_fields(self):
+        """Populate the select2 widget's per-model search fields from the queryset."""
         search_fields = {}
         for qs in self.queryset.get_querysets():
             klass = qs.model
@@ -188,6 +207,18 @@ class AllowedGFKChoiceField(GFKChoiceField):
         self.widget.search_fields = search_fields
         self.widget.attrs['data-placeholder'] = 'Type to search'
         self.widget.attrs['data-theme'] = 'bootstrap'
+
+    def __deepcopy__(self, memo):
+        """Rebuild the allowed-models queryset when copied into a form instance.
+
+        See ``_build_querysetsequence`` for why the import-time snapshot can't be
+        trusted. ``ModelChoiceField.__deepcopy__`` copies the (possibly stale)
+        queryset and widget; we then re-resolve both against the current schema.
+        """
+        result = super().__deepcopy__(memo)
+        result.queryset = result._build_querysetsequence()
+        result._configure_widget_search_fields()
+        return result
 
     def get_allowed_model_classes(self):
         """Returns a list of allowed Model classes"""

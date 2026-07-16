@@ -75,8 +75,12 @@ class BadgePrereqsUpdate(ObjectPrereqsFormView):
         ready — issue #1157). The prompt links to badge_grant_qualifying, which confirms
         the count before granting. Only published badges can be auto-granted.
         """
+        # Only prompt when the prereqs actually changed — a no-op save shouldn't nag the
+        # teacher to run a grant-check (issue #1980); the base view already skips its own
+        # save/messages in that case.
+        changed = form.has_changed()
         response = super().form_valid(form)
-        if self.object.published:
+        if changed and self.object.published:
             badge_name = SiteConfig.get().custom_name_for_badge.lower()
             grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
             # Messages render with |safe (messages-snippet.html), matching how the rest of the

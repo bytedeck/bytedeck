@@ -24,26 +24,27 @@
 
         {% if request.user.is_staff %}
         <div class="col-xs-12 col-sm-4 text-right">
-          <div class="pull-right">
+          {# btn-group keeps the actions on a single row (fa-fw gives them a uniform width) #}
+          <div class="btn-group pull-right" role="group">
             <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
-              <i class="fa fa-edit"></i>
+              <i class="fa fa-fw fa-edit"></i>
             </a>
             <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}">
-              <i class="fa fa-copy"></i>
+              <i class="fa fa-fw fa-copy"></i>
             </a>
             <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}">
-              <i class="fa fa-trash-o"></i>
+              <i class="fa fa-fw fa-trash-o"></i>
             </a>
             <a class="btn btn-success" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}">
-              <i class="fa fa-user"></i>
+              <i class="fa fa-fw fa-user"></i>
             </a>
-            <a class="btn btn-success" title="Bulk grant to multiple student" href="{% url 'badges:bulk_grant_badge' badge.id %}">
-              <i class="fa fa-users"></i>
+            <a class="btn btn-success" title="Bulk grant to multiple students" href="{% url 'badges:bulk_grant_badge' badge.id %}">
+              <i class="fa fa-fw fa-users"></i>
             </a>
             {% if badge.published %}
             <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
                href="{% url 'badges:grant_qualifying' badge.id %}">
-              <i class="fa fa-fw fa-users"></i>
+              <i class="fa fa-fw fa-user-plus"></i>
             </a>
             {% endif %}
           </div>
