@@ -19,10 +19,16 @@ sudo cp production/systemd/bytedeck.com.service /etc/systemd/system/bytedeck.com
 sudo mkdir -p /etc/systemd/system/snap.certbot.renew.service.d
 sudo cp production/systemd/snap.certbot.renew.service.override.conf /etc/systemd/system/snap.certbot.renew.service.d/snap.certbot.renew.service.override.conf
 
+# Install the Redis host tuning (disable THP, vm.overcommit_memory=1 -- the
+# settings the dockerized Redis warns about at startup). Runs now and on boot.
+sudo cp production/systemd/redis-host-setup.service /etc/systemd/system/redis-host-setup.service
+
 # Load the new systemd modules
 sudo systemctl daemon-reload
 
-# Ensure the service is enabled then restart it
+# Ensure the services are enabled, apply the Redis host tuning, then restart the app
+sudo systemctl enable redis-host-setup.service
+sudo systemctl restart redis-host-setup.service
 sudo systemctl enable bytedeck.com.service
 sudo systemctl restart bytedeck.com
 

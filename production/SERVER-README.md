@@ -83,9 +83,11 @@ git pull                      # master (prod) or staging (staging host)
 
 1. `docker compose ... build` the images.
 2. Copy `production/systemd/bytedeck.com.service` into `/etc/systemd/system/`.
-3. Install the certbot-renew override (see [TLS](#tls--certificates)).
-4. `systemctl daemon-reload`, then enable and **restart** `bytedeck.com.service`
-   (which runs `docker compose ... up -d`).
+3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
+   `redis-host-setup.service` host tuning (disables THP, sets
+   `vm.overcommit_memory=1` — the settings the dockerized Redis warns about).
+4. `systemctl daemon-reload`, enable + run `redis-host-setup`, then enable and
+   **restart** `bytedeck.com.service` (which runs `docker compose ... up -d`).
 5. `nginx -s reload` inside the nginx container (works around nginx sometimes
    not reconnecting to uwsgi after a restart).
 6. Tail the compose logs when run interactively; print a recent snapshot and
