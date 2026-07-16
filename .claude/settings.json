@@ -8,7 +8,18 @@
       "mcp__Claude_Code_Remote__fire_trigger",
       "mcp__Claude_Code_Remote__list_triggers",
       "mcp__Claude_Code_Remote__subscribe_pr_activity",
-      "mcp__Claude_Code_Remote__unsubscribe_pr_activity"
+      "mcp__Claude_Code_Remote__unsubscribe_pr_activity",
+      "mcp__github__get_me",
+      "mcp__github__pull_request_read",
+      "mcp__github__actions_list",
+      "mcp__github__get_job_logs",
+      "mcp__github__create_pull_request",
+      "mcp__github__update_pull_request",
+      "mcp__github__update_pull_request_branch",
+      "mcp__github__add_issue_comment",
+      "mcp__github__add_reply_to_pull_request_comment",
+      "mcp__github__pull_request_review_write",
+      "mcp__github__resolve_review_thread"
     ]
   }
 }
