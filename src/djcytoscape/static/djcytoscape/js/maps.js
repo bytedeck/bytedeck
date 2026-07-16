@@ -59,7 +59,11 @@ cy.style()
         "text-rotation": "-90deg",
         "text-halign": "left",
         "text-margin-x": -10,
-        "text-margin-y": -40
+        "text-margin-y": -40,
+        // Campaign labels run vertically along the node's edge, so the generic node
+        // `text-max-width` wraps long names onto stacked lines (see issue #1289).
+        // Disable wrapping here to keep each campaign name on a single line.
+        "text-wrap": "none"
       })
     .selector('edge.repeat-edge')
       .style({

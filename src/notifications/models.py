@@ -48,14 +48,16 @@ class NotificationQuerySet(models.query.QuerySet):
     #         qs_no_target.update(unread=False)
 
     def mark_all_read(self, recipient):
-        qs = self.get_unread().get_user(recipient)
-        qs.update(unread=False)
-        qs.update(time_read=timezone.now())
+        # Update unread and time_read in a single query. This must be one
+        # update: doing it as two (update(unread=False) then
+        # update(time_read=...)) makes the second update re-evaluate the
+        # unread=True filter, which now matches nothing, so time_read never
+        # gets set.
+        self.get_unread().get_user(recipient).update(unread=False, time_read=timezone.now())
 
     def mark_all_unread(self, recipient):
-        qs = self.get_read().get_user(recipient)
-        qs.update(unread=True)
-        qs.update(time_read=None)
+        # Single update for the same reason as mark_all_read above.
+        self.get_read().get_user(recipient).update(unread=True, time_read=None)
 
     def get_unread(self):
         return self.filter(unread=True)
@@ -327,30 +329,36 @@ def new_notification(sender, **kwargs):
     if affected_users is None:
         affected_users = [recipient, ]
 
+    notes = []
     for u in affected_users:
         # don't send a notification to yourself/themself
         if u == sender:
-            pass
-        else:
-            new_note = Notification(
-                recipient=u,
-                verb=verb,
-                sender_content_type=ContentType.objects.get_for_model(sender),
-                sender_object_id=sender.id,
-                font_icon=icon,
-            )
-            # Set the target if provided.
-            for option in ("target", "action"):
-                # obj = kwargs.pop(option, None) #don't want to remove option with pop
-                try:
-                    obj = kwargs[option]
-                    if obj is not None:
-                        setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
-                        setattr(new_note, "%s_object_id" % option, obj.id)
-                except:  # noqa
-                    # TODO make this except explicit, don't remember what it's doing
-                    pass
-            new_note.save()
+            continue
+
+        new_note = Notification(
+            recipient=u,
+            verb=verb,
+            sender_content_type=ContentType.objects.get_for_model(sender),
+            sender_object_id=sender.id,
+            font_icon=icon,
+        )
+        # Set the target if provided.
+        for option in ("target", "action"):
+            # obj = kwargs.pop(option, None) #don't want to remove option with pop
+            try:
+                obj = kwargs[option]
+                if obj is not None:
+                    setattr(new_note, "%s_content_type" % option, ContentType.objects.get_for_model(obj))
+                    setattr(new_note, "%s_object_id" % option, obj.id)
+            except:  # noqa
+                # TODO make this except explicit, don't remember what it's doing
+                pass
+        notes.append(new_note)
+
+    # Create every recipient's notification in a single bulk INSERT rather
+    # than one save() per user (a class-wide notification was N INSERTs).
+    # Safe: nothing is connected to Notification's post_save signal.
+    Notification.objects.bulk_create(notes)
 
 
 notify.connect(new_notification)

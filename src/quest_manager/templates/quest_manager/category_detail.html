@@ -39,7 +39,7 @@
                 <form method="post" action="{% url 'quests:category_publish' object.id %}" class="preview-action-form">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-success" title="Publish Campaign and all its Quests">
-                        <i class="fa fa-upload"></i>
+                        <i class="fa fa-fw fa-eye"></i>
                     </button>
                 </form>
             {% endif %}

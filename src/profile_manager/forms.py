@@ -5,8 +5,7 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from allauth.utils import email_address_exists
-
+from .allauth_compat import email_address_exists, send_email_confirmation
 from .models import Profile
 from siteconfig.models import SiteConfig
 
@@ -95,7 +94,6 @@ class ProfileForm(forms.ModelForm):
             user.email = self.cleaned_data['email']
             user.save()
 
-        from allauth.account.utils import send_email_confirmation
         if self.request and modified_email:
             send_email_confirmation(
                 request=self.request,

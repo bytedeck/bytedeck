@@ -20,7 +20,12 @@
         <ul class="list-unstyled">
           <li>Published quests in this campaign: {% firstof category_quest_count category.quest_count "0" %}</li>
           <li>Total XP available: {% firstof category_total_xp_available category.xp_sum "0" %}</li>
-          <li>Published: {% firstof category_published category.published %}</li>
+          {% comment %}
+            `firstof` outputs nothing when all values are falsy, so pipe the result
+            through `yesno` to render False as "False" instead of a blank.
+          {% endcomment %}
+          {% firstof category_published category.published as category_is_published %}
+          <li>Published: {{ category_is_published|yesno:"True,False" }}</li>
         </ul>
       </div>
     </div>

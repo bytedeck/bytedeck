@@ -149,16 +149,22 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         # after admin has accepted the import changes
         self.generate_badge_type(row)
 
-    def after_import(self, dataset, result, using_transactions, dry_run, **kwargs):
-        """ https://django-import-export.readthedocs.io/en/3.3.9/api_resources.html#import_export.resources.Resource.after_import """
-        for data_dict in dataset.dict:
-            import_id = data_dict["import_id"]
-            parent_badge = Badge.objects.get(import_id=import_id)
-            self.generate_simple_prereqs(parent_badge, data_dict)
+    def after_import(self, dataset, result, **kwargs):
+        """ https://django-import-export.readthedocs.io/en/latest/api_resources.html#import_export.resources.Resource.after_import
+
+        django-import-export 4.x passes using_transactions/dry_run via kwargs.
+        Skip prereq generation during the dry-run/preview step, mirroring
+        QuestResource.after_import.
+        """
+        if not kwargs.get("dry_run", False):
+            for data_dict in dataset.dict:
+                import_id = data_dict["import_id"]
+                parent_badge = Badge.objects.get(import_id=import_id)
+                self.generate_simple_prereqs(parent_badge, data_dict)
 
 
 class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdmin):
-    resource_class = BadgeResource
+    resource_classes = [BadgeResource]  # replaces resource_class, removed in django-import-export 4.0
     list_display = ('name', 'xp', 'published')
     inlines = [
         PrereqInline,

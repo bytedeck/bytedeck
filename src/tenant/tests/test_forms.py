@@ -6,9 +6,9 @@ from django.contrib.auth import get_user_model
 
 from django_tenants.test.cases import TenantTestCase
 
-from captcha.widgets import ReCaptchaV2Invisible
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
-from tenant.forms import DeckRequestForm, TenantForm
+from tenant.forms import MAX_DECK_NAME_LENGTH, DeckRequestForm, TenantForm
 from tenant.models import Tenant
 
 User = get_user_model()
@@ -135,3 +135,41 @@ class TenantFormTest(TenantTestCase):
         # trying to create new tenant, with name of existing schema
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
+
+    def test_clean_name__deck_name_too_long(self):
+        """A deck name longer than MAX_DECK_NAME_LENGTH is rejected on the form with a
+        clear error, so the user gets feedback instead of the name being silently
+        truncated (into SiteConfig.site_name_short etc.) when the deck is created.
+        """
+        base = {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"}
+
+        # one over the limit: rejected with a message that names the limit
+        too_long = "a" * (MAX_DECK_NAME_LENGTH + 1)
+        form = TenantForm({**base, "name": too_long})
+        self.assertFalse(form.is_valid())
+        self.assertIn("name", form.errors)
+        self.assertIn(str(MAX_DECK_NAME_LENGTH), form.errors["name"][0])
+
+        # exactly at the limit: accepted
+        at_limit = "a" * MAX_DECK_NAME_LENGTH
+        form = TenantForm({**base, "name": at_limit})
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_clean_name__duplicate_deck_name_is_rejected(self):
+        """A deck name that already exists is rejected on the form (via the unique
+        constraint), so the user is warned before the deck is created rather than
+        hitting an error afterwards.
+        """
+        # Add an existing tenant with a known (short) name. bulk_create avoids the
+        # slow schema build and the post_save signals — we only need the row so the
+        # form's uniqueness check has something to collide with.
+        Tenant.objects.bulk_create([Tenant(schema_name="dupedeck", name="dupedeck")])
+        data = {
+            "name": "dupedeck",
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john.doe@example.com",
+        }
+        form = TenantForm(data)
+        self.assertFalse(form.is_valid())
+        self.assertIn("name", form.errors)

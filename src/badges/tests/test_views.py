@@ -1,6 +1,9 @@
 import uuid
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
 from django_tenants.test.cases import TenantTestCase
@@ -9,6 +12,8 @@ from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion, BadgeType
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from prerequisites.models import Prereq
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 from notifications.models import Notification
@@ -57,6 +62,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirectsLogin('badges:bulk_grant_badge', args=[b_pk])
         self.assertRedirectsLogin('badges:bulk_grant')
         self.assertRedirectsLogin('badges:revoke', args=[a_pk])
+        self.assertRedirectsLogin('badges:grant_qualifying', args=[b_pk])
 
     def test_all_badge_page_status_codes_for_students(self):
 
@@ -81,6 +87,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('badges:bulk_grant_badge', args=[b_pk])
         self.assert403('badges:bulk_grant')
         self.assert403('badges:revoke', args=[s_pk])
+        self.assert403('badges:grant_qualifying', args=[b_pk])
 
         self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
 
@@ -104,6 +111,7 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assert200('badges:bulk_grant')
         self.assert200('badges:revoke', args=[a_pk])
         self.assert200('badges:badge_prereqs_update', args=[a_pk])
+        self.assert200('badges:grant_qualifying', args=[b_pk])
 
     def test_badge_create(self):
         # log in a teacher
@@ -252,6 +260,110 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         # we just bulk granted 2 badges, so there should be two more than before!
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
+
+    def test_badge_grant_qualifying__GET_lists_qualifying_students(self):
+        """The grant-qualifying page lists current students who meet the badge's prereqs
+        but haven't been granted it yet, and offers a confirm button (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+
+        # a published badge with a single prereq, and a current student who has met it
+        quest = baker.make(Quest)
+        Prereq.add_simple_prereq(self.test_badge, quest)
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+        baker.make(QuestSubmission, user=self.test_student1, quest=quest,
+                   is_completed=True, is_approved=True, semester=self.sem)
+
+        response = self.client.get(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(self.test_student1, response.context['qualifying_students'])
+        self.assertContains(response, 'Grant to qualifying students')
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__POST_queues_task_and_redirects(self, task):
+        """Confirming the grant queues the grant task for the badge and redirects to its
+        detail page.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        task.assert_called_once_with(
+            kwargs={'badge_id': self.test_badge.id, 'start_from_user_id': 1}, queue='default'
+        )
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__unpublished_badge_does_not_grant(self, task):
+        """An unpublished badge can't be granted: both GET and POST redirect with a warning
+        and never queue the grant task.
+        """
+        self.client.force_login(self.test_teacher)
+        self.test_badge.published = False
+        self.test_badge.full_clean()
+        self.test_badge.save()
+
+        url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        self.assertRedirects(self.client.get(url), self.test_badge.get_absolute_url())
+        self.assertRedirects(self.client.post(url), self.test_badge.get_absolute_url())
+        task.assert_not_called()
+
+    def test_badge_prereqs_update__prompts_to_grant_qualifying(self):
+        """After a teacher saves a badge's prerequisites they are prompted (via a message
+        linking to the grant-qualifying page) to run a grant-check, rather than the badge
+        being auto-granted on prereq changes (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any(grant_url in m for m in messages))
+
+    def test_badge_prereqs_update__unpublished_badge_not_prompted_to_grant(self):
+        """Saving prerequisites on an unpublished badge does NOT show the grant-check
+        prompt, since an unpublished badge can't be granted (issue #1157).
+        """
+        self.client.force_login(self.test_teacher)
+        self.test_badge.published = False
+        self.test_badge.full_clean()
+        self.test_badge.save()
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any(grant_url in m for m in messages))
 
     def test_scape_update_message_on_update_delete(self):
         """ Checks if delete and update function gives a success message when a badge is related to map """

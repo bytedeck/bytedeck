@@ -10,10 +10,14 @@ or they could be moved into a `test_urls.py` module.
 
 """
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
 from django.utils import timezone
@@ -168,6 +172,21 @@ class QuestViewQuickTests(ViewTestUtilsMixin, TenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',  # Ajax
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_sidebar_approvals_link__points_to_default_submitted_tab(self):
+        """The sidebar 'Quest Approvals' menu button links to the default approvals view
+        (the Submitted tab), not the In Progress tab. Regression test for issue #1895.
+        """
+        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
+        self.assertTrue(success)
+
+        response = self.client.get(reverse('quests:quests'))
+        content = response.content.decode()
+
+        # grab the href of the anchor inside the sidebar's approvals menu
+        match = re.search(r'id="lg-menu-approvals".*?href="([^"]+)"', content, re.DOTALL)
+        self.assertIsNotNone(match, "Sidebar approvals menu not found in the rendered page")
+        self.assertEqual(match.group(1), reverse('quests:approvals'))
 
     def test_start(self):
         # log in a student from setUp
@@ -419,6 +438,21 @@ class SubmissionViewTests(TenantTestCase):
 
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertEqual(response.status_code, 200)
+
+    def test_submission_view__staff_buttons_include_completion_statuses_link(self):
+        """The staff quick-link button group on the submission detail page must include
+        a link to the quest's Completion Statuses page, like it does for past submissions
+        and summary data (issue #1934). Students must not see the link.
+        """
+        status_url = reverse('quests:quest_user_status', args=[self.quest1.id])
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, status_url)
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, status_url)
 
     def test_student_can_drop_completed_submission_when_hidden(self):
         """
@@ -723,6 +757,21 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
+    def test_complete_quick_reply_form__escapes_html(self):
+        """HTML entered in the quick reply form is completely escaped when the comment
+        is saved, so scripts can't execute when the comment is rendered. Regression
+        test for issue #1343.
+        """
+        payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+        response = self.post_complete(submission_comment=payload)
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        self.assertNotIn('<script', comments[0].text)
+        self.assertNotIn('<img', comments[0].text)
+        self.assertIn('&lt;script&gt;', comments[0].text)
+
     def test_complete__no_verification(self):
         """ Checks if a student completing a submission that causes their XP to go over
         the threshold for 'Digital Novice' rank (60 XP) generates a notification
@@ -841,16 +890,52 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         self.assertErrorMessage(response)
 
-    def test_quest_not_available(self):
-        """ If a quest is not available to a student, they should not be able to complete it """
-        # TODO
-        # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-        # self.quest.visibel_to_student = False
-        # self.quest.save()
+    def test_quest_not_available__unpublished(self):
+        """ If a quest is unpublished (moved to drafts) while a student's submission is
+        in progress, they should not be able to complete it by entering the completion
+        url directly. Regression test for issue #535.
+        """
+        self.quest.published = False
+        self.quest.save()
 
-        # response = self.post_complete(comment="")
-        # # Should redirect back to the submission with error message
-        # self.assertEqual(response.status_code, 404)
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__archived(self):
+        """ If a quest is archived while a student's submission is in progress, they
+        should not be able to complete it by entering the completion url directly.
+        Regression test for issue #535.
+        """
+        self.quest.archived = True
+        self.quest.save()
+
+        response = self.post_complete()
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+
+    def test_quest_not_available__staff_also_404(self):
+        """ Staff also can't complete submissions of unpublished quests: the default
+        QuestSubmission queryset excludes unpublished/archived quests for everyone,
+        so the view's get_object_or_404 lookup fails.
+        """
+        self.client.force_login(self.test_teacher)
+        self.quest.published = False
+        self.quest.save()
+        draft_comment = baker.make(Comment, text="test draft comment")
+        staff_sub = baker.make(QuestSubmission, user=self.test_teacher, quest=self.quest,
+                               draft_comment=draft_comment, semester=self.semester)
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[staff_sub.id]),
+                data={'comment_text': "test comment", 'complete': True}
+            )
+        self.assertEqual(response.status_code, 404)
+        staff_sub.refresh_from_db()
+        self.assertFalse(staff_sub.is_completed)
 
     def test_notifications_own_student(self):
         """ Teacher should NOT be notified when their student complete's a quest, because it
@@ -966,18 +1051,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(self.sub.is_completed)
 
         self.assertErrorMessage(response)
-
-    # def test_quest_not_available(self):
-    #     """ If a quest is not available to a student, they should not be able to complete it """
-    #     # TODO
-    #     # # Easy way to make unavailable, should probably patch the available quests lists instead though...
-    #     # self.quest.visibel_to_student = False
-    #     # self.quest.save()
-
-    #     # response = self.post_complete(button="comment", comment="")
-    #     # # Should redirect back to the submission with error message
-    #     # self.assertEqual(response.status_code, 404)
-    #     pass
 
     def test_comment_button_notifications_own_student(self):
         """ Teacher should be notified when their student comments on an already complete's a quest
@@ -1977,6 +2050,34 @@ class QuestListViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))
         self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')
 
+    def test_student_does_not_see_quick_reply_form(self):
+        """Regression for #1886 / #1759: the student quick reply form (which
+        404'd when resubmitting a returned quest) was removed. A returned
+        submission must still render on the quests page, but without the inline
+        quick reply form or its Re-Submit button — students resubmit via the
+        detailed view instead."""
+        self.client.force_login(self.test_student)
+
+        # a returned submission (completed once, then sent back by a teacher):
+        # is_completed is False but time_completed is set, so is_returned() is True
+        returned_sub = baker.make(
+            QuestSubmission,
+            user=self.test_student,
+            quest=self.quest1,
+            semester=SiteConfig.get().active_semester,
+            is_completed=False,
+            time_completed=timezone.now(),
+        )
+        self.assertTrue(returned_sub.is_returned())
+
+        response = self.client.get(reverse('quests:inprogress'))
+
+        # the returned submission is on the page ...
+        self.assertContains(response, f'id="heading-submission-{returned_sub.id}"')
+        # ... but the removed quick reply form and its button are not
+        self.assertNotContains(response, f'quick_reply{returned_sub.id}')
+        self.assertNotContains(response, 'Re-Submit Quest')
+
     def test_show_hidden(self):
         """ Test of:
         url(r'^available/all/$', views.quest_list, name='available_all'),
@@ -2194,6 +2295,51 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         intended_quests = Quest.objects.get_active().filter(campaign=view_test_campaign)
         self.assertQuerySetEqual(displayed_quests, intended_quests, ordered=False)
 
+    def test_CategoryDetail_view__query_count_flat_as_quests_grow(self):
+        """The campaign detail page prefetches tags and annotates is_expired, so
+        its query count does not grow with the number of quests in the campaign
+        (the template reads tags and calls quest.expired() for every quest)."""
+        self.client.force_login(self.test_teacher)
+        campaign = baker.make(Category)
+        url = reverse('quests:category_detail', kwargs={"pk": campaign.pk})
+
+        def make_quests(n):
+            for _ in range(n):
+                quest = baker.make(Quest, campaign=campaign)
+                quest.tags.add("shared-tag")
+
+        make_quests(2)
+        self.client.get(url)  # warm per-request caches (SiteConfig, content types)
+        with CaptureQueriesContext(connection) as few_queries:
+            self.client.get(url)
+
+        make_quests(4)  # 6 quests total
+        with CaptureQueriesContext(connection) as many_queries:
+            self.client.get(url)
+
+        # without the prefetch + annotation each extra quest adds several queries
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_CategoryDetail_view__displays_published_status_when_false(self):
+        """The Campaign Info panel must display "Published: False" for an unpublished
+        campaign. Regression test for the `{% firstof %}` template tag swallowing
+        falsy values, which left the "Published:" line blank when the campaign
+        was unpublished.
+        """
+        campaign = baker.make(Category, published=False)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: False")
+
+    def test_CategoryDetail_view__displays_published_status_when_true(self):
+        """The Campaign Info panel must display "Published: True" for a published campaign."""
+        campaign = baker.make(Category, published=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
+        self.assertContains(response, "Published: True")
+
     def test_CategoryCreate_view(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
@@ -2208,17 +2354,33 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(course.title, data['title'])
 
     def test_CategoryUpdate_view(self):
-        """ Admin should be able to update a course """
+        """ Admin should be able to update a course. Saving returns to the campaign's
+        detail view (the page the edit was started from), not the campaigns list
+        (issue #1931). """
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'My Updated Title',
             'published': False,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
-        self.assertRedirects(response, reverse('quests:categories'))
+        self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
+
+    def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
+        """The cancel button on the campaign update form must link back to the
+        campaign's detail view, not the campaigns list (issue #1931)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_update', args=[1]))
+        self.assertContains(response, f'href="{reverse("quests:category_detail", args=[1])}"')
+
+    def test_CategoryCreate_view__cancel_button_returns_to_list(self):
+        """The cancel button on the campaign create form must link back to the
+        campaigns list, since a new campaign has no detail view to return to."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_create'))
+        self.assertContains(response, f'href="{reverse("quests:categories")}"')
 
     def test_CategoryDelete_view(self):
         """
@@ -2307,7 +2469,7 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         Test CategoryPublish end-to-end:
         - Staff can see the "Publish Campaign and all its Quests" button on an unpublished campaign.
         - Posting to the publish URL as staff sets published=True on the campaign and all related quests,
-            and redirects back to the categories list.
+            and redirects back to the campaign's detail view (issue #1931).
         - After publishing, the button is no longer shown to staff.
         - Non-staff POST to the publish URL is forbidden (403) and does not change publish states.
         """
@@ -2325,8 +2487,8 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         publish_url = reverse('quests:category_publish', args=[campaign.id])
         response = self.client.post(publish_url)
 
-        # Should redirect after successful publish
-        self.assertRedirects(response, reverse('quests:categories'))
+        # Should redirect back to the campaign's detail view after successful publish
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
 
         campaign.refresh_from_db()
         quest_1.refresh_from_db()
@@ -2364,6 +2526,78 @@ class CategoryViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(quest_1.published)
         self.assertFalse(quest_2.published)
         self.assertFalse(archived_quest.published)
+
+    def test_CategoryPublish_view__redirects_to_next_url(self):
+        """Publishing with a safe `next` parameter (e.g. from the campaigns list view)
+        must redirect back to that page instead of the campaign's detail view (issue #1931).
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        next_url = reverse('quests:categories_inactive')
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]), data={'next': next_url})
+        self.assertRedirects(response, next_url)
+
+    def test_CategoryPublish_view__ignores_unsafe_next_url(self):
+        """A `next` parameter pointing off-site must be ignored (open redirect protection),
+        falling back to the campaign's detail view.
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]),
+            data={'next': 'https://evil.example.com/'})
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
+
+    def test_CategoryPublish_view__ignores_http_next_url_on_secure_request(self):
+        """A `next` parameter that would downgrade a secure (https) request to plain
+        http must be ignored, falling back to the campaign's detail view.
+        """
+        campaign = baker.make(Category, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:category_publish', args=[campaign.id]),
+            data={'next': 'http://testserver/quests/campaigns/inactive/'},
+            secure=True)
+        self.assertRedirects(response, reverse('quests:category_detail', args=[campaign.id]))
+
+    def test_CategoryList_view__publish_button_on_inactive_tab(self):
+        """The inactive campaigns list must show the publish button for unpublished
+        campaigns, with a hidden `next` field returning to the list after publishing;
+        the available tab (published campaigns) must not show the button (issue #1931).
+        """
+        unpublished_campaign = baker.make(Category, published=False)
+        published_campaign = baker.make(Category, published=True)
+        self.client.force_login(self.test_teacher)
+
+        inactive_url = reverse('quests:categories_inactive')
+        response = self.client.get(inactive_url)
+        self.assertContains(response, reverse('quests:category_publish', args=[unpublished_campaign.id]))
+        self.assertContains(response, f'name="next" value="{inactive_url}"')
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
+
+    def test_CategoryDetail_view__staff_see_unpublished_quests_of_unpublished_campaign(self):
+        """Staff must see a campaign's unpublished quests on the campaign detail page
+        regardless of whether the campaign itself is published; only archived quests
+        are hidden. Guards the staff quest list of inactive campaigns (issue #1931).
+        """
+        campaign = baker.make(Category, published=False)
+        published_quest = baker.make(Quest, campaign=campaign, published=True)
+        unpublished_quest = baker.make(Quest, campaign=campaign, published=False)
+        archived_quest = baker.make(Quest, campaign=campaign, published=False, archived=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+
+        displayed_quests = list(response.context['category_displayed_quests'])
+        self.assertIn(published_quest, displayed_quests)
+        self.assertIn(unpublished_quest, displayed_quests)
+        self.assertNotIn(archived_quest, displayed_quests)
 
 
 class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
