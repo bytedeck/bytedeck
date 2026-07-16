@@ -17,7 +17,9 @@ from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
-from tenant.views import non_public_only_view, public_only_view, TenantCreate, TenantForm, EmailVerificationRequiredMixin
+from tenant.views import (
+    non_public_only_view, public_only_view, TenantCreate, TenantForm, EmailVerificationRequiredMixin, _humanize_seconds,
+)
 from tenant.models import Tenant
 from tenant.utils import DeckRequestService
 from siteconfig.models import SiteConfig
@@ -112,6 +114,24 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
+    def test_create_deck_page_extends_public_base_and_keeps_progress_modal(self):
+        """The Create New Deck page shares the public onboarding chrome: it renders
+        through public/base.html (same navbar/branding as the Request a New Deck
+        page) rather than as a standalone document, and still includes the
+        deck-generation progress modal that animates on submit. Staff bypass the
+        email-verification gate, so the superuser can load the form directly."""
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("tenant:new"))
+        self.assertEqual(response.status_code, 200)
+        # rendered through the shared public base template (the extension), not standalone
+        self.assertTemplateUsed(response, "tenant/tenant_form.html")
+        self.assertTemplateUsed(response, "public/base.html")
+        # public chrome is present: the navbar brand image only comes from public/base.html
+        self.assertContains(response, "pixels-4-icon.png")
+        # the progress modal and its form are preserved
+        self.assertContains(response, 'id="modalProgress"')
+        self.assertContains(response, 'id="form"')
+
     def test_form__errors_for_missing_fields(self):
         """Form errors occur if first_name, last_name, or invalid email are missing."""
         self.client.force_login(self.superuser)
@@ -130,11 +150,9 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
     @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
     @patch.object(DeckRequestService, "send_verification_email")
-    def test_successful_deck_request_sends_email_and_shows_message(self, mock_send_email, mock_captcha):
-        """
-        Ensure that submitting a valid deck request triggers the verification
-        email to be sent and returns a redirect response.
-        """
+    def test_RequestNewDeck_form_valid__sends_email_and_redirects_to_confirmation(self, mock_send_email, mock_captcha):
+        """A valid deck request sends the verification email and redirects to the
+        dedicated confirmation page (not back to the form with a flash message)."""
         form_data = {
             "first_name": "John",
             "last_name": "Doe",
@@ -144,7 +162,11 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         response = self.client.post(reverse("decks:request_new_deck"), data=form_data)
         mock_send_email.assert_called_once()
         mock_captcha.assert_called()
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(
+            response,
+            reverse("decks:request_new_deck_submitted"),
+            fetch_redirect_response=False,
+        )
 
     @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
     @patch.object(DeckRequestService, "send_verification_email")
@@ -162,6 +184,62 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
 
         # only the first submission actually sent an email
         mock_send_email.assert_called_once()
+
+    @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
+    @patch.object(DeckRequestService, "send_verification_email")
+    def test_RequestNewDeck_form_valid__redirect_identical_whether_or_not_email_sent(self, mock_send_email, mock_captcha):
+        """The response must not reveal whether an email was actually sent: both a
+        first (email-sending) request and a throttled second request for the same
+        address redirect to the same confirmation page."""
+        form_data = {
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "same@example.com",
+            "captcha": "dummy",
+        }
+        first = self.client.post(reverse("decks:request_new_deck"), data=form_data)
+        second = self.client.post(reverse("decks:request_new_deck"), data=form_data)
+
+        # the second was throttled (no second email), yet the outcome is identical
+        mock_send_email.assert_called_once()
+        confirmation_url = reverse("decks:request_new_deck_submitted")
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(first.url, confirmation_url)
+        self.assertEqual(second.url, confirmation_url)
+
+    def test_RequestNewDeckSubmitted_get__renders_workflow_and_timeouts(self):
+        """The confirmation page renders through the public base template and lays
+        out the 3-step onboarding workflow plus the validity window, single-use
+        constraint, spam reminder, and resend cooldown."""
+        response = self.client.get(reverse("decks:request_new_deck_submitted"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "tenant/request_new_deck_submitted.html")
+        self.assertTemplateUsed(response, "public/base.html")
+
+        # the 3-step workflow
+        self.assertContains(response, "Verify your email")
+        self.assertContains(response, "create your deck")
+        self.assertContains(response, "welcome email")
+        # spam reminder
+        self.assertContains(response, "spam")
+        # validity window (TOKEN_MAX_AGE = 3600) + single-use, and resend cooldown
+        # (REQUEST_COOLDOWN = 300), surfaced as friendly durations
+        self.assertContains(response, "1 hour")
+        self.assertContains(response, "one deck")
+        self.assertContains(response, "5 minutes")
+
+    def test_RequestNewDeckSubmitted_get_context_data__timeouts_track_configured_values(self):
+        """The timeout copy is derived from DeckRequestService's settings, not
+        hard-coded: changing the configured values changes the rendered page."""
+        with patch.object(DeckRequestService, "TOKEN_MAX_AGE", 7200), \
+                patch.object(DeckRequestService, "REQUEST_COOLDOWN", 600):
+            response = self.client.get(reverse("decks:request_new_deck_submitted"))
+        self.assertContains(response, "2 hours")
+        self.assertContains(response, "10 minutes")
+        # the old (default) copy must be gone, proving it wasn't hard-coded
+        self.assertNotContains(response, "1 hour")
+        self.assertNotContains(response, "5 minutes")
 
     @patch("tenant.models.Tenant.full_clean")
     def test_form_save_persists_tenant_without_touching_owner(self, mock_full_clean):
@@ -297,6 +375,27 @@ class TenantCreateViewTest(ViewTestUtilsMixin, TenantTestCase):
         with tenant_context(self.public_tenant):
             response = view.form_valid(form)
         self.assertEqual(response.status_code, 302)
+
+
+class HumanizeSecondsTest(TestCase):
+    """Tests for the `_humanize_seconds` helper used to surface deck-request
+    timeouts on the confirmation page as friendly, non-drifting copy."""
+
+    def test_humanize_seconds__picks_largest_whole_unit_with_correct_plural(self):
+        """A whole number of seconds is rendered in the largest exact unit
+        (hours, then minutes, then seconds), singular or plural as appropriate."""
+        cases = {
+            3600: "1 hour",     # TOKEN_MAX_AGE default
+            7200: "2 hours",
+            300: "5 minutes",   # REQUEST_COOLDOWN default
+            60: "1 minute",
+            90: "90 seconds",   # not a whole minute -> falls back to seconds
+            1: "1 second",
+            0: "0 seconds",
+        }
+        for seconds, expected in cases.items():
+            with self.subTest(seconds=seconds):
+                self.assertEqual(_humanize_seconds(seconds), expected)
 
     def test_verify_deck_request_valid_token_populates_session(self):
         """A valid nonce stores the verified request (including the nonce) in the

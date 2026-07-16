@@ -11,7 +11,7 @@ from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
-from django.views.generic import FormView
+from django.views.generic import FormView, TemplateView
 from django.urls import reverse_lazy
 
 from django_tenants.utils import get_public_schema_name
@@ -240,7 +240,9 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
 
     form_class = DeckRequestForm
     template_name = "tenant/request_new_deck.html"
-    success_url = reverse_lazy("decks:request_new_deck")
+    # Redirect to a dedicated confirmation page that explains the next steps,
+    # instead of dropping the user back on the form with a thin flash banner.
+    success_url = reverse_lazy("decks:request_new_deck_submitted")
 
     def form_valid(self, form):
         """
@@ -248,23 +250,24 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
 
         Extracts the user's first name, last name, and email from the form.
         Generates a signed verification token and sends an email containing
-        the verification link. A success message is displayed prompting the
-        user to check their inbox.
+        the verification link, then redirects to a confirmation page that
+        explains the next steps.
 
         Args:
             form (DeckRequestForm): The validated form instance containing
                 the user's information.
 
         Returns:
-            HttpResponse: Redirect to the success URL as defined by FormView.
+            HttpResponse: Redirect to the confirmation page (``success_url``).
         """
         first_name = form.cleaned_data["first_name"]
         last_name = form.cleaned_data["last_name"]
         email = form.cleaned_data["email"]
 
         # Throttle verification emails per address so this public endpoint can't
-        # be used to flood someone's inbox. Always show the same success message
-        # regardless, so the response never reveals whether an email was sent.
+        # be used to flood someone's inbox. We always redirect to the same
+        # confirmation page regardless of whether an email was actually sent, so
+        # the response never reveals whether the address was already in cooldown.
         # The email is hashed into the key so raw addresses aren't exposed in
         # cache tooling, and cache.add() reserves the key atomically so two
         # concurrent requests can't both slip past the check and send twice.
@@ -274,7 +277,6 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
             nonce = DeckRequestService.create_request(first_name, last_name, email)
             DeckRequestService.send_verification_email(first_name, email, nonce, request=self.request)
 
-        messages.success(self.request, "Check your email to verify your request!")
         return super().form_valid(form)
 
 
@@ -322,3 +324,59 @@ def verify_deck_request(request, nonce):
 
     # redirect to deck creation form
     return redirect("decks:new")
+
+
+def _humanize_seconds(seconds):
+    """Render a whole number of seconds as a friendly duration string.
+
+    Used to surface the deck-request timeouts (``TOKEN_MAX_AGE`` /
+    ``REQUEST_COOLDOWN``) on the confirmation page from their actual configured
+    values, so the on-page copy can't drift. Examples: ``3600 -> "1 hour"``,
+    ``300 -> "5 minutes"``, ``90 -> "90 seconds"``.
+
+    Args:
+        seconds (int): A non-negative number of seconds.
+
+    Returns:
+        str: The duration in the largest whole unit (hours, then minutes, then
+        seconds) with correct singular/plural wording.
+    """
+    for unit_seconds, unit_name in ((3600, "hour"), (60, "minute"), (1, "second")):
+        if seconds >= unit_seconds and seconds % unit_seconds == 0:
+            value = seconds // unit_seconds
+            return f"{value} {unit_name}{'s' if value != 1 else ''}"
+    return f"{seconds} seconds"
+
+
+class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
+    """Confirmation page shown after a deck request is submitted.
+
+    Replaces the old "check your email" flash message with a full page that
+    walks the requester through the onboarding workflow (verify email -> name
+    and create the deck -> welcome email with credentials) and states the
+    verification-link validity window and resend cooldown.
+
+    The page is static informational content rendered for every valid
+    submission, so — like the flash message it replaces — it never reveals
+    whether an email was actually sent (see ``RequestNewDeck.form_valid``).
+    """
+
+    template_name = "tenant/request_new_deck_submitted.html"
+
+    def get_context_data(self, **kwargs):
+        """Surface the deck-request timeouts as friendly strings, derived from
+        ``DeckRequestService``'s settings so the on-page copy can't drift from
+        the values actually enforced.
+
+        Args:
+            **kwargs: Keyword arguments from the URLconf, passed through to the
+                base ``TemplateView`` implementation.
+
+        Returns:
+            dict: The template context, with ``verification_validity`` and
+            ``resend_cooldown`` duration strings added to the base context.
+        """
+        context = super().get_context_data(**kwargs)
+        context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)
+        context["resend_cooldown"] = _humanize_seconds(DeckRequestService.REQUEST_COOLDOWN)
+        return context

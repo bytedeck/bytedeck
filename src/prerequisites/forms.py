@@ -53,7 +53,9 @@ class PrereqFormsetHelper(FormHelper):
         super().__init__(*args, **kwargs)
 
         # self.helper.form_class = 'form-inline'
-        self.template = 'bootstrap/table_inline_formset.html'
+        # crispy-forms 2.x dropped the bundled bootstrap(2) pack; this template
+        # now comes from the crispy-bootstrap3 package
+        self.template = 'bootstrap3/table_inline_formset.html'
         self.form_id = "id_prereq_formset"
         self.add_input(layout.Submit("submit", "Save", css_class='btn-success'))
         self.add_input(layout.Submit("cancel", "Cancel", css_class='btn-danger'))

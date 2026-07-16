@@ -40,6 +40,49 @@ if not ALLOWED_HOSTS:
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
 
+
+def _validate_deployment_settings(root_domain, debug, secret_key):
+    """Refuse to boot a real deployment that is still using the shipped example
+    defaults, so a miscopied .env (e.g. from .env.example.aws) can't silently
+    expose the site.
+
+    A real deployment is anything whose ROOT_DOMAIN is not ``localhost``
+    (production, staging, etc.). Local development (``localhost``) is never
+    blocked, and the caller skips this entirely during tests. Raises
+    ``ImproperlyConfigured`` on an unsafe configuration.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if debug:
+        raise ImproperlyConfigured(
+            f"DEBUG must be False for a real deployment (ROOT_DOMAIN={root_domain!r}). "
+            "Set DEBUG=False in the environment."
+        )
+    if secret_key == 'Change.Me!':
+        raise ImproperlyConfigured(
+            "SECRET_KEY is still the example default ('Change.Me!'). Generate a "
+            "unique, random SECRET_KEY in the environment before deploying."
+        )
+
+
+# Fail fast on insecure example defaults in a real deployment. Skipped during
+# tests, where DEBUG/SECRET_KEY are intentionally weak. This bootstrap line is
+# excluded from coverage because it only runs outside the test harness; the
+# logic itself is covered directly by DeploymentSettingsGuardTest.
+if 'test' not in sys.argv:  # pragma: no cover
+    _validate_deployment_settings(ROOT_DOMAIN, DEBUG, SECRET_KEY)
+
+# In production TLS is terminated at nginx, which then forwards to uWSGI over
+# plain HTTP. Trust the forwarded scheme so request.is_secure() — and every
+# absolute URL built from it, e.g. the verification/welcome email links from
+# request.build_absolute_uri() — reflects the original https request instead of
+# the internal http hop. nginx sets this from its own $scheme (see
+# nginx/uwsgi_params), overwriting any client-supplied value, so it can't be
+# spoofed in the standard deployment. Harmless in dev (runserver never sends it).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 WSGI_APPLICATION = 'hackerspace_online.wsgi.application'
 
 # Application definition
@@ -71,10 +114,11 @@ SHARED_APPS = (
 
     'django.contrib.sites',
 
-    'captcha',
+    'django_recaptcha',
 
     'grappelli',
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
     'bootstrap_datepicker_plus',
     'embed_video',
     'django_select2',
@@ -158,13 +202,14 @@ INSTALLED_APPS = (
 
     # http://django-crispy-forms.readthedocs.org/en/latest/install.html
     'crispy_forms',
+    'crispy_bootstrap3',  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 
     # https://github.com/summernote/django-summernote
     'django_summernote',
     'bytedeck_summernote',
 
     # https://pypi.org/project/django-recaptcha/
-    'captcha',
+    'django_recaptcha',
 
     # https://github.com/monim67/django-bootstrap-datepicker-plus
     'bootstrap_datepicker_plus',
@@ -225,6 +270,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
+    'allauth.account.middleware.AccountMiddleware',  # required by django-allauth >= 0.56
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -361,6 +407,12 @@ POSTGRES_DB_NAME = env('POSTGRES_DB_NAME')
 POSTGRES_USER = env('POSTGRES_USER')
 POSTGRES_PASSWORD = env('POSTGRES_PASSWORD', default=None)
 
+# Persist database connections across requests instead of opening a new one each time
+# (Django's default of 0 closes the connection at the end of every request).
+# Env-configurable so it can be tuned per deployment or pinned to 0 where a connection
+# pooler (e.g. pgbouncer in transaction mode) makes persistent connections undesirable.
+CONN_MAX_AGE = env.int('CONN_MAX_AGE', default=60)
+
 DATABASES = {
     'default': {
         'ENGINE': 'django_tenants.postgresql_backend',
@@ -368,7 +420,15 @@ DATABASES = {
         'USER': POSTGRES_USER,
         'PASSWORD': POSTGRES_PASSWORD,
         'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT
+        'PORT': POSTGRES_PORT,
+        'CONN_MAX_AGE': CONN_MAX_AGE,
+        # Companion to CONN_MAX_AGE: verify a persistent connection is still
+        # alive at the start of each request and transparently reconnect if it
+        # died while idle (RDS failover, network blip, server-side timeout).
+        # Without this, a dead pooled connection surfaces as an intermittent
+        # InterfaceError/OperationalError on whatever request draws it.
+        # https://docs.djangoproject.com/en/4.2/ref/settings/#conn-health-checks
+        'CONN_HEALTH_CHECKS': True,
     }
 }
 
@@ -463,6 +523,10 @@ STATICFILES_DIRS = env(
 
 CRISPY_TEMPLATE_PACK = 'bootstrap3'
 
+# django-crispy-forms 2.x ships no template packs of its own; bootstrap3 comes
+# from the crispy-bootstrap3 package and must be explicitly allowed.
+CRISPY_ALLOWED_TEMPLATE_PACKS = ('bootstrap3',)
+
 # https://django-crispy-forms.readthedocs.io/en/latest/crispy_tag_forms.html#make-crispy-forms-fail-loud
 CRISPY_FAIL_SILENTLY = not DEBUG  # logs crispy-forms failures as exceptions when True
 
@@ -512,12 +576,12 @@ else:
 
 
 # Google provides default keys in development that always validate, but results in this error:
-#  captcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
+#  django_recaptcha.recaptcha_test_key_error: RECAPTCHA_PRIVATE_KEY or RECAPTCHA_PUBLIC_KEY is making
 #  use of the Google test keys and will not behave as expected in a production environment
 #
 # Silencing the error allows us to setup an environment (otherwise the error will stop the app)
 # The fact that we are not using production keys will be obvious on the recaptcha widget because a red warning message is displayed
-SILENCED_SYSTEM_CHECKS += ['captcha.recaptcha_test_key_error']
+SILENCED_SYSTEM_CHECKS += ['django_recaptcha.recaptcha_test_key_error']
 
 
 # AUTHENTICATION ##################################################
@@ -555,9 +619,14 @@ LOGIN_REDIRECT_URL = '/'
 LOGIN_URL = 'account_login'
 ACCOUNT_ADAPTER = "hackerspace_online.adapter.CustomAccountAdapter"
 # Specifies the adapter class to use, allowing you to alter certain default behaviour.
-ACCOUNT_AUTHENTICATION_METHOD = "username"  # (=”username” | “email” | “username_email”)
-# Specifies the login method to use – whether the user logs in by entering their username,
-# e-mail address, or either one of both. Setting this to “email” requires ACCOUNT_EMAIL_REQUIRED=True
+ACCOUNT_LOGIN_METHODS = {"username"}  # ({"username"} | {"email"} | {"username", "email"})
+# Specifies the login method to use - whether the user logs in by entering their username,
+# e-mail address, or either one of both. Renamed from ACCOUNT_AUTHENTICATION_METHOD in django-allauth 65.0.
+ACCOUNT_SIGNUP_FIELDS = ["username*", "email", "password1*", "password2*"]
+# Which fields are presented on the signup form ("*" = required). Replaces the removed
+# ACCOUNT_EMAIL_REQUIRED / ACCOUNT_USERNAME_REQUIRED settings and preserves their old
+# defaults here: username required, email optional (providing + verifying an email
+# lets users reset their own password).
 # ACCOUNT_CONFIRM_EMAIL_ON_GET #(=False)
 # Determines whether or not an e-mail address is automatically confirmed by a mere GET request.
 # ACCOUNT_EMAIL_CONFIRMATION_ANONYMOUS_REDIRECT_URL #(=settings.LOGIN_URL)
@@ -800,6 +869,13 @@ if TESTING:
         'LOCATION': 'test-loc'
     }
 
+    # django-allauth >= 65 rate-limits auth flows via the cache: failed logins
+    # per IP/user, and verification-email resends (1 per 3 min per address,
+    # silently skipped when limited). Tests share one client IP and resend
+    # within seconds, so disable rate limits entirely. Note: False is the only
+    # way to disable — a dict (even {}) is merged over allauth's defaults.
+    ACCOUNT_RATE_LIMITS = False
+
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
@@ -850,3 +926,65 @@ if DEBUG and not TESTING:
     # DEBUG_TOOLBAR_CONFIG = {
     #     'SHOW_TOOLBAR_CALLBACK': lambda request: not request.is_ajax()
     # }
+
+
+# PRODUCTION / STAGING SECURITY SETTINGS ###############################
+# Hardening applied whenever DEBUG is off -- i.e. production AND staging
+# (staging mirrors prod). These are intentionally NOT applied in local
+# development, where the site is served over plain http://localhost, nor
+# during tests. Django's `manage.py check --deploy` verifies these.
+# Docs: https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+if not DEBUG and not TESTING:
+
+    # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
+    # Without this, request.is_secure() is always False behind the proxy,
+    # which would break https-aware redirect logic. This requires nginx to
+    # forward the original scheme to the app: for the uwsgi_pass block, add
+    #   uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
+    # SECURITY: only safe because Django is reachable *only* via nginx (uwsgi
+    # socket on the internal network), so a client cannot spoof this header.
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+
+    # Only ever send the session and CSRF cookies over HTTPS. Safe to enable
+    # unconditionally here because all real traffic is HTTPS; the browser adds
+    # the Secure flag regardless of the proxy header above.
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True  # Django default; set explicitly for clarity
+
+    # Redirect plain HTTP to HTTPS from within Django. nginx already does this
+    # at the edge (listen 80 -> 301), so this is defense-in-depth. Left OFF by
+    # default and env-gated: enabling it before nginx forwards the scheme (see
+    # SECURE_PROXY_SSL_HEADER above) would cause an infinite redirect loop.
+    # Flip to True (SECURE_SSL_REDIRECT=True in the env) once the uwsgi_param
+    # is in place.
+    SECURE_SSL_REDIRECT = env("SECURE_SSL_REDIRECT", default=False)
+
+    # Deploy-check warnings we intentionally don't satisfy, silenced so
+    # `check --deploy --fail-level WARNING` stays green:
+    #   security.W008 (SECURE_SSL_REDIRECT): nginx already redirects
+    #     HTTP->HTTPS at the edge (listen 80 -> 301). Remove if the redirect
+    #     is ever turned on at the Django layer.
+    #   security.W021 (SECURE_HSTS_PRELOAD): preload is a deliberate, hard to
+    #     reverse opt-in (every tenant subdomain must stay HTTPS-only, and
+    #     removal from the browser preload list is slow). Enable HSTS first,
+    #     then flip SECURE_HSTS_PRELOAD via env and drop this silence when
+    #     ready to submit to the preload list.
+    SILENCED_SYSTEM_CHECKS += ["security.W008", "security.W021"]
+
+    # HSTS: tell browsers to use HTTPS only, for this domain and every tenant
+    # subdomain. includeSubDomains matters here because every deck is a
+    # subdomain. Ramp SECURE_HSTS_SECONDS up gradually; only enable preload
+    # once you're certain every subdomain is HTTPS-only and intend to submit
+    # to the browser preload list.
+    SECURE_HSTS_SECONDS = env("SECURE_HSTS_SECONDS", default=60 * 60 * 24 * 365)  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
+
+    # Misc hardening flagged by `check --deploy`. NOSNIFF and the "same-origin"
+    # referrer policy match Django's own defaults; X_FRAME_OPTIONS "DENY" is
+    # already the effective default via XFrameOptionsMiddleware -- set here so
+    # the intent is explicit and the deploy check stays green.
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = "same-origin"
+    X_FRAME_OPTIONS = "DENY"

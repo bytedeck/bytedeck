@@ -3,6 +3,8 @@ import json
 from django import forms
 from django.core import signing
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from django.utils.text import slugify
@@ -12,6 +14,7 @@ from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
 from tags.forms import TagForm
+from tags.views import TagDetailStudent
 from tags.widgets import TaggitSelect2Widget
 from taggit.forms import TagField
 from taggit.models import Tag
@@ -240,6 +243,67 @@ class TagCRUDViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, f'{repeatable_quest.name} ({repeatable_quest.xp} XP)', html=True)
         for i in range(2, num_subs, 1):
             self.assertContains(response, f'{repeatable_quest.name} ({i}) ({repeatable_quest.xp} XP)', html=True)
+
+    def test_get_quest_submissions__query_count_flat_as_submissions_grow(self):
+        """get_quest_submissions counts submissions per quest in memory and
+        select_relates the quest, so its query count does not grow with the
+        number of submissions (it previously ran a COUNT and loaded the quest
+        per submission)."""
+        repeatable_quest = baker.make('quest_manager.quest', max_repeats=-1, xp=1)
+        repeatable_quest.tags.add(self.tag.name)
+
+        def add_submissions(n):
+            for _ in range(n):
+                baker.make(
+                    'quest_manager.questsubmission',
+                    quest=repeatable_quest, user=self.test_student,
+                    is_completed=True, is_approved=True,
+                    semester=SiteConfig.get().active_semester,
+                )
+
+        view = TagDetailStudent()
+        view.user = self.test_student
+        view.object = self.tag
+
+        add_submissions(2)
+        view.get_quest_submissions()  # warm caches
+        with CaptureQueriesContext(connection) as few_queries:
+            view.get_quest_submissions()
+
+        add_submissions(4)
+        with CaptureQueriesContext(connection) as many_queries:
+            view.get_quest_submissions()
+
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_get_badge_assertions__query_count_flat_as_assertions_grow(self):
+        """get_badge_assertions counts assertions per badge in memory and
+        select_relates the badge, so its query count does not grow with the
+        number of assertions."""
+        badge = baker.make('badges.badge', xp=1)
+        badge.tags.add(self.tag.name)
+
+        def add_assertions(n):
+            for _ in range(n):
+                baker.make(
+                    'badges.badgeassertion', badge=badge, user=self.test_student,
+                    semester=SiteConfig.get().active_semester,
+                )
+
+        view = TagDetailStudent()
+        view.user = self.test_student
+        view.object = self.tag
+
+        add_assertions(2)
+        view.get_badge_assertions()  # warm caches
+        with CaptureQueriesContext(connection) as few_queries:
+            view.get_badge_assertions()
+
+        add_assertions(4)
+        with CaptureQueriesContext(connection) as many_queries:
+            view.get_badge_assertions()
+
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
     def test_CreateView(self):
         """Make sure create view can create tags"""

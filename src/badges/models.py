@@ -239,6 +239,37 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     def get_absolute_url(self):
         return reverse('badges:badge_detail', kwargs={'badge_id': self.id})
 
+    def student_qualifies_ungranted(self, user):
+        """Return True if `user` meets this badge's prerequisites but hasn't been granted it
+        yet; otherwise False.
+
+        Badges with no prerequisites are manual-grant-only, hence `no_prereq_means=False`
+        (matching BadgeManager.get_conditions_met). Shared by the grant-check preview
+        (students_who_qualify_ungranted) and the grant task, so both apply the same rule.
+        """
+        from prerequisites.models import Prereq
+
+        return (
+            not BadgeAssertion.objects.all_for_user_badge(user, self, False).exists()
+            and Prereq.objects.all_conditions_met(self, user, no_prereq_means=False)
+        )
+
+    def students_who_qualify_ungranted(self):
+        """Return the current-semester students who meet this badge's prerequisites but have
+        not been granted it yet, as a list of User objects (empty when none qualify).
+
+        Used to preview and confirm a teacher-initiated grant-check (issue #1157): rather
+        than auto-granting on every prereq edit (which risks granting a badge before it is
+        finished), the teacher runs this check on demand.
+
+        Returns:
+            list[User]: e.g. ``[<User: ada>, <User: grace>]``
+        """
+        from courses.models import CourseStudent
+
+        students = CourseStudent.objects.all_users_for_active_semester()
+        return [user for user in students if self.student_qualifies_ungranted(user)]
+
     def get_icon_url(self):
         if self.icon and hasattr(self.icon, 'url'):
             return self.icon.url

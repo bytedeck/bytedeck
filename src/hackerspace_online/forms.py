@@ -7,8 +7,8 @@ from django.utils.translation import gettext_lazy as _
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import ResetPasswordForm, SignupForm, LoginForm
 from allauth.account.utils import filter_users_by_email
-from captcha.fields import ReCaptchaField
-from captcha.widgets import ReCaptchaV2Invisible
+from django_recaptcha.fields import ReCaptchaField
+from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from siteconfig.models import SiteConfig
 from allauth.socialaccount import forms as socialaccount_forms

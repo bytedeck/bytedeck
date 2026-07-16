@@ -339,6 +339,12 @@ class BadgeAssertionTestModel(TenantTestCase):
         for student in students_with_badge:
             baker.make(BadgeAssertion, user=student, badge=badge)
 
+        # fraction_of_active_users_granted_this() caches the active-user and
+        # assertion counts for 60s; clear so counts cached by earlier tests in
+        # this process can't leak into the assertion below
+        from django.core.cache import cache
+        cache.clear()
+
         fraction = badge.fraction_of_active_users_granted_this()
         self.assertEqual(fraction, num_students_with_badge / total_students)
 

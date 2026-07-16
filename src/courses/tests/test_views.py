@@ -1,7 +1,9 @@
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.shortcuts import reverse
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
@@ -696,6 +698,17 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertContains(response, obj.num_days())
             self.assertContains(response, obj.excludeddate_set.count())
 
+    def test_SemesterList_view__semester_without_dates(self):
+        """The semester list page renders without errors when a semester has a blank
+        name and no first/last day. Regression test for issue #912.
+        """
+        self.client.force_login(self.test_teacher)
+
+        semester = baker.make(Semester, name='', first_day=None, last_day=None)
+        response = self.client.get(reverse('courses:semester_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, str(semester))
+
     def test_SemesterCreate__without_ExcludedDates__view(self):
         self.client.force_login(self.test_teacher)
 
@@ -1004,6 +1017,27 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         user.profile.save()
 
         return baker.make(CourseStudent, user=user, semester=self.semester, course=self.course, block=self.block)
+
+    def test_get_student_mark_list__query_count_flat_as_students_grow(self):
+        """get_student_mark_list select_relates each student's profile, so its
+        query count does not grow with the number of students (it reads
+        student.profile.mark_cached for every student)."""
+        self.create_student_course(50)
+        self.create_student_course(60)
+        # warm SiteConfig/content-type caches so only the student marks matter
+        Semester.get_student_mark_list(Semester, students_only=True)
+
+        with CaptureQueriesContext(connection) as few_queries:
+            Semester.get_student_mark_list(Semester, students_only=True)
+
+        for _ in range(4):
+            self.create_student_course(70)
+
+        with CaptureQueriesContext(connection) as many_queries:
+            Semester.get_student_mark_list(Semester, students_only=True)
+
+        # without select_related('profile') each extra student adds a query
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
     def test_non_ajax_status_code(self):
         self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])

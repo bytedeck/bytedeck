@@ -11,6 +11,7 @@ from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
+from comments.models import Comment
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
@@ -215,6 +216,27 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         #     data=form_data
         # )
         # self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+    def test_comment_on_announcement__escapes_html(self):
+        """HTML entered in the announcement comment form is completely escaped when
+        the comment is saved, so scripts can't execute when the comment is rendered.
+        Regression test for issue #1343.
+        """
+        success = self.client.login(username=self.test_student1.username, password=self.test_password)
+        self.assertTrue(success)
+
+        payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data={'comment_text': payload, 'comment_button': True}
+        )
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+        comment = Comment.objects.all_with_target_object(self.test_announcement).first()
+        self.assertIsNotNone(comment)
+        self.assertNotIn('<script', comment.text)
+        self.assertNotIn('<img', comment.text)
+        self.assertIn('&lt;script&gt;', comment.text)
 
     def test_copy_announcement(self):
         # log in a teacher

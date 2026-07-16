@@ -346,7 +346,12 @@ class SiteConfig(models.Model):
         the tenant's schema SocialApp
         """
         with schema_context(get_public_schema_name()):
-            social_app = SocialApp.objects.get_current(provider=GoogleProvider.id)
+            # SocialAppManager.get_current() was removed in django-allauth 65;
+            # this is the equivalent lookup: the provider's app linked to the current Site.
+            social_app = SocialApp.objects.get(
+                sites__id=Site.objects.get_current().id,
+                provider=GoogleProvider.id,
+            )
             social_app_clone = copy(social_app)
             social_app_clone.pk = None
 

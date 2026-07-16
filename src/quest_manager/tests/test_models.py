@@ -571,3 +571,83 @@ class SubmissionTestModel(TenantTestCase):
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
+
+
+class QuestExpiredAnnotationTest(TenantTestCase):
+    """Quest.expired() is called for every quest rendered in list templates, so
+    it reuses an ``is_expired`` annotation from the queryset when one is present
+    instead of issuing a query per call."""
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+
+    def test_expired__prefers_is_expired_annotation(self):
+        """When the instance carries an is_expired annotation, expired() returns
+        it without issuing a query."""
+        quest = baker.make(Quest)
+
+        quest.is_expired = True  # simulate the queryset annotation
+        with self.assertNumQueries(0):
+            self.assertTrue(quest.expired())
+
+        quest.is_expired = False
+        with self.assertNumQueries(0):
+            self.assertFalse(quest.expired())
+
+    def test_expired__falls_back_to_query_without_annotation(self):
+        """Without the annotation, expired() still computes the value from the DB;
+        a quest with no expiry date has not expired."""
+        quest = baker.make(Quest, date_expired=None)
+        self.assertFalse(quest.expired())
+
+
+class QuestManagerPrefetchTest(TenantTestCase):
+    """The Drafts and Archived staff tabs render the same template rows as the
+    'Available' tab, which reads each quest's campaign, editor profile and tags.
+    all_drafts() and all_archived() must prefetch those relations so a page of
+    quests does not issue a query per row."""
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
+        # a teacher is needed both as staff caller and as each quest's editor
+        self.teacher = User.objects.create_user('teacher', is_staff=True)
+        self.campaign = baker.make(Category, title="Test Campaign")
+
+    def _make_quests(self, **kwargs):
+        """Create three quests with a campaign, editor and tags set, so the
+        related-object accessors exercised by the template have data to read."""
+        quests = []
+        for i in range(3):
+            quest = baker.make(Quest, campaign=self.campaign, editor=self.teacher, **kwargs)
+            quest.tags.add(f'tag-{i}')
+            quests.append(quest)
+        return quests
+
+    def test_all_drafts__prefetches_related_objects(self):
+        """all_drafts() prefetches campaign, editor profile and tags, so reading
+        them for every draft quest issues no additional queries."""
+        self._make_quests(published=False)
+
+        drafts = list(Quest.objects.all_drafts(self.teacher))
+        self.assertEqual(len(drafts), 3)
+
+        with self.assertNumQueries(0):
+            for quest in drafts:
+                self.assertEqual(quest.campaign.title, "Test Campaign")
+                # editor__profile is select_related; profile is the reverse 1-1
+                self.assertIsNotNone(quest.editor.profile)
+                self.assertEqual(len(quest.tags.all()), 1)
+
+    def test_all_archived__prefetches_related_objects(self):
+        """all_archived() prefetches campaign, editor profile and tags, so reading
+        them for every archived quest issues no additional queries."""
+        self._make_quests(archived=True)
+
+        archived = list(Quest.objects.all_archived(self.teacher))
+        self.assertEqual(len(archived), 3)
+
+        with self.assertNumQueries(0):
+            for quest in archived:
+                self.assertEqual(quest.campaign.title, "Test Campaign")
+                self.assertIsNotNone(quest.editor.profile)
+                self.assertEqual(len(quest.tags.all()), 1)

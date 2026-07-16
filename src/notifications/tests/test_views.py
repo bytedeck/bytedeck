@@ -1,11 +1,15 @@
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.shortcuts import reverse
+from django.test.utils import CaptureQueriesContext
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from notifications.models import Notification
+from notifications.signals import notify
 
 User = get_user_model()
 
@@ -119,3 +123,58 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_ajax__query_count_does_not_grow_with_notifications(self):
+        """The dropdown AJAX prefetches each notification's sender/target/action
+        generic FKs, so its query count stays flat as unread notifications grow
+        (get_link() reads three generic FKs per row)."""
+        self.client.force_login(self.test_student1)
+        url = reverse('notifications:ajax')
+
+        # every notification shares the same sender (a User) and target (a Quest)
+        # content types, so prefetching collapses their generic-FK reads to a
+        # fixed number of queries regardless of the notification count
+        target = baker.make('quest_manager.Quest')
+
+        def notify_student(times):
+            for _ in range(times):
+                notify.send(
+                    self.test_teacher,
+                    target=target,
+                    recipient=self.test_student1,
+                    affected_users=[self.test_student1],
+                    verb="did",
+                )
+
+        # warm per-request caches (SiteConfig, content types, session) so the two
+        # measurements below differ only by the number of notifications rendered
+        notify_student(2)
+        self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        with CaptureQueriesContext(connection) as few_queries:
+            self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        notify_student(5)  # 7 unread total, still under the 15-item cap
+        with CaptureQueriesContext(connection) as many_queries:
+            self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # without the prefetch each extra notification adds several generic-FK queries
+        self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
+
+    def test_read_all__marks_all_read_and_sets_time_read(self):
+        """The read_all view marks every unread notification read and stamps
+        time_read, then redirects to the notifications list."""
+        self.client.force_login(self.test_student1)
+        baker.make(
+            Notification, recipient=self.test_student1, unread=True, time_read=None, _quantity=3,
+        )
+        self.assertEqual(Notification.objects.all_unread(self.test_student1).count(), 3)
+
+        response = self.client.get(reverse('notifications:read_all'))
+        # don't fetch the target: baker-made notifications have random generic FKs
+        # that the list template would try to render
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
+
+        self.assertEqual(Notification.objects.all_unread(self.test_student1).count(), 0)
+        for note in Notification.objects.filter(recipient=self.test_student1):
+            self.assertIsNotNone(note.time_read)

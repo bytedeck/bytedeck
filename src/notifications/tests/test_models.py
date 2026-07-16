@@ -1,4 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from django.contrib.contenttypes.models import ContentType
@@ -7,6 +10,8 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from notifications.models import Notification, new_notification
+
+User = get_user_model()
 
 
 class NotificationModelTest(TenantTestCase):
@@ -72,6 +77,76 @@ class NotificationModelTest(TenantTestCase):
 
         notes_unread = Notification.objects.all_unread(self.student)
         self.assertEqual(notes_unread.count(), 1)
+
+    def test_new_notification__bulk_creates_one_insert_for_many_recipients(self):
+        """new_notification writes every recipient's notification in a single bulk
+        INSERT instead of one save() per recipient."""
+        recipients = baker.make(User, _quantity=5)
+
+        with CaptureQueriesContext(connection) as ctx:
+            new_notification(
+                self.teacher,
+                recipient=self.student,  # required kwarg, unused when affected_users given
+                affected_users=recipients,
+                verb="tested",
+            )
+
+        # a single bulk INSERT covers all recipients (was one INSERT per recipient)
+        inserts = [q for q in ctx.captured_queries if 'insert into "notifications_notification"' in q['sql'].lower()]
+        self.assertEqual(len(inserts), 1)
+        self.assertEqual(Notification.objects.filter(recipient__in=recipients).count(), 5)
+
+    def test_new_notification__skips_sender(self):
+        """A user does not get notified about their own action, even when listed
+        in affected_users (regression guard for the bulk_create refactor)."""
+        # clear notifications created as a side effect of user creation in setUp
+        Notification.objects.all().delete()
+
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.teacher, self.student],
+            verb="tested",
+        )
+        # only the student (not the sender/teacher) should have a notification
+        self.assertEqual(Notification.objects.filter(recipient=self.teacher).count(), 0)
+        self.assertEqual(Notification.objects.filter(recipient=self.student).count(), 1)
+
+    def test_mark_all_read__single_update_sets_unread_and_time_read(self):
+        """mark_all_read marks every unread notification read and stamps time_read
+        in one UPDATE (the previous two-update version left time_read unset)."""
+        baker.make(Notification, recipient=self.student, unread=True, time_read=None, _quantity=3)
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 3)
+
+        with CaptureQueriesContext(connection) as ctx:
+            Notification.objects.all().mark_all_read(self.student)
+
+        updates = [q for q in ctx.captured_queries if q['sql'].lstrip().upper().startswith('UPDATE')]
+        self.assertEqual(len(updates), 1)
+
+        self.assertEqual(Notification.objects.all_unread(self.student).count(), 0)
+        # time_read must actually be set now, not left None
+        for note in Notification.objects.filter(recipient=self.student):
+            self.assertIsNotNone(note.time_read)
+
+    def test_mark_all_unread__single_update_sets_unread_and_clears_time_read(self):
+        """mark_all_unread marks read notifications unread and clears time_read in
+        one UPDATE (the previous two-update version left time_read set)."""
+        baker.make(
+            Notification, recipient=self.student, unread=False, time_read=timezone.now(), _quantity=3,
+        )
+        self.assertEqual(Notification.objects.all_read(self.student).count(), 3)
+
+        with CaptureQueriesContext(connection) as ctx:
+            Notification.objects.all().mark_all_unread(self.student)
+
+        updates = [q for q in ctx.captured_queries if q['sql'].lstrip().upper().startswith('UPDATE')]
+        self.assertEqual(len(updates), 1)
+
+        self.assertEqual(Notification.objects.all_read(self.student).count(), 0)
+        for note in Notification.objects.filter(recipient=self.student):
+            self.assertTrue(note.unread)
+            self.assertIsNone(note.time_read)
 
     def test_url_correct_comment_hash(self):
         """ Checks if instances where an url is given. There is a corresponding comment hash with it

@@ -11,3 +11,8 @@ uwsgi_param REMOTE_PORT $remote_port;
 uwsgi_param SERVER_ADDR $server_addr;
 uwsgi_param SERVER_PORT $server_port;
 uwsgi_param SERVER_NAME $server_name;
+# Forward the original request scheme (http/https) so Django can build correct
+# absolute URLs when TLS is terminated here. Paired with SECURE_PROXY_SSL_HEADER
+# in settings.py; set from nginx's own $scheme, so client-supplied values can't
+# spoof it.
+uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;

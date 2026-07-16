@@ -5,7 +5,11 @@ from django.dispatch import receiver
 
 from badges.models import Badge
 from prerequisites.models import Prereq, HasPrereqsMixin
-from prerequisites.tasks import update_conditions_for_quest, update_quest_conditions_all_users, update_quest_conditions_for_user
+from prerequisites.tasks import (
+    update_conditions_for_quest,
+    update_quest_conditions_all_users,
+    update_quest_conditions_for_user,
+)
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
 
@@ -82,6 +86,11 @@ def update_cache_triggered_by_quests_available_outside_course(sender, instance, 
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
+
+    Badge prereq changes are intentionally NOT auto-granted here: a teacher may tweak a
+    badge's prerequisites several times while building it, and auto-granting on each change
+    could grant the badge before it is ready. Instead the teacher runs a grant-check on
+    demand from the badge page (see badges.views.badge_grant_qualifying, issue #1157).
     """
     if isinstance(instance.parent_object, Quest):
         # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
