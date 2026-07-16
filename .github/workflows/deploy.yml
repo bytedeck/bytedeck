@@ -49,7 +49,7 @@ jobs:
           cd "$APP_DIR"
           git fetch --prune origin "$BRANCH"
           git checkout -B "$BRANCH" "$SHA"
-          ./production/server-update.sh
+          bash production/server-update.sh
 
   deploy-staging:
     if: >-
