@@ -1,10 +1,10 @@
-name: Flake8
+name: Ruff
 
 on: [push, pull_request]
 
 jobs:
   lint:
-    name: Lint with Flake8
+    name: Lint with ruff
     runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
@@ -12,26 +12,9 @@ jobs:
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-    - name: Install dependencies
-      run:  pip install flake8
-    - name: Setup flake8 annotations
-      uses: rbialon/flake8-annotations@v1
+    - name: Install ruff
+      run: pip install ruff
     - name: Lint
-      run: |
-        pip install flake8
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 src --count --show-source --statistics --config=.flake8
-
-# jobs:
-#   lint:
-#     name: Lint with Flake8
-#     runs-on: ubuntu-18.04
-#     steps:
-#     - uses: actions/checkout@v2
-#     - uses: tonybajan/flake8-check-action@v1.0.0
-#       with:
-#         path: src
-#         select: E,F,W
-#         ignore: W291,E216,W504,W503,E126,W293
-#         maxlinelength: 150
-#         repotoken: ${{ secrets.GITHUB_TOKEN }}
+      # Config lives in pyproject.toml ([tool.ruff]). --output-format=github
+      # emits inline PR annotations (replaces the old flake8-annotations action).
+      run: ruff check src --output-format=github
