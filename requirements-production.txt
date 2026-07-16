@@ -10,7 +10,7 @@ django-crispy-forms>=2.4,<2.6  # 2.6+ requires Django >= 5.2
 crispy-bootstrap3>=2024.1,<2025  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 django-decorator-include>=3.3,<4.0
 django-embed-video>=1.4.10,<1.5
-django-environ>=0.12,<0.15
+django-environ>=0.14.0,<0.15
 django-grappelli>=4.0.1,<5
 django-import-export>=4.3,<5.0
 django-querysetsequence>=0.18,<0.19
