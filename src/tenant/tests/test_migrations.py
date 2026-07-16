@@ -3,7 +3,7 @@ import importlib
 from django.apps import apps as django_apps
 from django.db import connection
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 # Migration modules start with a digit, so import via importlib.
 ensure_allauth_account_tables = importlib.import_module(
@@ -11,7 +11,12 @@ ensure_allauth_account_tables = importlib.import_module(
 ).ensure_allauth_account_tables
 
 
-class EnsureAllauthAccountTablesTest(TenantTestCase):
+class EnsureAllauthAccountTablesTest(ByteDeckTenantTestCase):
+    # Drops and recreates account tables in its own schema; use a private,
+    # fresh schema rather than the shared reused one so the destructive DDL
+    # can't affect other classes (and doesn't collide with the shared tenant).
+    reuse_schema = False
+
     """The 0015_ensure_allauth_account_tables data migration repairs schemas
     whose migration history records django-allauth's `account` migrations as
     applied even though the tables were never created (e.g. the production and

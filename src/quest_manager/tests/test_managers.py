@@ -276,6 +276,12 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
 class QuestManagerTest(ByteDeckTenantTestCase):
 
+    # These tests assert the availability of the *seed* quests (e.g. "Welcome to
+    # ByteDeck!") under a frozen 2018 clock, which only holds if the tenant seed
+    # was created at that frozen time. A reused schema is seeded once at whatever
+    # the first class's real clock was, so this class needs its own fresh schema.
+    reuse_schema = False
+
     maxDiff = None
 
     @classmethod

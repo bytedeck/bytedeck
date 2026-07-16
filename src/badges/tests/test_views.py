@@ -106,7 +106,9 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('badges:bulk_grant_badge', args=[b_pk])
         self.assert200('badges:bulk_grant')
         self.assert200('badges:revoke', args=[a_pk])
-        self.assert200('badges:badge_prereqs_update', args=[a_pk])
+        # badge_prereqs_update takes a *badge* pk, not an assertion pk; using a_pk
+        # only worked when both sequences happened to start at 1 on a fresh schema.
+        self.assert200('badges:badge_prereqs_update', args=[b_pk])
         self.assert200('badges:grant_qualifying', args=[b_pk])
 
     def test_badge_create(self):

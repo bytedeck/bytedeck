@@ -85,53 +85,60 @@ class Command(BaseCommand):
         # Also disconnect from the tenant_save_callback so it wont create unnecessary domains
         post_save.disconnect(tenant_save_callback, sender=Tenant)
 
-        self.stdout.write(self.style.SUCCESS('\n** Creating `public` Tenant object...'))
-        public_tenant, created = Tenant.objects.get_or_create(
-            schema_name='public',
-            name='public'
-        )
+        # These signals are module-global (connected in HackerspaceConfig.ready). If any
+        # step below raises before we reconnect them, they would stay disconnected for the
+        # life of the process, so every later tenant creation would silently skip its
+        # domain/data initialization. Reconnect in a finally so a mid-command failure can't
+        # leak that broken signal state (this bit the test suite: a crash here left
+        # tenant_save_callback disconnected and cascaded into unrelated tenant tests).
+        try:
+            self.stdout.write(self.style.SUCCESS('\n** Creating `public` Tenant object...'))
+            public_tenant, created = Tenant.objects.get_or_create(
+                schema_name='public',
+                name='public'
+            )
 
-        public_tenant.domains.create(
-            domain=settings.ROOT_DOMAIN,
-            is_primary=True
-        )
+            public_tenant.domains.create(
+                domain=settings.ROOT_DOMAIN,
+                is_primary=True
+            )
 
-        if not created:
-            self.stdout.write(self.style.NOTICE('\nA schema with the name `public` already existed.  A new one was not created.'))
+            if not created:
+                self.stdout.write(self.style.NOTICE('\nA schema with the name `public` already existed.  A new one was not created.'))
 
-        self.stdout.write(self.style.SUCCESS('\nPublic Tenant object'))
-        self.stdout.write(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
-        self.stdout.write(f" tenant.schema_name: {public_tenant.schema_name}")
-        self.stdout.write(f" tenant.name: {public_tenant.name}")
+            self.stdout.write(self.style.SUCCESS('\nPublic Tenant object'))
+            self.stdout.write(f" tenant.domain_url: {public_tenant.get_primary_domain().domain}")
+            self.stdout.write(f" tenant.schema_name: {public_tenant.schema_name}")
+            self.stdout.write(f" tenant.name: {public_tenant.name}")
 
-        self.stdout.write(self.style.SUCCESS('\n** Updating Sites object...'))
-        site = Site.objects.first()
-        site.domain = settings.ROOT_DOMAIN
-        site.name = settings.ROOT_DOMAIN[:45]  # Can be too long if using an AWS public DNS
-        site.save()
+            self.stdout.write(self.style.SUCCESS('\n** Updating Sites object...'))
+            site = Site.objects.first()
+            site.domain = settings.ROOT_DOMAIN
+            site.name = settings.ROOT_DOMAIN[:45]  # Can be too long if using an AWS public DNS
+            site.save()
 
-        self.stdout.write("\nSites object")
-        self.stdout.write(f" site.domain: {site.domain}")
-        self.stdout.write(f" site.name: {site.name}")
-        self.stdout.write(f" site.id: {site.id}")
+            self.stdout.write("\nSites object")
+            self.stdout.write(f" site.domain: {site.domain}")
+            self.stdout.write(f" site.name: {site.name}")
+            self.stdout.write(f" site.id: {site.id}")
 
-        # Create the homepage, which is a flatpage object for easier
-        self.stdout.write(self.style.SUCCESS('\n** Creating homepage...'))
-        from django.contrib.flatpages.models import FlatPage
+            # Create the homepage, which is a flatpage object for easier
+            self.stdout.write(self.style.SUCCESS('\n** Creating homepage...'))
+            from django.contrib.flatpages.models import FlatPage
 
-        homepage = FlatPage.objects.create(
-            url='/home/',
-            title='Home',
-            content=get_homepage_content(),
-            template_name='public/flatpage-wide.html',
-        )
-        homepage.sites.add(site)
-        absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])
-        self.stdout.write(f" homepage: {public_tenant.get_root_url()}{absolute_url}\n")
-
-        # Connect again
-        post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
-        post_save.connect(tenant_save_callback, sender=Tenant)
+            homepage = FlatPage.objects.create(
+                url='/home/',
+                title='Home',
+                content=get_homepage_content(),
+                template_name='public/flatpage-wide.html',
+            )
+            homepage.sites.add(site)
+            absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])
+            self.stdout.write(f" homepage: {public_tenant.get_root_url()}{absolute_url}\n")
+        finally:
+            # Connect again
+            post_schema_sync.connect(initialize_tenant_with_data, sender=TenantMixin)
+            post_save.connect(tenant_save_callback, sender=Tenant)
 
         self.setup_shared_library()
 

@@ -93,7 +93,7 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
 
 
-class AllowedGFKChoiceFieldRebuildTest(TenantTestCase):
+class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
     """Regression tests for AllowedGFKChoiceField rebuilding its choices on copy.
 
     AllowedGFKChoiceField resolves its allowed models from the content-types

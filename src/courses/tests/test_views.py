@@ -747,7 +747,9 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # check if data was added to db
         self.assertEqual(Semester.objects.count(), 2)
-        semester = Semester.objects.get(pk=2)
+        # The just-created semester is the most recent one; don't assume an
+        # absolute pk (sequences aren't reset between reused-schema test classes).
+        semester = Semester.objects.latest('id')
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():

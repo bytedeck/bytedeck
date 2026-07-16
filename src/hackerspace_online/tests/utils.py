@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.conf import settings
 from django.core import serializers
+from django.core.cache import cache
 from django.db import connection
 from django.shortcuts import reverse
 
@@ -10,65 +11,177 @@ from django_tenants.utils import get_tenant_model, get_tenant_domain_model
 from model_bakery import baker
 
 import json
+import re
 import warnings
 
 
 class ByteDeckTenantTestCase(TenantTestCase):
-    """A TenantTestCase whose ``setUpTestData`` hook actually runs.
+    """A TenantTestCase that reuses one test schema across classes and runs ``setUpTestData``.
 
-    django-tenants' ``TenantTestCase.setUpClass`` never calls ``super().setUpClass()``,
-    which silently skips all of Django ``TestCase``'s class-level setup — most
-    importantly the class-wide atomic transaction and the ``setUpTestData`` hook.
-    A ``setUpTestData`` method defined on a plain ``TenantTestCase`` subclass is
-    therefore never called, and tests depending on its data fail (or worse, pass
-    while asserting nothing).
+    Two problems with django-tenants' ``TenantTestCase`` are fixed here:
 
-    This class restores the standard Django behavior: it performs the same tenant
-    setup as ``TenantTestCase.setUpClass`` (creating and migrating the ``test``
-    schema, then pointing the connection at it), and *then* runs Django's
-    ``TestCase.setUpClass``, so ``setUpTestData`` executes once per class inside a
-    class-level transaction with the tenant schema active. Django rolls each test
-    back to a savepoint, and (since Django 3.2) hands each test a fresh deep copy
-    of in-memory objects assigned in ``setUpTestData``, so per-test isolation is
-    preserved exactly as documented for regular Django ``TestCase``.
+    1. **``setUpTestData`` never runs.** ``TenantTestCase.setUpClass`` doesn't call
+       ``super().setUpClass()``, so Django ``TestCase``'s class-level setup — the
+       class-wide atomic transaction and the ``setUpTestData`` hook — is skipped
+       entirely. A ``setUpTestData`` defined on a plain ``TenantTestCase`` subclass
+       is silently never called.
 
-    Use this as the base class for all tenant tests. Fixtures that no test needs
-    to rebuild per-method belong in ``setUpTestData``; ``self.client = TenantClient
-    (self.tenant)`` and ``force_login`` calls stay in ``setUp``.
+    2. **The schema is rebuilt for every test class.** ``TenantTestCase`` creates a
+       fresh schema, replays *all* tenant-app migrations, and re-seeds the tenant's
+       initial data in ``setUpClass``, then drops it in ``tearDownClass`` — once per
+       test class. With ~160 tenant test classes that migrate/seed cost dominates
+       the suite's runtime.
+
+    This class instead creates the ``test`` schema **once per process** (the first
+    test class to run migrates and seeds it, committed outside any transaction so it
+    persists) and every later class reuses it, mirroring django-tenants'
+    ``FastTenantTestCase``. It then runs Django's ``TestCase.setUpClass`` so
+    ``setUpTestData`` executes once per class inside a class-wide atomic that is
+    rolled back in ``tearDownClass``.
+
+    **Isolation is preserved.** Each test still runs inside a savepoint that is
+    rolled back afterwards, and each class's ``setUpTestData`` is rolled back when
+    the class finishes, so every class starts from the same pristine seed data and
+    no ``setUpTestData`` or per-test writes leak between classes. Since Django 3.2
+    each test also gets a fresh deep copy of objects assigned in ``setUpTestData``.
+    The one observable difference from per-class schema rebuilds is that
+    auto-increment sequences are **not** reset between classes, so a test must not
+    assert a specific absolute primary-key value for objects it creates.
+
+    Caveats:
+
+    * Any state committed outside the test/class transactions *would* leak, so tests
+      must not commit (no ``TransactionTestCase`` semantics here) — the suite has no
+      such tenant tests.
+    * Under ``--keepdb`` the ``test`` schema survives between runs and is reused
+      as-is; drop the test database after changing models/migrations or the tenant
+      seed so it is rebuilt. A normal (non-``--keepdb``) run always starts fresh.
+
+    Use this as the base class for all tenant tests. Fixtures that no test mutates
+    beyond its own rolled-back transaction belong in ``setUpTestData``;
+    ``self.client = TenantClient(self.tenant)`` and ``force_login`` calls stay in
+    ``setUp``.
+
+    **Opting out of reuse.** A few kinds of test are incompatible with a shared,
+    long-lived schema and must set ``reuse_schema = False`` to get the original
+    per-class fresh-schema behavior (create + migrate + seed + drop, in a private
+    schema that never collides with the shared one):
+
+    * Tests that create *additional* tenants or exercise tenant/Site/domain
+      machinery — the persistent shared tenant would be enumerated by cross-tenant
+      signals and break them (and such tests build their own schemas anyway, so
+      they gain little from reuse).
+    * Tests that ``freeze_time`` at the class level *and* depend on the tenant's
+      seed data being created at that frozen time (the shared seed is created once,
+      at whatever the first class's clock was).
     """
+
+    # Set to False on a subclass to force the stock per-class fresh schema instead
+    # of the shared, reused one. See the class docstring for when that's required.
+    reuse_schema = True
+
+    @classmethod
+    def get_test_schema_name(cls):
+        """Shared ``test`` schema when reusing; a private per-class schema otherwise."""
+        if cls.reuse_schema:
+            return super().get_test_schema_name()
+        # A unique, valid Postgres schema name per opt-out class so its fresh schema
+        # never collides with the shared "test" schema or another opt-out class.
+        name = 'test_' + re.sub(r'[^a-z0-9_]', '', cls.__name__.lower())
+        return name[:63]
+
+    @classmethod
+    def get_test_tenant_domain(cls):
+        """Shared domain when reusing; a unique per-class domain for opt-out classes."""
+        if cls.reuse_schema:
+            return super().get_test_tenant_domain()
+        # Domain is globally unique; keep opt-out classes from colliding with the
+        # persistent shared tenant's domain (which is never dropped).
+        return f'{cls.get_test_schema_name()}.test.com'
 
     @classmethod
     def setUpClass(cls):
-        """Create/migrate the test tenant, then run Django's class-level setup."""
-        # Tenant setup below is copied verbatim from django-tenants 3.10's
-        # TenantTestCase.setUpClass (which we can't call, because it both skips
-        # TestCase.setUpClass and can't have it run *before* the tenant exists).
-        cls.sync_shared()
+        """Reuse (or first create) the test tenant, then run Django's class setup."""
         cls.add_allowed_test_domain()
-        cls.tenant = get_tenant_model()(schema_name=cls.get_test_schema_name())
-        cls.setup_tenant(cls.tenant)
-        cls.tenant.save(verbosity=cls.get_verbosity())
 
-        tenant_domain = cls.get_test_tenant_domain()
-        cls.domain = get_tenant_domain_model()(tenant=cls.tenant, domain=tenant_domain)
-        cls.setup_domain(cls.domain)
-        cls.domain.save()
+        tenant_model = get_tenant_model()
+        schema_name = cls.get_test_schema_name()
+        # Opt-out classes always build fresh (their private schema won't pre-exist);
+        # reuse classes look for the shared schema a previous class already built.
+        tenant = tenant_model.objects.filter(schema_name=schema_name).first() if cls.reuse_schema else None
 
+        if tenant is None:
+            # First test class to need this schema: create, migrate, and seed it.
+            # This runs before Django's class-wide atomic is entered (below), so for
+            # reuse classes it is committed and persists for every later class; for
+            # opt-out classes it is dropped again in tearDownClass.
+            cls.sync_shared()
+            # Tenant.name is unique. The shared tenant keeps the stock empty name
+            # ('') for parity with django-tenants' TenantTestCase, but an opt-out
+            # class's fresh tenant co-exists with that persistent shared tenant, so
+            # it must take a distinct (per-schema) name to avoid a unique collision.
+            tenant = tenant_model(schema_name=schema_name, name='' if cls.reuse_schema else schema_name)
+            cls.setup_tenant(tenant)
+            tenant.save(verbosity=cls.get_verbosity())
+
+            domain = get_tenant_domain_model()(tenant=tenant, domain=cls.get_test_tenant_domain())
+            cls.setup_domain(domain)
+            domain.save()
+            cls.domain = domain
+        else:
+            # A previous test class already built the shared schema; reuse it.
+            cls.domain = get_tenant_domain_model().objects.filter(tenant=tenant).first()
+
+        cls.tenant = tenant
         connection.set_tenant(cls.tenant)
 
-        # Standard Django TestCase class setup: enters the class-wide atomic
-        # block and calls setUpTestData with the tenant schema active.
-        # super(TenantTestCase, cls) skips django-tenants' override.
+        # Clear the process-global cache before setUpTestData reads it. The cache
+        # (LocMemCache) is keyed by schema name, and the shared "test" schema keeps
+        # the same key across every class. Without a rebuild between classes there
+        # is nothing to invalidate a stale entry, so a SiteConfig cached by an
+        # earlier class — whose active_semester was rolled back with that class —
+        # would otherwise be served here and produce dangling foreign keys. See
+        # _fixture_setup for the per-test clear.
+        cache.clear()
+
+        # Standard Django TestCase class setup: enters the class-wide atomic block
+        # and calls setUpTestData with the tenant schema active. super(TenantTestCase,
+        # cls) skips django-tenants' override (which would rebuild the schema).
         super(TenantTestCase, cls).setUpClass()
+
+    def _fixture_setup(self):
+        """Start the per-test savepoint, then clear the schema-keyed cache.
+
+        Each test rolls back to a savepoint afterwards, but the process-global
+        cache is not transactional: a test that caches a SiteConfig referencing an
+        object it created (e.g. a new active Semester) would leave that reference
+        cached after its rows are rolled back, so a later test in the same reused
+        schema would read a SiteConfig pointing at a row that no longer exists.
+        Clearing here — for every test, regardless of setUp overrides — guarantees
+        each test reads cache-backed singletons fresh from its own pristine DB
+        state. (Runs in addition to any cache.clear() a test's own setUp does.)
+        """
+        super()._fixture_setup()
+        cache.clear()
 
     @classmethod
     def tearDownClass(cls):
-        """Roll back class-level data, then drop the test tenant."""
-        # Rolls back the class-wide atomic block (i.e. everything created in
-        # setUpTestData) before the schema is dropped.
+        """Roll back this class's setUpTestData; keep the shared schema, drop a private one."""
+        # Rolls back the class-wide atomic block (everything created in
+        # setUpTestData) so the next class starts from the pristine seed data.
         super(TenantTestCase, cls).tearDownClass()
 
         connection.set_schema_to_public()
+
+        if cls.reuse_schema:
+            # The shared ``test`` schema, its Tenant row, and its domain are
+            # deliberately NOT dropped so the next test class reuses them. Django
+            # destroys the whole test database at the end of the run (unless
+            # --keepdb), which removes the schema. The allowed test domain is left
+            # in ALLOWED_HOSTS because the tenant it points at still exists.
+            return
+
+        # Opt-out class: drop its private schema exactly like the stock TenantTestCase.
         cls.domain.delete()
         cls.tenant.delete(force_drop=True)
         cls.remove_allowed_test_domain()

@@ -1700,6 +1700,11 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.parent_quest = baker.make(Quest, name="Test Parent Quest")
         cls.prereq_quest = baker.make(Quest, name="Test Prereq Quest")
         cls.parent_quest.add_simple_prereqs([cls.prereq_quest])
+        # The formset's hidden `id` field identifies the existing Prereq row, so
+        # tests must post that Prereq's own pk. It only coincided with
+        # parent_quest.pk on a fresh schema (aligned sequences); on a reused
+        # schema the two diverge, so capture the real value here.
+        cls.existing_prereq = cls.parent_quest.prereqs().first()
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
@@ -1749,7 +1754,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                 "prereq_count": '1',
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
-                "id": f'{self.parent_quest.pk}'
+                "id": f'{self.existing_prereq.pk}'
             },
         ]
 
@@ -1775,7 +1780,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                 "prereq_count": '1',
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
-                "id": f'{self.parent_quest.pk}',
+                "id": f'{self.existing_prereq.pk}',
                 "DELETE": 'on',
             },
         ]
@@ -1806,14 +1811,14 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                 "prereq_count": '3',
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
-                "id": f'{self.parent_quest.pk}'
+                "id": f'{self.existing_prereq.pk}'
             },
             {
                 "prereq_object": f"{ct.id}-{new_quest_2.id}",
                 "prereq_count": '1',
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
-                "id": f'{self.parent_quest.pk}'
+                "id": f'{self.existing_prereq.pk}'
             },
         ]
 
