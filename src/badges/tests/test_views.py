@@ -365,6 +365,33 @@ class BadgeViewTests(ViewTestUtilsMixin, TenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertFalse(any(grant_url in m for m in messages))
 
+    def test_badge_prereqs_update__no_change_is_noop(self):
+        """Saving a badge's prereqs form without adding or changing anything (only the
+        empty extra form, untouched) must not report an update or show the grant-check
+        prompt (issue #1980). test_badge is published, so a broken guard would show both.
+        """
+        self.client.force_login(self.test_teacher)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        # the single extra form as the browser renders it untouched: no prereq_object, and
+        # the count fields at their rendered defaults -> the form is unchanged/empty
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MIN_NUM_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        self.assertRedirects(response, self.test_badge.get_absolute_url())
+        messages = [str(m) for m in response.wsgi_request._messages]
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
+        self.assertFalse(any(grant_url in m for m in messages))
+
     def test_scape_update_message_on_update_delete(self):
         """ Checks if delete and update function gives a success message when a badge is related to map """
         # setup
