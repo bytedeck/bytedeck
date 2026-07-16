@@ -296,10 +296,16 @@ pulls jobs from GitHub.
 3. **`.env` + Docker** are already set up on the host from the manual-deploy
    days; nothing extra is needed.
 
-**Optional — require approval for production.** The jobs use GitHub
-*Environments* (`production` / `staging`). Add a *required reviewers* rule to the
-`production` environment (repo *Settings → Environments*) if you want prod
-deploys to wait for a manual click.
+**Production deploys require manual approval.** The jobs use GitHub
+*Environments* (`production` / `staging`), and the `production` environment has
+a *required reviewers* rule — so a `master` push still runs CI automatically,
+but the deploy job then pauses with "Waiting for review" until a reviewer
+approves it in the Actions UI (*Review deployments → production → Approve and
+deploy*). Staging has no such rule and deploys fully automatically.
+
+One-time settings for this rule (repo *Settings → Environments → production*):
+enable **Required reviewers** (add the maintainer), and restrict **Deployment
+branches** to `master` so no other branch can use the production environment.
 
 **Safety notes:** `git checkout -B` resets tracked files to the tested commit —
 untracked files like `.env` and media are preserved, but don't keep local edits
