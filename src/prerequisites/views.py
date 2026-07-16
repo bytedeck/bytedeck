@@ -44,6 +44,13 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
         return self.ObjectPrereqFormset(**self.get_form_kwargs(), instance=self.object)
 
     def form_valid(self, form):
+        # `form` is the prereq formset. If nothing actually changed (e.g. the teacher
+        # hit Save without editing anything, or removed the always-present empty "extra"
+        # form), skip the save so we don't claim the prerequisites were updated or trigger
+        # a needless map regeneration. Issue #1980.
+        if not form.has_changed():
+            return HttpResponseRedirect(self.get_success_url())
+
         form.save()
 
         messages.success(
