@@ -22,9 +22,6 @@ server {
 
     server_name ${DOMAIN} *.${DOMAIN};
 
-    resolver 8.8.8.8 8.8.4.4 valid=300s;
-    resolver_timeout 5s;
-
     ## Deny illegal Host headers
     if ($host !~* ^(${DOMAIN}|.+\.${DOMAIN})$ ) {
         return 444;
@@ -104,12 +101,12 @@ server {
     # HSTS (ngx_http_headers_module is required) (63072000 seconds)
     add_header Strict-Transport-Security "max-age=63072000" always;
 
-    # OCSP stapling
-    ssl_stapling on;
-    ssl_stapling_verify on;
-
-    # verify chain of trust of OCSP response using Root CA and Intermediate certs
-    ssl_trusted_certificate /etc/letsencrypt/live/${DOMAIN}/chain.pem;
+    # OCSP stapling intentionally NOT configured: Let's Encrypt shut down its
+    # OCSP responders in 2025 (in favour of CRLs), so its certificates carry no
+    # OCSP URL and "ssl_stapling on" only produced a startup warning
+    # ('"ssl_stapling" ignored, no OCSP responder URL in the certificate').
+    # The `resolver` directive that existed solely for OCSP fetching was
+    # removed along with it.
 
     # GZIP SETTINGS: https://www.nginx.com/blog/help-the-world-by-healing-your-nginx-configuration/#Enabling-Gzip-Compression-for-HTML-CSS-and-JavaScript-Files
     gzip on;
