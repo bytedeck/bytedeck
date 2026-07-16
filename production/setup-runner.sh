@@ -29,9 +29,17 @@ RUNNER_DIR="${RUNNER_DIR:-$HOME/actions-runner}"
 MARKER="$RUNNER_DIR/.bytedeck-runner-setup-version"
 REPO_URL="https://github.com/bytedeck/bytedeck"
 
+svc() {
+    # Always run svc.sh with the systemd pager disabled: svc.sh shells out to
+    # `systemctl status`, which on a TTY opens an interactive pager (less) and
+    # freezes the deploy until 'q' is pressed. An empty SYSTEMD_PAGER is
+    # equivalent to systemctl --no-pager.
+    (cd "$RUNNER_DIR" && sudo env SYSTEMD_PAGER= SYSTEMD_LESS= ./svc.sh "$@")
+}
+
 service_running() {
     # svc.sh proxies systemctl status: exit 0 = active.
-    (cd "$RUNNER_DIR" && sudo ./svc.sh status >/dev/null 2>&1)
+    svc status >/dev/null 2>&1
 }
 
 # --- Fast path: already set up and current ----------------------------------
@@ -41,14 +49,14 @@ if [ -f "$MARKER" ] && [ "$(cat "$MARKER")" = "$SETUP_VERSION" ]; then
         exit 0
     fi
     echo "Deploy runner: configured but service not running -- starting it."
-    (cd "$RUNNER_DIR" && sudo ./svc.sh start)
+    svc start
     exit 0
 fi
 
 # --- Adopt a runner that was configured manually -----------------------------
 if [ -f "$RUNNER_DIR/.runner" ]; then
     echo "Deploy runner: existing configuration found in $RUNNER_DIR -- adopting it."
-    service_running || (cd "$RUNNER_DIR" && sudo ./svc.sh start)
+    service_running || svc start
     echo "$SETUP_VERSION" > "$MARKER"
     exit 0
 fi
@@ -112,8 +120,8 @@ tar xzf runner.tar.gz && rm runner.tar.gz
     --work _work
 
 # Install as a systemd service running as this user, so it survives reboots.
-sudo ./svc.sh install "$(whoami)"
-sudo ./svc.sh start
+svc install "$(whoami)"
+svc start
 
 echo "$SETUP_VERSION" > "$MARKER"
 echo ""
