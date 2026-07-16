@@ -18,7 +18,7 @@ django-recaptcha>=4.0,<4.2  # 4.0 renamed the package module from `captcha` to `
 django-redis>=6.0,<7.0  # 7.0+ requires Django >= 5.2
 django-resized>=0.3.11,<1.1
 django-select2>=8.4,<8.5
-django-storages[boto3]>=1.14,<2
+django-storages[boto3]>=1.14.6,<2
 django-summernote>=0.8,<0.9
 django-taggit>=6.1,<7.0
 django-tenants>=3.10,<3.11
