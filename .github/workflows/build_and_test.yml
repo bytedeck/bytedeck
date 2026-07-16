@@ -18,8 +18,15 @@ jobs:
         run: docker compose up -d
       - name: Check running containers
         run: docker ps -a
+      # The `docker compose run` steps below all use --no-deps: without it,
+      # `run` re-evaluates the service's depends_on and can RECREATE the db
+      # container while the web container (from `up -d` above) is still running
+      # its startup migrations -- killing web, so the later `docker compose
+      # exec web` fails with "service 'web' is not running". Everything these
+      # one-off containers need is already up, so never let `run` touch the
+      # rest of the stack. --rm stops them piling up as exited containers.
       - name: Check for potential django problems
-        run: docker compose run web python src/manage.py check
+        run: docker compose run --rm --no-deps web python src/manage.py check
       - name: Check production deployment security settings
         # Exercises the DEBUG=off (production/staging) config path so the
         # SECURE_*/cookie-security settings can't silently regress. Overrides
@@ -28,12 +35,12 @@ jobs:
         # setdefault semantics). --fail-level WARNING turns the deploy checks
         # into a hard gate.
         run: >
-          docker compose run --rm
+          docker compose run --rm --no-deps
           -e DEBUG=False
           -e SECRET_KEY=ci-deploy-check-only-not-a-real-secret-key-0123456789abcdef
           web python src/manage.py check --deploy --fail-level WARNING
       - name: Check for missing migrations
-        run: docker compose run web python src/manage.py makemigrations --check --dry-run
+        run: docker compose run --rm --no-deps web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
         run: |
           docker compose exec -T web coverage run --parallel-mode src/manage.py test src

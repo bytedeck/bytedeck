@@ -60,15 +60,40 @@ Services started in production:
 | `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
 | `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
 | `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
+| `redis`       | Celery broker + Django cache. Internal-only (no published port); see [Redis](#redis). |
 
-Postgres (RDS) and Redis are **not** compose services in production — they are
-reached over the network via the `POSTGRES_*` / `REDIS_*` settings in `.env`.
+Postgres runs on **AWS RDS** (not a compose service), reached via the
+`POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
+above, reached via `REDIS_HOST` / `REDIS_PORT`.
+
+The shared service config lives in `docker-compose.yml`; the AWS file layers
+production concerns on top. In production every service additionally has
+**`restart: unless-stopped`** (a crashed container comes back automatically,
+including after a host reboot). Restart policies are deliberately
+production-only — in development a crashed process should stay down and
+visible, not quietly loop-restart. **Healthchecks** are shared (defined in
+`docker-compose.yml`, so development gets them too):
+
+- `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
+  to cover the `migrate_schemas`/`collectstatic` startup run.
+- `celery`: `celery inspect ping` against the worker over the broker — catches
+  hung/disconnected workers, not just dead processes.
+- `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
+  beat silently stops all periodic tasks.
+- `redis`: `redis-cli ping`.
+
+Check health at a glance with `docker compose ps` (the STATUS column shows
+`(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
+container that turns *unhealthy* — the healthcheck is a monitoring signal, while
+`restart:` handles crashes/exits.
 
 ## Deployment runbook
 
-Deployment is **manual** (SSH to the host). There is currently no
-auto-deploy on push — see [Automating deploys](#automating-deploys-future) for
-how we could add it.
+Deploys are **automated**: merging to `staging` (staging host) or `master`
+(production host) runs CI and then, on success, a self-hosted GitHub Actions
+runner on that host runs `production/server-update.sh` — see
+[Automated deploys](#automated-deploys). You can still deploy **manually** (for a
+hotfix, or if a runner is down) by SSHing to the host:
 
 ```bash
 # On the EC2 host, as the ubuntu user:
@@ -81,12 +106,15 @@ git pull                      # master (prod) or staging (staging host)
 
 1. `docker compose ... build` the images.
 2. Copy `production/systemd/bytedeck.com.service` into `/etc/systemd/system/`.
-3. Install the certbot-renew override (see [TLS](#tls--certificates)).
-4. `systemctl daemon-reload`, then enable and **restart** `bytedeck.com.service`
-   (which runs `docker compose ... up -d`).
+3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
+   `redis-host-setup.service` host tuning (disables THP, sets
+   `vm.overcommit_memory=1` — the settings the dockerized Redis warns about).
+4. `systemctl daemon-reload`, enable + run `redis-host-setup`, then enable and
+   **restart** `bytedeck.com.service` (which runs `docker compose ... up -d`).
 5. `nginx -s reload` inside the nginx container (works around nginx sometimes
    not reconnecting to uwsgi after a restart).
-6. Tail the compose logs.
+6. Tail the compose logs when run interactively; print a recent snapshot and
+   exit when run non-interactively (e.g. from the deploy runner).
 
 The app is managed by the **`bytedeck.com.service`** systemd unit
 (`Type=oneshot`, `RemainAfterExit=yes`) so it comes back up automatically on
@@ -165,27 +193,33 @@ runs `migrate_schemas` on startup; to run migrations manually use
 Redis is the Celery **broker** (db `0`) and the Django **cache** (dbs `1`/`2`),
 addressed via `REDIS_HOST` / `REDIS_PORT` in `.env`.
 
-Currently Redis is on **AWS ElastiCache**. ElastiCache is comparatively
-expensive for this workload; running a **Redis container on the EC2 host** is a
-safe and much cheaper alternative if it is locked down. If migrating to a
-self-hosted container:
+Redis runs as the **`redis` compose service** on the EC2 host (see
+`docker-compose.prod.aws.yml`), replacing the previous **AWS ElastiCache**
+instance (much cheaper for this workload). It is locked down as follows:
 
-- **Never expose it publicly.** Keep it on the compose `backend-network` and do
-  not publish its port to the host's public interface (bind to the internal
-  network or `127.0.0.1` only). Set a `requirepass` password as defense in
-  depth.
-- **Bound its memory** with `maxmemory` so it can't OOM the box. Since the same
-  instance serves the broker *and* the cache, use `maxmemory-policy noeviction`
-  (evicting broker/beat keys under an LRU policy would silently drop queued
-  tasks); size `maxmemory` with headroom and monitor.
-- **Apply host tuning.** `production/systemd/redis-host-setup.service` already
-  exists for exactly this: it disables Transparent Huge Pages and sets
-  `vm.overcommit_memory=1` (both recommended by Redis for a containerized
-  server). Enable it (`systemctl enable --now redis-host-setup`) when running
-  Redis on the host.
-- **Add `restart: unless-stopped`** to the service so it recovers on crash.
-- Persistence (RDB/AOF) is optional here — a lost broker queue on restart is
-  usually acceptable for periodic tasks, and the cache is disposable.
+- **Not publicly reachable.** It has no published port and lives only on the
+  internal `backend-network`, so only the app/celery containers can reach it.
+  That is why it runs without a password in this single-host setup; if you ever
+  expose it, add a `requirepass` and put the password in the broker/cache URLs.
+- **Memory is capped** (`--maxmemory`, default `256mb`, override via
+  `REDIS_MAXMEMORY` in `.env`) so Redis can't OOM the shared app host.
+- **`--maxmemory-policy noeviction`** so queued Celery/beat tasks are never
+  silently dropped under memory pressure. If cache churn makes the cap tight,
+  raise `REDIS_MAXMEMORY`, or switch to `volatile-lru` (cache entries carry a
+  TTL and broker keys don't, so only cache keys would be evicted).
+- **Persistence is disabled** (`--save "" --appendonly no`) — the broker queue
+  and cache are both disposable, so a restart just starts empty.
+- **`restart: unless-stopped`** so it recovers on crash.
+
+Apply the host tuning once per host (see [Host tuning](#host-tuning)):
+`production/systemd/redis-host-setup.service` disables Transparent Huge Pages and
+sets `vm.overcommit_memory=1` (both recommended by Redis). Enable it with
+`systemctl enable --now redis-host-setup`.
+
+**Migrating an existing host off ElastiCache:** set `REDIS_HOST=redis` in the
+server's `.env`, then redeploy (`./production/server-update.sh`). No data
+migration is needed since the broker/cache are disposable; the ElastiCache
+instance can then be decommissioned.
 
 ## Host tuning
 
@@ -250,19 +284,68 @@ request, so it redirects every request forever).
 - **Logs:** `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs -f`
 - **Redis warnings about THP / overcommit:** enable `redis-host-setup.service`.
 
-## Automating deploys (future)
+## Automated deploys
 
-There is currently no automation on push to `master`/`staging`; deploys are
-manual. Options to automate, roughly in order of preference:
+Deploys run automatically via a **self-hosted GitHub Actions runner on each
+host**, gated on green CI. The flow follows the branch model
+(`develop → staging → master`): merging to `staging` deploys the staging host,
+merging to `master` deploys production. No inbound SSH is exposed — the runner
+pulls jobs from GitHub.
 
-1. **Self-hosted GitHub Actions runner on each EC2 host** — a workflow triggered
-   on push to `master` (prod runner) / `staging` (staging runner) runs
-   `git pull && ./production/server-update.sh`. No inbound SSH exposure; the
-   runner pulls jobs from GitHub.
-2. **GitHub Actions + SSH deploy** — a workflow SSHes into the host (dedicated
-   deploy key stored as a repo/environment secret) and runs the deploy script.
-   Simpler, but exposes an SSH path and needs the host key pinned.
+**How it works** (`.github/workflows/deploy.yml`):
 
-Either should gate on CI passing first, and staging should auto-deploy before
-production. Ask in an issue before implementing so we can decide on secrets and
-runner placement.
+- It triggers via `workflow_run` **after** the *Build and Tests* workflow
+  finishes, and only runs when that run **succeeded**, was a **push** (not a PR),
+  and was on `master` or `staging`. So nothing deploys unless CI is green.
+- `master` runs the `deploy-production` job on the runner labelled
+  `[self-hosted, production]`; `staging` runs `deploy-staging` on
+  `[self-hosted, staging]`.
+- On the host, the job checks the app dir out to the exact tested commit and runs
+  the deploy script:
+  ```bash
+  cd "$APP_DIR"                        # default /home/ubuntu/bytedeck; override with
+                                       # the BYTEDECK_APP_DIR repo variable
+  git fetch --prune origin "$BRANCH"
+  git checkout -B "$BRANCH" "$SHA"     # $SHA = the commit that passed CI
+  ./production/server-update.sh
+  ```
+- A `concurrency` group serializes deploys per environment; each job has a
+  30-minute timeout.
+
+**One-time host setup** (per host):
+
+1. **Register the runner — automated.** Run `./production/server-update.sh`
+   interactively (or `./production/setup-runner.sh` directly) as the `ubuntu`
+   user. If no runner is set up, it offers to install one: it derives the label
+   from `ROOT_DOMAIN` in `.env` (`bytedeck.com` → `production`, otherwise
+   `staging`), prompts for a short-lived registration token (repo *Settings →
+   Actions → Runners → New self-hosted runner* — copy the `--token` value),
+   installs the latest runner into `~/actions-runner`, and registers it as a
+   systemd service so it survives reboots. On every later run it detects the
+   existing install (a `SETUP_VERSION` marker file plus a service-status check)
+   and skips in one line; a manually-configured runner is adopted as-is. The
+   runner binary itself self-updates after installation. When run
+   non-interactively (e.g. by the deploy runner) it never prompts and never
+   fails the deploy — it just reports if setup is missing.
+2. **Passwordless sudo.** `server-update.sh` uses `sudo` for the systemd steps,
+   so the runner user needs passwordless sudo for them (stock EC2 Ubuntu already
+   grants the `ubuntu` user this via cloud-init — verify with `sudo -n true`).
+   Without it the deploy fails.
+3. **`.env` + Docker** are already set up on the host from the manual-deploy
+   days; nothing extra is needed.
+
+**Production deploys require manual approval.** The jobs use GitHub
+*Environments* (`production` / `staging`), and the `production` environment has
+a *required reviewers* rule — so a `master` push still runs CI automatically,
+but the deploy job then pauses with "Waiting for review" until a reviewer
+approves it in the Actions UI (*Review deployments → production → Approve and
+deploy*). Staging has no such rule and deploys fully automatically.
+
+One-time settings for this rule (repo *Settings → Environments → production*):
+enable **Required reviewers** (add the maintainer), and restrict **Deployment
+branches** to `master` so no other branch can use the production environment.
+
+**Safety notes:** `git checkout -B` resets tracked files to the tested commit —
+untracked files like `.env` and media are preserved, but don't keep local edits
+to tracked files on a host. Until the runners are registered the workflow is
+inert (the deploy jobs simply have nowhere to run).

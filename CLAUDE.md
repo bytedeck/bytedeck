@@ -23,7 +23,7 @@ pre-commit install
 
 The bare `python` / `pre-commit` commands above assume the local venv; with docker-only setups wrap them instead (e.g. `docker compose run web bash -c "python src/manage.py initdb"`).
 
-The site only works via `http://localhost:8000` (not `0.0.0.0`) because the multi-tenant architecture requires a domain name. `localhost:8000` is the public tenant; each deck is served from its own subdomain (e.g. `http://hackerspace.localhost:8000`). Admin login is `admin` / `password` (from `.env`). Create tenants at `http://localhost:8000/decks/new/`. Full stack: `docker compose up` (web, db, redis, celery, celery-beat).
+The site only works via `http://localhost:8000` (not `0.0.0.0`) because the multi-tenant architecture requires a domain name. `localhost:8000` is the public tenant; each deck is served from its own subdomain (e.g. `http://hackerspace.localhost:8000`). Admin login is `admin` / `password` (from `.env`). Create tenants at `http://localhost:8000/decks/request/new/`. Full stack: `docker compose up` (web, db, redis, celery, celery-beat).
 
 ### Tests and Linting
 
@@ -97,5 +97,7 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 * Prefer calling `model.full_clean()` before `model.save()` in new code (much existing code doesn't — match the surrounding style rather than adding drive-by `full_clean()` calls).
 * Commit messages should reference issues where applicable ("Closes #123").
 * Long-running feature branches: the Project Competencies epic (#1905) integrates on the `competencies` branch — sub-issue PRs target `competencies`, not `develop`. The feature branch is synced with `develop` (automated daily merge) and will be merged back when ready.
+* Claude Code — always watch the PRs you own: any time you open a PR, or push to a branch that has an open PR, immediately subscribe to that PR's activity with `subscribe_pr_activity`, and stay subscribed until the PR is merged or closed. This applies to every Claude session (web, CLI, or otherwise), not only the session that created the PR — if a session finds an open PR it owns and isn't yet watching, it should subscribe. While subscribed, follow up on CI failures and review comments (investigate, push fixes when confident, ask when ambiguous). Because webhook events don't cover everything (CI success, new pushes, merge-conflict transitions), schedule a periodic self check-in (e.g. via `send_later`) to re-check state until the PR is merged or closed. Stop watching only when the PR is merged/closed or the user says to stop (`unsubscribe_pr_activity`). The PR-activity subscribe/unsubscribe tools are pre-approved in `.claude/settings.json` so no session is blocked by a permission prompt.
 * Claude Code (web sessions): after pushing a branch with an open PR, subscribe to the PR's activity (`subscribe_pr_activity`) and follow up on CI failures and review comments until the PR is merged or closed.
+* Claude Code: after addressing a PR review comment (pushing the fix and/or answering the question in a reply), mark that review thread as resolved (`resolve_review_thread`) so the PR reflects its true state — don't leave addressed threads dangling for the reviewer to close.
 * Claude Code: sign off everything you post to GitHub (PR descriptions, comments, review comments, issues) with "- Claude Code".

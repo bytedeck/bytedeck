@@ -7,7 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
-from django.urls import reverse_lazy
+from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import RedirectView
@@ -26,6 +26,8 @@ from djcytoscape.models import CytoScape
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
+
+from prerequisites.tasks import grant_badge_assertions_for_badge
 
 from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
@@ -66,6 +68,79 @@ def badge_list(request):
 
 class BadgePrereqsUpdate(ObjectPrereqsFormView):
     model = Badge
+
+    def form_valid(self, form):
+        """After a teacher saves a badge's prerequisites, prompt them to run a grant-check
+        (rather than auto-granting on every edit, which could grant a badge before it is
+        ready — issue #1157). The prompt links to badge_grant_qualifying, which confirms
+        the count before granting. Only published badges can be auto-granted.
+        """
+        # Only prompt when the prereqs actually changed — a no-op save shouldn't nag the
+        # teacher to run a grant-check (issue #1980); the base view already skips its own
+        # save/messages in that case.
+        changed = form.has_changed()
+        response = super().form_valid(form)
+        if changed and self.object.published:
+            badge_name = SiteConfig.get().custom_name_for_badge.lower()
+            grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
+            # Messages render with |safe (messages-snippet.html), matching how the rest of the
+            # project builds message links; both values here are trusted (a reversed URL and the
+            # staff-set badge label). Project-wide escaping of message HTML is tracked separately.
+            messages.info(
+                self.request,
+                f'Prerequisites changed. '
+                f'<a href="{grant_url}">Check and grant this {badge_name} to qualifying students?</a>'
+            )
+        return response
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class BadgeGrantQualifying(NonPublicOnlyViewMixin, View):
+    """Teacher-initiated grant-check for a badge (issue #1157).
+
+    GET shows how many current students meet the badge's prerequisites but haven't been
+    granted it, and asks the teacher to confirm. POST queues grant_badge_assertions_for_badge,
+    which grants the badge to those students (in bunches) and notifies their teachers.
+    Granting happens on demand this way rather than automatically on prereq changes, so a
+    badge is never granted while it is still being built. Published badges only.
+    """
+    template_name = "badges/badge_grant_qualifying_confirm.html"
+
+    def get(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
+
+        context = {
+            "heading": f"Grant {SiteConfig.get().custom_name_for_badge}: {badge.name}",
+            "badge": badge,
+            "qualifying_students": badge.students_who_qualify_ungranted(),
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, badge_id):
+        badge = get_object_or_404(Badge, pk=badge_id)
+        if not badge.published:
+            return self._unpublished_redirect(request, badge)
+
+        grant_badge_assertions_for_badge.apply_async(
+            kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
+        messages.success(
+            request,
+            f'Granting {SiteConfig.get().custom_name_for_badge.lower()} "{badge}" to all '
+            'qualifying students. This may take a moment to complete.'
+        )
+        return redirect(badge.get_absolute_url())
+
+    @staticmethod
+    def _unpublished_redirect(request, badge):
+        """An unpublished badge can't be granted; warn and send the teacher back to it."""
+        messages.warning(
+            request,
+            f"This {SiteConfig.get().custom_name_for_badge.lower()} is not published, "
+            "so it cannot be granted to students."
+        )
+        return redirect(badge.get_absolute_url())
 
 
 class BadgeDelete(NonPublicOnlyViewMixin, UpdateMapMessageMixin, DeleteView):

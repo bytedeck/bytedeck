@@ -19,7 +19,7 @@ class SecureProxySSLHeaderTest(SimpleTestCase):
         so build_absolute_uri produces https:// links instead of http://."""
         request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https")
         self.assertTrue(request.is_secure())
-        self.assertTrue(request.build_absolute_uri("/decks/new/").startswith("https://"))
+        self.assertTrue(request.build_absolute_uri("/decks/request/new/").startswith("https://"))
 
     def test_forwarded_http_request_is_not_secure(self):
         """Without the https forwarded scheme, the request stays plain HTTP so the
@@ -52,3 +52,15 @@ class DeploymentSettingsGuardTest(SimpleTestCase):
         """DEBUG=False with a unique SECRET_KEY on a real domain passes the guard."""
         # Should not raise.
         _validate_deployment_settings("bytedeck.com", False, "a-real-random-secret-key")
+
+
+class DatabaseConnectionSettingsTest(SimpleTestCase):
+    """Persistent DB connections (CONN_MAX_AGE) must be paired with connection
+    health checks, otherwise a pooled connection that died while idle (RDS
+    failover, network blip, server-side timeout) surfaces as an intermittent
+    error on whatever request draws it."""
+
+    def test_conn_health_checks_enabled(self):
+        """CONN_HEALTH_CHECKS must be True so dead persistent connections are
+        detected and transparently re-established at the start of a request."""
+        self.assertTrue(settings.DATABASES["default"]["CONN_HEALTH_CHECKS"])

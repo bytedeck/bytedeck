@@ -142,6 +142,21 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         prereq.save()  # update
         self.assertEqual(task.call_count, 0)
 
+    @patch('prerequisites.tasks.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_prereq_changes_do_not_auto_grant(self, task):
+        """Creating, updating or deleting a prereq whose parent is a badge must NOT trigger
+        the badge-granting task: a teacher may tweak a badge's prereqs while building it,
+        so granting is teacher-initiated from the badge page instead (issue #1157).
+        """
+        badge = baker.make(Badge)
+        quest = baker.make('quest_manager.quest')
+        prereq = baker.make(Prereq, prereq_invert=True, parent_object=badge, prereq_object=quest)  # creation
+        prereq.prereq_invert = False
+        prereq.full_clean()
+        prereq.save()  # update
+        prereq.delete()  # deletion
+        self.assertEqual(task.call_count, 0)
+
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
     def test_update_cache_triggered_by_quest_prereq_changes(self, task):
         """Creation and Update of a prereq where the parent IS a quest should both trigger a cache update
