@@ -38,4 +38,4 @@ pytz # required by django-redis which uses pickle, even though django-redis chan
 # subdependencies
 psycopg2-binary>=2.8.6,<2.10  # since our backend is PostgreSQL, Django and django-tenants use this to interact with the db
 redis>=4.0.2,<8  # pulled in via django-redis/celery; redis-py 8+ speaks RESP3 (HELLO) which the redis 5.0 server in docker-compose doesn't support
-pillow>=10.3,<11.0  # used implicitly by django_resized (does not exist as an extra package either)
+pillow>=12.3.0,<13.0  # used implicitly by django_resized (does not exist as an extra package either)
