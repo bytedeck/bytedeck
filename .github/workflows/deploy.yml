@@ -1,0 +1,74 @@
+name: Deploy
+
+# Automated deploys via self-hosted runners, gated on green CI.
+#
+# This triggers AFTER the "Build and Tests" workflow finishes, and only deploys
+# when that run succeeded, was a push (not a PR), and was on master or staging.
+# The branch model is develop -> staging -> master: merging to staging deploys
+# the staging host, merging to master deploys production.
+#
+# INERT until a self-hosted runner is registered on each host with the matching
+# label (see production/SERVER-README.md -> "Automated deploys"):
+#   - production host: labels [self-hosted, production]
+#   - staging host:    labels [self-hosted, staging]
+
+on:
+  workflow_run:
+    workflows: ["Build and Tests"]
+    types: [completed]
+    branches: [master, staging]
+
+# The deploy only reads the repo (checkout happens on the host, not here).
+permissions:
+  contents: read
+
+# Serialize deploys per environment; never interrupt an in-flight deploy.
+concurrency:
+  group: deploy-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-production:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'master'
+    runs-on: [self-hosted, production]
+    environment: production
+    timeout-minutes: 30
+    steps:
+      - name: Deploy the tested commit to production
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          # Override with a BYTEDECK_APP_DIR repo variable if the checkout lives elsewhere.
+          APP_DIR: ${{ vars.BYTEDECK_APP_DIR || '/home/ubuntu/bytedeck' }}
+        run: |
+          set -euo pipefail
+          echo "Deploying $SHA ($BRANCH) in $APP_DIR"
+          cd "$APP_DIR"
+          git fetch --prune origin "$BRANCH"
+          git checkout -B "$BRANCH" "$SHA"
+          ./production/server-update.sh
+
+  deploy-staging:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'staging'
+    runs-on: [self-hosted, staging]
+    environment: staging
+    timeout-minutes: 30
+    steps:
+      - name: Deploy the tested commit to staging
+        env:
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          APP_DIR: ${{ vars.BYTEDECK_APP_DIR || '/home/ubuntu/bytedeck' }}
+        run: |
+          set -euo pipefail
+          echo "Deploying $SHA ($BRANCH) in $APP_DIR"
+          cd "$APP_DIR"
+          git fetch --prune origin "$BRANCH"
+          git checkout -B "$BRANCH" "$SHA"
+          ./production/server-update.sh
