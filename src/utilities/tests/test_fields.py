@@ -88,3 +88,57 @@ class RestrictedFileFormFieldTest(TenantTestCase):
 
         # ensure content type is set correctly
         self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
+
+
+class AllowedGFKChoiceFieldRebuildTest(TenantTestCase):
+    """Regression tests for AllowedGFKChoiceField rebuilding its choices on copy.
+
+    AllowedGFKChoiceField resolves its allowed models from the content-types
+    table when the field object is constructed. Form fields are constructed at
+    import time (when the form class body runs), which can happen before the
+    database/tenant schema is ready -- e.g. while the test runner imports test
+    modules to collect them -- leaving the field with an empty, all-invalid
+    choice list cached for the whole process. Django copies declared fields into
+    each form instance, so the field must rebuild its choices on deepcopy for
+    forms to accept valid selections regardless of import timing.
+    """
+
+    def test_deepcopy_rebuilds_empty_import_time_queryset(self):
+        """A field left empty at construction repopulates its choices when copied."""
+        import copy
+
+        from prerequisites.forms import PrereqGFKChoiceField
+        from prerequisites.models import IsAPrereqMixin
+
+        field = PrereqGFKChoiceField()
+        # Simulate the import-time failure mode: the allowed-models lookup came
+        # back empty (e.g. contenttypes not queryable when the field was built).
+        field.queryset = QuerySetSequence()
+        self.assertEqual(list(field.queryset.get_querysets()), [])
+
+        # Django copies declared fields into each form instance
+        # (BaseForm.__init__ deep-copies base_fields); the copy must rebuild
+        # its choices against the live schema.
+        copied = copy.deepcopy(field)
+        models = [qs.model for qs in copied.queryset.get_querysets()]
+
+        self.assertTrue(models, "deepcopy should have rebuilt a non-empty choice list")
+        self.assertEqual(models, IsAPrereqMixin.all_registered_model_classes())
+
+    def test_form_instance_has_valid_choices_even_if_declared_field_is_empty(self):
+        """A form using the field accepts a valid GFK selection through its copied field."""
+        import copy
+
+        from prerequisites.forms import PrereqFormInline, PrereqGFKChoiceField
+
+        # Force the declared (import-time) field to be empty, then confirm a form
+        # instance -- which deep-copies that field -- still resolves real choices.
+        empty_field = PrereqGFKChoiceField()
+        empty_field.queryset = QuerySetSequence()
+
+        form_field = copy.deepcopy(empty_field)
+        self.assertTrue([qs.model for qs in form_field.queryset.get_querysets()])
+
+        # And a real form built from the declared fields resolves choices too.
+        form = PrereqFormInline()
+        self.assertTrue([qs.model for qs in form.fields['prereq_object'].queryset.get_querysets()])

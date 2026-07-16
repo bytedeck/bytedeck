@@ -31,7 +31,19 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
         Profile.objects.get_or_create(user=self.test_teacher)
         Profile.objects.get_or_create(user=self.test_student1)
 
-        self.map = baker.make('djcytoscape.CytoScape')
+        self.quest_ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        # Pin this map's initial object to a dedicated quest. baker.make would
+        # otherwise fill initial_content_type/initial_object_id with random
+        # values that could (rarely, depending on baker's RNG state across a
+        # multi-app run) collide with the object a POST test submits, which the
+        # CytoscapeGFKChoiceField then excludes as "already in use" -- making the
+        # form invalid only on unlucky orderings.
+        self.map_initial_quest = baker.make('quest_manager.Quest')
+        self.map = baker.make(
+            'djcytoscape.CytoScape',
+            initial_content_type=self.quest_ct,
+            initial_object_id=self.map_initial_quest.id,
+        )
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
@@ -99,9 +111,12 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.test_teacher)
 
-        # generate form data
-        content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
-        object_ = content_type.model_class().objects.first()
+        # A dedicated, freshly-created quest as the initial object: it is not yet
+        # used by any map, so the CytoscapeGFKChoiceField won't exclude it. Using
+        # an unordered .objects.first() here made the test depend on which quest
+        # happened to be first and whether it was already a map's initial object.
+        content_type = self.quest_ct
+        object_ = baker.make('quest_manager.Quest')
 
         form_data = generate_form_data(model_form=GenerateQuestMapForm, name='New Name')
         form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'})
@@ -129,9 +144,10 @@ class ViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         self.client.force_login(self.test_teacher)
 
-        # generate form data
-        content_type = ContentType.objects.filter(CytoScape.ALLOWED_INITIAL_CONTENT_TYPES).first()
-        object_ = content_type.model_class().objects.first()
+        # A dedicated quest (not used as any other map's initial object) so the
+        # CytoscapeGFKChoiceField accepts it; see test_ScapeGenerateMap__POST.
+        content_type = self.quest_ct
+        object_ = baker.make('quest_manager.Quest')
 
         form_data = generate_form_data(model_form=QuestMapForm, name='Updated Name')
         form_data.update({'initial_content_object': f'{content_type.id}-{object_.id}'})
