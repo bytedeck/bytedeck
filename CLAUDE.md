@@ -98,4 +98,5 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 * Commit messages should reference issues where applicable ("Closes #123").
 * Long-running feature branches: the Project Competencies epic (#1905) integrates on the `competencies` branch — sub-issue PRs target `competencies`, not `develop`. The feature branch is synced with `develop` (automated daily merge) and will be merged back when ready.
 * Claude Code (web sessions): after pushing a branch with an open PR, subscribe to the PR's activity (`subscribe_pr_activity`) and follow up on CI failures and review comments until the PR is merged or closed.
+* Claude Code: after addressing a PR review comment (pushing the fix and/or answering the question in a reply), mark that review thread as resolved (`resolve_review_thread`) so the PR reflects its true state — don't leave addressed threads dangling for the reviewer to close.
 * Claude Code: sign off everything you post to GitHub (PR descriptions, comments, review comments, issues) with "- Claude Code".

@@ -60,9 +60,32 @@ Services started in production:
 | `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
 | `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
 | `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
+| `redis`       | Celery broker + Django cache. Internal-only (no published port); see [Redis](#redis). |
 
-Postgres (RDS) and Redis are **not** compose services in production — they are
-reached over the network via the `POSTGRES_*` / `REDIS_*` settings in `.env`.
+Postgres runs on **AWS RDS** (not a compose service), reached via the
+`POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
+above, reached via `REDIS_HOST` / `REDIS_PORT`.
+
+The shared service config lives in `docker-compose.yml`; the AWS file layers
+production concerns on top. In production every service additionally has
+**`restart: unless-stopped`** (a crashed container comes back automatically,
+including after a host reboot). Restart policies are deliberately
+production-only — in development a crashed process should stay down and
+visible, not quietly loop-restart. **Healthchecks** are shared (defined in
+`docker-compose.yml`, so development gets them too):
+
+- `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
+  to cover the `migrate_schemas`/`collectstatic` startup run.
+- `celery`: `celery inspect ping` against the worker over the broker — catches
+  hung/disconnected workers, not just dead processes.
+- `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
+  beat silently stops all periodic tasks.
+- `redis`: `redis-cli ping`.
+
+Check health at a glance with `docker compose ps` (the STATUS column shows
+`(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
+container that turns *unhealthy* — the healthcheck is a monitoring signal, while
+`restart:` handles crashes/exits.
 
 ## Deployment runbook
 
@@ -165,27 +188,33 @@ runs `migrate_schemas` on startup; to run migrations manually use
 Redis is the Celery **broker** (db `0`) and the Django **cache** (dbs `1`/`2`),
 addressed via `REDIS_HOST` / `REDIS_PORT` in `.env`.
 
-Currently Redis is on **AWS ElastiCache**. ElastiCache is comparatively
-expensive for this workload; running a **Redis container on the EC2 host** is a
-safe and much cheaper alternative if it is locked down. If migrating to a
-self-hosted container:
+Redis runs as the **`redis` compose service** on the EC2 host (see
+`docker-compose.prod.aws.yml`), replacing the previous **AWS ElastiCache**
+instance (much cheaper for this workload). It is locked down as follows:
 
-- **Never expose it publicly.** Keep it on the compose `backend-network` and do
-  not publish its port to the host's public interface (bind to the internal
-  network or `127.0.0.1` only). Set a `requirepass` password as defense in
-  depth.
-- **Bound its memory** with `maxmemory` so it can't OOM the box. Since the same
-  instance serves the broker *and* the cache, use `maxmemory-policy noeviction`
-  (evicting broker/beat keys under an LRU policy would silently drop queued
-  tasks); size `maxmemory` with headroom and monitor.
-- **Apply host tuning.** `production/systemd/redis-host-setup.service` already
-  exists for exactly this: it disables Transparent Huge Pages and sets
-  `vm.overcommit_memory=1` (both recommended by Redis for a containerized
-  server). Enable it (`systemctl enable --now redis-host-setup`) when running
-  Redis on the host.
-- **Add `restart: unless-stopped`** to the service so it recovers on crash.
-- Persistence (RDB/AOF) is optional here — a lost broker queue on restart is
-  usually acceptable for periodic tasks, and the cache is disposable.
+- **Not publicly reachable.** It has no published port and lives only on the
+  internal `backend-network`, so only the app/celery containers can reach it.
+  That is why it runs without a password in this single-host setup; if you ever
+  expose it, add a `requirepass` and put the password in the broker/cache URLs.
+- **Memory is capped** (`--maxmemory`, default `256mb`, override via
+  `REDIS_MAXMEMORY` in `.env`) so Redis can't OOM the shared app host.
+- **`--maxmemory-policy noeviction`** so queued Celery/beat tasks are never
+  silently dropped under memory pressure. If cache churn makes the cap tight,
+  raise `REDIS_MAXMEMORY`, or switch to `volatile-lru` (cache entries carry a
+  TTL and broker keys don't, so only cache keys would be evicted).
+- **Persistence is disabled** (`--save "" --appendonly no`) — the broker queue
+  and cache are both disposable, so a restart just starts empty.
+- **`restart: unless-stopped`** so it recovers on crash.
+
+Apply the host tuning once per host (see [Host tuning](#host-tuning)):
+`production/systemd/redis-host-setup.service` disables Transparent Huge Pages and
+sets `vm.overcommit_memory=1` (both recommended by Redis). Enable it with
+`systemctl enable --now redis-host-setup`.
+
+**Migrating an existing host off ElastiCache:** set `REDIS_HOST=redis` in the
+server's `.env`, then redeploy (`./production/server-update.sh`). No data
+migration is needed since the broker/cache are disposable; the ElastiCache
+instance can then be decommissioned.
 
 ## Host tuning
 
