@@ -285,14 +285,23 @@ pulls jobs from GitHub.
 
 **One-time host setup** (per host):
 
-1. **Register the runner.** Repo *Settings → Actions → Runners → New self-hosted
-   runner*; follow the on-host steps and give it the right label — `production`
-   on the prod host, `staging` on the staging host. Run it as the `ubuntu` user
-   that owns `/home/ubuntu/bytedeck` (so `git` and `docker` work), and install it
-   as a service so it survives reboots (`sudo ./svc.sh install ubuntu && sudo ./svc.sh start`).
+1. **Register the runner — automated.** Run `./production/server-update.sh`
+   interactively (or `./production/setup-runner.sh` directly) as the `ubuntu`
+   user. If no runner is set up, it offers to install one: it derives the label
+   from `ROOT_DOMAIN` in `.env` (`bytedeck.com` → `production`, otherwise
+   `staging`), prompts for a short-lived registration token (repo *Settings →
+   Actions → Runners → New self-hosted runner* — copy the `--token` value),
+   installs the latest runner into `~/actions-runner`, and registers it as a
+   systemd service so it survives reboots. On every later run it detects the
+   existing install (a `SETUP_VERSION` marker file plus a service-status check)
+   and skips in one line; a manually-configured runner is adopted as-is. The
+   runner binary itself self-updates after installation. When run
+   non-interactively (e.g. by the deploy runner) it never prompts and never
+   fails the deploy — it just reports if setup is missing.
 2. **Passwordless sudo.** `server-update.sh` uses `sudo` for the systemd steps,
-   so the runner user needs passwordless sudo for them (a sudoers drop-in
-   allowing `systemctl`, `cp`, `mkdir`). Without it the deploy fails.
+   so the runner user needs passwordless sudo for them (stock EC2 Ubuntu already
+   grants the `ubuntu` user this via cloud-init — verify with `sudo -n true`).
+   Without it the deploy fails.
 3. **`.env` + Docker** are already set up on the host from the manual-deploy
    days; nothing extra is needed.
 

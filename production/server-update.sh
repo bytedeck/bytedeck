@@ -23,6 +23,11 @@ sudo cp production/systemd/snap.certbot.renew.service.override.conf /etc/systemd
 # settings the dockerized Redis warns about at startup). Runs now and on boot.
 sudo cp production/systemd/redis-host-setup.service /etc/systemd/system/redis-host-setup.service
 
+# Ensure the GitHub Actions deploy runner is set up (idempotent: skips fast
+# when already installed and running; offers interactive setup when missing
+# and a human is at the terminal). Never fails the deploy.
+./production/setup-runner.sh || echo "WARN: deploy-runner setup check failed; continuing."
+
 # Load the new systemd modules
 sudo systemctl daemon-reload
 
