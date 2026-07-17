@@ -61,10 +61,12 @@ class CommentManager(models.Manager):
         if parent is not None:
             comment.parent = parent
 
+        comment.full_clean()
         comment.save(using=self._db)
 
         # add anchor target to Comment path now that id assigned when saved
         comment.path += "#comment-" + str(comment.id)
+        comment.full_clean()
         comment.save(using=self._db)
 
         return comment
@@ -131,7 +133,10 @@ class Comment(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     parent = models.ForeignKey("self", null=True, blank=True, on_delete=models.SET_NULL)
     path = models.CharField(max_length=350)
-    text = models.TextField()
+    # blank is allowed because a draft comment (e.g. a quest submission's draft_comment)
+    # is created empty before the student has typed anything; full_clean() would otherwise
+    # reject it (issue #1630).
+    text = models.TextField(blank=True)
     timestamp = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
     active = models.BooleanField(default=True)
@@ -171,10 +176,12 @@ class Comment(models.Model):
 
     def flag(self):
         self.flagged = True
+        self.full_clean()
         self.save()
 
     def unflag(self):
         self.flagged = False
+        self.full_clean()
         self.save()
 
     def get_children(self):

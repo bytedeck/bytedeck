@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from model_bakery import baker
@@ -54,6 +55,42 @@ class CommentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(comment.target_content_type, ContentType.objects.get_for_model(target))
         self.assertEqual(comment.target_object_id, target.id)
         self.assertEqual(comment.parent, parent)
+
+    def test_create_comment__empty_text_is_allowed(self):
+        """A draft comment (e.g. a quest submission's draft_comment) is created empty before
+        the student types anything, so empty text must pass full_clean() (issue #1630).
+        """
+        comment = Comment.objects.create_comment(user=baker.make(User), text="", path="/some/path/")
+        self.assertEqual(comment.text, "")
+
+    def test_create_comment__invalid_data_raises_validation_error(self):
+        """create_comment() runs full_clean(), so invalid data raises ValidationError rather
+        than being silently saved (issue #1630).
+        """
+        user = baker.make(User)
+        with self.assertRaises(ValidationError):
+            # path exceeds the model's max_length of 350
+            Comment.objects.create_comment(user=user, text="hi", path="/" + "x" * 400)
+
+
+class CommentModelValidationTest(TenantTestCase):
+    """flag()/unflag() validate the comment before saving (issue #1630)."""
+
+    def setUp(self):
+        self.comment = Comment.objects.create_comment(user=baker.make(User), text="hi", path="/some/path/")
+
+    def test_flag__runs_full_clean(self):
+        """flag() calls full_clean() before save(), so an invalid comment raises."""
+        self.comment.path = "/" + "x" * 400  # now exceeds max_length
+        with self.assertRaises(ValidationError):
+            self.comment.flag()
+
+    def test_unflag__runs_full_clean(self):
+        """unflag() calls full_clean() before save(), so an invalid comment raises."""
+        self.comment.flagged = True
+        self.comment.path = "/" + "x" * 400  # now exceeds max_length
+        with self.assertRaises(ValidationError):
+            self.comment.unflag()
 
 
 class CleanHTMLTests(TestCase):
