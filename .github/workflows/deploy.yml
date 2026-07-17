@@ -49,7 +49,9 @@ jobs:
           cd "$APP_DIR"
           git fetch --prune origin "$BRANCH"
           git checkout -B "$BRANCH" "$SHA"
-          ./production/server-update.sh
+          # Invoke via the interpreter (not ./) so a lost exec bit in git can
+          # never fail the deploy with "Permission denied" again.
+          bash production/server-update.sh
 
   deploy-staging:
     if: >-
@@ -71,4 +73,6 @@ jobs:
           cd "$APP_DIR"
           git fetch --prune origin "$BRANCH"
           git checkout -B "$BRANCH" "$SHA"
-          ./production/server-update.sh
+          # Invoke via the interpreter (not ./) so a lost exec bit in git can
+          # never fail the deploy with "Permission denied" again.
+          bash production/server-update.sh
