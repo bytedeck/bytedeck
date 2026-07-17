@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.test.utils import isolate_apps
 
 from model_bakery import baker
 
@@ -255,8 +256,15 @@ class IsAPrereqMixinTest(ByteDeckTenantTestCase):
         cts = IsAPrereqMixin.all_registered_content_types()
         self.assertEqual(cts.count(), 8)
 
+    @isolate_apps('prerequisites')
     def test_static_model_is_registered(self):
         """Any model class that implements IsAPrereqMixin returns True"""
+        # isolate_apps keeps these throwaway models out of the global app registry.
+        # Otherwise they leak process-wide: their content types get created on the
+        # next schema build (so baker.make can pick them for a GFK) and any code
+        # that iterates all models (e.g. the full_clean command) queries their
+        # non-existent tables -- an order-dependent failure that only shows up when
+        # this test runs before those.
         class TestClassRegistered(IsAPrereqMixin, models.Model):
             pass
 
