@@ -38,7 +38,16 @@ class ClearExpiredSessionsTaskTest(TenantTestCase):
     session tables grow forever."""
 
     def _make_session(self, key, expired):
-        """Create a session row in the current schema, expired or not."""
+        """Create a session row in the current schema, expired or not.
+
+        Args:
+            key (str): session_key for the new row (must be unique per schema).
+            expired (bool): True dates the session one day in the past
+                (eligible for clearsessions), False one day in the future.
+
+        Returns:
+            Session: the created django.contrib.sessions row.
+        """
         from datetime import timedelta
 
         from django.contrib.sessions.models import Session

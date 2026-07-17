@@ -11,6 +11,12 @@ class FakeTask:
     """Stand-in for the celery task object passed as `sender` to task_failure."""
 
     def __init__(self, name):
+        """Store the dotted task name the handler reads off the sender.
+
+        Args:
+            name (str): value for the `name` attribute, mirroring a real
+                celery task's registered name.
+        """
         self.name = name
 
 
@@ -25,7 +31,15 @@ class EmailAdminsOnTaskFailureTest(SimpleTestCase):
         cache.clear()
 
     def _fire(self, task_name="app.tasks.some_task", exception=None):
-        """Invoke the handler the way celery's task_failure signal would."""
+        """Invoke the handler the way celery's task_failure signal would.
+
+        Args:
+            task_name (str): name given to the FakeTask sender.
+            exception (Exception | None): exception to report; defaults to a
+                ValueError.
+
+        Returns None; assertions inspect mail.outbox afterwards.
+        """
         email_admins_on_task_failure(
             sender=FakeTask(task_name),
             task_id="abc-123",

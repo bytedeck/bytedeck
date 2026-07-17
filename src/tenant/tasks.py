@@ -39,6 +39,9 @@ def clear_expired_sessions_in_all_schemas():
     Nothing else cleans them up, so this runs daily via celery beat. The purge
     is a single DELETE per schema, so looping inline is fine even with many
     tenants.
+
+    Takes no arguments and returns None; it is invoked by celery beat, which
+    ignores the return value.
     """
     schema_names = ['public'] + list(
         get_tenant_model().objects.exclude(schema_name='public').values_list('schema_name', flat=True)

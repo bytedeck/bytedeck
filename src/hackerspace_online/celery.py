@@ -72,6 +72,17 @@ def email_admins_on_task_failure(sender=None, task_id=None, exception=None, einf
     task+exception type per hour, so a failing per-schema fan-out can't send
     hundreds of emails. Never raises: error reporting must not be able to
     take down the worker.
+
+    Arguments (all supplied by celery's task_failure signal):
+        sender: the task object that failed (its `name` attribute is used;
+            falls back to repr() if absent).
+        task_id (str): id of the failed task instance.
+        exception (Exception): the exception the task raised.
+        einfo: billiard ExceptionInfo whose str() is the traceback.
+        **kwargs: remaining signal arguments (args, kwargs, traceback);
+            accepted and ignored, as the signal contract requires.
+
+    Returns None.
     """
     from django.core.cache import cache
     from django.core.mail import mail_admins
