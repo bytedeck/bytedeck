@@ -1,0 +1,29 @@
+[tool.ruff]
+# Lint settings translated from the old .flake8 (max-line-length = 150,
+# migrations excluded). The formatter (`ruff format`) is deliberately NOT
+# enabled -- this is a lint-only swap; adopting the formatter would reformat
+# the whole codebase and is a separate decision.
+line-length = 150
+extend-exclude = ["migrations"]
+target-version = "py310"
+
+[tool.ruff.lint]
+# E/W = pycodestyle, F = pyflakes (the flake8 core); B = flake8-bugbear
+# (includes B006, the flake8-mutable check); C4 = flake8-comprehensions.
+# These match the plugins the pre-commit flake8 hook already ran -- and now CI
+# enforces them too, instead of only E/W/F.
+select = ["E", "W", "F", "B", "C4"]
+ignore = [
+    # Carried over from .flake8. (Its other ignores -- W503, W504, E126,
+    # E216 -- are rules ruff never implemented, so they simply disappear.)
+    "W291", # trailing whitespace
+    "W293", # whitespace on blank line
+    # Bugbear/comprehensions findings grandfathered to keep this swap
+    # zero-churn on src/; worth burning down in a follow-up PR.
+    "B017", # assert-raises-exception (too broad an assertRaises)
+    "B018", # useless-expression
+    "B034", # re.sub positional flags args
+    "B904", # raise-without-from-inside-except
+    "B905", # zip() without explicit strict=
+    "C420", # unnecessary dict comprehension over an iterable
+]

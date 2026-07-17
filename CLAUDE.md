@@ -29,7 +29,7 @@ The site only works via `http://localhost:8000` (not `0.0.0.0`) because the mult
 
 ```bash
 # Full test suite + style check (expected before every commit/PR)
-python src/manage.py test src && flake8 src
+python src/manage.py test src && ruff check src
 
 # Faster: parallel, stop on first failure. Caveat: when a test fails under --parallel,
 # the runner can crash with "TypeError: cannot pickle 'traceback' object" and hide the
@@ -89,7 +89,7 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 
 ## Code Style & PR Conventions
 
-* Flake8 with `max-line-length = 150`; migrations excluded (config in `.flake8`). Enforced via pre-commit hooks (`.pre-commit-config.yaml`: trailing-whitespace, pyupgrade, autoflake, flake8 with bugbear/comprehensions/mutable plugins).
+* Ruff (lint only, no formatter) with `line-length = 150`; migrations excluded (config in `pyproject.toml` `[tool.ruff]`: pycodestyle/pyflakes plus bugbear and comprehensions rules). Enforced via pre-commit hooks (`.pre-commit-config.yaml`: trailing-whitespace, pyupgrade, ruff with `--fix`).
 * Test naming convention: `test_method_or_class_name__specific_case_being_tested`, e.g. `test_end_active_semester__staff()`. All tests require a useful docstring.
 * Bug fixes must be test-driven: include a test that fails without the fix.
 * New server-side code is expected to be 100% covered (all logical branches); verify with coverage before a PR.

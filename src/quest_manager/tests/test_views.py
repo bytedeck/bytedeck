@@ -2657,20 +2657,22 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, TenantTestCase):
     def test_ajax_returns_correct_count(self):
         """ Should return the number of pending submissions for the quest"""
         self.client.force_login(self.test_teacher)
-        # only submissions that are "completed" but not "approved" should be counted
-        submissions = [
-            baker.make(QuestSubmission, is_completed=True, is_approved=False),
-            baker.make(QuestSubmission, is_completed=True, is_approved=False),
-            baker.make(QuestSubmission, is_completed=False, is_approved=False),
-            baker.make(QuestSubmission, is_completed=False, is_approved=False),
-            baker.make(QuestSubmission, is_completed=True, is_approved=True),
-            baker.make(QuestSubmission, is_completed=False, is_approved=True),
-        ]
-        for sub in submissions:
-            sub.semester = SiteConfig.get().active_semester
-            sub.user = self.test_student
-            sub.quest = self.quest
-            sub.save()
+        # Only submissions that are "completed" but not "approved" should be counted.
+        # A user can have at most one *in-progress* submission per quest/semester
+        # (issue #1345), so the in-progress "distractor" rows (which must NOT be
+        # counted) each use a distinct quest; the counted/approved rows stay on
+        # self.quest.
+        active = SiteConfig.get().active_semester
+        common = {"user": self.test_student, "semester": active}
+        # completed but not approved -> counted (2)
+        baker.make(QuestSubmission, quest=self.quest, is_completed=True, is_approved=False, **common)
+        baker.make(QuestSubmission, quest=self.quest, is_completed=True, is_approved=False, **common)
+        # completed and approved -> not counted
+        baker.make(QuestSubmission, quest=self.quest, is_completed=True, is_approved=True, **common)
+        # in-progress (not completed) -> not counted; distinct quests to respect the constraint
+        baker.make(QuestSubmission, quest=baker.make(Quest), is_completed=False, is_approved=False, **common)
+        baker.make(QuestSubmission, quest=baker.make(Quest), is_completed=False, is_approved=False, **common)
+        baker.make(QuestSubmission, quest=baker.make(Quest), is_completed=False, is_approved=True, **common)
 
         response = self.client.post(
             reverse('quests:ajax_submission_count'),
