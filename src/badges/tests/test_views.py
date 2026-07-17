@@ -494,8 +494,8 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         ''' If not logged in then all views should redirect to login page '''
         self.assertRedirectsLogin('badges:badge_types')
         self.assertRedirectsLogin('badges:badge_type_create')
-        self.assertRedirectsLogin('badges:badge_type_update', args=[1])
-        self.assertRedirectsLogin('badges:badge_type_delete', args=[1])
+        self.assertRedirectsLogin('badges:badge_type_update', args=[self.badge_type.pk])
+        self.assertRedirectsLogin('badges:badge_type_delete', args=[self.badge_type.pk])
 
     def test_all_page_status_codes_for_students(self):
         ''' If not logged in then all views should redirect to 403 '''
@@ -504,8 +504,8 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Staff access only
         self.assert403('badges:badge_types')
         self.assert403('badges:badge_type_create')
-        self.assert403('badges:badge_type_update', args=[1])
-        self.assert403('badges:badge_type_delete', args=[1])
+        self.assert403('badges:badge_type_update', args=[self.badge_type.pk])
+        self.assert403('badges:badge_type_delete', args=[self.badge_type.pk])
 
     def test_BadgeTypeList_view(self):
         """ Admin should be able to view badge type list """
@@ -534,9 +534,9 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             'name': 'My Updated Name',
             'fa_icon': 'fa-bath',
         }
-        response = self.client.post(reverse('badges:badge_type_update', args=[1]), data=data)
+        response = self.client.post(reverse('badges:badge_type_update', args=[self.badge_type.pk]), data=data)
         self.assertRedirects(response, reverse('badges:badge_types'))
-        test_badgetype = BadgeType.objects.get(id=1)
+        test_badgetype = BadgeType.objects.get(id=self.badge_type.pk)
         self.assertEqual(test_badgetype.name, data['name'])
         self.assertEqual(test_badgetype.fa_icon, data['fa_icon'])
 

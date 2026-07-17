@@ -1,5 +1,6 @@
 from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
 
 from model_bakery import baker
@@ -246,9 +247,15 @@ class UserDeletionTest(ByteDeckTenantTestCase):
 
         # Create related objects for student user
         cls.badge_assertion = baker.make('BadgeAssertion', user=cls.student)
-        cls.comment = baker.make('Comment', user=cls.student)
+        # Give the GFK-bearing models explicit, real targets so baker doesn't fill
+        # them with a random (possibly table-less) model under the reused schema.
+        user_ct = ContentType.objects.get_for_model(User)
+        cls.comment = baker.make('Comment', user=cls.student, target_content_type=None)
         cls.course_student = baker.make('CourseStudent', user=cls.student)
-        cls.notification = baker.make('Notification', recipient=cls.student)
+        cls.notification = baker.make(
+            'Notification', recipient=cls.student,
+            sender_content_type=user_ct, sender_object_id=cls.student.id,
+        )
         cls.portfolio = baker.make('Portfolio', user=cls.student)
         cls.quest_submission = baker.make('QuestSubmission', user=cls.student)
 

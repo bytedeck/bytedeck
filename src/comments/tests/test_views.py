@@ -19,9 +19,16 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.student = baker.make(User)
         cls.teacher = baker.make(User, is_staff=True)
         cls.announcement = baker.make('announcements.Announcement')
-        # create a test comment on the test announcement
-        cls.comment = baker.make('comments.Comment', user=cls.student, path=cls.announcement.get_absolute_url())
-        cls.comment_decoy = baker.make('comments.Comment')
+        # create a test comment on the test announcement. Null the GFK explicitly
+        # (these comments are attached by path, not a target object) so baker
+        # doesn't fill target_content_type with a random -- possibly table-less --
+        # model, which would make str()/rendering non-deterministic under a
+        # reused schema.
+        cls.comment = baker.make(
+            'comments.Comment', user=cls.student, path=cls.announcement.get_absolute_url(),
+            target_content_type=None,
+        )
+        cls.comment_decoy = baker.make('comments.Comment', target_content_type=None)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)

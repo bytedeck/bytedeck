@@ -16,7 +16,7 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
         cls.course = baker.make(Course)
-        cls.active_semester = SiteConfig().get().active_semester
+        cls.active_semester = SiteConfig.get().active_semester
 
         # staff
         cls.staff_set = list(User.objects.filter(is_staff=True)) + [baker.make(User, username='teacher', is_staff=True)]

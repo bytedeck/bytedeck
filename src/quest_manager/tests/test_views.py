@@ -1818,7 +1818,8 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                 "prereq_count": '1',
                 # "or_prereq_object": None,
                 "or_prereq_count": '1',
-                "id": f'{self.existing_prereq.pk}'
+                # An extra (new) form beyond INITIAL_FORMS=1: no existing id.
+                "id": ''
             },
         ]
 
@@ -1863,6 +1864,9 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         cls.quest = baker.make(Quest, name="Test Quest")
         cls.quest.tags.add('tag')
+        # Capture the real tag pk -- sequences aren't reset across reused-schema
+        # classes, so the "tag" created here is not guaranteed to be pk 1.
+        cls.tag = cls.quest.tags.get(name="tag")
 
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
         cls.test_ta = User.objects.create_user('test_ta')
@@ -1873,7 +1877,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.valid_copy_form_data.update({
             # for testing
             'name': 'Test Quest - COPY',
-            'tags': [1],
+            'tags': [cls.tag.pk],
             'new_quest_prerequisite': cls.quest.id,
 
             # validation error
