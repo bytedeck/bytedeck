@@ -8,9 +8,9 @@ Save us all some time and frustration by working through these steps carefully, 
 
 ### Running Tests and Checking Code Style
 You can run tests either locally, or through the web container:
-1. This will run all the project's tests and if successful, will also check the code style using flake8 (make sure you're in your virtual environment):
-   * using venv: `python src/manage.py test src && flake8 src`
-   * using docker: `docker compose exec web bash -c "python src/manage.py test src && flake8 src"`  (assuming it's running. If not, change `exec` to `run`)
+1. This will run all the project's tests and if successful, will also check the code style using ruff (make sure you're in your virtual environment):
+   * using venv: `python src/manage.py test src && ruff check src`
+   * using docker: `docker compose exec web bash -c "python src/manage.py test src && ruff check src"`  (assuming it's running. If not, change `exec` to `run`)
 1. Tests take too long, but you can speed them up a number of ways:
    * Quit after the first error or failure, and also by running th tests in parallel to take advantage of multi-core processors:
      `python src/manage.py test src --parallel --failfast`
@@ -46,8 +46,8 @@ or to run in a local venv (assuming you have activated it), start all the docker
 1. Write tests! See Test Requirements below for important details (if you are not comfortable with test-driven development, you can also write tests after writing code instead of before).  Also see "Running Tests and Checking Code Style" section.
 1. Write code!
 1. Before committing, make sure to run tests and linting locally (this will save you the annoyance of having to clean up lots of little "oops typo!" commits).  Note that the `--failfast` and `--parallel` modes are optional and used to speed up the tests.  `--failfast` will quit as soon as one test fails, and `--parallel` will run tests in multiple processes (however if a test fails, the output might not be helpful, and you might need to run the tests again without this option to get more info on the failing test):
-   * venv: `python src/manage.py test src --failfast --parallel && flake8 src`
-   * docker: `docker compose exec web bash -c "python src/manage.py test src --failfast --parallel && flake8 src"`
+   * venv: `python src/manage.py test src --failfast --parallel && ruff check src`
+   * docker: `docker compose exec web bash -c "python src/manage.py test src --failfast --parallel && ruff check src"`
 1. Commit your changes and provide a [good commit message](https://www.freecodecamp.org/news/how-to-write-better-git-commit-messages/) (you may need to `git add .` if you created any new files that need to be tracked).  If your changes resolve a specific [issue on github](https://github.com/bytedeck/bytedeck/issues), then add "Closes #123" to the commit where 123 is the issue number. Note that if your development environment is running inside of docker and not a Python virtual environment, the pre-commit hooks won't run properly. For this reason, you will be required to run your commit command inside of docker:
    - venv: `git commit -am "Useful description of your changes; Closes #123"`
    - docker: `docker compose exec web bash -c "git commit -m 'Useful description of your changes; Closes #123'"` (ensure the commit message is enclosed in single and not double quotes)
@@ -114,7 +114,7 @@ When contributing to this repo, you need to keep in mind its multi-tenant archit
 * **Migrations**: Do NOT use the standard migrate command! If for some reason you need to manually migrate, use the `migrate_schemas` command instead (you can find docs for this and other management commands [here](https://django-tenants.readthedocs.io/en/latest/use.html?highlight=migrations#management-commands))
 
 ### Use a Consistent Coding Style
-We use Flake8 with [a few exclusions](https://github.com/timberline-secondary/hackerspace/blob/develop/src/.flake8).  These will be enforced by the pre-commit hook.
+We use [ruff](https://docs.astral.sh/ruff/) (lint only) with a few exclusions -- see `[tool.ruff]` in [pyproject.toml](pyproject.toml).  These will be enforced by the pre-commit hook.
 
 ### Advanced / Optional: Inspecting the database with pgadmin4
 Using pgadmin4 we can inspect the postgres database's schemas and tables (helpful for a sanity check sometimes!)
