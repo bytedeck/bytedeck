@@ -5,18 +5,17 @@ from django.contrib.sites.models import Site
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 from unittest.mock import patch
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
+class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         # Every test needs access to the request factory.
         # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
@@ -103,7 +102,7 @@ class ViewsTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
 
 
-class GoogleSigninViewTest(ViewTestUtilsMixin, TenantTestCase):
+class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         self.client = TenantClient(self.tenant)

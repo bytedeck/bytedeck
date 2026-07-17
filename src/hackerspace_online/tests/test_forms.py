@@ -16,16 +16,17 @@ from profile_manager.models import email_confirmed_handler
 
 from siteconfig.models import SiteConfig
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from hackerspace_online.forms import CustomSignupForm, CustomSocialAccountSignupForm, PublicContactForm, CustomLoginForm
 
 User = get_user_model()
 
 
-class CustomSignUpFormTest(TenantTestCase):
+class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         pass
@@ -129,7 +130,7 @@ class CustomSignUpFormTest(TenantTestCase):
         # self.assertTrue(getattr(response.wsgi_request, 'recently_signed_up_with_email', None))
 
 
-class CustomSocialAccountSignUpFormTest(TenantTestCase):
+class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         pass
@@ -655,7 +656,7 @@ class CustomSocialAccountSignUpFormTest(TenantTestCase):
         self.assertTrue(primary_email_obj.primary)
 
 
-class CustomLoginFormTest(TenantTestCase):
+class CustomLoginFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(username='testuser', password='testuser')
@@ -753,7 +754,7 @@ class CustomLoginFormTest(TenantTestCase):
         self.user.delete()
 
 
-class PublicContactFormTest(TenantTestCase):
+class PublicContactFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         pass

@@ -1,34 +1,33 @@
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from notifications.models import Notification
 from notifications.signals import notify
 
 User = get_user_model()
 
 
-class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
+class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
 
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
 
     def test_all_notification_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -45,8 +44,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_notification_page_status_codes_for_students(self):
         # log in student1
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Accessible views:
         self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
@@ -66,8 +64,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_notification_page_status_codes_for_teachers(self):
         # log in student1
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Accessible views:
         self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
@@ -95,10 +92,12 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
         """ Marks a Notification as read via Ajax (by setting unread = FALSE)
         """
         # log in student1
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
-        notification = baker.make('notifications.Notification', recipient=self.test_student1)
+        notification = baker.make(
+            'notifications.Notification', recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
         # make sure it is unread
         self.assertTrue(notification.unread)
 
@@ -115,8 +114,7 @@ class NotificationViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_ajax(self):
         # log in student1
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         response = self.client.post(
             reverse('notifications:ajax'),

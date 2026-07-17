@@ -1,10 +1,10 @@
 
 from tags.widgets import TaggitSelect2Widget
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class TestTaggitSelect2Widget(TenantTestCase):
+class TestTaggitSelect2Widget(ByteDeckTenantTestCase):
 
     def test_get_url(self):
         widget = TaggitSelect2Widget()

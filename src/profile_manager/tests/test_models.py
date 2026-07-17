@@ -1,10 +1,12 @@
 from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
@@ -18,19 +20,20 @@ from siteconfig.models import SiteConfig
 User = get_user_model()
 
 
-class ProfileTestModel(TenantTestCase):
+class ProfileTestModel(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.user = baker.make(User)
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.user = baker.make(User)
         # Profiles are created automatically with each user, so we only need to access profiles via users
-        self.profile = self.user.profile
+        cls.profile = cls.user.profile
 
-        self.active_sem = SiteConfig.get().active_semester
+        cls.active_sem = SiteConfig.get().active_semester
 
         # Why is this required?  Why can't I just baker.make(Semester)?  For some reason when I
         # use baker.make(Semester) it tried to duplicate the pk, using pk=1 again?!
-        self.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
+        cls.inactive_sem = baker.make(Semester, pk=(SiteConfig.get().active_semester.pk + 1))
 
     def create_active_course_registration(self):
         return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem, course=baker.make('courses.Course'))
@@ -235,19 +238,26 @@ class SmartListTests(SimpleTestCase):
         self.assertEqual(smart_list(1), [1])
 
 
-class UserDeletionTest(TenantTestCase):
+class UserDeletionTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         # Create a student user to be deleted
-        self.student = baker.make(User)
+        cls.student = baker.make(User)
 
         # Create related objects for student user
-        self.badge_assertion = baker.make('BadgeAssertion', user=self.student)
-        self.comment = baker.make('Comment', user=self.student)
-        self.course_student = baker.make('CourseStudent', user=self.student)
-        self.notification = baker.make('Notification', recipient=self.student)
-        self.portfolio = baker.make('Portfolio', user=self.student)
-        self.quest_submission = baker.make('QuestSubmission', user=self.student)
+        cls.badge_assertion = baker.make('BadgeAssertion', user=cls.student)
+        # Give the GFK-bearing models explicit, real targets so baker doesn't fill
+        # them with a random (possibly table-less) model under the reused schema.
+        user_ct = ContentType.objects.get_for_model(User)
+        cls.comment = baker.make('Comment', user=cls.student, target_content_type=None)
+        cls.course_student = baker.make('CourseStudent', user=cls.student)
+        cls.notification = baker.make(
+            'Notification', recipient=cls.student,
+            sender_content_type=user_ct, sender_object_id=cls.student.id,
+        )
+        cls.portfolio = baker.make('Portfolio', user=cls.student)
+        cls.quest_submission = baker.make('QuestSubmission', user=cls.student)
 
     def test_delete_student_and_cascade(self):
         # Ensure that the related objects exist before deletion

@@ -1,4 +1,4 @@
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
 import re
@@ -9,7 +9,7 @@ from quest_manager.models import QuestSubmission
 from comments.models import Comment
 
 
-class TestSubmissionSignals(TenantTestCase):
+class TestSubmissionSignals(ByteDeckTenantTestCase):
 
     def test_pre_delete_signal(self):
         """ test the pre delete signal for QuestSubmission """

@@ -1,6 +1,6 @@
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from quest_manager.forms import (
     QuestForm,
@@ -10,10 +10,11 @@ from quest_manager.forms import (
 )
 
 
-class QuestFormTest(TenantTestCase):
+class QuestFormTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.minimal_valid_data = {
+    @classmethod
+    def setUpTestData(cls):
+        cls.minimal_valid_data = {
             "name": "Test Quest",
             "xp": 0,
             "max_repeats": 0,
@@ -76,7 +77,7 @@ class QuestFormTest(TenantTestCase):
         self.assertTrue(form.is_valid())
 
 
-class QuickReplyFormsEscapeHTMLTest(TenantTestCase):
+class QuickReplyFormsEscapeHTMLTest(ByteDeckTenantTestCase):
     """The plain-text (non-wysiwyg) reply forms are accessible to all users, so
     all HTML entered in them must be completely escaped. Regression tests for
     issue #1343 where scripts entered in the quick reply form would execute.

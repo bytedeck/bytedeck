@@ -7,12 +7,12 @@ from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.test import TestCase
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
 
-# from hackerspace_online.management.commands import find_replace
 from quest_manager.models import Quest, Category
 from tenant.models import Tenant
 
@@ -48,33 +48,6 @@ class CommandMixin:
         return out.getvalue()
 
 
-class FindReplaceTest(TestCase, CommandMixin):
-    name = "find_replace"
-
-    # def setUp(self):
-    #     self.tenant = Tenant(
-    #         domain_url='testdeck.localhost',
-    #         schema_name='testdeck',
-    #         name='testdeck'
-    #     )
-    #     self.tenant.save()
-
-    def test_tenants_all(self):
-        # Constant error, not sure why Category table is empty:
-        # django.db.utils.IntegrityError: null value in column "title" violates not-null constraint
-        # DETAIL:  Failing row contains (1, null, , t).
-        pass
-        # "All tenants"
-        # for tenant in Tenant.objects.all():
-        #     print(tenant.name)
-        # # print(tenants)
-        # # # requires
-        # # pass
-        # out = self.call_command(self.tenant.name)
-        # print(out)
-        # self.assertEqual(out, "In dry run mode (--write not passed)\n")
-
-
 class InitDbTest(TestCase, CommandMixin):
     """ Note that this is NOT a TenantTestCase
     """
@@ -101,7 +74,7 @@ class InitDbTest(TestCase, CommandMixin):
             Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
 
 
-class GenerateContentTest(TenantTestCase, CommandMixin):
+class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
     """ generate_content adds items to an existing tenant.
     Dont need extensive testing as tests exist in "test_shell_utils.py"
     """

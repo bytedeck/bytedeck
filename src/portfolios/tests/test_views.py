@@ -1,14 +1,13 @@
 from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from portfolios.models import Portfolio
 
 User = get_user_model()
@@ -35,7 +34,7 @@ def generate_test_png_file():
     return uploaded_file
 
 
-class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
+class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ url(r'^$', views.PortfolioList.as_view(), name='list'),
         url(r'^public/$', views.public_list, name='public_list'),
         url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
@@ -52,12 +51,15 @@ class PortfolioViewTests(ViewTestUtilsMixin, TenantTestCase):
         url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_student = baker.make(User)
+        cls.portfolio = baker.make('portfolios.Portfolio', user=cls.test_student)
+        cls.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=cls.portfolio)
+        cls.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=cls.test_student))
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_student = baker.make(User)
-        self.portfolio = baker.make('portfolios.Portfolio', user=self.test_student)
-        self.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=self.portfolio)
-        self.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=self.test_student))
 
     def test_all_portfolio_view_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login, EXCEPT the public list and public urls '''

@@ -6,7 +6,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
 # from siteconfig.models import SiteConfig
@@ -15,6 +14,7 @@ from quest_manager.models import Quest, Category
 
 # from django_tenants.test.client import TenantClient
 from hackerspace_online.shell_utils import generate_quests
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
 User = get_user_model()
@@ -106,9 +106,10 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         self.assertValidJSON(clean_JSON(json_str))
 
 
-class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
-    def setUp(self):
-        self.map = generate_real_primary_map()
+class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.map = generate_real_primary_map()
 
     def test_object_creation(self):
         self.element = baker.make(CytoElement)
@@ -167,9 +168,10 @@ class CytoElementModelTest(JSONTestCaseMixin, TenantTestCase):
                 element.full_clean()
 
 
-class TempCampaignNodeTest(TenantTestCase):
-    def setUp(self):
-        self.temp_campaign_node = TempCampaignNode(id_=1)
+class TempCampaignNodeTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.temp_campaign_node = TempCampaignNode(id_=1)
 
     def test_object_creation(self):
         self.assertIsInstance(self.temp_campaign_node, TempCampaignNode)
@@ -177,17 +179,21 @@ class TempCampaignNodeTest(TenantTestCase):
         self.assertEqual(str(self.temp_campaign_node), str(self.temp_campaign_node.id))
 
 
-class TempCampaignTest(TenantTestCase):
-    def setUp(self):
-        self.temp_campaign = TempCampaign(parent_node_id=1)
+class TempCampaignTest(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.temp_campaign = TempCampaign(parent_node_id=1)
 
     def test_object_creation(self):
         self.assertIsInstance(self.temp_campaign, TempCampaign)
 
 
-class CytoScapeModelTest(JSONTestCaseMixin, TenantTestCase):
-    def setUp(self):
-        self.map = generate_real_primary_map()
+class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        # tests that regenerate/mutate the map only touch the DB, which is rolled
+        # back per test, and self.map is a per-test deep copy — safe class-level fixture
+        cls.map = generate_real_primary_map()
 
     def test_object_creation(self):
         self.assertIsInstance(self.map, CytoScape)

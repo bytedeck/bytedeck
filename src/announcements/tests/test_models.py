@@ -1,12 +1,13 @@
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
 from announcements.models import Announcement
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class AnnouncementTestModel(TenantTestCase):
-    def setUp(self):
-        self.announcement = baker.make(Announcement)
+class AnnouncementTestModel(ByteDeckTenantTestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.announcement = baker.make(Announcement)
 
     def test_creation(self):
         self.assertIsInstance(self.announcement, Announcement)

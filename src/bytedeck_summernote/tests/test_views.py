@@ -1,10 +1,11 @@
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
-class TestByteDeckSummernoteView(TenantTestCase):
+
+class TestByteDeckSummernoteView(ByteDeckTenantTestCase):
     def setUp(self):
         self.client = TenantClient(self.tenant)
 

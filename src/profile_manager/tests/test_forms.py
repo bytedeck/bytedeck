@@ -1,8 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
-from django_tenants.test.cases import TenantTestCase
 
-from hackerspace_online.tests.utils import generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from profile_manager.forms import ProfileForm
 from siteconfig.models import SiteConfig
 
@@ -13,10 +12,11 @@ import dns.resolver
 User = get_user_model()
 
 
-class ProfileFormTest(TenantTestCase):
+class ProfileFormTest(ByteDeckTenantTestCase):
 
-    def setUp(self) -> None:
-        self.user = User.objects.create_user('test_student', password="test_password")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user('test_student')
 
     def test_init(self):
         # Without request

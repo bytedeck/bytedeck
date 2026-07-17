@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from hackerspace_online.shell_utils import generate_quests, generate_students
 from quest_manager.models import Quest, Category
@@ -11,7 +11,7 @@ from quest_manager.models import Quest, Category
 User = get_user_model()
 
 
-class ShellUtilsTest(TenantTestCase):
+class ShellUtilsTest(ByteDeckTenantTestCase):
     def setUp(self):
         # self.client = TenantClient(self.tenant)
         pass

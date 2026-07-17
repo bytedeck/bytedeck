@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from profile_manager.tasks import invalidate_profile_xp_cache_in_all_schemas
 from profile_manager.models import Profile
@@ -15,7 +15,7 @@ from django.test.utils import override_settings
 User = get_user_model()
 
 
-class ProfleTasksTests(TenantTestCase):
+class ProfleTasksTests(ByteDeckTenantTestCase):
     """
     Run tasks (from tenant module) asyncronously with apply()
     """

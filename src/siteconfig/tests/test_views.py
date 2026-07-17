@@ -6,10 +6,9 @@ from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.shortcuts import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 from siteconfig.forms import SiteConfigForm
@@ -20,7 +19,7 @@ from model_bakery import baker
 User = get_user_model()
 
 
-class SiteConfigViewTest(ViewTestUtilsMixin, TenantTestCase):
+class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Tests for the SiteConfig View
     """
 

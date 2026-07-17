@@ -3,26 +3,27 @@ from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django.contrib.contenttypes.models import ContentType
 from unittest import TestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification, new_notification
 
 User = get_user_model()
 
 
-class NotificationModelTest(TenantTestCase):
+class NotificationModelTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         User = get_user_model()
-        self.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
-        self.student = baker.make(User)
-        # self.assertion = baker.make(BadgeAssertion)
-        # self.badge = Recipe(Badge, xp=20).make()
-        # self.badge_assertion_recipe = Recipe(BadgeAssertion, user=self.student, badge=self.badge)
+        cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
+        cls.student = baker.make(User)
+        # cls.assertion = baker.make(BadgeAssertion)
+        # cls.badge = Recipe(Badge, xp=20).make()
+        # cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge)
 
     def test_notification_creation(self):
         notification = Notification.objects.create(
@@ -37,7 +38,10 @@ class NotificationModelTest(TenantTestCase):
         self.assertIsNotNone(str(notification))
 
     def test_mark_read(self):
-        notification = baker.make(Notification)
+        notification = baker.make(
+            Notification,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+        )
         self.assertTrue(notification.unread)
         notification.mark_read()
         self.assertFalse(notification.unread)
@@ -115,7 +119,10 @@ class NotificationModelTest(TenantTestCase):
     def test_mark_all_read__single_update_sets_unread_and_time_read(self):
         """mark_all_read marks every unread notification read and stamps time_read
         in one UPDATE (the previous two-update version left time_read unset)."""
-        baker.make(Notification, recipient=self.student, unread=True, time_read=None, _quantity=3)
+        baker.make(
+            Notification, recipient=self.student, unread=True, time_read=None, _quantity=3,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+        )
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 3)
 
         with CaptureQueriesContext(connection) as ctx:

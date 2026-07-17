@@ -1,8 +1,9 @@
 from bleach import clean  # noqa
-from django_tenants.test.cases import TenantTestCase
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class TestCSSSanitizer(TenantTestCase):
+class TestCSSSanitizer(ByteDeckTenantTestCase):
     """ByteDeck's CSSSanitizer implementation, fixes various issues"""
 
     def test_sanitize_css(self):
