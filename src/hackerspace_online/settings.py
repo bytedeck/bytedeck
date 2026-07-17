@@ -374,7 +374,14 @@ CACHES = {
         },
         'KEY_FUNCTION': 'django_tenants.cache.make_key',
         'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
-        'TIMEOUT': None,
+        # Was TIMEOUT: None (never expire). django-select2 pickles a queryset
+        # per rendered widget into this cache, so with no TTL the entries
+        # accumulate forever -- and with the production Redis capped by
+        # maxmemory + noeviction, an ever-growing cache eventually makes Redis
+        # refuse ALL writes (breaking the shared Celery broker too). 24h covers
+        # any realistic open-form lifetime (an ajax lookup after expiry just
+        # means reopening the form) while keeping the cache bounded.
+        'TIMEOUT': env.int('SELECT2_CACHE_TIMEOUT', default=60 * 60 * 24),
     }
 }
 

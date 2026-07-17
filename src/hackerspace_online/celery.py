@@ -4,6 +4,7 @@ from django.conf import settings
 
 from tenant_schemas_celery.app import CeleryApp
 from celery.schedules import crontab
+from celery.signals import task_failure
 
 # set the default Django settings module for the 'celery' program.
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'hackerspace_online.settings')
@@ -50,7 +51,53 @@ app.conf.beat_schedule = {
             "queue": "default",
         }
     },
+    "Clear expired sessions in all schemas daily task": {
+        "task": "tenant.tasks.clear_expired_sessions_in_all_schemas",
+        "schedule": crontab(minute=0, hour=2),
+        "options": {
+            "queue": "default",
+        }
+    },
 }
+
+
+@task_failure.connect
+def email_admins_on_task_failure(sender=None, task_id=None, exception=None, einfo=None, **kwargs):
+    """Email ADMINS when any celery task raises during execution.
+
+    Without this, task exceptions vanish into the worker log: no task in the
+    project configures retries, there is no result backend, and
+    CELERY_TASK_IGNORE_RESULT is on -- so a broken periodic task could fail
+    silently for weeks. Throttled via the cache to one email per
+    task+exception type per hour, so a failing per-schema fan-out can't send
+    hundreds of emails. Never raises: error reporting must not be able to
+    take down the worker.
+    """
+    from django.core.cache import cache
+    from django.core.mail import mail_admins
+
+    try:
+        task_name = getattr(sender, 'name', None) or repr(sender)
+        throttle_key = f'task-failure-emailed:{task_name}:{type(exception).__name__}'
+        # cache.add is atomic: returns False if the key already exists.
+        if not cache.add(throttle_key, True, timeout=60 * 60):
+            return
+        mail_admins(
+            subject=f'Celery task failed: {task_name}',
+            message=(
+                f'Task: {task_name}\n'
+                f'Task id: {task_id}\n'
+                f'Exception: {exception!r}\n\n'
+                f'{einfo}\n\n'
+                'Further failures of this task with the same exception type are '
+                'suppressed for 1 hour.'
+            ),
+            fail_silently=True,
+        )
+    except Exception:
+        # e.g. the cache itself is down -- swallow it; the original task
+        # failure is already in the worker log.
+        pass
 
 
 # @app.task(bind=True)

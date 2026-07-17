@@ -119,3 +119,14 @@ class CelerySettingsTest(SimpleTestCase):
         """The worker must retry the broker connection at startup instead of
         dying if redis is momentarily slower to come up."""
         self.assertTrue(settings.CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP)
+
+
+class Select2CacheTest(SimpleTestCase):
+    """The select2 cache pickles a queryset per rendered widget; with no TTL
+    those entries accumulate forever, and with production Redis capped by
+    maxmemory+noeviction an unbounded cache eventually makes Redis refuse all
+    writes (breaking the shared celery broker too)."""
+
+    def test_select2_cache_has_finite_ttl(self):
+        """The select2 cache must have a finite TTL (default 24h), never None."""
+        self.assertEqual(settings.CACHES["select2"]["TIMEOUT"], 60 * 60 * 24)
