@@ -73,7 +73,7 @@ class CommentManagerTest(ByteDeckTenantTestCase):
             Comment.objects.create_comment(user=user, text="hi", path="/" + "x" * 400)
 
 
-class CommentModelValidationTest(TenantTestCase):
+class CommentModelValidationTest(ByteDeckTenantTestCase):
     """flag()/unflag() validate the comment before saving (issue #1630)."""
 
     def setUp(self):
