@@ -22,9 +22,9 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
@@ -37,7 +37,7 @@ migration_0049 = importlib.import_module(
 )
 
 
-class DoubleStartRaceTest(TenantTestCase):
+class DoubleStartRaceTest(ByteDeckTenantTestCase):
     """The concurrent-double-start vector from issue #1345."""
 
     def setUp(self):
@@ -117,7 +117,7 @@ class DoubleStartRaceTest(TenantTestCase):
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), self.quest.xp)
 
 
-class RepeatableQuestFlowRegressionTest(TenantTestCase):
+class RepeatableQuestFlowRegressionTest(ByteDeckTenantTestCase):
     """Guard that the constraint is a no-op for legitimate flows: a repeatable
     quest can still accumulate completed submissions (completing a submission
     moves it out of the constraint's scope), and a teacher can still *return* an
@@ -179,7 +179,12 @@ class RepeatableQuestFlowRegressionTest(TenantTestCase):
         )
 
 
-class MigrationDedupTest(TenantTestCase):
+class MigrationDedupTest(ByteDeckTenantTestCase):
+    # Drops and re-adds the QuestSubmission unique constraint via the schema
+    # editor, so give it a private fresh schema rather than mutating the shared
+    # reused one (and to avoid colliding with the persistent test tenant).
+    reuse_schema = False
+
     """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
     it must delete duplicate never-completed in-progress rows (keeping the
     earliest, flushing deletes in bounded batches) and spare completed,
