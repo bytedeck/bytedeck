@@ -38,7 +38,10 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         self.assertIsNotNone(str(notification))
 
     def test_mark_read(self):
-        notification = baker.make(Notification)
+        notification = baker.make(
+            Notification,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+        )
         self.assertTrue(notification.unread)
         notification.mark_read()
         self.assertFalse(notification.unread)
@@ -116,7 +119,10 @@ class NotificationModelTest(ByteDeckTenantTestCase):
     def test_mark_all_read__single_update_sets_unread_and_time_read(self):
         """mark_all_read marks every unread notification read and stamps time_read
         in one UPDATE (the previous two-update version left time_read unset)."""
-        baker.make(Notification, recipient=self.student, unread=True, time_read=None, _quantity=3)
+        baker.make(
+            Notification, recipient=self.student, unread=True, time_read=None, _quantity=3,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+        )
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 3)
 
         with CaptureQueriesContext(connection) as ctx:

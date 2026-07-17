@@ -3,6 +3,7 @@ from model_bakery import baker
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
 
@@ -54,8 +55,17 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         course = baker.make('courses.Course')
         semester = SiteConfig.get().active_semester
 
+        # A valid sender for the notifications. Without an explicit GFK target,
+        # baker fills sender_content_type/sender_object_id with a random installed
+        # model (see CLAUDE.md) -- which can be a table-less throwaway test model,
+        # making str(notification) crash when the email task renders it.
+        user_ct = ContentType.objects.get_for_model(User)
+
         # Create a notification for student 1, but they have emails turned off by default
-        notification1 = baker.make(Notification, recipient=self.test_student1)
+        notification1 = baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=user_ct, sender_object_id=self.test_teacher.id,
+        )
         emails = get_notification_emails(root_url)
         self.assertEqual(len(emails), 0)
 
@@ -83,7 +93,10 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertEqual(emails[0].to, [self.test_student1.email])
 
         # Make a bunch of notifications for student2, so now we should have 2 emails
-        baker.make(Notification, recipient=self.test_student2, _quantity=10)
+        baker.make(
+            Notification, recipient=self.test_student2, _quantity=10,
+            sender_content_type=user_ct, sender_object_id=self.test_teacher.id,
+        )
         emails = get_notification_emails(root_url)
 
         self.assertEqual(len(emails), 2)
@@ -111,7 +124,10 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
     def test_generate_notification_email__student(self):
         """ Test that the content of a notification email is correct """
-        notifications = baker.make(Notification, recipient=self.test_student1, _quantity=2)
+        notifications = baker.make(
+            Notification, recipient=self.test_student1, _quantity=2,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
 
         root_url = 'https://test.com'
         email = generate_notification_email(self.test_student1, root_url)
@@ -132,7 +148,10 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
     def test_generate_notification_email__staff(self):
         """ Test that staff notification emails include quests awaiting approval """
-        notification = baker.make(Notification, recipient=self.test_teacher)
+        notification = baker.make(
+            Notification, recipient=self.test_teacher,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
         root_url = 'https://test.com'
         sub = baker.make('quest_manager.questsubmission')
 
@@ -162,7 +181,10 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
         # Create a noficiation for 1 student that has no course but have emails turned on
         inactive_student = baker.make(User)
-        baker.make(Notification, recipient=inactive_student)
+        baker.make(
+            Notification, recipient=inactive_student,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
 
         inactive_student.profile.get_notifications_by_email = True
         inactive_student.profile.save()

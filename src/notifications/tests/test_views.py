@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
@@ -93,7 +94,10 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # log in student1
         self.client.force_login(self.test_student1)
 
-        notification = baker.make('notifications.Notification', recipient=self.test_student1)
+        notification = baker.make(
+            'notifications.Notification', recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
         # make sure it is unread
         self.assertTrue(notification.unread)
 

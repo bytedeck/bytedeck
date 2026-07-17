@@ -26,12 +26,16 @@ class Command(BaseCommand):
 
     def setup_shared_library(self):
         self.stdout.write('\n** Setting up shared library...')
+        # Look up by the unique schema_name only (name is set on create). Matching
+        # on name too would miss an existing 'library' tenant created with a
+        # different name and then crash on the schema_name unique constraint,
+        # making initdb non-idempotent.
         library_tenant, created = Tenant.objects.get_or_create(
             schema_name='library',
-            name='Shared Library'
+            defaults={'name': 'Shared Library'},
         )
 
-        if not created:
+        if not created and not library_tenant.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists():
             library_tenant.domains.create(
                 domain='library.' + settings.ROOT_DOMAIN,
                 is_primary=True
