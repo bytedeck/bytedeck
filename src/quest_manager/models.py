@@ -2,7 +2,7 @@ import uuid
 import json
 import datetime
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
@@ -944,6 +944,26 @@ class QuestSubmissionManager(models.Manager):
         return quest.is_repeat_available(user)
 
     def create_submission(self, user, quest):
+        """Create and return a new in-progress QuestSubmission of ``quest`` for ``user``.
+
+        The submission is placed in the active semester, with an ordinal
+        continuing from the user's last submission of this quest (1 for a first
+        attempt).
+
+        Concurrency (issue #1345): the partial unique constraint on
+        QuestSubmission forbids a second *never-yet-completed* in-progress
+        submission of the same quest per user/semester -- exactly what a
+        concurrent "double start" (e.g. two browser tabs) would create. If this
+        call loses that race, the existing in-progress submission is returned
+        instead of a duplicate.
+
+        :param user: the student starting the quest.
+        :param quest: the Quest being started.
+        :returns: the newly created ``QuestSubmission``, or the existing
+            in-progress one if a concurrent request already created it.
+        :raises IntegrityError: if the save fails for a reason other than the
+            double-start race (no matching in-progress submission exists).
+        """
         last_submission = self.last_submission(user, quest)
 
         if last_submission:
@@ -951,13 +971,39 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
+        active_semester_pk = SiteConfig.get().active_semester.pk
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
             ordinal=ordinal,
-            semester_id=SiteConfig.get().active_semester.pk,
+            semester_id=active_semester_pk,
         )
-        new_submission.save()
+        try:
+            # Wrapped in atomic() so a constraint violation doesn't break the
+            # surrounding transaction (issue #1345).
+            with transaction.atomic():
+                # Constraint validation is skipped so the DB-level unique
+                # constraint (and its race-losing IntegrityError path below)
+                # stays authoritative.
+                new_submission.full_clean(validate_constraints=False)
+                new_submission.save()
+        except IntegrityError:
+            # Lost the race: another request already created the in-progress
+            # submission. Return the existing one instead of a duplicate, so the
+            # student is simply sent to the submission that won. Use the
+            # unfiltered base manager (the default manager excludes archived and
+            # unpublished quests, which would hide the row) and re-raise if
+            # nothing matches -- then the error wasn't the double-start race.
+            existing_submission = self.model._base_manager.filter(
+                user=user,
+                quest=quest,
+                semester_id=active_semester_pk,
+                is_completed=False,
+                first_time_completed__isnull=True,
+            ).first()
+            if existing_submission is None:
+                raise
+            return existing_submission
         return new_submission
 
     def calculate_xp(self, user):
@@ -1031,6 +1077,25 @@ class QuestSubmission(models.Model):
 
     class Meta:
         ordering = ["time_approved", "time_completed"]
+        constraints = [
+            # A user can only have one *never-yet-completed* in-progress
+            # submission of a given quest per semester. Both rows created by a
+            # concurrent "double start" (issue #1345) are in that state, so the
+            # race is blocked; but the condition deliberately excludes:
+            # - completed submissions (``is_completed=True``), so repeatable
+            #   quests still accumulate completed submissions, and
+            # - *returned* submissions -- ``mark_returned()`` flips
+            #   ``is_completed`` back to False, but ``first_time_completed``
+            #   stays set from the first completion -- so a teacher returning
+            #   an old submission of a repeatable quest while the student has a
+            #   new one in progress remains a legal state (two "in progress",
+            #   only one of them never-completed).
+            models.UniqueConstraint(
+                fields=["user", "quest", "semester"],
+                condition=Q(is_completed=False) & Q(first_time_completed__isnull=True),
+                name="unique_inprogress_submission_per_quest_semester",
+            ),
+        ]
 
     objects = QuestSubmissionManager()
 
