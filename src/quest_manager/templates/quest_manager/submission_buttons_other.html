@@ -11,7 +11,7 @@
         target="_blank" href="{% url 'quests:approved_for_quest' s.quest.id %}">
         <i class="fa fa-fw fa-folder-o"></i></a>
     <a title="View status of all students for this quest" class="btn btn-default" role="button"
-        target="_blank" href="{% url 'quests:quest_user_status' s.quest.id %}">
+        href="{% url 'quests:quest_user_status' s.quest.id %}">
         <i class="fa fa-fw fa-users"></i></a>
     <a title="View summary data for this quest" class="btn btn-default" role="button"
         target="_blank" href="{% url 'quests:summary' s.quest.id %}">
