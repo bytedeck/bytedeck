@@ -5,22 +5,6 @@
 {% block head %}
   {{ form.media.css }}
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
-  <style>
-    /* crispy-bootstrap3 renders each formset checkbox in a <td class="checkbox">.
-       Bootstrap 3's .checkbox rules assume a block wrapper with a <label>: they set the
-       cell to display:block and absolutely-position the input with a negative margin, which
-       drags the NOT/Delete checkboxes out of their table cells. Restore normal table-cell
-       layout for the prereq formset. Issue #1978. */
-    #id_prereq_formset td.checkbox {
-      display: table-cell;
-      text-align: center;
-      vertical-align: middle;
-    }
-    #id_prereq_formset td.checkbox input[type="checkbox"] {
-      position: static;
-      margin: 0;
-    }
-  </style>
 {% endblock %}
 
 {% block heading_inner %}Advanced Prerequisites Form{% endblock %}

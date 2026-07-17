@@ -24,6 +24,11 @@ class PrereqFormInline(FutureModelForm):
 
     or_prereq_object = PrereqGFKChoiceField(required=False)
 
+    class Media:
+        # Fixes the crispy-bootstrap3 checkbox layout on the advanced prereqs form (issue #1978).
+        # Kept with the form (rather than inline in the template) so it loads via {{ form.media.css }}.
+        css = {'all': ('prerequisites/css/advanced_prereqs_form.css',)}
+
     class Meta:
         model = Prereq
         # fields = ['prereq_content_type', 'prereq_object_id', 'prereq_count', 'prereq_invert']
