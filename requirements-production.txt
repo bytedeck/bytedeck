@@ -26,7 +26,7 @@ django-url-or-relative-url-field>=0.2.0,<0.3.0
 tenant-schemas-celery>=4.0,<4.1
 
 # non django
-beautifulsoup4>=4.12.3,<4.13
+beautifulsoup4>=4.15.0,<4.16
 bleach[css]>=5,<6
 celery>=5.3,<5.6
 cssutils==2.11.1
