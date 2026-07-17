@@ -16,31 +16,15 @@ repos:
         args: [ "--py36-plus", "--py37-plus", "--py38-plus" ]
         types: [python]
 
-  - repo: https://github.com/humitos/mirrors-autoflake
-    rev: v1.1
+  # ruff replaces flake8 (+bugbear/comprehensions/mutable plugins) and
+  # autoflake (unused-import/variable removal via --fix on the F rules).
+  # Config lives in pyproject.toml ([tool.ruff]); the formatter (ruff-format)
+  # is deliberately not enabled.
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.22
     hooks:
-      - id: autoflake
-        args:
-          [
-            "--in-place",
-            "--remove-all-unused-imports",
-            "--remove-unused-variable",
-          ]
-
-  - repo: https://github.com/pycqa/flake8
-    rev: 3.9.2
-    hooks:
-      - id: flake8
-        additional_dependencies:
-          [
-            "flake8-bugbear",
-            "flake8-comprehensions",
-            "flake8-mutable",
-          ]
-        args:
-          [
-            "--config=.flake8",
-          ]
+      - id: ruff
+        args: [ "--fix" ]
 
   ## Packages here are subjective...
   # - repo: https://github.com/asottile/reorder_python_imports

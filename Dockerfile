@@ -35,8 +35,11 @@ RUN apt-get update && \
 
 RUN python3 -m pip install --upgrade pip
 
-# Why isn't this in requirements?!  Move it there?
-RUN python3 -m pip install uwsgi
+# uwsgi lives here rather than in requirements*.txt on purpose: only the
+# container needs it (dev uses runserver; production runs uwsgi), and local
+# venvs on Windows/macOS can't build it. Pinned for reproducible images --
+# bump deliberately.
+RUN python3 -m pip install uwsgi==2.0.31
 
 # Clean up
 RUN apt-get autoremove -y \

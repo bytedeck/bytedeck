@@ -604,6 +604,14 @@ class PrereqAllConditionsMet(models.Model):
     ids = models.TextField(default='[]')  # str representation of a list of ids for the model, e.g '[25, 34, 55, 56, 77]'
     model_name = models.CharField(max_length=256)  # model name as a string with .get_model_name()
 
+    class Meta:
+        constraints = [
+            # Only one cache object should exist per user per model.  Duplicates (created by
+            # concurrently running celery tasks) caused MultipleObjectsReturned errors (issue #520),
+            # and with this constraint get_or_create()/update_or_create() are safe from that race.
+            models.UniqueConstraint(fields=['user', 'model_name'], name='unique_user_model_name')
+        ]
+
     def add_id(self, new_id):
         ids = self.get_ids()
         if new_id not in ids:
