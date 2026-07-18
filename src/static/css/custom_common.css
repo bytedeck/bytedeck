@@ -1108,3 +1108,37 @@ div.btn-group.action-btn-group {
 
 
 
+
+/* === #1981: prevent the bootstrap-table "flash of unstyled table" ================= */
+/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the
+   browser paints the raw, unstyled table first and then — a second or two later on large
+   tables — bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout).
+   That rebuild is the visible "jump". This file is loaded in the render-blocking <head>, so
+   hiding the raw table here stops it from ever being painted; custom.js drops a spinner into
+   its place and the rules below reveal the finished table. */
+table[data-toggle="table"] {
+    /* take the raw table out of flow while hidden so a big table doesn't reserve a tall
+       blank gap under the spinner */
+    position: absolute;
+    visibility: hidden;
+}
+
+/* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — put it
+   back in flow and show it. Version-independent and JS-free, so the table always appears. */
+.bootstrap-table table[data-toggle="table"],
+table[data-toggle="table"].bt-reveal {
+    position: static;
+    visibility: visible;
+}
+
+/* Spinner shown in the table's place while it formats (inserted by custom.js). */
+.bt-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 120px;
+    color: #999;
+}
+.bt-loading .fa {
+    opacity: 0.6;
+}

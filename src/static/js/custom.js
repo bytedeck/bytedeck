@@ -36,4 +36,40 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
+    // #1981: bootstrap-table reformats server-rendered tables on load, briefly showing the raw
+    // table before it "jumps" into the styled/paginated version. The head CSS (custom_common.css)
+    // hides those tables until they're formatted; here we show a spinner in the gap and make sure
+    // the table is revealed even if bootstrap-table's script never runs.
+    $('table[data-toggle="table"]').each(function() {
+        var $table = $(this);
+
+        // If bootstrap-table already initialized this table (its script ran before this one),
+        // it is wrapped and the CSS has already revealed it — nothing to do.
+        if ($table.closest('.bootstrap-table').length) {
+            return;
+        }
+
+        var $spinner = $(
+            '<div class="bt-loading" role="status" aria-label="Loading table">' +
+            '<i class="fa fa-spinner fa-spin fa-2x" aria-hidden="true"></i></div>'
+        );
+        $table.before($spinner);
+
+        // Poll for bootstrap-table to wrap the table (robust to script load order and to the
+        // different bootstrap-table versions loaded across the site). Drop the spinner once
+        // wrapped — or after a timeout, so a failed/late bootstrap-table can never leave the
+        // data hidden (the fallback class reveals the raw table).
+        var start = Date.now();
+        var poll = setInterval(function() {
+            var wrapped = $table.closest('.bootstrap-table').length;
+            if (wrapped || Date.now() - start > 6000) {
+                clearInterval(poll);
+                $spinner.remove();
+                if (!wrapped) {
+                    $table.addClass('bt-reveal');
+                }
+            }
+        }, 50);
+    });
+
 });
