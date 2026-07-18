@@ -1,8 +1,8 @@
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 from django.conf import settings
 from django.contrib.auth import get_user_model
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from badges.models import Badge, BadgeRarity, BadgeType
 from courses.models import Block, Course, Grade, MarkRange, Rank
 from quest_manager.models import Category, Quest
@@ -14,7 +14,7 @@ from utilities.models import MenuItem
 User = get_user_model()
 
 
-class TenantInitializationTest(TenantTestCase):
+class TenantInitializationTest(ByteDeckTenantTestCase):
 
     def test_admin_created(self):
         """ Check if admin superuser is created upon initialization """
@@ -113,12 +113,6 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(Badge.objects.filter(name="Green Team").exists())
         self.assertTrue(Badge.objects.filter(name="Blue Team").exists())
 
-    def test_default_badge_icons(self):
-        """
-            Empty because Django tests involving static files are prone to breakage.
-            Come back to this once testing static files is made clearer.
-        """
-
     def test_default_campaign_created(self):
         """ Initialization script should create a default Category (Campaign) object. """
         self.assertTrue(Category.objects.filter(title="Orientation").exists())
@@ -131,12 +125,6 @@ class TenantInitializationTest(TenantTestCase):
         self.assertTrue(Quest.objects.filter(name="Screenshots").exists())
         self.assertTrue(Quest.objects.filter(name="Who owns your creations?").exists())
         self.assertTrue(Quest.objects.filter(name="Send your teacher a Message").exists())
-
-    def test_default_quest_icons(self):
-        """
-            Empty because Django tests involving static files are prone to breakage.
-            Come back to this once testing static files is made clearer.
-        """
 
     def test_default_message_quest_notifies_owner(self):
         """ The quest "Send your teacher a Message" should have the deck owner assigned as the specific teacher to notify by default. """
@@ -174,7 +162,7 @@ class TenantInitializationTest(TenantTestCase):
         self.assertEqual(site_config.site_name_short, "Deck")
 
 
-class CreateSiteConfigObjectTest(TenantTestCase):
+class CreateSiteConfigObjectTest(ByteDeckTenantTestCase):
     """Tests for deriving a new tenant's SiteConfig display names from its deck name."""
 
     def test_create_site_config__long_deck_name_does_not_overflow(self):

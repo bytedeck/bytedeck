@@ -1,12 +1,12 @@
 from django.contrib.contenttypes.models import ContentType
 
-from django_tenants.test.cases import TenantTestCase
 from queryset_sequence import QuerySetSequence
 
 from djcytoscape.models import CytoScape
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class CytoscapeGFKChoiceFieldTest(TenantTestCase):
+class CytoscapeGFKChoiceFieldTest(ByteDeckTenantTestCase):
 
     def test_queryset(self):
         """ Quick test to see if the hardcoded model list is equal to CytoScape.ALLOWED_INITIAL_CONTENT_TYPES """

@@ -64,3 +64,69 @@ class DatabaseConnectionSettingsTest(SimpleTestCase):
         """CONN_HEALTH_CHECKS must be True so dead persistent connections are
         detected and transparently re-established at the start of a request."""
         self.assertTrue(settings.DATABASES["default"]["CONN_HEALTH_CHECKS"])
+
+
+class EmailSettingsTest(SimpleTestCase):
+    """EMAIL_FILE_PATH previously read the wrong environment variable
+    (EMAIL_BACKEND, a copy-paste bug), so setting EMAIL_BACKEND would silently
+    corrupt the file-based backend's output directory."""
+
+    def test_email_file_path__defaults_to_sent_mail_dir(self):
+        """EMAIL_FILE_PATH must be a filesystem path (the _sent_mail directory
+        by default), never the value of the EMAIL_BACKEND setting."""
+        self.assertTrue(settings.EMAIL_FILE_PATH.endswith("_sent_mail"))
+        self.assertNotEqual(settings.EMAIL_FILE_PATH, settings.EMAIL_BACKEND)
+
+
+class DataUploadLimitTest(SimpleTestCase):
+    """DATA_UPLOAD_MAX_MEMORY_SIZE was previously unset, so Django's 2.5 MB
+    default applied even though nginx allows 17 MB request bodies -- large
+    non-file form posts tripped RequestDataTooBigMiddleware far below the
+    intended cap."""
+
+    def test_data_upload_limit__raised_above_django_default(self):
+        """The explicit limit must be 16 MiB: above Django's 2.5 MB default and
+        below nginx's 17 MB client_max_body_size."""
+        self.assertEqual(settings.DATA_UPLOAD_MAX_MEMORY_SIZE, 16 * 1024 * 1024)
+
+
+class CelerySettingsTest(SimpleTestCase):
+    """Worker-hardening settings for the single shared Celery worker: bound
+    memory leaks, keep quick tasks from queueing behind long all-schema tasks,
+    and kill hung tasks instead of losing a worker slot forever."""
+
+    def test_results_ignored(self):
+        """No result backend is configured and nothing reads task results, so
+        results must be ignored rather than stored on the broker."""
+        self.assertTrue(settings.CELERY_TASK_IGNORE_RESULT)
+
+    def test_worker_recycling_enabled(self):
+        """Workers must recycle after a bounded number of tasks so leaks from
+        the per-schema fan-out tasks can't grow without limit."""
+        self.assertGreater(settings.CELERY_WORKER_MAX_TASKS_PER_CHILD, 0)
+
+    def test_prefetch_disabled_for_mixed_workload(self):
+        """Prefetch multiplier must be 1 so seconds-long tasks don't get stuck
+        prefetched behind minutes-long all-schema tasks."""
+        self.assertEqual(settings.CELERY_WORKER_PREFETCH_MULTIPLIER, 1)
+
+    def test_time_limits_sane(self):
+        """A soft limit must exist and fire before the hard kill so tasks get a
+        chance to clean up (SoftTimeLimitExceeded) before the worker is killed."""
+        self.assertLess(settings.CELERY_TASK_SOFT_TIME_LIMIT, settings.CELERY_TASK_TIME_LIMIT)
+
+    def test_broker_retry_on_startup(self):
+        """The worker must retry the broker connection at startup instead of
+        dying if redis is momentarily slower to come up."""
+        self.assertTrue(settings.CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP)
+
+
+class Select2CacheTest(SimpleTestCase):
+    """The select2 cache pickles a queryset per rendered widget; with no TTL
+    those entries accumulate forever, and with production Redis capped by
+    maxmemory+noeviction an unbounded cache eventually makes Redis refuse all
+    writes (breaking the shared celery broker too)."""
+
+    def test_select2_cache_has_finite_ttl(self):
+        """The select2 cache must have a finite TTL (default 24h), never None."""
+        self.assertEqual(settings.CACHES["select2"]["TIMEOUT"], 60 * 60 * 24)

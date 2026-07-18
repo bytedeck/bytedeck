@@ -6,8 +6,9 @@ from django.contrib.messages import get_messages
 from django.test import override_settings
 from django.http import HttpResponse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from hackerspace_online.urls import urlpatterns as hackerspace_urlpatterns
 
@@ -41,7 +42,7 @@ urlpatterns = [
 ] + hackerspace_urlpatterns
 
 
-class RequestDataTooBigMiddlewareTestCase(TenantTestCase):
+class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
     """
     Various tests for `hackerspace_online.middleware.RequestDataTooBigMiddleware` class
     """

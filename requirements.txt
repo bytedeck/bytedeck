@@ -4,8 +4,8 @@ django-debug-toolbar-template-timings>=0.9
 
 # CLI
 coveralls  # includes coverage
-flake8>=3.7
-pipdeptree>=0.13.2
+ruff
+pipdeptree>=3.1.1
 pre-commit
 
 # code debugging/tests

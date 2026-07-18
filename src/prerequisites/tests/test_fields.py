@@ -1,9 +1,9 @@
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from prerequisites.models import IsAPrereqMixin
 
 
-class PrereqGFKChoiceFieldTest(TenantTestCase):
+class PrereqGFKChoiceFieldTest(ByteDeckTenantTestCase):
 
     def test_hardcoded_prereq_model_choice(self):
         """If this test fails, then probably means a new model implements `IsAPrereqMixin`, or a model was removed."""

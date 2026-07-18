@@ -12,14 +12,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
 from utilities.models import MenuItem
 from utilities.fields import GFKChoiceField
 from utilities.widgets import GFKSelect2Widget
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 
 User = get_user_model()
 
@@ -52,14 +51,16 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
         return str(obj.name).upper()
 
 
-class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
+class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.groups = Group.objects.bulk_create(
+            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
+        )
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        self.groups = Group.objects.bulk_create(
-            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
-        )
 
     def _ct_pk(self, obj):
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
@@ -153,17 +154,18 @@ class TestAutoResponseView(ViewTestUtilsMixin, TenantTestCase):
         assert response.status_code == 404
 
 
-class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
+class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher and a student so tests can log in as each via force_login()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login '''
@@ -254,7 +256,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, leading_slash_error)
 
 
-class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
+class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
@@ -282,17 +284,18 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         return flatpage
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
+    @classmethod
+    def setUpTestData(cls):
         User = get_user_model()
 
-        self.test_password = "password"
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
+        cls.flatpage_nonlogin = [FlatPageViewTests.create_flatpage(registration_required=False) for i in range(3)]
+        cls.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
 
-        self.flatpage_nonlogin = [FlatPageViewTests.create_flatpage(registration_required=False) for i in range(3)]
-        self.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes_for_anonymous(self):
         """
@@ -309,8 +312,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Redirects to 403 or returns 200 if user is is_staff=False
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         self.assert200('utilities:flatpage_list')
 
@@ -323,8 +325,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Should return 200 for all cases
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         pk = FlatPage.objects.first().pk
 
@@ -355,8 +356,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
             self.assertRedirectsLoginURL(flatpage.get_absolute_url())
 
         # With logging in
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # no login required
         for flatpage in self.flatpage_nonlogin:
@@ -370,8 +370,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that all flatpages are properly displayed
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         response = self.client.get(reverse('utilities:flatpage_list'))
 
@@ -382,8 +381,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Can create flatpage and access it
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
         data = {
             'url': '/flatpagecreate-test/',
             'title': 'flatpagecreate-test-title',
@@ -409,8 +407,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that flatpages are being updated using update view
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         pre_update_data = {
             'url': '/pre_update_data-test-url/',
@@ -453,8 +450,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, TenantTestCase):
         """
             Confirm that flatpages are being properly deleted
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         flatpage = FlatPageViewTests.create_flatpage()
         absolute_url = flatpage.get_absolute_url()

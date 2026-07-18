@@ -5,33 +5,32 @@ from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 from comments.models import Comment
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+        cls.test_student2 = baker.make(User)
+
+        cls.test_announcement = baker.make(Announcement, draft=False)
+        cls.ann_pk = cls.test_announcement.pk
 
     def setUp(self):
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
         self.client = TenantClient(self.tenant)
-
-        self.test_password = "password"
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-        self.test_student2 = baker.make(User)
-
-        self.test_announcement = baker.make(Announcement, draft=False)
-        self.ann_pk = self.test_announcement.pk
 
     def test_all_announcement_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -49,8 +48,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_announcement_page_status_codes_for_students(self):
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # all_fields = self.test_announcement._meta.get_fields()
         # for field in all_fields:
@@ -82,8 +80,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_all_announcement_page_status_codes_for_teachers(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         self.assert200('announcements:list')
         self.assert200('announcements:archived')
@@ -125,8 +122,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(draft_announcement.draft)
 
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         # Students shoudn't see draft announcements in the list
         self.assertNotContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
@@ -143,8 +139,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         draft_announcement = baker.make(Announcement)
 
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # draft announcement should appear with a link to publish it.  TODO This is crude, should be checking HTML?
         publish_link = reverse('announcements:publish', args=[draft_announcement.pk])
@@ -191,8 +186,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_comment_on_announcement_by_student(self):
         # log in a student
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         form_data = {
             'comment_text': "test comment",
@@ -222,8 +216,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         the comment is saved, so scripts can't execute when the comment is rendered.
         Regression test for issue #1343.
         """
-        success = self.client.login(username=self.test_student1.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_student1)
 
         payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
         response = self.client.post(
@@ -240,8 +233,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
 
     def test_copy_announcement(self):
         # log in a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # hit the view as a get request first, to load a copy of the announcement in the form
         response = self.client.get(
@@ -280,8 +272,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         field in Siteconfig
         """
         # Login a teacher
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
@@ -310,8 +301,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         "CustomAnnouncement commented on"
         """
         # Login a teacher (could be a student, won't affect results but we need a logged-in user)
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # Change custom_name_for_announcement to a non-default option
         config = SiteConfig.get()
@@ -334,7 +324,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, "CustomAnnouncement commented on")
 
 
-class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
+class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for archived announcements view and other archived processes
 
     Mostly this one:
@@ -342,11 +332,14 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, TenantTestCase):
         archived = '/archived/' in request.path_info
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = baker.make(User, is_staff=True)
+        cls.test_student = baker.make(User)
+        cls.test_announcement = baker.make(Announcement, draft=False)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = baker.make(User, is_staff=True)
-        self.test_student = baker.make(User)
-        self.test_announcement = baker.make(Announcement, draft=False)
 
     def test_archived_announcement(self):
         """ Archived announcements should not appear in announcements list"""

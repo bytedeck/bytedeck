@@ -2,15 +2,13 @@ from io import BytesIO
 
 from django.core.files.uploadedfile import InMemoryUploadedFile
 
-from django_tenants.test.cases import TenantTestCase
-
 from siteconfig.models import SiteConfig
 from siteconfig.forms import SiteConfigForm
 
-from hackerspace_online.tests.utils import generate_form_data, model_to_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data, model_to_form_data
 
 
-class SiteConfigFormTest(TenantTestCase):
+class SiteConfigFormTest(ByteDeckTenantTestCase):
     """Tests for the SiteConfig Form
     """
 

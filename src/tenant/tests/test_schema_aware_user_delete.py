@@ -23,11 +23,11 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import tenant_context
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from tenant.deletion import schema_aware_get_deleted_objects
@@ -36,7 +36,11 @@ from tenant.models import Tenant
 User = get_user_model()
 
 
-class SchemaAwareUserDeleteAdminPublicTest(TenantTestCase):
+class SchemaAwareUserDeleteAdminPublicTest(ByteDeckTenantTestCase):
+    # Builds its own public tenant and drives cross-schema user deletion; keep a
+    # private fresh schema so it never collides with the shared reused tenant.
+    reuse_schema = False
+
     """Public-schema user deletion through the Django admin (issue #691).
 
     On the public schema the ``TENANT_APPS`` tables are absent, so the default
@@ -162,7 +166,7 @@ class SchemaAwareUserDeleteAdminPublicTest(TenantTestCase):
         self.assertNotIn("href", str(to_delete))
 
 
-class SchemaAwareUserDeleteAdminTenantTest(TenantTestCase):
+class SchemaAwareUserDeleteAdminTenantTest(ByteDeckTenantTestCase):
     """Regression guard: on a tenant schema every table exists, so
     ``CustomUserAdmin`` falls through to Django's default and the delete cascade
     still removes related tenant rows (e.g. QuestSubmission)."""

@@ -2,12 +2,10 @@ from django.apps import apps
 from django.contrib.admin.sites import AdminSite
 from django.contrib.flatpages.models import FlatPage
 
-from django_tenants.test.cases import TenantTestCase
-
-
 from django.test import TestCase
 
 from bytedeck_summernote.admin import ByteDeckSummernoteModelAdminMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
 class ByteDeckSummernoteModelAdminMixinTestCase(TestCase):
@@ -40,7 +38,7 @@ class ByteDeckSummernoteModelAdminMixinTestCase(TestCase):
         self.assertEqual(subclass_mixin.get_summernote_widget_class(), TestSummernoteWidget)
 
 
-class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
+class TestByteDeckSummernoteSafeModelAdmin(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
     def setUp(self):
@@ -110,7 +108,7 @@ class TestByteDeckSummernoteSafeModelAdmin(TenantTestCase):
         )
 
 
-class TestByteDeckSummernoteAdvancedModelAdmin(TenantTestCase):
+class TestByteDeckSummernoteAdvancedModelAdmin(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
 
     def setUp(self):

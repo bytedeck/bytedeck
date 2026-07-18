@@ -10,10 +10,10 @@ from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from utilities.fields import GFKChoiceField
 from utilities.widgets import GFKSelect2Widget
 from quest_manager.models import Quest
@@ -45,15 +45,17 @@ class GFKSelect2WidgetForm(forms.Form):
     )
 
 
-class TestGFKSelect2Widget(TenantTestCase):
+class TestGFKSelect2Widget(ByteDeckTenantTestCase):
     form = GFKSelect2WidgetForm(initial={'f': '1-1'})
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.groups = Group.objects.bulk_create(
+            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
+        )
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        self.groups = Group.objects.bulk_create(
-            [Group(pk=pk, name=random_string(50)) for pk in range(100)]
-        )
 
     def _ct_pk(self, obj):
         return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'

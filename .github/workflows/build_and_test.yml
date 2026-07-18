@@ -1,6 +1,25 @@
 name: Build and Tests
 
-on: [push, pull_request]
+# Run on pushes to the long-lived branches only, plus every pull request.
+# Without the branch filter, a push to a PR branch triggered BOTH a push run
+# and a pull_request run -- the whole ~30 min suite twice per commit.
+# `competencies` is included because it's a long-running integration branch
+# that sub-issue PRs target (see CLAUDE.md). master/staging must stay here:
+# the auto-deploy workflow (deploy.yml) fires via workflow_run when this
+# workflow succeeds on those branches.
+on:
+  push:
+    branches: [develop, staging, master, competencies]
+  pull_request:
+
+# A force-push or rapid follow-up commit cancels the now-stale in-progress
+# run instead of letting both finish. Each PR and each branch gets its own
+# group (github.ref), so unrelated runs never cancel each other. Cancelling
+# a stale master/staging run is safe for auto-deploy: the cancelled run
+# never reaches "success", so deploy.yml simply fires for the newest SHA.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:

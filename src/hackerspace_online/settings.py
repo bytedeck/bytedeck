@@ -277,11 +277,18 @@ MIDDLEWARE = [
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
 ]
 
+# Max size (bytes) of a request body Django will parse in memory, EXCLUDING
+# file uploads (multipart file parts stream to disk regardless). Was previously
+# unset, so Django's 2.5 MB default applied even though nginx allows 17 MB
+# bodies (client_max_body_size) -- large non-file form posts (e.g. Summernote
+# content with embedded images) tripped RequestDataTooBigMiddleware well below
+# the intended cap. 16 MiB leaves headroom under the nginx limit.
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=16 * 1024 * 1024)
+
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
 
 if DB_LOGS_ENABLED:
     MIDDLEWARE.insert(0, 'hackerspace_online.middleware.ForceDebugCursorMiddleware')
-    print(MIDDLEWARE)
     LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
 
     if not os.path.exists(LOGS_PATH):
@@ -367,7 +374,14 @@ CACHES = {
         },
         'KEY_FUNCTION': 'django_tenants.cache.make_key',
         'REVERSE_KEY_FUNCTION': 'django_tenants.cache.reverse_key',
-        'TIMEOUT': None,
+        # Was TIMEOUT: None (never expire). django-select2 pickles a queryset
+        # per rendered widget into this cache, so with no TTL the entries
+        # accumulate forever -- and with the production Redis capped by
+        # maxmemory + noeviction, an ever-growing cache eventually makes Redis
+        # refuse ALL writes (breaking the shared Celery broker too). 24h covers
+        # any realistic open-form lifetime (an ajax lookup after expiry just
+        # means reopening the form) while keeping the cache bounded.
+        'TIMEOUT': env.int('SELECT2_CACHE_TIMEOUT', default=60 * 60 * 24),
     }
 }
 
@@ -393,6 +407,42 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_TASK_MAX_RETRIES = 10
 CELERY_TASKS_BUNCH_SIZE = 10
+
+# No result backend is configured and nothing in the codebase reads task
+# results (all tasks are fire-and-forget apply_async/delay), so don't spend
+# broker round-trips storing them.
+CELERY_TASK_IGNORE_RESULT = True
+
+# Recycle each worker process after this many tasks: the per-schema fan-out
+# tasks (condition updates, map regeneration) accumulate memory, and recycling
+# bounds any leak the same way uwsgi's max-requests does for web workers.
+CELERY_WORKER_MAX_TASKS_PER_CHILD = env.int('CELERY_WORKER_MAX_TASKS_PER_CHILD', default=100)
+
+# Fetch one task at a time instead of the default 4-per-process: this workload
+# mixes seconds-long emails with minutes-long all-schema updates, and
+# prefetching lets quick tasks get stuck queued behind a long one in a busy
+# worker while other workers sit idle.
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+
+# Safety net for hung tasks (mirrors uwsgi's harakiri for web requests): the
+# soft limit raises SoftTimeLimitExceeded inside the task; the hard limit kills
+# the worker process. Generous on purpose -- the legitimate all-schema tasks
+# (e.g. update_quest_conditions_all_users, regenerate_all_maps) can run for
+# many minutes on a large deck count.
+CELERY_TASK_SOFT_TIME_LIMIT = env.int('CELERY_TASK_SOFT_TIME_LIMIT', default=25 * 60)
+CELERY_TASK_TIME_LIMIT = env.int('CELERY_TASK_TIME_LIMIT', default=30 * 60)
+
+# Keep retrying the broker connection at startup (restores pre-Celery-6
+# behaviour and silences the deprecation warning): with docker's depends_on
+# the broker is usually up first, but a slow redis start shouldn't kill the
+# worker before it begins.
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+
+# NOTE on acks_late / task_reject_on_worker_lost: deliberately NOT enabled
+# globally. They re-deliver a task if the worker dies mid-run, which is only
+# safe for idempotent work -- several tasks here send email, and a crash-loop
+# would re-send on every retry. Enable per-task (acks_late=True) on tasks that
+# are provably idempotent instead.
 
 # allowed delay between conditions met updates for all users:
 # In sec., wait before start next 'big' update for all conditions, if it's going to start - all other updates could be skipped
@@ -440,7 +490,7 @@ DATABASE_ROUTERS = (
 # EMAIL ######################################
 
 EMAIL_BACKEND = env('EMAIL_BACKEND', default='django.core.mail.backends.filebased.EmailBackend')
-EMAIL_FILE_PATH = env('EMAIL_BACKEND', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
+EMAIL_FILE_PATH = env('EMAIL_FILE_PATH', default=os.path.join(PROJECT_ROOT, "_sent_mail"))
 
 EMAIL_HOST = env('EMAIL_HOST', default=None)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default=None)

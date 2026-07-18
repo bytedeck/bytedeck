@@ -7,9 +7,9 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from courses.models import Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission, Category
 from siteconfig.models import SiteConfig
-from django_tenants.test.cases import TenantTestCase
 from unittest.mock import patch
 from library.utils import library_schema_context
 from library.tests.test_views import LibraryTenantTestCaseMixin
@@ -20,30 +20,30 @@ User = get_user_model()
 
 class CategoryManagerTests(LibraryTenantTestCaseMixin):
 
-    def setUp(self):
-        super().setUp()
+    @classmethod
+    def setUpTestData(cls):
         # Create campaign (category) and quests in library schema
         with library_schema_context():
-            self.category = baker.make(Category, title="Test Campaign", published=True)
-            self.quest1 = baker.make(
+            cls.category = baker.make(Category, title="Test Campaign", published=True)
+            cls.quest1 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=True,
                 archived=False,
                 xp=100,
                 name="Published Quest 1"
             )
-            self.quest2 = baker.make(
+            cls.quest2 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=False,
                 archived=False,
                 xp=200,
                 name="Invisible Quest"
             )
-            self.quest3 = baker.make(
+            cls.quest3 = baker.make(
                 Quest,
-                campaign=self.category,
+                campaign=cls.category,
                 published=True,
                 archived=True,
                 xp=300,
@@ -117,10 +117,11 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.assertEqual(qs.first().xp_sum, 80)
 
 
-class QuestQuerysetTest(TenantTestCase):
+class QuestQuerysetTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.student = baker.make(User, username='student', is_staff=False)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User, username='student', is_staff=False)
 
     def test_not_in_progress_completed_or_cooldown(self):
         """ Test that all 5 conditions are met for this queryset method:
@@ -273,21 +274,29 @@ class QuestQuerysetTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestManagerTest(TenantTestCase):
+class QuestManagerTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
+    # These tests assert the availability of the *seed* quests (e.g. "Welcome to
+    # ByteDeck!") under a frozen 2018 clock, which only holds if the tenant seed
+    # was created at that frozen time. A reused schema is seeded once at whatever
+    # the first class's real clock was, so this class needs its own fresh schema.
+    reuse_schema = False
+
+    maxDiff = None
+
+    @classmethod
+    def setUpTestData(cls):
         # get a list all quests created in data migrations
         # convert to list for ease of comparison, and also to force
         #  evaluation before additional quests are created within tests
-        self.initial_quest_list = list(Quest.objects.all())
-        # print(self.initial_quest_list)
-        self.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
+        cls.initial_quest_list = list(Quest.objects.all())
+        # print(cls.initial_quest_list)
+        cls.initial_quest_name_list = list(Quest.objects.all().values_list('name', flat=True))
         # this includes 6 quests, all published, but only one
         # available at the start as the rest have prerequisites.
 
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
-        self.maxDiff = None
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
 
     def test_quest_qs_exclude_hidden(self):
         """QuestQuerySet.datetime_available should return all quests that are not
@@ -639,11 +648,12 @@ class QuestManagerTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionQuerysetTest(TenantTestCase):
+class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
 
     def test_quest_submission_qs_get_user(self):
         """QuestSubmissionQuerySet.get_user should return all quest submissions for given user"""
@@ -701,7 +711,7 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
         """
         first = baker.make(QuestSubmission, quest__published=True)
         baker.make(QuestSubmission, quest__published=False)
-        qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
+        qs = QuestSubmission.objects.order_by('id').exclude_quests_not_published().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
     def test_for_teacher_only(self):
@@ -753,14 +763,17 @@ class QuestSubmissionQuerysetTest(TenantTestCase):
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class QuestSubmissionManagerTest(TenantTestCase):
+class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
+
+        cls.sub1, cls.sub2 = cls.make_test_submissions_stack()
+        cls.active_semester = cls.sub1.semester
 
     def setUp(self):
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
-
-        self.sub1, self.sub2 = self.make_test_submissions_stack()
-        self.active_semester = self.sub1.semester
         SiteConfig.get().set_active_semester(self.active_semester.id)
 
     def test_get_queryset_default(self):
@@ -787,7 +800,8 @@ class QuestSubmissionManagerTest(TenantTestCase):
         qs = QuestSubmission.objects.all_for_user_quest(self.student, quest, True)
         self.assertQuerySetEqual(qs, [first])
 
-    def make_test_submissions_stack(self):
+    @classmethod
+    def make_test_submissions_stack(cls):
         """Generate 7 submissions, 3 from one semester and 4 from a different semester, each with different settings
 
         Returns:
@@ -797,13 +811,13 @@ class QuestSubmissionManagerTest(TenantTestCase):
         another_semester = baker.make(Semester)
 
         sub1 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=False, semester=semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=True, quest__archived=True, semester=semester)
 
         sub2 = baker.make(QuestSubmission, quest__published=True, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=True, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=False, quest__archived=False, semester=another_semester)
-        baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=True, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=False, quest__archived=False, semester=another_semester)
+        baker.make(QuestSubmission, user=cls.student, quest__published=True, quest__archived=True, semester=another_semester)
 
         return sub1, sub2
 
@@ -855,28 +869,36 @@ class QuestSubmissionManagerTest(TenantTestCase):
         that can be gained in a repeatable quest
         """
         quest_repeatable_with_max_xp = baker.make(Quest, max_xp=15, xp=5, max_repeats=-1)
+        # is_completed=True: approved submissions are always completed, and only
+        # one *in-progress* submission per quest/semester is allowed (issue #1345).
         baker.make(
             QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
-            semester=self.active_semester, is_approved=True, _quantity=3
+            semester=self.active_semester, is_completed=True, is_approved=True, _quantity=3
         )
 
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
         # Perform additional submission but xp remains the same
-        baker.make(QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp, semester=self.active_semester, is_approved=True)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest_repeatable_with_max_xp,
+            semester=self.active_semester, is_completed=True, is_approved=True,
+        )
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 15)
 
-    def test_calculate_xp__ith_xp_requested_and_max_xp(self):
+    def test_calculate_xp__with_xp_requested_and_max_xp(self):
         """If student can request a custom xp value for a repeatable quest, the total xp shouldn't exceed the max_xp
         """
-        # Create an approved submission
-        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_approved=True, quest__xp=10)
+        # Create an approved submission (approved submissions are always completed;
+        # only one in-progress submission per quest/semester is allowed -- #1345).
+        baker.make(QuestSubmission, user=self.student, semester=self.active_semester, is_completed=True, is_approved=True, quest__xp=10)
 
         # Create a repeatable quest with custom xp.
         quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=17)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=8)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=10)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=8)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=10)
 
         xp = QuestSubmission.objects.calculate_xp(self.student)
         # Should be the max_xp value + 10 (17+10) = 27), since request XP 10 + 8 = 18 is greater than the max_xp of 17
@@ -885,8 +907,10 @@ class QuestSubmissionManagerTest(TenantTestCase):
         # Create a 2nd repeatable quest with custom xp.
         quest = baker.make(Quest, xp=1, xp_can_be_entered_by_students=True, max_repeats=-1, max_xp=3)
         # submission with a custom XP values
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=1)
-        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester, is_approved=True, xp_requested=5)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=1)
+        baker.make(QuestSubmission, quest=quest, user=self.student, semester=self.active_semester,
+                   is_completed=True, is_approved=True, xp_requested=5)
 
         # despite 1 + 5, should only add 3 xp since max_xp is 3 for this repeatable quest
         xp = QuestSubmission.objects.calculate_xp(self.student)

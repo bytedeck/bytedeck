@@ -1,22 +1,23 @@
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
-from django_tenants.test.cases import TenantTestCase
 
-from hackerspace_online.tests.utils import generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from profile_manager.forms import ProfileForm
 from siteconfig.models import SiteConfig
 
 from unittest.mock import patch, MagicMock
+import dns.exception
 import dns.resolver
 
 
 User = get_user_model()
 
 
-class ProfileFormTest(TenantTestCase):
+class ProfileFormTest(ByteDeckTenantTestCase):
 
-    def setUp(self) -> None:
-        self.user = User.objects.create_user('test_student', password="test_password")
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_user('test_student')
 
     def test_init(self):
         # Without request
@@ -81,6 +82,20 @@ class ProfileFormTest(TenantTestCase):
             form.is_valid()
             cleaned_email = form.cleaned_data['email']
             self.assertEqual(cleaned_email, 'example@domainwithnoanswer.com')
+
+    def test_clean_email__dns_lookup_error_fails_open(self):
+        """A DNS lookup failure that isn't NXDOMAIN (NoNameservers, a timeout, resolver
+        misconfiguration, etc.) means we simply couldn't verify the domain — not that it's
+        invalid. clean_email should fail open and accept the email rather than let the
+        exception propagate and 500 the whole profile form (issue #1976). Without the broad
+        dns.exception.DNSException handler these would crash instead of validating.
+        """
+        for exc in (dns.resolver.NoNameservers, dns.resolver.LifetimeTimeout, dns.exception.Timeout):
+            with self.subTest(exception=exc.__name__):
+                form = ProfileForm(instance=self.user.profile, data={'email': 'example@gmail.com'})
+                with patch('dns.resolver.resolve', side_effect=exc):
+                    self.assertTrue(form.is_valid())
+                    self.assertEqual(form.cleaned_data['email'], 'example@gmail.com')
 
     def test_profile_with_custom_profile_field(self):
         """ tests if user can create a profile with `custom_profile_field` when SiteConfig.custom_profile_field

@@ -8,10 +8,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.conf import settings
 
-from django_tenants.test.cases import TenantTestCase
 from freezegun import freeze_time
 from model_bakery import baker
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig, get_default_deck_owner
 
 from library.utils import get_library_schema_name
@@ -19,7 +19,7 @@ from library.utils import get_library_schema_name
 User = get_user_model()
 
 
-class SiteConfigModelTest(TenantTestCase):
+class SiteConfigModelTest(ByteDeckTenantTestCase):
     """ Tests for the SiteConfig model """
 
     def setUp(self):

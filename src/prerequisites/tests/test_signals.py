@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 
 from django.contrib.contenttypes.models import ContentType
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from unittest.mock import patch
@@ -9,6 +8,7 @@ from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
 from courses.models import CourseStudent, Semester
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
@@ -18,25 +18,30 @@ User = get_user_model()
 
 
 @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-class PrerequisitesSignalsTest(TenantTestCase):
+class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # the signal-count mocks below are per-test-method, so signals fired by
+        # this class-level fixture creation are never included in their counts
+        cls.teacher = baker.make(User, username='teacher', is_staff=True)
+        cls.student = baker.make(User, username='student', is_staff=False)
+
+        cls.sem = baker.make(Semester)
+        cls.badge_assertion = baker.make(BadgeAssertion,
+                                         user=cls.student,
+                                         do_not_grant_xp=True,
+                                         semester=cls.sem)
+        cls.quest_submission = baker.make(QuestSubmission,
+                                          user=cls.student,
+                                          is_completed=False)
+
+        cls.course_student = baker.make(CourseStudent,
+                                        user=cls.student,
+                                        active=False)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.teacher = baker.make(User, username='teacher', is_staff=True)
-        self.student = baker.make(User, username='student', is_staff=False)
-
-        self.sem = baker.make(Semester)
-        self.badge_assertion = baker.make(BadgeAssertion,
-                                          user=self.student,
-                                          do_not_grant_xp=True,
-                                          semester=self.sem)
-        self.quest_submission = baker.make(QuestSubmission,
-                                           user=self.student,
-                                           is_completed=False)
-
-        self.course_student = baker.make(CourseStudent,
-                                         user=self.student,
-                                         active=False)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_create(self, task):

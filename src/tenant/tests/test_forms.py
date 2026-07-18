@@ -4,7 +4,7 @@ import string
 
 from django.contrib.auth import get_user_model
 
-from django_tenants.test.cases import TenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from django_recaptcha.widgets import ReCaptchaV2Invisible
 
@@ -14,7 +14,7 @@ from tenant.models import Tenant
 User = get_user_model()
 
 
-class DeckRequestFormTest(TenantTestCase):
+class DeckRequestFormTest(ByteDeckTenantTestCase):
     """Tests for the public `DeckRequestForm`."""
 
     def test_captcha_uses_invisible_recaptcha_widget(self):
@@ -27,7 +27,7 @@ class DeckRequestFormTest(TenantTestCase):
         self.assertIsInstance(form.fields['captcha'].widget, ReCaptchaV2Invisible)
 
 
-class TenantFormTest(TenantTestCase):
+class TenantFormTest(ByteDeckTenantTestCase):
     """Various tests for `TenantForm` form class."""
 
     def test_default(self):

@@ -1,15 +1,15 @@
-from django_tenants.test.cases import TenantTestCase
-
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
 from djcytoscape.tasks import regenerate_map
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
-class CytoScapeTaskTests(TenantTestCase):
+class CytoScapeTaskTests(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.quest = baker.make('quest_manager.Quest')
+    @classmethod
+    def setUpTestData(cls):
+        cls.quest = baker.make('quest_manager.Quest')
 
     def test_regenerate_map(self):
         """ tests if regenerate map task runs successfully """
