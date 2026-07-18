@@ -234,3 +234,24 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             response=self.client.get(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),
         )
+
+    def test_regenerate_all__many_maps_processed_in_background(self):
+        """With more than 5 maps, regeneration is offloaded to a background task
+        and the user is warned it is being processed in the background."""
+        for i in range(6):
+            CytoScape.generate_map(baker.make('quest_manager.Quest'), f"Extra Map {i}")
+        self.assertGreater(CytoScape.objects.count(), 5)
+
+        response = self.client.get(reverse('djcytoscape:regenerate_all'), follow=True)
+        self.assertTrue(
+            any("background" in str(m) for m in response.context['messages']),
+            "expected a 'processed in the background' warning message",
+        )
+
+    def test_quest_map_interlink__existing_map_renders(self):
+        """Interlinking to an object that already initiates a map renders that map."""
+        response = self.client.get(reverse(
+            'djcytoscape:quest_map_interlink',
+            args=[self.map.initial_content_type_id, self.map.initial_object_id, self.map.id],
+        ))
+        self.assertEqual(response.status_code, 200)
