@@ -438,6 +438,9 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Two campaigns (A, B), each with one member quest that has the shared Start quest as a
+        prerequisite, so both campaigns render as siblings branching off Start.
+        """
         cls.start = baker.make(Quest, name="Start")
         # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id) —
         # i.e. A is left of B by default, before any map_order is applied.
@@ -462,7 +465,7 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         """Position of a quest's node in the emitted node list."""
         return next(i for i, n in enumerate(nodes) if n['data'].get('Quest') == quest_id)
 
-    def test_campaign_node_links_back_to_its_category(self):
+    def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
         """The compound campaign node carries selector_id 'Category: <pk>' so the map can look up
         the campaign's map_order — and json_dict surfaces it as a `Category` data attribute.
         """
@@ -470,7 +473,7 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
-    def test_default_map_order_keeps_creation_order(self):
+    def test_elements_dict__default_map_order_keeps_creation_order(self):
         """With map_order left at its default 0, campaigns keep their deterministic creation
         order (A before B), so the feature is backwards compatible with existing maps.
         """
@@ -480,14 +483,16 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
             self._index_by_category(nodes, self.camp_b.id),
         )
 
-    def test_map_order_reorders_campaigns_left_to_right(self):
+    def test_elements_dict__map_order_reorders_campaigns_left_to_right(self):
         """Giving B a lower map_order than A emits campaign B first — its compound node, its
         member quest, and the edge feeding that quest all precede A's — which dagre renders to
         the left. This flips the default A-before-B order.
         """
         self.camp_a.map_order = 2
+        self.camp_a.full_clean()
         self.camp_a.save()
         self.camp_b.map_order = 1
+        self.camp_b.full_clean()
         self.camp_b.save()
 
         elements = self._emit()

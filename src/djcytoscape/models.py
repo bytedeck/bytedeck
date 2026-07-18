@@ -576,7 +576,8 @@ class CytoScape(models.Model):
             dict[int, int]: {cyto_node_id: map_order} for every node that represents a
             Category — both the compound campaign parent nodes and any Category-as-prerequisite
             nodes. Nodes reference their Category through selector_id ('Category: <pk>').
-            map_order defaults to 0, so campaigns the user hasn't ordered keep creation order.
+            map_order defaults to 0, so campaigns the user hasn't ordered keep the deterministic
+            node-id order established for the map in issue #1977.
         """
         node_to_cat = {}
         for node_id, selector_id in self.cytoelement_set.filter(
@@ -596,7 +597,9 @@ class CytoScape(models.Model):
         Elements are ordered so the rendered layout is both deterministic (issue #1977) and
         honours the user's campaign order: dagre places same-rank nodes by their input order, so
         emitting campaign nodes, their member quests, and the edges into them in Category.map_order
-        nudges campaigns left-to-right into that order. Ties fall back to id (creation order).
+        nudges campaigns left-to-right into that order. Ties (including every campaign at the
+        default map_order 0) fall back to the node id — i.e. the deterministic node ordering from
+        issue #1977 — so maps where nobody has set an order are unchanged.
         """
         nodes = list(self.elements().filter(group=CytoElement.NODES))
         edges = list(self.elements().filter(group=CytoElement.EDGES))
@@ -612,7 +615,7 @@ class CytoScape(models.Model):
 
         # Keep every top-level node (compound campaign parents included) before any child node —
         # cytoscape requires a parent to be defined before the child that references it — then order
-        # by campaign map_order, then id (the deterministic #1977 fallback).
+        # by campaign map_order, then node id (the deterministic #1977 fallback).
         nodes.sort(key=lambda n: (n.data_parent_id is not None, node_campaign_order(n), n.id))
 
         nodes_by_id = {node.id: node for node in nodes}

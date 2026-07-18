@@ -2350,13 +2350,15 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         data = {
             'title': 'New category',
             'published': True,
-            'map_order': 0,
+            'map_order': 5,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
 
         course = Category.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
+        # map_order is a writable create field (issue #1977), so the posted value persists
+        self.assertEqual(course.map_order, data['map_order'])
 
     def test_CategoryUpdate_view(self):
         """ Admin should be able to update a course. Saving returns to the campaign's
