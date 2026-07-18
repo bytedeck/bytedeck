@@ -5,13 +5,14 @@ from django.forms import model_to_dict
 from django.utils import timezone
 
 from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_public_schema_name, schema_context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 PUBLIC_SCHEMA = get_public_schema_name()
 
 
-class PeriodicTaskSignalsTest(TenantTestCase):
+class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
 
     def test_save_CronSchedule_signal(self):
         """ Saving a CronSchedule model should also save it in the public schema """

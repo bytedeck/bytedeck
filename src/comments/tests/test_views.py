@@ -1,27 +1,36 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 from comments.models import Comment
 from bs4 import BeautifulSoup
 
-from hackerspace_online.tests.utils import ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 
 User = get_user_model()
 
 
-class CommentViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.announcement = baker.make('announcements.Announcement')
+        # create a test comment on the test announcement. Null the GFK explicitly
+        # (these comments are attached by path, not a target object) so baker
+        # doesn't fill target_content_type with a random -- possibly table-less --
+        # model, which would make str()/rendering non-deterministic under a
+        # reused schema.
+        cls.comment = baker.make(
+            'comments.Comment', user=cls.student, path=cls.announcement.get_absolute_url(),
+            target_content_type=None,
+        )
+        cls.comment_decoy = baker.make('comments.Comment', target_content_type=None)
 
     def setUp(self):
-        self.student = baker.make(User)
-        self.teacher = baker.make(User, is_staff=True)
-        self.announcement = baker.make('announcements.Announcement')
-        # create a test comment on the test announcement
-        self.comment = baker.make('comments.Comment', user=self.student, path=self.announcement.get_absolute_url())
-        self.comment_decoy = baker.make('comments.Comment')
         self.client = TenantClient(self.tenant)
 
     @patch('comments.models.Comment.unflag')

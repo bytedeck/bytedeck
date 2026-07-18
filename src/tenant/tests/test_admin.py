@@ -24,10 +24,10 @@ from django.utils import timezone
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from django_tenants.utils import tenant_context, schema_exists
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 
 from hackerspace_online.celery import app
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from tenant.admin import TenantAdmin, TenantAdminForm
 from tenant.models import Tenant
@@ -53,7 +53,7 @@ def get_perm(Model, codename):
     return Permission.objects.get(content_type=ct, codename=codename)
 
 
-class NonPublicTenantAdminTest(TenantTestCase):
+class NonPublicTenantAdminTest(ByteDeckTenantTestCase):
     """For testing non-public tenants
 
     TenantTestCase comes with a `self.tenant`
@@ -73,7 +73,7 @@ class NonPublicTenantAdminTest(TenantTestCase):
             tenant_model_admin.save_model(obj=Tenant, request=None, form=None, change=None)
 
 
-class PublicTenantTestAdminPublic(TenantTestCase):
+class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
     """TenantTestCase comes with a tenant: tenant.test.com"""
 
     ###############################################################################
@@ -92,35 +92,35 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     #     self.assertEqual(self.public_tenant.domain_url, "localhost")
     #################################################################################
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         # create the public schema
-        self.public_tenant = Tenant(schema_name="public", name="public")
-        self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
-        with tenant_context(self.public_tenant):
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
             # create superuser account
-            self.superuser = User.objects.create_superuser(
+            cls.superuser = User.objects.create_superuser(
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding triggering
-            # django signals (post_save and pre_save) can save us a lot of time.
-            Tenant.objects.bulk_create([self.public_tenant])
-            self.public_tenant.refresh_from_db()
+            # avoiding triggering django signals (post_save and pre_save)
+            # can save us a lot of time.
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
             # create domain object manually, since we avoided triggering the signals
-            self.public_tenant.domains.create(domain="localhost", is_primary=True)
+            cls.public_tenant.domains.create(domain="localhost", is_primary=True)
 
             # create a "real" (like superuser do in admin) tenant object for testing purpose
-            self.extra_tenant = Tenant(
+            cls.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
-            self.extra_tenant.paid_until = date(2032, 1, 1)
-            self.extra_tenant.trial_end_date = date(2022, 1, 1)
-            self.extra_tenant.save()
+            cls.extra_tenant.paid_until = date(2032, 1, 1)
+            cls.extra_tenant.trial_end_date = date(2022, 1, 1)
+            cls.extra_tenant.save()
 
         # update "owner" and add *unverified* email address
-        with tenant_context(self.tenant):
+        with tenant_context(cls.tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
                 # using different name/email to test fallback feature
@@ -134,7 +134,7 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 email_address.save()
 
         # update "owner" and add missing email address
-        with tenant_context(self.extra_tenant):
+        with tenant_context(cls.extra_tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
                 # using different name/email to test fallback feature
@@ -148,6 +148,8 @@ class PublicTenantTestAdminPublic(TenantTestCase):
                 email_address.verified = True
                 email_address.save()
 
+    def setUp(self):
+        self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         self.client = TenantClient(self.public_tenant)
 
     def test_owner_full_name_text_column(self):
@@ -416,10 +418,11 @@ class PublicTenantTestAdminPublic(TenantTestCase):
     #             self.tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
 
 
-class TenantAdminFormTest(TenantTestCase):
+class TenantAdminFormTest(ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.form_data = {
+    @classmethod
+    def setUpTestData(cls):
+        cls.form_data = {
             'name': 'test',  # This is the name of the already existing test tenant
             # 'owner_full_name': None,
             # 'owner_email': None,
@@ -463,29 +466,30 @@ class TenantAdminFormTest(TenantTestCase):
         self.assertFalse(form.is_valid())
 
 
-class TenantAdminViewPermissionsTest(TenantTestCase):
+class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
     """Tests for TenandAdmin views permissions."""
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         # create the public schema
-        self.public_tenant = Tenant(schema_name="public", name="public")
-        with tenant_context(self.public_tenant):
-            self.viewuser = User.objects.create_user(
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            cls.viewuser = User.objects.create_user(
                 username="viewuser",
                 password="sekret",
                 is_staff=True,
             )
-            self.adduser = User.objects.create_user(
+            cls.adduser = User.objects.create_user(
                 username="adduser",
                 password="sekret",
                 is_staff=True,
             )
-            self.changeuser = User.objects.create_user(
+            cls.changeuser = User.objects.create_user(
                 username="changeuser",
                 password="sekret",
                 is_staff=True,
             )
-            self.deleteuser = User.objects.create_user(
+            cls.deleteuser = User.objects.create_user(
                 username="deleteuser",
                 password="sekret",
                 is_staff=True,
@@ -494,43 +498,44 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
             opts = Tenant._meta
 
             # User who can view Tenants
-            self.viewuser.user_permissions.add(
+            cls.viewuser.user_permissions.add(
                 get_perm(Tenant, get_permission_codename("view", opts))
             )
             # User who can add Tenants
-            self.adduser.user_permissions.add(
+            cls.adduser.user_permissions.add(
                 get_perm(Tenant, get_permission_codename("add", opts))
             )
             # User who can change Tenants
-            self.changeuser.user_permissions.add(
+            cls.changeuser.user_permissions.add(
                 get_perm(Tenant, get_permission_codename("change", opts))
             )
             # User who can delete Tenants
-            self.deleteuser.user_permissions.add(
+            cls.deleteuser.user_permissions.add(
                 get_perm(Tenant, get_permission_codename("delete", opts))
             )
 
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding triggering
-            # django signals (post_save and pre_save) can save us a lot of time.
-            Tenant.objects.bulk_create([self.public_tenant])
-            self.public_tenant.refresh_from_db()
+            # avoiding triggering django signals (post_save and pre_save)
+            # can save us a lot of time.
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
             # create domain object manually, since we avoided triggering the signals
-            self.public_tenant.domains.create(domain="localhost", is_primary=True)
+            cls.public_tenant.domains.create(domain="localhost", is_primary=True)
 
             # create a "real" (like superuser do in admin) tenant object for testing purpose
-            self.extra_tenant = Tenant(
+            cls.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
-            self.extra_tenant.save()
-
-        self.client = TenantClient(self.public_tenant)
+            cls.extra_tenant.save()
 
         # We need to check if library tenant exist
         # Since library is created elsewhere it will fail only if full tests are ran
         # See Issue https://github.com/bytedeck/bytedeck/issues/1590 for more details
-        self.lib = 1 if Tenant.objects.filter(schema_name='library').exists() else 0
+        cls.lib = 1 if Tenant.objects.filter(schema_name='library').exists() else 0
+
+    def setUp(self):
+        self.client = TenantClient(self.public_tenant)
 
     @override_settings(ROOT_URLCONF=__name__)
     def test_delete_view(self):
@@ -637,35 +642,36 @@ class TenantAdminViewPermissionsTest(TenantTestCase):
         )
 
 
-class TenantAdminActionsTest(TenantTestCase):
+class TenantAdminActionsTest(ByteDeckTenantTestCase):
     """TenantAdmin class is shipped with various admin actions"""
 
-    def setUp(self):
+    @classmethod
+    def setUpTestData(cls):
         # create the public schema
-        self.public_tenant = Tenant(schema_name="public", name="public")
-        with tenant_context(self.public_tenant):
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
             # create superuser account
-            self.superuser = User.objects.create_superuser(
+            cls.superuser = User.objects.create_superuser(
                 username="admin",
                 password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
             )
             # Hack to create the public tenant without triggering the signals,
-            # since "setUp" method run before each test, avoiding triggering
-            # django signals (post_save and pre_save) can save us a lot of time.
-            Tenant.objects.bulk_create([self.public_tenant])
-            self.public_tenant.refresh_from_db()
+            # avoiding triggering django signals (post_save and pre_save)
+            # can save us a lot of time.
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
             # create domain object manually, since we avoided triggering the signals
-            self.public_tenant.domains.create(domain="localhost", is_primary=True)
+            cls.public_tenant.domains.create(domain="localhost", is_primary=True)
 
             # create a "real" (like superuser do in admin) tenant object for testing purpose
-            self.extra_tenant = Tenant(
+            cls.extra_tenant = Tenant(
                 schema_name="extra",
                 name="extra",
             )
-            self.extra_tenant.save()
+            cls.extra_tenant.save()
 
         # update "owner" and add *unverified* email address
-        with tenant_context(self.tenant):
+        with tenant_context(cls.tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
                 # using different name/email to test fallback feature
@@ -679,7 +685,7 @@ class TenantAdminActionsTest(TenantTestCase):
                 email_address.save()
 
         # update "owner" and add *verified* email address
-        with tenant_context(self.extra_tenant):
+        with tenant_context(cls.extra_tenant):
             config = SiteConfig.get()
             if config.deck_owner is not None and not config.deck_owner.email:
                 # using different name/email to test fallback feature
@@ -693,6 +699,7 @@ class TenantAdminActionsTest(TenantTestCase):
                 email_address.verified = True
                 email_address.save()
 
+    def setUp(self):
         self.client = TenantClient(self.public_tenant)
 
         self.old_celery_always_eager = app.conf.task_always_eager

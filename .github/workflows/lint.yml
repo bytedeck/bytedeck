@@ -1,6 +1,15 @@
 name: Ruff
 
-on: [push, pull_request]
+# Same trigger/concurrency scheme as build_and_test.yml: long-lived branches
+# on push, every PR, and stale in-progress runs cancelled on new pushes.
+on:
+  push:
+    branches: [develop, staging, master, competencies]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:

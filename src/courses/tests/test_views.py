@@ -6,7 +6,6 @@ from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from freezegun import freeze_time
@@ -14,7 +13,7 @@ from freezegun import freeze_time
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
 from notifications.models import Notification, notify_rank_up
-from hackerspace_online.tests.utils import ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 
@@ -26,17 +25,18 @@ import json
 User = get_user_model()
 
 
-class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
+class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher and a student so tests can log in as each with force_login()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
 
     def test_all_rank_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -150,28 +150,29 @@ class RankViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(scape.name in str(messages[0]))
 
 
-class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher and a student so tests can log in as each with force_login()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+
+        cls.sem = SiteConfig.get().active_semester
+        cls.block = baker.make('courses.block')
+        cls.course = baker.make('courses.course')
+        cls.grade = baker.make('courses.grade')
+
+        cls.valid_form_data = {
+            'semester': cls.sem.pk,
+            'block': cls.block.pk,
+            'course': cls.course.pk,
+        }
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        self.sem = SiteConfig.get().active_semester
-        self.block = baker.make('courses.block')
-        self.course = baker.make('courses.course')
-        self.grade = baker.make('courses.grade')
-
-        self.valid_form_data = {
-            'semester': self.sem.pk,
-            'block': self.block.pk,
-            'course': self.course.pk,
-        }
 
     def test_all_page_status_codes_for_anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -358,8 +359,7 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
             Admin should not be able to delete course with a student registered
             Also checks if course can be deleted with a forced post method
         """
-        success = self.client.login(username=self.test_teacher.username, password=self.test_password)
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # register student to course
         course_student = baker.make(CourseStudent, user=self.test_student1, semester=self.sem, block=self.block, course=self.course,)
@@ -380,28 +380,29 @@ class CourseViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, dt_well_ptag)
 
 
-class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
+class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        # need a teacher and a student so tests can log in as each with force_login()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student1 = User.objects.create_user('test_student')
+
+        cls.sem = SiteConfig.get().active_semester
+        cls.block = baker.make('courses.block')
+        cls.course = baker.make('courses.course')
+        cls.grade = baker.make('courses.grade')
+
+        cls.valid_form_data = {
+            'semester': cls.sem.pk,
+            'block': cls.block.pk,
+            'course': cls.course.pk,
+        }
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-
-        # need a teacher and a student with known password so tests can log in as each, or could use force_login()?
-        self.test_password = "password"
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        self.test_teacher = User.objects.create_user('test_teacher', password=self.test_password, is_staff=True)
-        self.test_student1 = User.objects.create_user('test_student', password=self.test_password)
-
-        self.sem = SiteConfig.get().active_semester
-        self.block = baker.make('courses.block')
-        self.course = baker.make('courses.course')
-        self.grade = baker.make('courses.grade')
-
-        self.valid_form_data = {
-            'semester': self.sem.pk,
-            'block': self.block.pk,
-            'course': self.course.pk,
-        }
 
     def test_CourseStudentUpdate_view(self):
         """ Staff can update a student's course """
@@ -589,16 +590,16 @@ class CourseStudentViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
 
-class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
+class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Test module for the MarkRange model's view classes"""
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
-        # set form data in setUp to be used for posting to create/update forms
+        # set form data in setUpTestData to be used for posting to create/update forms
         # manytomany field in MarkRange form prevents generate_form_data from functioning properly so must be set manually
-        self.data = {
+        cls.data = {
             'name': 'TestMarkRange',
             'minimum_mark': '72.5',
             'active': True,
@@ -606,6 +607,9 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
             'color_dark': '#337AB7',
             'days': '1,2,3,4,5,6,7',
         }
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def test_MarkRangeList_view(self):
         """The MarkRange list view's object list should contain all MarkRange objects"""
@@ -660,7 +664,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(MarkRange.objects.filter(id=1).exists())
 
 
-class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
+class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def generate_dates(quantity, dates=None):
         """
@@ -682,9 +686,12 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         leftover = quantity - len(dates)
         return SemesterViewTests.generate_dates(leftover, dates)
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
 
     def test_SemesterList_view(self):
         self.client.force_login(self.test_teacher)
@@ -740,7 +747,9 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
 
         # check if data was added to db
         self.assertEqual(Semester.objects.count(), 2)
-        semester = Semester.objects.get(pk=2)
+        # The just-created semester is the most recent one; don't assume an
+        # absolute pk (sequences aren't reset between reused-schema test classes).
+        semester = Semester.objects.latest('id')
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():
@@ -901,11 +910,14 @@ class SemesterViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
 
-class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
+class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.test_teacher = User.objects.create_user('test_teacher', password='password', is_staff=True)
 
     def test_BlockList_view(self):
         """ Admin should be able to view block list """
@@ -958,8 +970,7 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         student = baker.make(User)
         block = baker.make(Block)
 
-        success = self.client.login(username=self.test_teacher.username, password='password')
-        self.assertTrue(success)
+        self.client.force_login(self.test_teacher)
 
         # register student to block
         course_student = baker.make(CourseStudent, user=student, block=block)
@@ -990,16 +1001,19 @@ class BlockViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
 
 
-class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
+class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.teacher = baker.make(User, is_staff=True)
+
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course)
+        cls.semester = SiteConfig.get().active_semester
+        cls.inactive_semester = baker.make(Semester)
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.teacher = baker.make(User, is_staff=True)
-
-        self.block = baker.make(Block)
-        self.course = baker.make(Course)
-        self.semester = SiteConfig.get().active_semester
-        self.inactive_semester = baker.make(Semester)
 
     def create_student_course(self, xp):
         """
@@ -1111,34 +1125,36 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(total_students, len(active_sem_students))
 
 
-class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
+class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
-    def setUp(self):
-        self.client = TenantClient(self.tenant)
-
-        self.student = baker.make(User)
-        self.block = baker.make(Block)
-        self.course = baker.make(Course)
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course)
 
         # freeze_time doesnt affect "SiteConfig.get().active_semester"
         # we have to manually set the dates
-        self.semester = SiteConfig.get().active_semester
-        self.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
-        self.semester.last_day = self.semester.first_day + datetime.timedelta(days=135)
-        self.semester.save()
+        cls.semester = SiteConfig.get().active_semester
+        cls.semester.first_day = datetime.date(2024, 1, 1)  # keep in mind this is in localtime
+        cls.semester.last_day = cls.semester.first_day + datetime.timedelta(days=135)
+        cls.semester.save()
 
-        self.student_course = baker.make(
+        cls.student_course = baker.make(
             CourseStudent,
-            user=self.student,
-            semester=self.semester,
-            course=self.course,
-            block=self.block
+            user=cls.student,
+            semester=cls.semester,
+            course=cls.course,
+            block=cls.block
         )
 
         # use this to make aware datetime objects
         # (UTC-8) for datetime.date(2024, 1, 1)
-        self.tz = timezone.get_default_timezone()
-        self.base_xp = 1
+        cls.tz = timezone.get_default_timezone()
+        cls.base_xp = 1
+
+    def setUp(self):
+        self.client = TenantClient(self.tenant)
 
     def create_quest_and_submissions(self, xp, quest_submission_date, quest_submission_quantity=1):
         """
@@ -1324,24 +1340,28 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, TenantTestCase):
             self.assertEqual(valid_days, 10)
 
 
-class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
+class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+
+        cls.block = baker.make(Block)
+        cls.course = baker.make(Course, xp_for_100_percent=1000)
+
+        cls.stu_course = baker.make(
+            CourseStudent,
+            user=cls.student,
+            semester=SiteConfig.get().active_semester,
+            block=cls.block,
+            course=cls.course,
+        )
 
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
-
-        self.block = baker.make(Block)
-        self.course = baker.make(Course, xp_for_100_percent=1000)
-
-        self.stu_course = baker.make(
-            CourseStudent,
-            user=self.student,
-            semester=SiteConfig.get().active_semester,
-            block=self.block,
-            course=self.course,
-        )
 
         # to show mark calculation page without 404 you need to turn this on
+        # (stays in setUp: SiteConfig writes populate cross-test caches)
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
         siteconfig.save()
@@ -1400,15 +1420,18 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
 
 
-class AjaxRankPopupTests(ViewTestUtilsMixin, TenantTestCase):
+class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_ranked_popup/
     + ajax/on_close_ranked_popup/
     """
 
+    @classmethod
+    def setUpTestData(cls):
+        cls.student = baker.make(User)
+
     def setUp(self):
         self.client = TenantClient(self.tenant)
-        self.student = baker.make(User)
 
     def test_status_codes(self):
         ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`

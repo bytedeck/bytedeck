@@ -8,7 +8,16 @@ from tenant.models import Tenant
 
 def change_domain_urls(sender, *args, **kwargs):
     """ Called via post_save signal from Sites app so that when the domain of the site changes,
-    The domain_url of tenants will be updated.
+    the tenants' domains would be updated to match.
+
+    ``domain_url`` is no longer a field on the tenant model: django-tenants stores
+    domains in the separate ``Domain``/``TenantDomain`` relation, so
+    ``tenant.domain_url`` is always ``None``. This handler is therefore effectively
+    inert -- there is no ``domain_url`` column to rewrite -- and is guarded so that
+    saving a ``Site`` while any non-public tenant exists cannot raise
+    ``AttributeError: 'NoneType' object has no attribute 'split'`` (previously this
+    crashed e.g. ``initdb``'s ``site.save()`` whenever a deck already existed). A
+    proper reimplementation would update each tenant's primary ``Domain`` instead.
 
     This should probably be in the Tenant app?
     """
@@ -21,11 +30,16 @@ def change_domain_urls(sender, *args, **kwargs):
         with transaction.atomic():
             all_tenants = Tenant.objects.exclude(schema_name='public')
             for tenant in all_tenants:
+                # domain_url is a removed field (always None); skip rather than
+                # crash on ``None.split(...)``. See the docstring above.
+                if not tenant.domain_url:
+                    continue
                 domain = tenant.domain_url.split(public_tenant.domain_url)[0]
                 tenant.domain_url = '{}{}'.format(domain, kwargs['instance'].domain)
                 tenant.save()
-            public_tenant.domain_url = kwargs['instance'].domain
-            public_tenant.save()
+            if public_tenant.domain_url:
+                public_tenant.domain_url = kwargs['instance'].domain
+                public_tenant.save()
 
 
 def handle_tenant_site_domain_update(tenant, **kwargs):

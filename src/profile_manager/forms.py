@@ -1,3 +1,4 @@
+import dns.exception
 import dns.resolver
 
 from django import forms
@@ -73,11 +74,16 @@ class ProfileForm(forms.ModelForm):
             try:
                 dns.resolver.resolve(domain, 'MX')
                 # If it doesn't throw an exception, the domain has MX records
-            except dns.resolver.NoAnswer:
-                # Some domains don't answer, such as sd72.bc.ca!
-                pass
             except dns.resolver.NXDOMAIN:
                 raise forms.ValidationError(f"{domain} doesn't appear to exist. Enter a valid email address or leave it blank.")
+            except dns.exception.DNSException:
+                # Any other DNS failure — NoAnswer (some domains don't answer, such as sd72.bc.ca!),
+                # NoNameservers, timeouts, resolver misconfiguration, etc. — means we couldn't verify
+                # the domain, not that it's invalid. This is best-effort validation, and the real gate
+                # is the verification email sent afterward, so fail open rather than blocking (or 500ing)
+                # the email change. Previously only NoAnswer/NXDOMAIN were caught, so a resolver error on
+                # a server with restricted/slow outbound DNS crashed the profile form with a 500 (issue #1976).
+                pass
 
         if email and email_address_exists(email, exclude_user=self.instance.user):
             raise forms.ValidationError("A user is already registered with this email address.")

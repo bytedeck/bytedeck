@@ -5,7 +5,6 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import override_settings
 
-from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
@@ -17,10 +16,12 @@ from prerequisites.tasks import grant_badge_assertions_for_badge
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+
 User = get_user_model()
 
 
-class GrantBadgeAssertionsForBadgeTest(TenantTestCase):
+class GrantBadgeAssertionsForBadgeTest(ByteDeckTenantTestCase):
     """Tests for the `grant_badge_assertions_for_badge` task, which grants a badge to
     all current students who meet its (changed) prerequisite conditions. Issue #1157.
     """

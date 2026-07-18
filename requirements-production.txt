@@ -3,7 +3,7 @@ Django>=4.2.16,<4.3
 # All django-* packages below are pinned to ranges that support BOTH Django 4.2
 # and 5.2, so the framework can be flipped to 5.2 LTS without touching them.
 django-allauth[socialaccount]>=65.18,<66  # the extra pulls pyjwt[crypto]/oauthlib/requests, needed by the Google provider
-django-bootstrap-datepicker-plus>=5.0.5,<6.0
+django-bootstrap-datepicker-plus>=6.0.0,<7.0
 django-celery-beat>=2.8,<3.0
 django-colorful>=1.4,<2.0
 django-crispy-forms>=2.4,<2.6  # 2.6+ requires Django >= 5.2
@@ -16,7 +16,7 @@ django-import-export>=4.3,<5.0
 django-querysetsequence>=0.18,<0.19
 django-recaptcha>=4.0,<4.2  # 4.0 renamed the package module from `captcha` to `django_recaptcha`
 django-redis>=6.0,<7.0  # 7.0+ requires Django >= 5.2
-django-resized>=0.3.11,<1.1
+django-resized>=1.0.3,<1.1
 django-select2>=8.4,<8.5
 django-storages[boto3]>=1.14,<2
 django-summernote>=0.8,<0.9
@@ -26,13 +26,13 @@ django-url-or-relative-url-field>=0.2.0,<0.3.0
 tenant-schemas-celery>=4.0,<4.1
 
 # non django
-beautifulsoup4>=4.12.3,<4.13
-bleach[css]>=5,<6
-celery>=5.3,<5.6
-cssutils==2.11.1
+beautifulsoup4>=4.15,<4.16
+bleach[css]>=6.4,<7  # 6.4 includes the invisible-Unicode-character XSS fix
+celery>=5.6,<5.7
+cssutils>=2.15,<3.0  # 2.12+ split vendored encutils into its own package; upgrading an EXISTING venv clobbers it -- run: pip install --force-reinstall encutils
 dnspython>=2.6.1,<3.0
-html2text==2020.1.16
-numpy==1.22
+html2text>=2025.4.15,<2026
+numpy>=1.26,<2.3  # 2.3+ requires Python >= 3.11; raise the ceiling with the Python upgrade
 pytz # required by django-redis which uses pickle, even though django-redis changelog says it doesn't us pickle anymore?
 
 # subdependencies
@@ -41,4 +41,4 @@ psycopg2-binary>=2.8.6,<2.10  # since our backend is PostgreSQL, Django and djan
 # server couldn't speak RESP3) is gone -- all environments now run redis:7 --
 # but the ceiling stays until celery/kombu declare redis-py 8 support.
 redis>=4.0.2,<8
-pillow>=10.3,<11.0  # used implicitly by django_resized (does not exist as an extra package either)
+pillow>=12.3,<13.0  # used implicitly by django_resized (does not exist as an extra package either)
