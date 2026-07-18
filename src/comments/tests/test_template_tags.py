@@ -1,7 +1,7 @@
 from django.test import TestCase
 from django.core.files import File
 from django.template import Context, Template
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock
 
 
 class FilenameFilterTests(TestCase):
@@ -19,19 +19,16 @@ class FilenameFilterTests(TestCase):
         # Assert that the rendered output matches the expected filename
         self.assertEqual(rendered, "file.txt")
 
-    # TODO: Can't figure out how to get the method to raise the FileNotFoundError
-    # Does that piece fo code do anything?
-    # def test_filename_missing_file(self):
-    #    # Mock the FileField object with a missing file
-    #     file_field_mock = MagicMock()
-    #     file_field_mock.file = MagicMock(spec=File)
-    #     file_field_mock.file.name = ""
+    def test_filename_missing_file(self):
+        """When accessing the underlying file raises FileNotFoundError, the filter
+        returns a "File Missing" warning instead of blowing up."""
+        from comments.templatetags.comment_tags import filename
 
-    #     # Render the template with the mocked FileField object
-    #     context = Context({'value': file_field_mock})
-    #     template = Template('{% load comment_tags %}{{ value|filename }}')
-    #     rendered = template.render(context)
+        # A FieldFile whose `.file` attribute raises FileNotFoundError when accessed,
+        # mirroring a database row that points at a file no longer on disk. The filter
+        # is called directly (not through a template) so its raw HTML isn't autoescaped.
+        file_field_mock = MagicMock()
+        type(file_field_mock).file = PropertyMock(side_effect=FileNotFoundError)
 
-    #     # Assert that the rendered output includes the expected HTML string
-    #     expected_output = '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]'
-    #     self.assertIn(expected_output, rendered)
+        expected_output = '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]'
+        self.assertEqual(filename(file_field_mock), expected_output)
