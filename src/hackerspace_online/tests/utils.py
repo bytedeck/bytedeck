@@ -149,7 +149,8 @@ class ByteDeckTenantTestCase(TenantTestCase):
         # cls) skips django-tenants' override (which would rebuild the schema).
         super(TenantTestCase, cls).setUpClass()
 
-    def _fixture_setup(self):
+    @classmethod
+    def _fixture_setup(cls):
         """Start the per-test savepoint, then clear the schema-keyed cache.
 
         Each test rolls back to a savepoint afterwards, but the process-global
@@ -160,6 +161,11 @@ class ByteDeckTenantTestCase(TenantTestCase):
         Clearing here — for every test, regardless of setUp overrides — guarantees
         each test reads cache-backed singletons fresh from its own pristine DB
         state. (Runs in addition to any cache.clear() a test's own setUp does.)
+
+        A ``classmethod`` since Django 5.1 made ``TestCase._fixture_setup`` one;
+        it is still invoked once per test method (it enters the per-test savepoint
+        that ``_fixture_teardown`` rolls back), so the cache is still cleared per
+        test — only the binding changed from instance to class.
         """
         super()._fixture_setup()
         cache.clear()

@@ -38,6 +38,13 @@ def remove_duplicate_in_progress_submissions(apps, schema_editor):
         .filter(is_completed=False, first_time_completed__isnull=True)
         .order_by("pk")
         .values_list("pk", "user_id", "quest_id", "semester_id")
+        # Clear any prefetch the active manager may have added (QuestSubmission's
+        # default manager prefetches quest__tags): this scan only reads scalar
+        # tuples, and since Django 5.1 iterator() raises if the queryset carries
+        # a prefetch_related() without an explicit chunk_size. A real migration
+        # uses the historical (plain) manager and has nothing to clear; this keeps
+        # the scan correct if the concrete manager is ever used instead.
+        .prefetch_related(None)
     )
     for pk, user_id, quest_id, semester_id in in_progress.iterator():
         if semester_id is None:

@@ -50,11 +50,18 @@ class CytoscapeGFKChoiceField(AllowedGFKChoiceField):
 
 class GenerateQuestMapForm(FutureModelForm):
 
+    # initial_content_object is CytoScape's GenericForeignKey, declared below as a
+    # form field and persisted by FutureModelForm. It is intentionally NOT listed
+    # in Meta.fields: since Django 5.0, naming a non-editable model field (a GFK)
+    # in Meta.fields raises FieldError. field_order keeps the declared GFK in its
+    # original position (declared fields are otherwise appended after model fields);
+    # QuestMapForm inherits it and appends its extra fields after these three.
+    field_order = ['name', 'initial_content_object', 'parent_scape']
+
     class Meta:
         model = CytoScape
         fields = [
             'name',
-            'initial_content_object',
             'parent_scape',
         ]
 
