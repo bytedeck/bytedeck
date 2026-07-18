@@ -569,19 +569,63 @@ class CytoScape(models.Model):
         elements = self.cytoelement_set.all()
         return elements.select_related('data_parent', 'data_source', 'data_target')
 
+    def _campaign_map_orders(self):
+        """Map each Category (campaign) node in this scape to its Category.map_order.
+
+        Returns:
+            dict[int, int]: {cyto_node_id: map_order} for every node that represents a
+            Category — both the compound campaign parent nodes and any Category-as-prerequisite
+            nodes. Nodes reference their Category through selector_id ('Category: <pk>').
+            map_order defaults to 0, so campaigns the user hasn't ordered keep creation order.
+        """
+        node_to_cat = {}
+        for node_id, selector_id in self.cytoelement_set.filter(
+            group=CytoElement.NODES, selector_id__startswith='Category:'
+        ).values_list('id', 'selector_id'):
+            node_to_cat[node_id] = int(selector_id.split(':')[1].strip())
+
+        if not node_to_cat:
+            return {}
+
+        orders = dict(Category.objects.filter(id__in=set(node_to_cat.values())).values_list('id', 'map_order'))
+        return {node_id: orders.get(cat_id, 0) for node_id, cat_id in node_to_cat.items()}
+
     def elements_dict(self):
-        elements = self.elements()
-        nodes = elements.filter(group=CytoElement.NODES)
-        edges = elements.filter(group=CytoElement.EDGES)
+        """Serialize this scape's nodes and edges into the dict cytoscape/dagre consumes.
 
-        nodes_list = [node.json_dict() for node in nodes]
-        edges_list = [edge.json_dict() for edge in edges]
+        Elements are ordered so the rendered layout is both deterministic (issue #1977) and
+        honours the user's campaign order: dagre places same-rank nodes by their input order, so
+        emitting campaign nodes, their member quests, and the edges into them in Category.map_order
+        nudges campaigns left-to-right into that order. Ties fall back to id (creation order).
+        """
+        nodes = list(self.elements().filter(group=CytoElement.NODES))
+        edges = list(self.elements().filter(group=CytoElement.EDGES))
 
-        elements_dict = {
-            'nodes': nodes_list,
-            'edges': edges_list,
+        map_orders = self._campaign_map_orders()
+
+        def node_campaign_order(node):
+            # a Category/campaign node orders by its own map_order; a quest inside a campaign
+            # orders by its parent campaign's map_order; anything else stays at the default 0.
+            if node.id in map_orders:
+                return map_orders[node.id]
+            return map_orders.get(node.data_parent_id, 0)
+
+        # Keep every top-level node (compound campaign parents included) before any child node —
+        # cytoscape requires a parent to be defined before the child that references it — then order
+        # by campaign map_order, then id (the deterministic #1977 fallback).
+        nodes.sort(key=lambda n: (n.data_parent_id is not None, node_campaign_order(n), n.id))
+
+        nodes_by_id = {node.id: node for node in nodes}
+
+        # Order an edge by the campaign of the node it points at, so the edges feeding a campaign's
+        # quests arrive in the same left-to-right order as the campaigns themselves. Every edge
+        # targets a node in this scape, so the lookup always resolves.
+        edges.sort(key=lambda e: (node_campaign_order(nodes_by_id[e.data_target_id]), e.id))
+
+        return {
+            'nodes': [node.json_dict() for node in nodes],
+            'edges': [edge.json_dict() for edge in edges],
         }
-        return elements_dict
 
     def generate_elements_json(self):
         return json.dumps(self.elements_dict())
@@ -780,13 +824,15 @@ class CytoScape(models.Model):
         if hasattr(obj, 'campaign') and obj.campaign is not None:
             campaign = obj.campaign
 
-            # Create a node for this campaign (or get it if it already exists)
+            # Create a node for this campaign (or get it if it already exists).
+            # selector_id ties the compound node back to its Category (like quest/badge nodes do),
+            # so the map can order campaigns left-to-right by Category.map_order (issue #1977).
             campaign_node, campaign_created = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
                 label=CytoScape.generate_label(obj.campaign),
                 classes="campaign",
-                # defaults={'attribute': value},
+                defaults={'selector_id': CytoElement.generate_selector_id(obj.campaign)},
             )
 
             # Add a parent (i.e. campaign) to the target node (to form a compound node)

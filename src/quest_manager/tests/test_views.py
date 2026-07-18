@@ -2350,6 +2350,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         data = {
             'title': 'New category',
             'published': True,
+            'map_order': 0,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
@@ -2365,12 +2366,24 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         data = {
             'title': 'My Updated Title',
             'published': False,
+            'map_order': 0,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
+
+    def test_CategoryUpdate_view__sets_map_order(self):
+        """The campaign update form exposes map_order (the quest-map left-to-right ordering,
+        issue #1977) and saves it."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_update', args=[1]))
+        self.assertContains(response, 'name="map_order"')
+
+        data = {'title': 'Ordered Campaign', 'published': True, 'map_order': 5}
+        self.client.post(reverse('quests:category_update', args=[1]), data=data)
+        self.assertEqual(Category.objects.get(id=1).map_order, 5)
 
     def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
         """The cancel button on the campaign update form must link back to the
