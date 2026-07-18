@@ -31,7 +31,7 @@ class TenantTasksTests(ByteDeckTenantTestCase):
         self.assertIn("john@doe.com", mail.outbox[0].bcc)
 
 
-class ClearExpiredSessionsTaskTest(TenantTestCase):
+class ClearExpiredSessionsTaskTest(ByteDeckTenantTestCase):
     """clear_expired_sessions_in_all_schemas purges expired django_session rows
     in every schema. Sessions are db-backed with an 8-week cookie age and
     nothing else runs clearsessions, so without this task the per-schema
