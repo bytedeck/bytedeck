@@ -156,7 +156,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "short_description", "icon", "published")
+    fields = ("title", "short_description", "icon", "published", "map_order")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -180,7 +180,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "short_description", "icon", "published")
+    fields = ("title", "short_description", "icon", "published", "map_order")
     model = Category
     # no success_url: UpdateView falls back to the object's get_absolute_url(), returning
     # the user to the campaign detail view they started the edit from (issue #1931)

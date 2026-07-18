@@ -11,6 +11,7 @@ from model_bakery import baker
 
 # from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoElement, CytoScape, TempCampaign, TempCampaignNode, clean_JSON
+from prerequisites.models import Prereq
 from quest_manager.models import Quest, Category
 
 # from django_tenants.test.client import TenantClient
@@ -535,3 +536,92 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         for index, expected in enumerate(expected_results):
             result = scapes[0:index].get_maps_as_formatted_string()
             self.assertEqual(result, expected)
+
+
+class CampaignMapOrderTest(ByteDeckTenantTestCase):
+    """Campaigns are placed left-to-right on the quest map in Category.map_order (issue #1977,
+    the ordering half). dagre lays out same-rank nodes by their input order, so emitting a
+    campaign's node, its member quest, and the edge into that quest earlier moves the campaign
+    left. Two campaigns branch off a common Start quest so they render as siblings.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Two campaigns (A, B), each with one member quest that has the shared Start quest as a
+        prerequisite, so both campaigns render as siblings branching off Start.
+        """
+        cls.start = baker.make(Quest, name="Start")
+        # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id) —
+        # i.e. A is left of B by default, before any map_order is applied.
+        cls.camp_a = baker.make(Category, title="AAA Campaign")
+        cls.camp_b = baker.make(Category, title="BBB Campaign")
+        cls.qa = baker.make(Quest, name="A-quest", campaign=cls.camp_a)
+        cls.qb = baker.make(Quest, name="B-quest", campaign=cls.camp_b)
+        Prereq.add_simple_prereq(cls.qa, cls.start)
+        Prereq.add_simple_prereq(cls.qb, cls.start)
+
+    def _emit(self):
+        """Regenerate the map and return its elements dict."""
+        return CytoScape.generate_map(self.start, "order-test").elements_dict()
+
+    @staticmethod
+    def _index_by_category(nodes, category_id):
+        """Position of a campaign's compound node in the emitted node list."""
+        return next(i for i, n in enumerate(nodes) if n['data'].get('Category') == category_id)
+
+    @staticmethod
+    def _index_by_quest(nodes, quest_id):
+        """Position of a quest's node in the emitted node list."""
+        return next(i for i, n in enumerate(nodes) if n['data'].get('Quest') == quest_id)
+
+    def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
+        """The compound campaign node carries selector_id 'Category: <pk>' so the map can look up
+        the campaign's map_order — and json_dict surfaces it as a `Category` data attribute.
+        """
+        scape = CytoScape.generate_map(self.start, "order-test")
+        node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
+        self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
+
+    def test_elements_dict__default_map_order_keeps_creation_order(self):
+        """With map_order left at its default 0, campaigns keep their deterministic creation
+        order (A before B), so the feature is backwards compatible with existing maps.
+        """
+        nodes = self._emit()['nodes']
+        self.assertLess(
+            self._index_by_category(nodes, self.camp_a.id),
+            self._index_by_category(nodes, self.camp_b.id),
+        )
+
+    def test_elements_dict__map_order_reorders_campaigns_left_to_right(self):
+        """Giving B a lower map_order than A emits campaign B first — its compound node, its
+        member quest, and the edge feeding that quest all precede A's — which dagre renders to
+        the left. This flips the default A-before-B order.
+        """
+        self.camp_a.map_order = 2
+        self.camp_a.full_clean()
+        self.camp_a.save()
+        self.camp_b.map_order = 1
+        self.camp_b.full_clean()
+        self.camp_b.save()
+
+        elements = self._emit()
+        nodes = elements['nodes']
+
+        # campaign B's compound node now precedes campaign A's
+        self.assertLess(
+            self._index_by_category(nodes, self.camp_b.id),
+            self._index_by_category(nodes, self.camp_a.id),
+        )
+        # and B's member quest precedes A's
+        self.assertLess(
+            self._index_by_quest(nodes, self.qb.id),
+            self._index_by_quest(nodes, self.qa.id),
+        )
+
+        # the edge feeding B's quest is emitted before the edge feeding A's quest
+        node_id_by_quest = {n['data']['Quest']: n['data']['id'] for n in nodes if 'Quest' in n['data']}
+        edge_targets = [e['data']['target'] for e in elements['edges']]
+        self.assertLess(
+            edge_targets.index(node_id_by_quest[self.qb.id]),
+            edge_targets.index(node_id_by_quest[self.qa.id]),
+        )
