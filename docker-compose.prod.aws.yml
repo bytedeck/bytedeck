@@ -8,8 +8,22 @@
 # https://docs.docker.com/compose/extends/
 ################################################################################
 
+# Bound every container's log file so unbounded stdout/stderr can't fill the
+# host disk. Docker's default json-file driver keeps ONE log file that grows
+# forever; on this single EC2 host a chatty or looping process would eventually
+# consume all disk. max-size rotates each file and max-file caps how many are
+# kept (so ~max-size * max-file per service). Tunable via .env; the anchor is
+# applied to every service below. (Extension fields -- keys starting with "x-"
+# -- are ignored by Compose, so this only takes effect where aliased in.)
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "${DOCKER_LOG_MAX_SIZE:-10m}"
+    max-file: "${DOCKER_LOG_MAX_FILE:-5}"
+
 services:
   web:
+    logging: *default-logging
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&
                       python manage.py migrate_schemas --executor=multiprocessing &&
@@ -27,10 +41,12 @@ services:
     restart: unless-stopped
 
   celery:
+    logging: *default-logging
     user: $WUID:$WGID
     restart: unless-stopped
 
   celery-beat:
+    logging: *default-logging
     restart: unless-stopped
 
   # Production/staging additions to the shared redis service (image, healthcheck,
@@ -38,6 +54,7 @@ services:
   # AWS ElastiCache: reachable ONLY on the internal backend-network with no
   # published port, so it needs no password in this single-host setup.
   redis:
+    logging: *default-logging
     restart: unless-stopped
     # - maxmemory caps RAM so Redis can't OOM the shared app host (override with
     #   REDIS_MAXMEMORY in .env; size it to the instance and working set).
@@ -58,6 +75,7 @@ services:
       - "no"
 
   nginx:
+    logging: *default-logging
     build:
       context: ./nginx
       args:
