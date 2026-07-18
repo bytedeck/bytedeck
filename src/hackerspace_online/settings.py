@@ -1051,4 +1051,6 @@ if not DEBUG and not TESTING:
     X_FRAME_OPTIONS = "DENY"
     # Sends the origin (not the path) cross-origin so YouTube and other embeds
     # load again; see PRODUCTION_SECURE_REFERRER_POLICY above and issue #1896.
-    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY
+    # Excluded from coverage because this block only runs outside the test
+    # harness; the policy value itself is covered directly by ReferrerPolicyTest.
+    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY  # pragma: no cover
