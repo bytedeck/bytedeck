@@ -1,12 +1,11 @@
-Django>=4.2.16,<4.3
+Django>=5.2,<5.3
 
-# All django-* packages below are pinned to ranges that support BOTH Django 4.2
-# and 5.2, so the framework can be flipped to 5.2 LTS without touching them.
+# The django-* packages below are pinned to ranges compatible with Django 5.2 LTS.
 django-allauth[socialaccount]>=65.18,<66  # the extra pulls pyjwt[crypto]/oauthlib/requests, needed by the Google provider
 django-bootstrap-datepicker-plus>=6.0.0,<7.0
 django-celery-beat>=2.8,<3.0
 django-colorful>=1.4,<2.0
-django-crispy-forms>=2.4,<2.6  # 2.6+ requires Django >= 5.2
+django-crispy-forms>=2.6,<3.0  # 2.6 requires Django >= 5.2 (now satisfied)
 crispy-bootstrap3>=2024.1,<2025  # bootstrap3 template pack, split out of django-crispy-forms in 2.x
 django-decorator-include>=3.3,<4.0
 django-embed-video>=1.4.10,<1.5
@@ -15,7 +14,7 @@ django-grappelli>=4.0.1,<5
 django-import-export>=4.3,<5.0
 django-querysetsequence>=0.18,<0.19
 django-recaptcha>=4.0,<4.2  # 4.0 renamed the package module from `captcha` to `django_recaptcha`
-django-redis>=6.0,<7.0  # 7.0+ requires Django >= 5.2
+django-redis>=7.0,<8.0  # 7.0 requires Django >= 5.2 (now satisfied)
 django-resized>=1.0.3,<1.1
 django-select2>=8.4,<8.5
 django-storages[boto3]>=1.14,<2

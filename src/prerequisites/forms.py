@@ -29,10 +29,18 @@ class PrereqFormInline(FutureModelForm):
         # Kept with the form (rather than inline in the template) so it loads via {{ form.media.css }}.
         css = {'all': ('prerequisites/css/advanced_prereqs_form.css',)}
 
+    # prereq_object / or_prereq_object are the Prereq model's GenericForeignKeys,
+    # declared above as form fields and persisted by FutureModelForm (via the
+    # field's save_object_data()). They are intentionally NOT listed in
+    # Meta.fields: since Django 5.0, naming a non-editable model field (a GFK) in
+    # Meta.fields raises FieldError instead of silently ignoring it. Because
+    # declared fields not in Meta.fields are appended after the model fields,
+    # field_order restores the original interleaved column order for the formset.
+    field_order = ['prereq_object', 'prereq_count', 'prereq_invert', 'or_prereq_object', 'or_prereq_count', 'or_prereq_invert']
+
     class Meta:
         model = Prereq
-        # fields = ['prereq_content_type', 'prereq_object_id', 'prereq_count', 'prereq_invert']
-        fields = ['prereq_object', 'prereq_count', 'prereq_invert', 'or_prereq_object', 'or_prereq_count', 'or_prereq_invert']
+        fields = ['prereq_count', 'prereq_invert', 'or_prereq_count', 'or_prereq_invert']
         help_texts = {field: None for field in fields}
         labels = {
             'prereq_count': "Count",
