@@ -3,13 +3,11 @@ from datetime import timedelta
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import RequestFactory
 from django.utils import timezone
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from notifications.admin import NotificationAdmin
 from notifications.models import Notification
 
@@ -30,11 +28,9 @@ class NotificationAdminTest(ByteDeckTenantTestCase):
     """Tests for the NotificationAdmin custom admin action."""
 
     def setUp(self):
+        """Build a NotificationAdmin and a message-enabled request for the action."""
         self.admin = NotificationAdmin(model=Notification, admin_site=AdminSite())
-        # A request with the messages framework wired up so message_user() works.
-        self.request = RequestFactory().get('/')
-        self.request.session = {}
-        self.request._messages = FallbackStorage(self.request)
+        self.request = request_with_messages()
 
     def test_delete_old_notifications_action(self):
         """The admin action deletes notifications older than 90 days and reports the result via message_user."""

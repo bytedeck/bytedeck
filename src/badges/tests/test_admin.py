@@ -15,6 +15,7 @@ class BadgeResourceDehydrateTest(ByteDeckTenantTestCase):
     """Tests for BadgeResource's dehydrate_* export helpers."""
 
     def setUp(self):
+        """Build a fresh BadgeResource for each test."""
         self.resource = BadgeResource()
 
     def test_dehydrate_badge_type_fields__return_none_before_badge_saved(self):
@@ -47,6 +48,7 @@ class BadgeResourceDehydrateTest(ByteDeckTenantTestCase):
         self.assertIn(str(badge_prereq.import_id), result)
 
     def test_dehydrate_prereq_import_ids__empty_when_no_prereqs(self):
+        """A badge with no prerequisites exports an empty prereq string."""
         badge = baker.make(Badge)
         self.assertEqual(self.resource.dehydrate_prereq_import_ids(badge), '')
 
@@ -55,9 +57,10 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
     """Tests for BadgeResource.generate_badge_type, which resolves/creates a BadgeType during import."""
 
     def setUp(self):
+        """Build a fresh BadgeResource for each test."""
         self.resource = BadgeResource()
 
-    def test_creates_badge_type_and_sets_row(self):
+    def test_generate_badge_type__creates_badge_type_and_sets_row(self):
         """A row naming a new badge type creates it and rewrites row['badge_type'] to its id."""
         row = {'badge_type_name': 'Platinum', 'badge_type_sort': 5, 'badge_type_icon': 'fa-gem'}
 
@@ -68,7 +71,7 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
         self.assertEqual(badge_type.sort_order, 5)
         self.assertEqual(badge_type.fa_icon, 'fa-gem')
 
-    def test_reuses_existing_badge_type(self):
+    def test_generate_badge_type__reuses_existing_badge_type(self):
         """An existing badge type of the same name is reused rather than duplicated."""
         existing = baker.make(BadgeType, name='Silver')
         row = {'badge_type_name': 'Silver', 'badge_type_sort': None, 'badge_type_icon': None}
@@ -78,7 +81,7 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
         self.assertEqual(row['badge_type'], existing.id)
         self.assertEqual(BadgeType.objects.filter(name='Silver').count(), 1)
 
-    def test_no_name_is_a_noop(self):
+    def test_generate_badge_type__no_name_is_a_noop(self):
         """A row without a badge type name leaves the row untouched and creates nothing."""
         before = BadgeType.objects.count()
         row = {'badge_type_name': '', 'badge_type_sort': 1, 'badge_type_icon': 'fa-x'}
@@ -88,7 +91,7 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
         self.assertNotIn('badge_type', row)
         self.assertEqual(BadgeType.objects.count(), before)
 
-    def test_before_import_row_delegates_to_generate_badge_type(self):
+    def test_before_import_row__delegates_to_generate_badge_type(self):
         """before_import_row creates the badge type for the row being imported."""
         row = {'badge_type_name': 'Bronze', 'badge_type_sort': 2, 'badge_type_icon': 'fa-medal'}
         self.resource.before_import_row(row)
@@ -99,9 +102,10 @@ class BadgeResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
     """Tests for BadgeResource.generate_simple_prereqs, which recreates prereqs during import."""
 
     def setUp(self):
+        """Build a fresh BadgeResource for each test."""
         self.resource = BadgeResource()
 
-    def test_creates_prereq_from_quest_import_id(self):
+    def test_generate_simple_prereqs__creates_prereq_from_quest_import_id(self):
         """A prereq import_id pointing at an existing quest becomes a simple prereq of the parent."""
         parent = baker.make(Badge)
         quest_prereq = baker.make(Quest)
@@ -111,7 +115,7 @@ class BadgeResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
 
         self.assertEqual(len(parent.prereqs()), 1)
 
-    def test_creates_prereq_from_badge_import_id(self):
+    def test_generate_simple_prereqs__creates_prereq_from_badge_import_id(self):
         """A prereq import_id pointing at an existing badge (not a quest) also works."""
         parent = baker.make(Badge)
         badge_prereq = baker.make(Badge)
@@ -121,7 +125,7 @@ class BadgeResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
 
         self.assertEqual(len(parent.prereqs()), 1)
 
-    def test_does_not_duplicate_existing_prereq(self):
+    def test_generate_simple_prereqs__does_not_duplicate_existing_prereq(self):
         """An import_id already present as a prereq is not added a second time."""
         parent = baker.make(Badge)
         quest_prereq = baker.make(Quest)
@@ -132,7 +136,8 @@ class BadgeResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
 
         self.assertEqual(len(parent.prereqs()), 1)
 
-    def test_blank_import_ids_add_nothing(self):
+    def test_generate_simple_prereqs__blank_import_ids_add_nothing(self):
+        """A blank prereq import_ids string adds no prerequisites."""
         parent = baker.make(Badge)
         data_dict = {'prereq_import_ids': ''}
 

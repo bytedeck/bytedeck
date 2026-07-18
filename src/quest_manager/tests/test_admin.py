@@ -1,10 +1,8 @@
 from django.contrib.auth import get_user_model
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import RequestFactory
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from quest_manager.admin import (
     archive_selected_quests,
     fix_whitespace_bug,
@@ -16,13 +14,6 @@ from quest_manager.models import Quest
 User = get_user_model()
 
 
-def _request_with_messages():
-    request = RequestFactory().get('/')
-    request.session = {}
-    request._messages = FallbackStorage(request)
-    return request
-
-
 class QuestAdminActionsTest(ByteDeckTenantTestCase):
     """Tests for the module-level admin actions registered on QuestAdmin."""
 
@@ -30,7 +21,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
         """Publishing sets published=True and clears the editor on each selected quest."""
         editor = baker.make(User)
         quest = baker.make(Quest, published=False, editor=editor)
-        request = _request_with_messages()
+        request = request_with_messages()
 
         publish_selected_quests(None, request, Quest.objects.filter(pk=quest.pk))
 
@@ -42,7 +33,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
     def test_archive_selected_quests(self):
         """Archiving sets archived=True, published=False and clears the editor."""
         quest = baker.make(Quest, archived=False, published=True)
-        request = _request_with_messages()
+        request = request_with_messages()
 
         archive_selected_quests(None, request, Quest.objects.filter(pk=quest.pk))
 
@@ -54,7 +45,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
     def test_prettify_code_selected_quests(self):
         """Prettifying rewrites the instructions HTML in place and reports success."""
         quest = baker.make(Quest, instructions='<div><p>hi</p></div>')
-        request = _request_with_messages()
+        request = request_with_messages()
 
         prettify_code_selected_quests(None, request, Quest.objects.filter(pk=quest.pk))
 
@@ -66,7 +57,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
     def test_fix_whitespace_bug(self):
         """The whitespace-bug fixer also rewrites instructions and reports success."""
         quest = baker.make(Quest, instructions='<div><p>hi</p></div>')
-        request = _request_with_messages()
+        request = request_with_messages()
 
         fix_whitespace_bug(None, request, Quest.objects.filter(pk=quest.pk))
 

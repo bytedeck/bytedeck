@@ -1,12 +1,10 @@
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
-from django.contrib.messages.storage.fallback import FallbackStorage
 from django.db.models.signals import post_save
-from django.test import RequestFactory
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from profile_manager.admin import (
     ProfileAdmin,
     create_missing_profiles,
@@ -15,14 +13,6 @@ from profile_manager.admin import (
 from profile_manager.models import Profile, create_profile
 
 User = get_user_model()
-
-
-def _request_with_messages():
-    """A GET request wired up with the messages framework so message_user()/messages.success() work."""
-    request = RequestFactory().get('/')
-    request.session = {}
-    request._messages = FallbackStorage(request)
-    return request
 
 
 class CreateMissingProfilesActionTest(ByteDeckTenantTestCase):
@@ -40,7 +30,7 @@ class CreateMissingProfilesActionTest(ByteDeckTenantTestCase):
 
         self.assertFalse(Profile.objects.filter(user=profileless).exists())
 
-        request = _request_with_messages()
+        request = request_with_messages()
         create_missing_profiles(None, request, Profile.objects.none())
 
         self.assertTrue(Profile.objects.filter(user=profileless).exists())
@@ -49,7 +39,7 @@ class CreateMissingProfilesActionTest(ByteDeckTenantTestCase):
     def test_create_missing_profiles__no_message_when_nothing_to_create(self):
         """When every user already has a profile, no success message is added."""
         baker.make(User)  # profile auto-created by signal
-        request = _request_with_messages()
+        request = request_with_messages()
         create_missing_profiles(None, request, Profile.objects.none())
         self.assertEqual(len(list(request._messages)), 0)
 
@@ -64,7 +54,7 @@ class MigrateNamesToUserModelActionTest(ByteDeckTenantTestCase):
         falsy and user names are left untouched -- the action simply completes.
         """
         user = baker.make(User)
-        request = _request_with_messages()
+        request = request_with_messages()
 
         migrate_names_to_user_model(None, request, Profile.objects.filter(user=user))
 
@@ -77,12 +67,15 @@ class ProfileAdminDisplayMethodsTest(ByteDeckTenantTestCase):
     """Tests for ProfileAdmin's list_display callables."""
 
     def setUp(self):
+        """Build a ProfileAdmin bound to a throwaway AdminSite."""
         self.admin = ProfileAdmin(model=Profile, admin_site=AdminSite())
 
     def test_get_username(self):
+        """get_username surfaces the related user's username."""
         user = baker.make(User, username='someone')
         self.assertEqual(self.admin.get_username(user.profile), 'someone')
 
     def test_get_full_name(self):
+        """get_full_name surfaces the related user's full name."""
         user = baker.make(User, first_name='Ada', last_name='Lovelace')
         self.assertEqual(self.admin.get_full_name(user.profile), 'Ada Lovelace')
