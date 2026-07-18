@@ -950,7 +950,6 @@ if DEBUG and not TESTING:
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
     INSTALLED_APPS += (
         'debug_toolbar',
-        'template_timings_panel',
         # http://django-cachalot.readthedocs.io
         # 'cachalot',
     )
@@ -963,7 +962,6 @@ if DEBUG and not TESTING:
         'debug_toolbar.panels.sql.SQLPanel',
         'debug_toolbar.panels.staticfiles.StaticFilesPanel',
         'debug_toolbar.panels.templates.TemplatesPanel',
-        'template_timings_panel.panels.TemplateTimings.TemplateTimings',
         # 'cachalot.panels.CachalotPanel',
         'debug_toolbar.panels.cache.CachePanel',
         'debug_toolbar.panels.signals.SignalsPanel',
