@@ -607,8 +607,9 @@ class CytoScape(models.Model):
         map_orders = self._campaign_map_orders()
 
         def node_campaign_order(node):
-            # a Category/campaign node orders by its own map_order; a quest inside a campaign
-            # orders by its parent campaign's map_order; anything else stays at the default 0.
+            """Campaign ordering key for a node: a Category/campaign node uses its own map_order, a
+            quest inside a campaign uses its parent campaign's, and anything else defaults to 0.
+            """
             if node.id in map_orders:
                 return map_orders[node.id]
             return map_orders.get(node.data_parent_id, 0)
