@@ -1,4 +1,5 @@
 import json
+from collections import defaultdict
 from itertools import cycle
 
 from django.core.exceptions import ValidationError
@@ -276,6 +277,43 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     def test_regenerate(self):
         """Can regenerate without error on a known good map object"""
         self.map.regenerate()
+
+    def test_cytoelement_ordering_is_a_total_order(self):
+        """CytoElement.Meta.ordering must end with the unique `id` tiebreaker so element
+        emission is deterministic. Without it, sibling elements (same group and data_parent —
+        e.g. every top-level node, whose data_parent is NULL) come back in whatever order
+        Postgres returns, which shifts as regenerate() churns rows. Because dagre lays out
+        same-rank nodes by their input order, that made the map toggle between layouts on each
+        regeneration (issue #1977).
+        """
+        self.assertEqual(CytoElement._meta.ordering[-1], 'id')
+
+    def test_elements_emitted_in_ascending_id_order_within_parent_groups(self):
+        """The emitted map JSON must list nodes in a deterministic order: within each compound
+        (campaign) parent — and among the top-level nodes — siblings come out in ascending id,
+        i.e. creation order. A stable emission order in means a stable dagre layout out (#1977).
+        """
+        ids_by_parent = defaultdict(list)
+        for node in self.map.elements_dict()['nodes']:
+            ids_by_parent[node['data'].get('parent')].append(node['data']['id'])
+
+        # sanity: the real primary map has more than one node to order
+        self.assertGreater(sum(len(ids) for ids in ids_by_parent.values()), 1)
+        for parent, ids in ids_by_parent.items():
+            self.assertEqual(ids, sorted(ids), msg=f"nodes under parent {parent} are not id-ordered")
+
+    def test_regeneration_produces_stable_node_order(self):
+        """Regenerating a map must yield the same left-to-right node order every time so the
+        rendered layout is deterministic (issue #1977). Node ids change on each regeneration but
+        their labels don't, so we compare the ordered sequence of labels across two regenerations.
+        """
+        def ordered_labels():
+            return [node['data'].get('label') for node in self.map.elements_dict()['nodes']]
+
+        before = ordered_labels()
+        self.map.regenerate()
+        after = ordered_labels()
+        self.assertEqual(before, after)
 
     def test_maps_dont_include_drafts(self):
         """Draft unpublished quests should not appear in maps"""
