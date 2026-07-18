@@ -133,7 +133,15 @@ class CytoElement(models.Model):
 
         # nodes then edges, then nodes without a parent, which might be a compound (campaign) node and need to come before
         # other nodes within that comound node (campaign)
-        ordering = ['-group', models.F('data_parent').asc(nulls_first=True)]
+
+        # `id` is the final tiebreaker so this is a *total* order: without it, sibling elements
+        # (same group and data_parent — e.g. every top-level node, whose data_parent is NULL) come
+        # back in whatever order Postgres happens to return, which shifts as regenerate() deletes and
+        # recreates rows. Cytoscape's dagre layout breaks ties between same-rank nodes by their input
+        # order, so that unstable emission order made the map toggle between layouts on each
+        # regeneration. Ordering by id (i.e. deterministic creation order) makes the emitted JSON —
+        # and therefore the rendered layout — identical every time. Issue #1977.
+        ordering = ['-group', models.F('data_parent').asc(nulls_first=True), 'id']
 
     def __str__(self):
         if self.group == self.NODES:
