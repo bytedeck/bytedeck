@@ -188,6 +188,91 @@ class TempCampaignTest(ByteDeckTenantTestCase):
     def test_object_creation(self):
         self.assertIsInstance(self.temp_campaign, TempCampaign)
 
+    def test_str__no_children(self):
+        """A campaign with no nodes reports that it has no children."""
+        self.assertIn("No children", str(TempCampaign(parent_node_id=1)))
+
+    def test_str__with_children(self):
+        """A campaign's string lists its parent id and each child node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        rendered = str(tc)
+        self.assertIn("Parent: 1", rendered)
+        self.assertIn("Child:10", rendered)
+        self.assertIn("Child:11", rendered)
+
+    def test_add_node__existing_id_appends_prereq(self):
+        """Re-adding an existing node id appends the new prereq instead of duplicating the node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=10, prereq_node_id=101)
+        self.assertEqual(len(tc.nodes), 1)
+        self.assertEqual(tc.get_node(10).prereq_node_ids, [100, 101])
+
+    def test_add_campaign_reliant(self):
+        """Nodes directly reliant on the campaign are tracked in campaign_reliant_node_ids."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_campaign_reliant(reliant_node_id=42)
+        self.assertEqual(tc.campaign_reliant_node_ids, [42])
+
+    def test_has_internal_reliant(self):
+        """has_internal_reliant is True only when an internal node is a reliant of the given node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # node 11 (internal) relies on node 10 -> internal reliant
+        tc.add_reliant(node_id=10, reliant_node_id=11)
+        self.assertTrue(tc.has_internal_reliant(tc.get_node(10)))
+        # node 11's reliant is an external id -> not internal
+        tc.add_reliant(node_id=11, reliant_node_id=999)
+        self.assertFalse(tc.has_internal_reliant(tc.get_node(11)))
+
+    def test_is_non_sequential(self):
+        """is_non_sequential runs over a campaign whose nodes share a common prereq.
+
+        Note: the method body compares a *list* with ``is True`` (``get_common_prereq_node_ids()
+        is True``), so it currently always returns False regardless of the campaign's shape.
+        This test pins that current behavior; it should be revisited if the comparison is fixed.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=11, prereq_node_id=100)
+        # Both nodes share prereq 100, so get_common_prereq_node_ids() is non-empty...
+        self.assertEqual(tc.get_common_prereq_node_ids(), [100])
+        # ...but `[...] is True` is False, so is_non_sequential() returns False today.
+        self.assertFalse(tc.is_non_sequential())
+
+
+class CytoManagerTests(ByteDeckTenantTestCase):
+    """Tests for the CytoElement/CytoScape manager helpers (random-node pickers and lookups)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.map = generate_real_primary_map()
+
+    def test_get_random_node__returns_node_in_scape(self):
+        """get_random_node returns a NODE element belonging to the given scape."""
+        node = CytoElement.objects.get_random_node(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_random_node_triangular_distribution__returns_node_in_scape(self):
+        """The triangular-distribution picker also returns a node from the scape."""
+        node = CytoElement.objects.get_random_node_triangular_distribution(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_map_for_init__missing_then_found(self):
+        """get_map_for_init returns None when no map initiates the object, else that map."""
+        quest = baker.make('quest_manager.Quest')
+        self.assertIsNone(CytoScape.objects.get_map_for_init(quest))
+
+        scape = CytoScape.generate_map(quest, "Quest Map")
+        found = CytoScape.objects.get_map_for_init(quest)
+        self.assertEqual(found, scape)
+        self.assertEqual(found.initial_object_id, quest.id)
+
 
 class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     @classmethod
@@ -222,6 +307,30 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
+
+    def test_generate_map__transition_node_for_tilde_quest(self):
+        """A reliant quest whose label starts with '~' is turned into a transition
+        (child-map link) node: is_transition_node() detects it and
+        convert_to_transition_node() flags the node and restyles it."""
+        start = baker.make('quest_manager.Quest', name="Start Quest")
+        # A '~'-prefixed name marks a map break -> transition node (autobreak on by default).
+        transition = baker.make('quest_manager.Quest', name="~Continue in the next map")
+        transition.add_simple_prereqs([start])  # transition relies on start
+
+        scape = CytoScape.generate_map(start, "Transition Map")
+
+        node = CytoElement.objects.get(
+            scape=scape, selector_id=CytoElement.generate_selector_id(transition),
+        )
+        self.assertTrue(node.is_transition)
+        self.assertIn("child-map", node.classes)
+
+    def test_is_transition_node__autobreak_off_returns_false(self):
+        """With autobreak disabled, no node is treated as a transition node."""
+        scape = self.map
+        scape.autobreak = False
+        any_node = scape.cytoelement_set.filter(group=CytoElement.NODES).first()
+        self.assertFalse(scape.is_transition_node(any_node))
 
     def test_generate_map__long_name_xp(self):
         """
