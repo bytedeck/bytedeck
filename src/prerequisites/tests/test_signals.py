@@ -97,6 +97,41 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
             self.assertEqual(task.call_count, 1)
             self.assertEqual(callback.call_count, 1)
 
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_cache_triggered_by_task_completion__skips_user_deletion_cascade(self, task):
+        """Deleting a user cascades to delete their submissions/badges/course-students, and
+        each of those deletions would normally queue update_quest_conditions_for_user. For a
+        user being removed that recompute is pointless, so the cascade must queue no such
+        task (issue #1754).
+        """
+        # self.student already has a BadgeAssertion, a QuestSubmission and a CourseStudent
+        # (created in setUpTestData). Make the submission complete+approved so that, absent
+        # the fix, its deletion WOULD fire the task -- proving the suppression is doing work.
+        self.quest_submission.is_completed = True
+        self.quest_submission.is_approved = True
+        self.quest_submission.save()
+        task.reset_mock()  # ignore the task the save above triggers
+
+        self.student.delete()
+
+        task.assert_not_called()
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_cache_triggered_by_task_completion__fires_on_direct_submission_delete(self, task):
+        """The user-deletion guard must not suppress the normal case: deleting a single
+        complete+approved submission (while its user remains) still recalculates that user's
+        available quests (issue #1754 regression guard).
+        """
+        self.quest_submission.is_completed = True
+        self.quest_submission.is_approved = True
+        self.quest_submission.save()
+        task.reset_mock()
+
+        self.quest_submission.delete()
+
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'], [self.student.id])
+
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
     def test_update_prereq_cache__triggered_by_badge(self, task):
         """

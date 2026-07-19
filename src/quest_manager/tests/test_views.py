@@ -1155,19 +1155,19 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
         self.post_complete(button='comment', submission_comment='comment from submission #1')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from submission #1').exists())
 
         self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
         self.post_complete(button='comment', submission_comment='comment from submission #2')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from submission #2').exists())
 
         # comments using quick reply
         self.post_complete(button='comment', submission_comment='comment from quick reply #1')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
 
     def test_complete__unrecognized_submit_button_returns_404(self):
@@ -1649,7 +1649,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('quests:')
@@ -1659,7 +1659,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
     # TODO
     # TAs should not be able to make a quest published
@@ -2130,7 +2130,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:available'))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
-        self.assertEqual(response.context['remove_hidden'], True)
+        self.assertTrue(response.context['remove_hidden'])
 
         # Still not there though, because student doesn't have an active course
         self.assertNotContains(response, 'Show Hidden Quests')
@@ -2975,8 +2975,8 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], False)
-        self.assertEqual(response.context['past'], False)
+        self.assertFalse(response.context['completed'])
+        self.assertFalse(response.context['past'])
 
         # Without a submission ID fails, 404:
         response = self.client.post(
@@ -3014,8 +3014,8 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], True)
-        self.assertEqual(response.context['past'], False)
+        self.assertTrue(response.context['completed'])
+        self.assertFalse(response.context['past'])
 
     def test_ajax_submission_info__past(self):
         """ Completed and in a past semester
@@ -3033,8 +3033,8 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], False)
-        self.assertEqual(response.context['past'], True)
+        self.assertFalse(response.context['completed'])
+        self.assertTrue(response.context['past'])
 
 
 class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
@@ -3470,19 +3470,19 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(**post_request, data={'approve_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, True)
+        self.assertTrue(self.sub.is_approved)
 
         # 'return_button' self.sub.is_approved is False
         response = self.client.post(**post_request, data={'return_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, False)
+        self.assertFalse(self.sub.is_approved)
 
         # 'skip_button' self.sub.is_approved is True
         response = self.client.post(**post_request, data={'skip_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, True)
+        self.assertTrue(self.sub.is_approved)
 
         # 'comment_button' new comment should exist
         response = self.client.post(**post_request, data={

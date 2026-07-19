@@ -66,7 +66,7 @@ class TenantModelTest(ByteDeckTenantTestCase):
         admin = User.objects.get(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
         self.client.force_login(admin)
         self.tenant.update_cached_fields()
-        admin.refresh_from_db
+        admin.refresh_from_db()
         # should still return the staff user's last log in, ignoring the admin user
         self.assertEqual(self.tenant.last_staff_login, staff.last_login)
 

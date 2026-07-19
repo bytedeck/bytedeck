@@ -36,7 +36,7 @@ class BadgeRarityModelTest(ByteDeckTenantTestCase):
         self.assertEqual(BadgeRarity.objects.get_rarity(79.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(80.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(90.0), self.common)
-        self.assertEqual(BadgeRarity.objects.get_rarity(91), None)
+        self.assertIsNone(BadgeRarity.objects.get_rarity(91))
 
         ubercommon = baker.make(BadgeRarity, percentile=100.0)
         self.assertEqual(BadgeRarity.objects.get_rarity(100), ubercommon)

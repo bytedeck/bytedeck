@@ -22,7 +22,7 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         password = settings.TENANT_DEFAULT_ADMIN_PASSWORD
 
         user = User.objects.filter(username=username).first()
-        self.assertTrue(user is not None)
+        self.assertIsNotNone(user)
         self.assertEqual(user.email, settings.TENANT_DEFAULT_ADMIN_EMAIL)
 
         self.assertTrue(user.is_staff)
@@ -38,7 +38,7 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
 
         # user model test
         user = User.objects.filter(username=username).first()
-        self.assertTrue(user is not None)
+        self.assertIsNotNone(user)
 
         self.assertTrue(user.is_staff)
         self.assertFalse(user.is_superuser)
@@ -157,7 +157,7 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         """ Test that the SiteConfig object exists and the Deck name has expected defaults.
         """
         site_config = SiteConfig.get()
-        self.assertTrue(site_config is not None)
+        self.assertIsNotNone(site_config)
         self.assertEqual(site_config.site_name, "My Byte Deck")
         self.assertEqual(site_config.site_name_short, "Deck")
 

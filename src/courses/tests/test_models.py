@@ -47,7 +47,7 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         """get_range() returns the highest range whose minimum the mark meets."""
         mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
-        self.assertEqual(MarkRange.objects.get_range(25.0), None)
+        self.assertIsNone(MarkRange.objects.get_range(25.0))
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(74.9), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
@@ -61,7 +61,7 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         mr_50_c2 = baker.make(MarkRange, minimum_mark=50.0, courses=[c2])
         mr_100_c1 = baker.make(MarkRange, minimum_mark=100.0, courses=[c1])
 
-        self.assertEqual(MarkRange.objects.get_range(25.0), None)
+        self.assertIsNone(MarkRange.objects.get_range(25.0))
         self.assertEqual(MarkRange.objects.get_range(50.0), self.mr_50)
         self.assertEqual(MarkRange.objects.get_range(50.0, [c1]), mr_50_c1)
         self.assertEqual(MarkRange.objects.get_range(74.9, [c2]), mr_50_c2)
@@ -583,7 +583,7 @@ class RankManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(rank_2000, Rank.objects.get_next_rank(1999))
         self.assertEqual(rank_3000, Rank.objects.get_next_rank(2000))
         self.assertEqual(rank_3000, Rank.objects.get_next_rank(2999))
-        self.assertEqual(None, Rank.objects.get_next_rank(3000))
+        self.assertIsNone(Rank.objects.get_next_rank(3000))
 
     def test_get_next_rank__when_deleted(self):
         """Method can handle if ranks were deleted """

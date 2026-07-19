@@ -396,7 +396,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(oldest_announcement.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['archived'], True)
+        self.assertTrue(response.context['archived'])
         self.assertContains(response, oldest_announcement.title)
 
         # create enough announcements to create a second page, oldest should be on second page

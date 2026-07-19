@@ -148,12 +148,12 @@ class FullCleanTest(TestCase, CommandMixin):
             log = buf.getvalue()
 
             # capture schema name
-            self.assertTrue('test_schema1' in log)
+            self.assertIn('test_schema1', log)
 
             # will cause an error because author is None because of
             # `null=True` without `blank=True`
             #  ie. `{'author': ['this field cannot be blank.']}`
-            self.assertTrue("'author': ['This field cannot be blank.']" in log)
+            self.assertIn("'author': ['This field cannot be blank.']", log)
             self.assertEqual(log.count("ValidationError"), 1)
 
         # Speed up tests

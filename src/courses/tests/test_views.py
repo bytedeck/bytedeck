@@ -139,7 +139,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('courses:ranks')
@@ -149,7 +149,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
 
 class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
@@ -767,7 +767,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in exclude_dates)
+            self.assertIn(ed.date, exclude_dates)
 
     def test_SemesterCreate__add_without_required_fields__view(self):
         """
@@ -818,7 +818,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertTrue(semester.excludeddate_set.exists())
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in exclude_dates)
+            self.assertIn(ed.date, exclude_dates)
 
     def test_SemesterUpdate__update_data__view(self):
         """
@@ -851,7 +851,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # assert data is correct
         for ed in semester.excludeddate_set.all():
-            self.assertTrue(ed.date in updated_exclude_dates)
+            self.assertIn(ed.date, updated_exclude_dates)
 
     def test_SemesterUpdate__delete_data__view(self):
         """
@@ -995,7 +995,7 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(CourseStudent.objects.first().pk, course_student.pk)
 
         # confirm block existence
-        self.assertTrue(Block.objects.filter(id=block.pk).first() is not None)
+        self.assertIsNotNone(Block.objects.filter(id=block.pk).first())
 
         # confirm deletion prevention text shows up
         response = self.client.get(reverse('courses:block_delete', args=[block.pk]))
