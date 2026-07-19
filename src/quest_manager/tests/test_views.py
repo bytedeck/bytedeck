@@ -3912,3 +3912,46 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
         # Confirm redirect to archived quests page
         self.assertRedirects(response, reverse('quests:archived'))
+
+    def test_get__already_archived_quest_returns_404(self):
+        """The archive confirmation page 404s for an already-archived quest (#1856).
+
+        QuestArchive is a DetailView whose default queryset excludes archived quests,
+        so there is nothing left to confirm-archive once a quest is archived.
+        """
+        archived_quest = baker.make(Quest, name="Already Archived", archived=True)
+        url = reverse('quests:quest_archive', args=[archived_quest.id])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_post__already_archived_quest_returns_404(self):
+        """Posting to archive an already-archived quest 404s instead of re-running the
+        archive logic (#1856).
+
+        Archiving is effectively a no-op once a quest is archived; because the view's
+        default queryset excludes archived quests, the object lookup 404s and the
+        submission-deletion/XP-invalidation side effects never run a second time.
+        """
+        archived_quest = baker.make(Quest, name="Already Archived", archived=True)
+        url = reverse('quests:quest_archive', args=[archived_quest.id])
+        self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_post__nonexistent_quest_returns_404(self):
+        """Posting to archive a quest id that does not exist 404s cleanly rather than
+        raising an unhandled exception (#1856).
+        """
+        nonexistent_id = 9999999
+        self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
+        url = reverse('quests:quest_archive', args=[nonexistent_id])
+        self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_unarchive__nonexistent_quest_returns_404(self):
+        """Unarchiving a quest id that does not exist 404s cleanly (#1856).
+
+        The view previously looked the quest up with ``QuerySet.get()``, which raised
+        ``Quest.DoesNotExist`` for a bad id and surfaced as an unhandled 500; it now
+        uses ``get_object_or_404``.
+        """
+        nonexistent_id = 9999999
+        self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
+        url = reverse('quests:unarchive', args=[nonexistent_id])
+        self.assertEqual(self.client.post(url).status_code, 404)
