@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db.models import QuerySet
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
@@ -14,6 +15,23 @@ from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
 
 User = get_user_model()
+
+
+def _delete_originated_from_user(origin):
+    """True when a delete cascade was started by deleting a User (issue #1754).
+
+    Django's pre_delete/post_delete signals carry an ``origin`` kwarg: the instance or
+    queryset ``.delete()`` was called on. When a user is deleted the cascade removes all
+    their QuestSubmissions/BadgeAssertions/CourseStudents, and every one of those
+    post_delete signals carries the User as the origin. Recomputing the available-quest
+    cache for a user who is being removed is pointless (and the cascade would otherwise
+    queue dozens of tasks), so we use the origin to tell a user-deletion cascade apart
+    from a direct delete of a single submission/badge (which should still recompute).
+    """
+    if origin is None:
+        return False
+    origin_model = origin.model if isinstance(origin, QuerySet) else type(origin)
+    return issubclass(origin_model, User)
 
 
 # @receiver([post_save, post_delete], sender=BadgeAssertion)
@@ -47,6 +65,12 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
         # When both conditions are met, that would be the only time we want to update available quests
         # for the user.
         if isinstance(instance, QuestSubmission) and (instance.is_completed is False or instance.is_approved is False):
+            return
+
+        # Skip when this row is being removed as part of deleting its user: recomputing the
+        # available-quest cache for a user who is being deleted is pointless, and the delete
+        # cascade fires this signal once per submission/badge/course-student (issue #1754).
+        if _delete_originated_from_user(kwargs.get('origin')):
             return
 
         update_quest_conditions_for_user.apply_async(args=[instance.user_id], queue='default')
