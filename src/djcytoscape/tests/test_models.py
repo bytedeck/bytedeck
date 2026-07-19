@@ -28,6 +28,19 @@ def generate_real_primary_map():
     return CytoScape.generate_map(welcome_quest, 'Main')
 
 
+def bake_scape(**kwargs):
+    """``baker.make`` a CytoScape pointed at a real Quest initial object.
+
+    CytoScape.initial_content_type is a non-nullable ForeignKey(ContentType) with a
+    uniqueness constraint on (initial_content_type, initial_object_id). Bare
+    ``baker.make(CytoScape)`` would give it a random, dangling initial object, so
+    these tests pin it to a freshly-created Quest instead.
+    """
+    kwargs.setdefault('initial_content_type', ContentType.objects.get_for_model(Quest))
+    kwargs.setdefault('initial_object_id', baker.make('quest_manager.Quest').id)
+    return baker.make(CytoScape, **kwargs)
+
+
 class JSONTestCaseMixin:
 
     def assertValidJSON(self, str):
@@ -351,12 +364,12 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_save__sets_first_scape_as_primary(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
 
     def test_save__changes_primary_scape(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
         newmap.is_the_primary_scape = True
@@ -514,7 +527,15 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     def test_get_maps_as_formatted_string(self):
         """ Checks if `get_maps_as_formatted_string` returns the appropriate formatting per length """
         names = [str(x) for x in range(4)]
-        scapes = baker.make(CytoScape, name=cycle(names), _quantity=4)
+        # Each scape needs a distinct real initial object: (initial_content_type,
+        # initial_object_id) is unique-constrained, so cycle 4 fresh Quest ids.
+        quest_ids = [baker.make('quest_manager.Quest').id for _ in range(4)]
+        scapes = baker.make(
+            CytoScape, name=cycle(names),
+            initial_content_type=ContentType.objects.get_for_model(Quest),
+            initial_object_id=cycle(quest_ids),
+            _quantity=4,
+        )
 
         # since baker returns a list with `_quantity` > 1
         # we have to convert it to a queryset
