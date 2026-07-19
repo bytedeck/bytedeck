@@ -231,3 +231,25 @@ class NotificationModel_html_strip_Test(TestCase):
             Notification.html_strip(test_case),
             expected_case
         )
+
+    def test_notification_html_strip__multiple_img_tags_are_not_mangled(self):
+        """Content with more than one <img> keeps every image well-formed and resized.
+
+        Regression for issue #1761: the previous index-based implementation spliced one
+        image tag into the middle of another and dropped the resize, leaving oversized
+        images and broken markup that wrecked the notification dropdown's layout.
+        """
+        test_case = (
+            'A <img src="one.png" style="width: 50%;"> B <img src="two.png" style="width: 25%;"> C'
+        )
+        expected_case = (
+            'A <img height="20px" src="one.png" style="" width="auto"/> '
+            'B <img height="20px" src="two.png" style="" width="auto"/> C'
+        )
+        self.assertEqual(Notification.html_strip(test_case), expected_case)
+
+    def test_notification_html_strip__truncates_long_text_with_ellipsis(self):
+        """Text longer than the character limit is cut and gets a trailing ellipsis."""
+        long_text = "x" * 200
+        result = Notification.html_strip(long_text, char_limit=50)
+        self.assertEqual(result, "x" * 50 + "...")

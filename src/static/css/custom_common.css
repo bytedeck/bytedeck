@@ -241,6 +241,16 @@ button.btn-mobile-navbar.btn-mobile-navbar-left {
     width: 100%;
 }
 
+/* Notifications can embed images from quest/badge content. html_strip() already
+   shrinks them to ~20px tall, but cap them here too so an unusually wide image can
+   never push the dropdown out of shape (issue #1761). */
+.notification-dropdown img {
+    max-width: 100%;
+    max-height: 24px;
+    width: auto;
+    height: auto;
+}
+
 .navbar-mobile-xp > li > a, .navbar-nav > li.navbar-xp > a {
     padding-top: 14px;
     padding-bottom: 13px;

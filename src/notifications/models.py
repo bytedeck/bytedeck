@@ -6,8 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import strip_tags
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from tenant.utils import get_root_url
 
@@ -129,75 +128,65 @@ class Notification(models.Model):
     objects = NotificationManager()
 
     def html_strip(string, char_limit=50, tag_size=1, resize_image=True, image_height=20, **kwargs) -> str:
-        """
-            Strips all html tags except img tags and imposes a length limit. Returns the input text without html tags save for img tag
+        """Return a short, dropdown-safe preview of ``string``.
 
-            tag_size: how many letters an image should count as
+        Strips every HTML tag except ``<img>`` (keeping the text of the stripped tags)
+        and truncates to ``char_limit`` visible characters, where each surviving image
+        counts as ``tag_size`` characters. Surviving images are resized to a fixed
+        height so a notification's content can't blow out the notification dropdown's
+        layout. A trailing ``"..."`` is added when the text was truncated.
 
-            resize_image: enables image resizing
-            image_height: image height after resizing in pixels
+        tag_size: how many characters an image counts as toward the limit
+        resize_image: enables image resizing
+        image_height: image height after resizing, in pixels
+
+        The document is walked in order rather than having image tags reinserted by
+        character index: the old index-based approach mangled the markup (splicing one
+        image tag into the middle of another, and dropping the resize) whenever a
+        notification contained more than one image, which is what broke the dropdown
+        (issue #1761).
         """
         if not string:
             return ""
-        if type(string) is not str:
+        if not isinstance(string, str):
             string = str(string)
 
-        limit_imposed = False
-        HTML_tags = []
-        tag_index = []
+        soup = BeautifulSoup(string, "html.parser")
 
-        # store HTML tags and index to lists
-        cache_open_index = None
-        for index in range(len(string)):
-            char = string[index]
+        # Drop every tag except <img>, keeping its text. find_all() returns a static list
+        # in document order (parents before children), and unwrap() promotes a tag's
+        # children in place, so this flattens the tree to a run of text nodes and <img>
+        # tags without disturbing their order.
+        for tag in soup.find_all(True):
+            if tag.name != "img":
+                tag.unwrap()
 
-            # check for open img
-            if char == "<" and string[index:].startswith("<img"):
-                cache_open_index = index
+        result = BeautifulSoup("", "html.parser")
+        remaining = char_limit
+        truncated = False
 
-            # check for closed if open already found
-            elif cache_open_index is not None and char == ">":
-                # position img tag would be without html tags
-                offset = cache_open_index - len(strip_tags(string[:cache_open_index]))
+        for node in list(soup.contents):
+            if remaining <= 0:
+                truncated = True
+                break
+            if isinstance(node, Tag) and node.name == "img":
+                if resize_image:
+                    node["style"] = ""  # drop width/height styles that would overflow the dropdown
+                    node["height"] = f"{image_height}px"
+                    node["width"] = "auto"
+                result.append(node)
+                remaining -= tag_size
+            else:
+                text = str(node)
+                if len(text) > remaining:
+                    result.append(NavigableString(text[:remaining]))
+                    remaining = 0
+                    truncated = True
+                else:
+                    result.append(NavigableString(text))
+                    remaining -= len(text)
 
-                start = cache_open_index
-                end = index + 1
-
-                # save the html tag and index to list
-                HTML_tags.append(string[start:end])
-                tag_index.append(cache_open_index - offset)
-
-                cache_open_index = None
-
-        # dict of html tag and its position in the string
-        html_index = {HTML_tags[i]: tag_index[i] for i in range(len(HTML_tags))}
-
-        # index count of images that will be shown
-        shown_tag_count = len([index for _, index in html_index.items() if index < char_limit])
-        # tags should count towards the character limit
-        char_limit -= shown_tag_count * tag_size
-
-        # strip all the tags and apply char limit to TEXT
-        stripped = strip_tags(string)
-        text = stripped[:char_limit]
-        limit_imposed = len(stripped) > char_limit
-
-        # reinsert tags with new stripped text
-        for tag, index in html_index.items():
-            if index < char_limit:
-                text = text[:index] + tag + text[index:]
-
-        # resizes all images in string
-        if resize_image:
-            soup = BeautifulSoup(text, features="html.parser")
-            for img in soup.findAll('img'):
-                img['style'] = ""  # remove style as it always comes with width/height modifiers
-                img['height'] = f"{image_height}px"
-                img['width'] = "auto"
-
-            text = str(soup)
-
-        return text + ("..." if limit_imposed else "")
+        return str(result) + ("..." if truncated else "")
 
     def __str__(self):
         try:
