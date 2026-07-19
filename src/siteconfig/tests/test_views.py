@@ -31,26 +31,29 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.config = SiteConfig.get()
         self.client = TenantClient(self.tenant)
 
-    def test_all_siteconfig_page_status_codes_for_anonymous(self):
+    def test_siteconfig_page_status_codes__anonymous(self):
+        """Anonymous users are redirected to login from the siteconfig update views."""
         self.assertRedirectsLogin('config:site_config_update', args=[self.config.get().id])
         self.assertRedirectsLogin('config:site_config_update_own')
 
-    def test_all_siteconfig_page_status_codes_for_students(self):
+    def test_siteconfig_page_status_codes__students(self):
+        """Students are forbidden (403) from the siteconfig update views."""
         student = baker.make(User)
         self.client.force_login(student)
 
         self.assert403('config:site_config_update', args=[self.config.get().id])
         self.assert403('config:site_config_update_own')
 
-    def test_all_siteconfig_page_status_codes_for_staff(self):
+    def test_siteconfig_page_status_codes__staff(self):
+        """Staff can access (200) the siteconfig update views."""
         teacher = baker.make(User, is_staff=True)
         self.client.force_login(teacher)
 
         self.assert200('config:site_config_update', args=[self.config.get().id])
         self.assert200('config:site_config_update_own')
 
-    def testSiteConfigUpdate_uses_newly_saved_cache_data(self):
-
+    def test_siteconfig_update__uses_newly_saved_cache_data(self):
+        """After a form update, SiteConfig.get() rebuilds the cache with the saved data."""
         self.client.force_login(User.objects.create_user(username='staff_test', is_staff=True))
 
         old_cache = cache.get(SiteConfig.cache_key())
@@ -84,10 +87,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Comparing the `site_name` since Django's Model.__eq__ is comparing `pk`
         self.assertNotEqual(old_cache.site_name, cache.get(SiteConfig.cache_key()).site_name)
 
-    def test_SiteConfigForm_basic_tests(self):
-        """
-            Basic test for SiteConfigForm
-        """
+    def test_siteconfig_form__basic_submission_and_owner_change(self):
+        """Only the deck owner can change the deck_owner field, and the new owner is made a superuser."""
         owner_user = self.config.deck_owner
         staff_user = baker.make(User, is_staff=True)
 
@@ -137,12 +138,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         config.save()
         self.assertEqual(owner_user.pk, SiteConfig.get().deck_owner.pk)
 
-    def test_form_helper_required_fields(self):
-        """
-        Tests whether `form.helper.layout` includes all required fields or not.
-
-        There is an issue with `FormHelper` that breaks form submission, if required fields are not listed explicitly.
-        """
+    def test_form_helper__includes_required_fields(self):
+        """Tests whether `form.helper.layout` includes all required fields (missing ones break submission)."""
         owner_user = self.config.deck_owner
 
         URL = reverse("config:site_config_update_own")
@@ -187,10 +184,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.post(URL, data=form_data)
         self.assertEqual(SiteConfig.get().site_name, "site_name")  # should be equal and prove the case
 
-    def test_custom_javascript_mimetypes(self):
-        """
-        Tests all permitted mimetypes for `custom_javascript` file uploads.
-        """
+    def test_custom_javascript__permitted_mimetypes(self):
+        """Tests all permitted mimetypes for `custom_javascript` file uploads."""
         owner_user = self.config.deck_owner
 
         URL = reverse("config:site_config_update_own")
@@ -250,10 +245,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.post(URL, data=data)
         self.assertEqual(SiteConfig.get().custom_javascript.read(), valid_js)  # form success should have updated model
 
-    def test_owner_only_fields_can_only_be_changed_by_owner(self):
-        """ Checks if staff users that isnt the owner can change any of the advanced fields.
-        Which are only editable by the deck_owner
-        """
+    def test_owner_only_fields__changed_only_by_owner(self):
+        """Advanced/owner-only fields can be changed by the deck owner but not by other staff."""
         URL = reverse("config:site_config_update_own")
 
         # create form data. remove any file uploads

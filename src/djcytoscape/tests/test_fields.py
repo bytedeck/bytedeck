@@ -8,8 +8,8 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 class CytoscapeGFKChoiceFieldTest(ByteDeckTenantTestCase):
 
-    def test_queryset(self):
-        """ Quick test to see if the hardcoded model list is equal to CytoScape.ALLOWED_INITIAL_CONTENT_TYPES """
+    def test_queryset__matches_allowed_initial_content_types(self):
+        """The field's queryset models match CytoScape.ALLOWED_INITIAL_CONTENT_TYPES."""
         from djcytoscape.forms import CytoscapeGFKChoiceField
 
         dynamically_loaded_models = [
@@ -19,8 +19,8 @@ class CytoscapeGFKChoiceFieldTest(ByteDeckTenantTestCase):
 
         self.assertEqual(dynamically_loaded_models, [qs.model for qs in f.queryset.get_querysets()])
 
-    def test_overridden_querysetsequence(self):
-        """ Quick test to see if the overridden_querysetsence method does custom filtering or not """
+    def test_overridden_querysetsequence__excludes_in_use_initial_objects(self):
+        """overridden_querysetsequence excludes objects already used as a map's initial object."""
         from djcytoscape.forms import CytoscapeGFKChoiceField
 
         dynamically_loaded_models = [

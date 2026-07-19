@@ -15,6 +15,7 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create staff plus active/inactive students in and out of the active semester."""
         cls.course = baker.make(Course)
         cls.active_semester = SiteConfig.get().active_semester
 
@@ -49,21 +50,24 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
                 semester=cls.active_semester
             )
 
-    def test_all_for_active_semester_qs(self):
+    def test_all_for_active_semester__returns_active_students(self):
+        """all_for_active_semester() returns only active students registered in the active semester."""
         qs = Profile.objects.all_for_active_semester().values_list('user__username', flat=True)
         expected_qs = self.active_active_semester_students
         expected_qs = [user.username for user in expected_qs]
 
         self.assertEqual(set(qs), set(expected_qs))
 
-    def test_get_active_qs(self):
+    def test_all_active__returns_active_users(self):
+        """all_active() returns every active user, including staff, regardless of semester."""
         qs = Profile.objects.all_active().values_list('user__username', flat=True)
         expected_qs = self.active_inactive_semester_students + self.active_active_semester_students + self.staff_set
         expected_qs = [user.username for user in expected_qs]
 
         self.assertEqual(set(qs), set(expected_qs))
 
-    def test_get_inactive_qs(self):
+    def test_all_inactive__returns_inactive_users(self):
+        """all_inactive() returns only the deactivated users."""
         qs = Profile.objects.all_inactive().values_list('user__username', flat=True)
         expected_qs = self.inactive_inactive_semester_students + self.inactive_active_semester_students
         expected_qs = [user.username for user in expected_qs]

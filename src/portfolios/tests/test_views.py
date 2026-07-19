@@ -53,15 +53,17 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student with a portfolio, one artwork, and a commented document."""
         cls.test_student = baker.make(User)
         cls.portfolio = baker.make('portfolios.Portfolio', user=cls.test_student)
         cls.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=cls.portfolio)
         cls.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=cls.test_student))
 
     def setUp(self):
+        """Create a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_portfolio_view_status_codes_for_anonymous(self):
+    def test_all_portfolio_view_status_codes__for_anonymous(self):
         ''' If not logged in then all views should redirect to login, EXCEPT the public list and public urls '''
 
         self.assert200('portfolios:public_list')
@@ -77,7 +79,7 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('portfolios:art_update', args=[self.art.pk])
 
     def test_all_portfolio_view_status_codes_for_students__own_portfolio(self):
-
+        """A student can access, edit, and add art to their own portfolio views."""
         self.client.force_login(self.test_student)
 
         self.assert200('portfolios:public_list')
@@ -98,7 +100,7 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
     def test_all_portfolio_view_status_codes_for_students__others_portfolio(self):
-
+        """A student cannot access another student's unshared portfolio or art views."""
         # create a new user and try to access the test student's portfolio and art
         self.client.force_login(baker.make(User))
 
@@ -116,8 +118,8 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert404('portfolios:art_update', args=[self.art.pk])
         self.assert404('portfolios:art_add', args=[self.doc.pk])
 
-    def test_all_portfolio_view_status_codes_for_staff(self):
-
+    def test_all_portfolio_view_status_codes__for_staff(self):
+        """Staff can access, edit, and add art to any student's portfolio views."""
         self.client.force_login(baker.make(User, is_staff=True))
 
         self.assert200('portfolios:public_list')
@@ -179,9 +181,6 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             reverse('portfolios:edit', args=[self.portfolio.pk]),
             data=form_data
         )
-        # form = response.context['form']
-        # if not form.is_valid():
-        #     print(form.errors)  # Print the validation errors
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('portfolios:detail', args=[self.portfolio.pk]))
 

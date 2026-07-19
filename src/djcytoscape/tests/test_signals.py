@@ -38,13 +38,15 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 2)
 
     def setUp(self):
+        """Grab the tenant's SiteConfig singleton for toggling map_auto_update."""
         self.config = SiteConfig.get()
 
     def tearDown(self):
+        """Restore map_auto_update to its enabled default after each test."""
         self.config.map_auto_update = True
         self.config.save()
 
-    def test_badge_regenerate_related_maps(self, task):
+    def test_regenerate_related_maps__badge(self, task):
         """ Tests if saving and deleting badge triggers `regenerate_map` task.
         """
         # setup a simple map
@@ -53,7 +55,7 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
 
         self.assert_regenerates_map_on_object_change(badge, scape, task)
 
-    def test_quest_regenerate_related_maps(self, task):
+    def test_regenerate_related_maps__quest(self, task):
         """ Tests if saving and deleting quest triggers `regenerate_map` task.
         """
         # setup a simple map
@@ -62,7 +64,7 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
 
         self.assert_regenerates_map_on_object_change(quest, scape, task)
 
-    def test_rank_regenerate_related_maps(self, task):
+    def test_regenerate_related_maps__rank(self, task):
         """ Tests if saving and deleting rank triggers `regenerate_map` task.
         """
         # setup a simple map
@@ -71,7 +73,7 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
 
         self.assert_regenerates_map_on_object_change(rank, scape, task)
 
-    def test_prereq_regenerate_related_maps(self, task):
+    def test_regenerate_related_maps__prereq(self, task):
         """ Tests if saving and deleting quest triggers `regenerate_map` task.
         Cant check if `regenerate_map` made new CytoElements. So checking if task args are accurate
         """
@@ -99,7 +101,7 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         prereq.save()
         self.assertEqual(task.call_count, 2)
 
-    def test_prereq_signal_handles_all_registered_parent_models(self, task):
+    def test_prereq_signal__handles_all_registered_parent_models(self, task):
         """Saving a Prereq must not crash the map-regeneration signal for any
         registered prereq model as the parent. Loops through every model that
         implements IsAPrereqMixin — the only models that are supposed to be

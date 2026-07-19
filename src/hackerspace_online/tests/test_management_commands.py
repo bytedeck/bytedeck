@@ -53,7 +53,7 @@ class InitDbTest(TestCase, CommandMixin):
     """
     name = "initdb"
 
-    def test_initdb(self):
+    def test_initdb__sets_up_public_tenant(self):
         """ Test that initdb command sets up the public tenant, including:
         - a Tenant object called 'public'
         - a superuser
@@ -79,7 +79,7 @@ class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
     """
     name = "generate_content"
 
-    def test_added_rows_to_db(self):
+    def test_generate_content__adds_rows_to_db(self):
         """ test checks if "generate_content" adds objects to the db """
         new_campaigns = 2
         new_quests = 5
@@ -109,6 +109,7 @@ class FullCleanTest(TestCase, CommandMixin):
     name = 'full_clean'
 
     def setUp(self):
+        """Initialize the public tenant and seed a tenant with a validation error."""
         call_command('initdb')
 
         # have to create tenant this way to prevent errors
@@ -132,7 +133,7 @@ class FullCleanTest(TestCase, CommandMixin):
         #     #  ie. `{'semester': ['this field cannot be blank.']}`
         #     qs = baker.make('quest_manager.QuestSubmission')
 
-    def test_full_clean(self):
+    def test_full_clean__captures_validation_errors(self):
         """ Checks if full clean captures expected validation errors from "full_clean" management command
         See setUp for the expected errors.
         """

@@ -17,7 +17,7 @@ User = get_user_model()
 class DeckRequestFormTest(ByteDeckTenantTestCase):
     """Tests for the public `DeckRequestForm`."""
 
-    def test_captcha_uses_invisible_recaptcha_widget(self):
+    def test_captcha__uses_invisible_recaptcha_widget(self):
         """The deck request captcha must use the same reCAPTCHA widget type as the rest
         of the site (v2 invisible). A single key pair is configured globally
         (RECAPTCHA_PUBLIC_KEY/RECAPTCHA_PRIVATE_KEY) and Google's keys are widget-type
@@ -30,7 +30,7 @@ class DeckRequestFormTest(ByteDeckTenantTestCase):
 class TenantFormTest(ByteDeckTenantTestCase):
     """Various tests for `TenantForm` form class."""
 
-    def test_default(self):
+    def test_is_valid__complete_and_incomplete_data(self):
         """
         Creating new tenant object with valid data, should pass without errors.
         """
@@ -66,7 +66,7 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertTrue(form.is_valid())
 
-    def test_form_max_length(self):
+    def test_max_length__fields_enforce_user_field_limits(self):
         """
         Test if form fields has set correct `max_length` property.
         """
@@ -107,7 +107,7 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertTrue(form.is_valid())
 
-    def test_cant_use_public_name(self):
+    def test_clean_name__cant_use_public_name(self):
         """
         Creating new tenant object with reserved "public" name, should fail with form (validation) error
         """
@@ -120,7 +120,7 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
-    def test_cant_create_if_schema_still_exists(self):
+    def test_clean_name__cant_create_if_schema_still_exists(self):
         """
         Creating new tenant object with a name of existing schema, should fail with form (validation) error
         """

@@ -19,12 +19,14 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher used to authenticate the form-submission requests."""
         cls.teacher = get_user_model().objects.create(username="teacher", is_staff=True,)
 
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_valid_SiteConfigModel(self):
+    def test_generate_form_data__valid_SiteConfig_model(self):
         """
             Basic test to see if generate_form_data works with SiteConfig model
         """
@@ -40,7 +42,7 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
         # assert changes
         self.assertEqual(SiteConfig.get().site_name, "NEW SITE NAME")
 
-    def test_valid_RankModel(self):
+    def test_generate_form_data__valid_Rank_model(self):
         """
             Basic test to see if generate_form_data works with Rank model
         """
@@ -56,7 +58,7 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
         # assert changes
         self.assertTrue(Rank.objects.filter(name="NEW RANK NAME").exists())
 
-    def test_valid_BlockForm(self):
+    def test_generate_form_data__valid_BlockForm(self):
         """
             Basic test to see if generate_form_data works with BlockForm
         """
@@ -82,7 +84,7 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
     # implemented for redundancy and there are many similarly-functional tests for other near-identical forms across site more suited to
     # this convienience method
     # form_valid_data exists as a dict but is being picked up as an arg instead of a kwarg and kwargs=form_valid_data upon creation does not fix
-    def test_valid_CourseStudentForm(self):
+    def test_generate_form_data__valid_CourseStudentForm(self):
         """
             Basic test to see if generate_form_data works with CourseStudentForm
 
@@ -147,14 +149,14 @@ class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
         """Class-level fixture that would silently never run on stock TenantTestCase."""
         cls.category = baker.make('quest_manager.Category', title='setuptestdata-probe')
 
-    def test_setuptestdata_ran_in_tenant_schema(self):
+    def test_setuptestdata__ran_in_tenant_schema(self):
         """setUpTestData ran, its data is queryable, and it was created in the test tenant's schema."""
         self.assertEqual(connection.schema_name, self.tenant.schema_name)
         self.assertTrue(
             apps.get_model('quest_manager', 'Category').objects.filter(title='setuptestdata-probe').exists()
         )
 
-    def test_a_mutations_of_class_data_are_visible_within_a_test(self):
+    def test_a_mutations_of_class_data__are_visible_within_a_test(self):
         """A test may freely mutate class-level data; changes are visible inside that test."""
         self.category.title = 'mutated'
         self.category.save()
@@ -162,7 +164,7 @@ class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
             apps.get_model('quest_manager', 'Category').objects.filter(title='mutated').exists()
         )
 
-    def test_b_mutations_of_class_data_do_not_leak_between_tests(self):
+    def test_b_mutations_of_class_data__do_not_leak_between_tests(self):
         """DB rows and in-memory attributes are restored between tests (runs after test_a_*)."""
         self.assertEqual(self.category.title, 'setuptestdata-probe')
         Category = apps.get_model('quest_manager', 'Category')

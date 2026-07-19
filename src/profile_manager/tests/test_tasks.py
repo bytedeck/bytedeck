@@ -21,7 +21,8 @@ class ProfleTasksTests(ByteDeckTenantTestCase):
     """
 
     @override_settings(CELERY_TASK_ALWAYS_EAGER=True)
-    def test_recalculate_current_xp_profile_on_all_schemas(self):
+    def test_invalidate_profile_xp_cache_in_all_schemas__resets_cached_values(self):
+        """Running the task resets each active-semester profile's cached xp and mark to 0."""
         self.course = baker.make(Course)
         self.active_semester = SiteConfig().get().active_semester
 

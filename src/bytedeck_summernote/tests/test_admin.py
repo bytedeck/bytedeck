@@ -10,7 +10,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 class ByteDeckSummernoteModelAdminMixinTestCase(TestCase):
 
-    def test_get_summernote_widget_class(self):
+    def test_get_summernote_widget_class__not_implemented_then_overridden(self):
         """
         Test two things:
         1. that the get_summernote_widget_class method raises a NotImplementedError when called directly,
@@ -42,6 +42,7 @@ class TestByteDeckSummernoteSafeModelAdmin(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
     def setUp(self):
+        """Set up admin site and refreshed django_summernote config."""
         self.username = "lqez"
         self.password = "ohmygoddess"
         self.site = AdminSite()
@@ -50,7 +51,7 @@ class TestByteDeckSummernoteSafeModelAdmin(ByteDeckTenantTestCase):
         self.app_config.update_config()
         self.summernote_config = self.app_config.config
 
-    def test_admin_model(self):
+    def test_admin_model__safe_widget_injected(self):
         """Safe widget (iframe variant) injected into customized admin class"""
         from bytedeck_summernote.admin import (
             ByteDeckSummernoteSafeModelAdmin,
@@ -67,7 +68,7 @@ class TestByteDeckSummernoteSafeModelAdmin(ByteDeckTenantTestCase):
             ByteDeckSummernoteSafeWidget,
         )
 
-    def test_admin_model_inplace(self):
+    def test_admin_model_inplace__safe_inplace_widget_injected(self):
         """Safe widget (non-iframe variant aka inplace) injected into customized admin class"""
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
@@ -83,7 +84,8 @@ class TestByteDeckSummernoteSafeModelAdmin(ByteDeckTenantTestCase):
 
         self.summernote_config["iframe"] = True
 
-    def test_admin_summernote_fields(self):
+    def test_admin_summernote_fields__safe_widget_only_for_listed_fields(self):
+        """Safe widget is injected only when the field is in summernote_fields."""
         from bytedeck_summernote.admin import ByteDeckSummernoteSafeModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
@@ -112,6 +114,7 @@ class TestByteDeckSummernoteAdvancedModelAdmin(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
 
     def setUp(self):
+        """Set up admin site and refreshed django_summernote config."""
         self.username = "lqez"
         self.password = "ohmygoddess"
         self.site = AdminSite()
@@ -120,7 +123,7 @@ class TestByteDeckSummernoteAdvancedModelAdmin(ByteDeckTenantTestCase):
         self.app_config.update_config()
         self.summernote_config = self.app_config.config
 
-    def test_admin_model(self):
+    def test_admin_model__advanced_widget_injected(self):
         """Advanced widget (iframe variant) injected into customized admin class"""
         from bytedeck_summernote.admin import (
             ByteDeckSummernoteAdvancedModelAdmin,
@@ -137,7 +140,7 @@ class TestByteDeckSummernoteAdvancedModelAdmin(ByteDeckTenantTestCase):
             ByteDeckSummernoteAdvancedWidget,
         )
 
-    def test_admin_model_inplace(self):
+    def test_admin_model_inplace__advanced_inplace_widget_injected(self):
         """Advanced widget (non-iframe variant aka inplace) injected into customized admin class"""
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
@@ -153,7 +156,8 @@ class TestByteDeckSummernoteAdvancedModelAdmin(ByteDeckTenantTestCase):
 
         self.summernote_config["iframe"] = True
 
-    def test_admin_summernote_fields(self):
+    def test_admin_summernote_fields__advanced_widget_only_for_listed_fields(self):
+        """Advanced widget is injected only when the field is in summernote_fields."""
         from bytedeck_summernote.admin import ByteDeckSummernoteAdvancedModelAdmin
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 

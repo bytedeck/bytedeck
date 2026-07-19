@@ -20,12 +20,15 @@ class MarkRangeModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a MarkRange with a 50% minimum for the class tests."""
         cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
 
-    def test_mark_range_creation(self):
+    def test_mark_range__creation(self):
+        """A MarkRange is created as the expected model instance."""
         self.assertIsInstance(self.mr_50, MarkRange)
 
     def test_mark_range__str__(self):
+        """str(MarkRange) is the name followed by its minimum mark percentage."""
         expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
         self.assertEqual(str(self.mr_50), expected_str)
 
@@ -33,13 +36,15 @@ class MarkRangeModelTest(ByteDeckTenantTestCase):
 class MarkRangeManagerTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Clear the default mark ranges and create ranges at 50% and 75% minimums."""
         # clear default mark range variables (every test in this class expects the defaults gone)
         MarkRange.objects.all().delete()
 
         cls.mr_50 = baker.make(MarkRange, minimum_mark=50.0)
         cls.mr_75 = baker.make(MarkRange, minimum_mark=75.0)
 
-    def test_get_range(self):
+    def test_get_range__by_mark(self):
+        """get_range() returns the highest range whose minimum the mark meets."""
         mr_100 = baker.make(MarkRange, minimum_mark=100.0)
 
         self.assertEqual(MarkRange.objects.get_range(25.0), None)
@@ -48,7 +53,8 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0), mr_100)
 
-    def test_get_range_with_course(self):
+    def test_get_range__with_course(self):
+        """get_range() honours course-specific ranges when courses are passed."""
         c1 = baker.make(Course)
         c2 = baker.make(Course)
         mr_50_c1 = baker.make(MarkRange, minimum_mark=50.0, courses=[c1])
@@ -65,7 +71,7 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
 
-    def test_get_range_for_user(self):
+    def test_get_range_for_user__by_cached_mark(self):
         """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
         """
         user = baker.make(User)
@@ -88,9 +94,9 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
 
 class BlockModelManagerTest(ByteDeckTenantTestCase):
 
-    def test_grouped_teachers_blocks_equals_one(self):
+    def test_grouped_teachers_blocks__single_teacher(self):
         """
-            Should only return 1 group of teachers if regardless of the number of Blocks
+            Should only return 1 group of teachers regardless of the number of Blocks
         """
 
         teacher_owner = User.objects.get(username='owner')
@@ -102,7 +108,7 @@ class BlockModelManagerTest(ByteDeckTenantTestCase):
 
         self.assertEqual(len(group.keys()), 1)
 
-    def test_grouped_teachers_blocks_more_than_one(self):
+    def test_grouped_teachers_blocks__multiple_teachers(self):
         """ Should return 3 group of teachers teaching Default, [AB] and [CD] blocks"""
 
         teacher_owner = User.objects.get(username='owner')
@@ -131,16 +137,17 @@ class BlockModelManagerTest(ByteDeckTenantTestCase):
 class SemesterModelManagerTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a September 2019 semester for the manager tests."""
         cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
         cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
         cls.semester1 = baker.make(Semester, first_day=cls.semester_start, last_day=cls.semester_end)
 
-    def test_get_current(self):
-        """ Get's the current semester as defined by SiteConfig """
+    def test_get_current__returns_active_semester(self):
+        """ Gets the current semester as defined by SiteConfig """
         self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
 
-    def test_get_current_as_queryset(self):
-        """ Get's the current semester object in a quesryset  """
+    def test_get_current__as_queryset(self):
+        """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
 
@@ -148,6 +155,7 @@ class SemesterModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a September 2019 semester used across the semester model tests."""
         cls.semester_start = date(2019, 9, 1)  # Sep 1st 2019
         cls.semester_end = date(2019, 9, 30)  # Sep 30th, 2019
         cls.today_fake = date(2019, 9, 15)  # Sep 15 2019, some date in the semester
@@ -156,7 +164,8 @@ class SemesterModelTest(ByteDeckTenantTestCase):
                                   last_day=cls.semester_end
                                   )
 
-    def test_semester_creation(self):
+    def test_semester__creation(self):
+        """A Semester is created as the expected model instance."""
         self.assertIsInstance(self.semester, Semester)
 
     def test_str__name_set(self):
@@ -185,7 +194,8 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         self.assertEqual(semester.num_days(), 0)
         self.assertEqual(semester.num_days(upto_today=True), 0)
 
-    def test_is_open(self):
+    def test_is_open__within_and_outside_dates(self):
+        """is_open() is True on and between the first and last day, and False outside them."""
         # before semester starts: False
         before_start = self.semester_start - timedelta(days=1)
         with freeze_time(before_start, tz_offset=0):
@@ -210,7 +220,7 @@ class SemesterModelTest(ByteDeckTenantTestCase):
 
         # Timezone problems?
 
-    def test_num_days(self):
+    def test_num_days__excludes_weekends_and_excluded_dates(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
         """
         # no excluded dates yet, so 21 weekdays in Sep 2019 (see setup)
@@ -227,7 +237,7 @@ class SemesterModelTest(ByteDeckTenantTestCase):
 
         self.assertIsInstance(self.semester.num_days(), int)
 
-    def test_num_days_upto_today(self):
+    def test_num_days__upto_today(self):
         """The number of classes in the semester SO FAR up to today
         """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
@@ -237,7 +247,7 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         with freeze_time(date(2019, 10, 15), tz_offset=0):
             self.assertEqual(self.semester.num_days(upto_today=True), 21)
 
-    def test_excluded_days(self):
+    def test_excluded_days__returns_excluded_dates(self):
         """ returns a list of dates excluded for this semester (holidays and other non-instructional days) """
         # add some excluded dates
         baker.make(ExcludedDate, semester=self.semester, date=date(2019, 9, 1))  # Sun, shouldn't count
@@ -246,43 +256,48 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         dates = self.semester.excluded_days()
         self.assertListEqual(list(dates), [date(2019, 9, 1), date(2019, 9, 2)])
 
-    def test_days_so_far(self):
+    def test_days_so_far__equals_num_days_upto_today(self):
+        """days_so_far() equals num_days(upto_today=True)."""
         self.assertEqual(self.semester.days_so_far(), self.semester.num_days(upto_today=True))
 
-    def test_fraction_complete(self):
+    def test_fraction_complete__partway_through(self):
         """ how far through the semester as a fraction """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total
             fraction_complete = self.semester.fraction_complete()
             self.assertAlmostEqual(fraction_complete, 10 / 21)
 
-    def test_percent_complete(self):
+    def test_percent_complete__partway_through(self):
         """ how far through the semester as a percent """
         with freeze_time(date(2019, 9, 15), tz_offset=0):
             # 10 days so far (excluding weekends) / 21 days total * 100
             percent_complete = self.semester.percent_complete()
             self.assertAlmostEqual(percent_complete, 10 / 21 * 100)
 
-    def test_get_interim1_date(self):
+    def test_get_interim1_date__quarter_point(self):
+        """get_interim1_date() is the date a quarter of the way through the semester."""
         self.assertEqual(self.semester.get_interim1_date(), self.semester.get_date(0.25))
 
-    def test_get_term_date(self):
+    def test_get_term_date__midpoint(self):
+        """get_term_date() is the date halfway through the semester."""
         self.assertEqual(self.semester.get_term_date(), self.semester.get_date(0.5))
 
-    def test_get_interim2_date(self):
+    def test_get_interim2_date__three_quarter_point(self):
+        """get_interim2_date() is the date three quarters of the way through the semester."""
         self.assertEqual(self.semester.get_interim2_date(), self.semester.get_date(0.75))
 
-    def test_get_final_date(self):
+    def test_get_final_date__last_day(self):
+        """get_final_date() is the semester's last day."""
         self.assertEqual(self.semester.get_final_date(), self.semester.last_day)
 
-    def test_get_date(self):
+    def test_get_date__rolls_back_off_weekends(self):
         """ Gets the closest date, rolling back if it falls on a weekend or excluded
         after a fraction of the semester is over """
         self.assertEqual(self.semester.get_date(0.25), date(2019, 9, 6))
         self.assertEqual(self.semester.get_date(0.5), date(2019, 9, 13))  # lands on a weekend so roll back to the friday
         self.assertEqual(self.semester.get_date(1.0), self.semester.last_day)
 
-    def test_get_datetime_by_days_since_start(self):
+    def test_get_datetime_by_days_since_start__skips_weekends(self):
         """ 5 days since start of semester should fall on 6 Sep 2019,
         6 days should push through weekend and land on 9 Sep 2019 """
         dt = self.semester.get_datetime_by_days_since_start(5)
@@ -293,7 +308,7 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
 
-    def test_reset_students_xp_cached(self):
+    def test_reset_students_xp_cached__zeroes_xp(self):
         """Students' xp_cached should be set to 0."""
         student = baker.make(User)
         course = baker.make(Course)
@@ -312,17 +327,19 @@ class CourseModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a Course for the class tests."""
         cls.course = baker.make(Course)
 
-    def test_course_creation(self):
+    def test_course__creation(self):
+        """A Course is created and its str is its title."""
         self.assertIsInstance(self.course, Course)
         self.assertEqual(str(self.course), self.course.title)
 
-    def test_get_absolute_url(self):
+    def test_get_absolute_url__returns_course_list(self):
         """All courses return the course list"""
         self.assertEqual(self.course.get_absolute_url(), reverse('courses:course_list'))
 
-    def test_condition_met_as_prerequisite(self):
+    def test_condition_met_as_prerequisite__currently_registered(self):
         """ If the user is CURRENTLY registered in this course, then condition is met """
         student = baker.make(User)
         baker.make(CourseStudent, user=student, course=self.course)
@@ -331,7 +348,7 @@ class CourseModelTest(ByteDeckTenantTestCase):
         baker.make(CourseStudent, user=student, course=self.course, semester=SiteConfig.get().active_semester)
         self.assertTrue(self.course.condition_met_as_prerequisite(student, 1))
 
-    def test_model_protection(self):
+    def test_model_protection__course_with_students(self):
         """
             Quick test to see if Course model deletion is prevented when trying to delete Course model programmatically
 
@@ -351,18 +368,19 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student registered in a course in the active semester."""
         cls.student = baker.make(User, username='test_student')
         cls.course = baker.make(Course)
         cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
-    def test_current_course(self):
+    def test_current_course__returns_active_semester_course(self):
         """ Currently returns the first course in the active semester, if there are more than one"""
         # Add a second course to the student during active semester (+ SetUp)
         sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
-        # order doesn't matter here, as long as it's one fo the courses the student is currently registered in
+        # order doesn't matter here, as long as it's one of the courses the student is currently registered in
         self.assertIn(CourseStudent.objects.current_course(self.student), [sc2, self.course_student])
 
-    def test_all_for_user_semester(self):
+    def test_all_for_user_semester__filters_by_user_and_semester(self):
         """ Test that method returns all CourseStudent objects for a given user and semester """
         semester_to_check = baker.make(Semester)
 
@@ -383,7 +401,7 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
     @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades(self, xp_per_course):
+    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, xp_per_course):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
 
         # second student in same course as setup
@@ -417,8 +435,8 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
-    def test_all_users_for_active_semester(self):
-
+    def test_all_users_for_active_semester__excludes_inactive(self):
+        """all_users_for_active_semester() counts active-semester students, excluding inactive users."""
         # There should be 1 student in the active semester
         self.assertEqual(CourseStudent.objects.all_users_for_active_semester().count(), 1)
 
@@ -433,19 +451,18 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student registered in a course in the active semester."""
         cls.student = baker.make(User)
         cls.course = baker.make(Course)
         cls.course_student = baker.make(CourseStudent, user=cls.student, course=cls.course, semester=SiteConfig.get().active_semester)
 
-    def test_course_student_creation(self):
+    def test_course_student__creation(self):
+        """A CourseStudent is created as the expected model instance."""
         self.assertIsInstance(self.course_student, CourseStudent)
-        # self.assertEqual(str(self.course), self.course.title)
-
-    # def test_course_student_get_absolute_url(self):
-    #     self.assertEqual(self.course_student.get_absolute_url(), reverse('courses:list'))
 
     @patch('courses.models.Semester.fraction_complete')
-    def test_calc_mark(self, fraction_complete):
+    def test_calc_mark__scales_with_fraction_complete(self, fraction_complete):
+        """calc_mark() scales a student's XP into a mark based on how far the semester has progressed."""
         fraction_complete.return_value = 0.5
         course = baker.make(Course, xp_for_100_percent=100)
         course_student = baker.make(CourseStudent, user=self.student, course=course, semester=SiteConfig.get().active_semester)
@@ -474,8 +491,8 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         course_student.calc_mark(50)
 
     @patch('courses.models.Semester.days_so_far')
-    def test_xp_per_day_ave(self, days_so_far):
-
+    def test_xp_per_day_ave__divides_xp_by_days(self, days_so_far):
+        """xp_per_day_ave() is the student's cached XP divided by days so far, or 0 when no days."""
         self.student.profile.xp_cached = 120
         self.student.profile.save()
         days_so_far.return_value = 10
@@ -491,10 +508,11 @@ class BlockModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student and a Block for the class tests."""
         cls.student = baker.make(User)
         cls.block = baker.make(Block)
 
-    def test_model_protection(self):
+    def test_model_protection__block_with_students(self):
         """
             Quick test to see if Block model deletion is prevented when trying to delete Block model programmatically
             Block deletion is only prevented when there are CourseStudent models linked via foreign key to the Block model
@@ -508,7 +526,7 @@ class BlockModelTest(ByteDeckTenantTestCase):
         # see if models.PROTECT is in place
         self.assertRaises(ProtectedError, self.block.delete)
 
-    def test_condition_met_as_prerequisite(self):
+    def test_condition_met_as_prerequisite__registered_in_block_active_semester(self):
         """ If the user is registered in a course in this block during the active semester, then condition is met
         Tests check condition on self.block for self.student """
 
@@ -530,7 +548,7 @@ class BlockModelTest(ByteDeckTenantTestCase):
 
 class RankManagerTest(ByteDeckTenantTestCase):
 
-    def test_get_rank(self):
+    def test_get_rank__returns_rank_for_xp(self):
         """ Test that the correct rank is returned for a given XP value"""
 
         # default ranks are create from 0-1000XP, so test above that range.
@@ -556,7 +574,7 @@ class RankManagerTest(ByteDeckTenantTestCase):
         rank_0 = Rank.objects.get_rank(-100)
         self.assertIsNotNone(rank_0)
 
-    def test_get_next_rank(self):
+    def test_get_next_rank__returns_next_rank_for_xp(self):
         """ Test that the correct rank is returned for a given XP value"""
 
         # default ranks are create from 0-1000XP, so test above that range.
@@ -578,19 +596,21 @@ class RankModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Clear the default ranks and create a single TestRank at 0 XP."""
         # every test in this class expects the default ranks gone, with only TestRank remaining
         Rank.objects.all().delete()
         cls.rank = baker.make(Rank, name="TestRank", xp=0)
 
-    def test_rank_creation(self):
+    def test_rank__creation(self):
+        """A Rank is created and its str is its name."""
         self.assertIsInstance(self.rank, Rank)
         self.assertEqual(str(self.rank), self.rank.name)
 
-    def test_get_absolute_url(self):
+    def test_get_absolute_url__returns_ranks_list(self):
         """Absolute url for all ranks is the ranks list page"""
         self.assertEqual(self.rank.get_absolute_url(), reverse('courses:ranks'))
 
-    def test_get_icon_url(self):
+    def test_get_icon_url__default_and_custom(self):
         """Returns the icon url for the rank, if no url then returns the default icon from SiteConfig"""
         self.assertEqual(self.rank.get_icon_url(), SiteConfig.get().get_default_icon_url())
         self.rank.icon = 'test.png'
@@ -621,14 +641,14 @@ class RankCacheInvalidationTest(ByteDeckTenantTestCase):
         """Populate the rank cache so the test's write can be shown to invalidate it."""
         Rank.objects.get_ranks_cached()
 
-    def test_cached_rank_lookups_hit_no_queries(self):
+    def test_cached_rank_lookups__hit_no_queries(self):
         """With a warm cache, get_rank() and get_next_rank() must not query the database."""
         self.warm_cache()
         with self.assertNumQueries(0):
             Rank.objects.get_rank(100)
             Rank.objects.get_next_rank(100)
 
-    def test_save_invalidates_cache(self):
+    def test_save__invalidates_cache(self):
         """Creating a Rank (via save) and re-saving it must invalidate the cache (post_save signal)."""
         self.warm_cache()
         rank = baker.make(Rank, xp=123456)
@@ -639,21 +659,21 @@ class RankCacheInvalidationTest(ByteDeckTenantTestCase):
         rank.save()
         self.assert_cache_matches_db()
 
-    def test_instance_delete_invalidates_cache(self):
+    def test_instance_delete__invalidates_cache(self):
         """Deleting a Rank instance must invalidate the cache (post_delete signal)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         rank.delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_delete_invalidates_cache(self):
+    def test_queryset_delete__invalidates_cache(self):
         """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
         Rank.objects.filter(pk=rank.pk).delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_update_invalidates_cache(self):
+    def test_queryset_update__invalidates_cache(self):
         """Queryset .update() fires no signals; the RankQuerySet.update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()
@@ -661,13 +681,13 @@ class RankCacheInvalidationTest(ByteDeckTenantTestCase):
         self.assertEqual(Rank.objects.get_rank(654321).pk, rank.pk)
         self.assert_cache_matches_db()
 
-    def test_bulk_create_invalidates_cache(self):
+    def test_bulk_create__invalidates_cache(self):
         """bulk_create() fires no signals; the RankQuerySet.bulk_create override must invalidate the cache."""
         self.warm_cache()
         Rank.objects.bulk_create([Rank(name='Bulk Rank', xp=123456)])
         self.assert_cache_matches_db()
 
-    def test_bulk_update_invalidates_cache(self):
+    def test_bulk_update__invalidates_cache(self):
         """bulk_update() fires no signals; the RankQuerySet.bulk_update override must invalidate the cache."""
         rank = baker.make(Rank, xp=123456)
         self.warm_cache()

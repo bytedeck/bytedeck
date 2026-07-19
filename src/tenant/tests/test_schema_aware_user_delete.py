@@ -50,6 +50,7 @@ class SchemaAwareUserDeleteAdminPublicTest(ByteDeckTenantTestCase):
     """
 
     def setUp(self):
+        """Build the public tenant, a superuser, and a target user (with EmailAddress) to delete."""
         # Build the public tenant + a superuser to drive the admin, mirroring
         # tenant.tests.test_admin.PublicTenantTestAdminPublic.
         self.public_tenant = Tenant(schema_name="public", name="public")
@@ -172,6 +173,7 @@ class SchemaAwareUserDeleteAdminTenantTest(ByteDeckTenantTestCase):
     still removes related tenant rows (e.g. QuestSubmission)."""
 
     def setUp(self):
+        """Build a tenant-schema client and a superuser to drive the admin."""
         self.client = TenantClient(self.tenant)
         self.superuser = User.objects.create_superuser(
             username="tenant_admin", email="ta@example.com", password="pw",

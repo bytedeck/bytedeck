@@ -9,7 +9,7 @@ class TestUtilsText(SimpleTestCase):
     Various tests for `utilities.html` module.
     """
 
-    def test_textify(self):
+    def test_textify__converts_html_to_markdown(self):
         """
         Generate a plain text version of an html content using html2text library.
         """
@@ -17,7 +17,7 @@ class TestUtilsText(SimpleTestCase):
         output = textify(html)
         self.assertEqual(output, """**Zed's** dead baby, _Zed's_ dead.\n\n""")
 
-    def test_textify_donot_ignore_links(self):
+    def test_textify__does_not_ignore_links(self):
         """
         Don't ignore links anymore, I like links
         """
@@ -39,7 +39,7 @@ class LinkTextExtractor(HTMLParser):
 
 
 class UrlizeTests(SimpleTestCase):
-    def test_basic(self):
+    def test_urlize__basic(self):
         """
         Test that a simple URL is correctly converted into an anchor tag
         and the URL text is preserved.
@@ -73,7 +73,7 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(text)
         self.assertTrue(result.startswith('a.<a href="http://example.com"'))
 
-    def test_empty(self):
+    def test_urlize__empty_or_none(self):
         """
         Test that empty string or None input returns an empty string without error.
 
@@ -86,7 +86,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertEqual(urlize(""), "")
         self.assertEqual(urlize(None), "")
 
-    def test_trim_url_limit(self):
+    def test_urlize__trim_url_limit(self):
         """
         Test that long URLs are visually trimmed in the anchor text,
         while the href attribute retains the full URL.
@@ -115,7 +115,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn(url, result)
         self.assertNotIn("...", result)
 
-    def test_multiple_urls(self):
+    def test_urlize__multiple_urls(self):
         """
         Test that multiple URLs in the input text are all converted into anchor tags.
 
@@ -129,7 +129,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="https://bar.com/page"', result)
         self.assertEqual(result.count('<a '), 2)
 
-    def test_url_positions(self):
+    def test_urlize__url_positions(self):
         """
         Test that URLs are correctly linkified regardless of their position
         in the input string (start, middle, or end).
@@ -145,7 +145,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('<a href="http://middle.com"', urlize("Text before http://middle.com text after"))
         self.assertIn('<a href="http://end.com"', urlize("Ends with http://end.com"))
 
-    def test_non_url_text(self):
+    def test_urlize__non_url_text(self):
         """
         Test that plain text without any URLs is returned unmodified.
         """
@@ -153,7 +153,7 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(text)
         self.assertEqual(result, text)
 
-    def test_trailing_punctuation(self):
+    def test_urlize__trailing_punctuation(self):
         """
         Test that trailing punctuation such as periods is excluded
         from the anchor tag.
@@ -165,7 +165,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="http://example.com"', result)
         self.assertTrue(result.endswith("</a>."))
 
-    def test_already_linked_html(self):
+    def test_urlize__already_linked_html(self):
         """
         Test that pre-existing <a> tags are preserved and not double-processed.
 
@@ -179,7 +179,7 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(html)
         self.assertEqual(result, html)
 
-    def test_no_javascript_links(self):
+    def test_urlize__no_javascript_links(self):
         """
         Test that javascript: links are not linkified for security reasons.
         """
@@ -187,7 +187,7 @@ class UrlizeTests(SimpleTestCase):
         result = urlize(text)
         self.assertNotIn("href=", result)  # Should not linkify
 
-    def test_clean_html_url_integration(self):
+    def test_clean_html__urlize_integration(self):
         """
         Ensure that clean_html applies urlize logic to plain text URLs.
         """
@@ -196,7 +196,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('<a href="http://www.example.com"', result)
         self.assertIn('target="_blank"', result)
 
-    def test_clean_html_trims_long_urls(self):
+    def test_clean_html__trims_long_urls(self):
         """
         Test that clean_html trims long URLs in display text.
         """
@@ -205,7 +205,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn("...", result)
         self.assertIn('href="http://example.com/this/is/a/very/long/path/that/needs/to/be/trimmed"', result)
 
-    def test_clean_html_ignores_existing_links(self):
+    def test_clean_html__ignores_existing_links(self):
         """
         Test that clean_html doesn't re-process existing anchor tags.
         """
@@ -215,7 +215,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="http://example.com"', result)
         self.assertIn('target="_blank"', result)
 
-    def test_clean_html_multiple_urls(self):
+    def test_clean_html__multiple_urls(self):
         """
         Ensure that multiple unformatted URLs are handled correctly.
         """
@@ -225,7 +225,7 @@ class UrlizeTests(SimpleTestCase):
         self.assertIn('href="http://www.bar.com"', result)
         self.assertEqual(result.count("<a "), 2)
 
-    def test_clean_html_does_not_link_javascript(self):
+    def test_clean_html__does_not_link_javascript(self):
         """
         Ensure javascript: links are not linkified.
         """
@@ -233,7 +233,8 @@ class UrlizeTests(SimpleTestCase):
         result = clean_html(text)
         self.assertNotIn('<a ', result)
 
-    def test_numbered_list_with_br(self):
+    def test_urlize__numbered_list_with_br(self):
+        """Numbered list items separated by <br> are linkified with prefixes kept outside the anchors."""
         # Input simulating comment input with <br> instead of newlines
         input_text = (
             "1.www.testing.com<br>"
