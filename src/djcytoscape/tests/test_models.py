@@ -364,11 +364,13 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_save__sets_first_scape_as_primary(self):
+        """The first-created map is primary; a second map saved afterwards is not."""
         newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
 
     def test_save__changes_primary_scape(self):
+        """Flagging a second map primary and saving demotes the previous primary map."""
         newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)

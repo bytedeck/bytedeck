@@ -113,7 +113,7 @@ def _iter_test_modules():
 def _violations(path):
     """Return a list of human-readable convention violations in ``path``."""
     problems = []
-    tree = ast.parse(path.read_text())
+    tree = ast.parse(path.read_text(encoding="utf-8"))
     for node in ast.walk(tree):
         if not isinstance(node, ast.FunctionDef):
             continue
