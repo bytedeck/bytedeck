@@ -17,7 +17,7 @@ User = get_user_model()
 class QuestAdminActionsTest(ByteDeckTenantTestCase):
     """Tests for the module-level admin actions registered on QuestAdmin."""
 
-    def test_publish_selected_quests(self):
+    def test_publish_selected_quests__publishes_and_clears_editor(self):
         """Publishing sets published=True and clears the editor on each selected quest."""
         editor = baker.make(User)
         quest = baker.make(Quest, published=False, editor=editor)
@@ -30,7 +30,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
         self.assertIsNone(quest.editor)
         self.assertEqual(len(list(request._messages)), 1)
 
-    def test_archive_selected_quests(self):
+    def test_archive_selected_quests__archives_and_unpublishes(self):
         """Archiving sets archived=True, published=False and clears the editor."""
         quest = baker.make(Quest, archived=False, published=True)
         request = request_with_messages()
@@ -42,7 +42,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
         self.assertFalse(quest.published)
         self.assertEqual(len(list(request._messages)), 1)
 
-    def test_prettify_code_selected_quests(self):
+    def test_prettify_code_selected_quests__rewrites_instructions(self):
         """Prettifying rewrites the instructions HTML in place and reports success."""
         quest = baker.make(Quest, instructions='<div><p>hi</p></div>')
         request = request_with_messages()
@@ -54,7 +54,7 @@ class QuestAdminActionsTest(ByteDeckTenantTestCase):
         self.assertIn('\n', quest.instructions)
         self.assertEqual(len(list(request._messages)), 1)
 
-    def test_fix_whitespace_bug(self):
+    def test_fix_whitespace_bug__rewrites_instructions(self):
         """The whitespace-bug fixer also rewrites instructions and reports success."""
         quest = baker.make(Quest, instructions='<div><p>hi</p></div>')
         request = request_with_messages()

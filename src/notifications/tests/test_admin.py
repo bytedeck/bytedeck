@@ -32,7 +32,7 @@ class NotificationAdminTest(ByteDeckTenantTestCase):
         self.admin = NotificationAdmin(model=Notification, admin_site=AdminSite())
         self.request = request_with_messages()
 
-    def test_delete_old_notifications_action(self):
+    def test_delete_old_notifications_action__deletes_old_and_messages(self):
         """The admin action deletes notifications older than 90 days and reports the result via message_user."""
         sender = baker.make(User)
         recipient = baker.make(User)

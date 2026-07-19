@@ -20,7 +20,7 @@ User = get_user_model()
 class PrereqInlineFormTest(ByteDeckTenantTestCase):
     """Tests for PrereqInlineForm which limits content-type choices to registered prereq models."""
 
-    def test_content_type_querysets_limited_to_registered(self):
+    def test_prereq_inline_form__content_type_querysets_limited_to_registered(self):
         """The (or_)prereq_content_type fields only offer content types registered as prereqs."""
         # PrereqInlineForm is an inline ModelForm; Django injects the model at runtime.
         # Bind it to Prereq here so we can instantiate it in isolation.
@@ -38,7 +38,7 @@ class PrereqInlineFormTest(ByteDeckTenantTestCase):
 class AutoNameSelectedPrereqsActionTest(ByteDeckTenantTestCase):
     """Tests for the auto_name_selected_prereqs admin action."""
 
-    def test_auto_name_sets_name_to_str(self):
+    def test_auto_name_selected_prereqs__sets_name_to_str(self):
         """The action stores str(prereq) into each selected prereq's name field."""
         parent = baker.make(Quest)
         prereq_quest = baker.make(Quest)
@@ -57,7 +57,7 @@ class RecalculateAvailableQuestsActionTest(ByteDeckTenantTestCase):
     """Tests for the recalculate_available_quests_for_all_users admin action."""
 
     @patch('prerequisites.admin.update_quest_conditions_all_users.apply_async')
-    def test_recalculate_schedules_task_and_messages(self, mock_apply_async):
+    def test_recalculate_available_quests__schedules_task_and_messages(self, mock_apply_async):
         """The action offloads recalculation to a background task and notifies the user."""
         request = request_with_messages()
 

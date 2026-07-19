@@ -13,12 +13,12 @@ User = get_user_model()
 class ColorStyleFromMarkTagTest(ByteDeckTenantTestCase):
     """Tests for the color_style_from_mark template tag."""
 
-    def test_returns_empty_string_when_no_mark_range(self):
+    def test_color_style_from_mark__empty_string_when_no_mark_range(self):
         """A user not enrolled in any course has no mark range, so the tag returns ''."""
         user = baker.make(User)
         self.assertEqual(color_style_from_mark(user), "")
 
-    def test_returns_light_color_for_light_theme(self):
+    def test_color_style_from_mark__light_color_for_light_theme(self):
         """When a mark range applies and the user is on the light theme, its light color is used."""
         MarkRange.objects.all().delete()
         MarkRange.objects.create(name="Range", minimum_mark=0.0, color_light='#111111', color_dark='#222222')
@@ -33,7 +33,7 @@ class ColorStyleFromMarkTagTest(ByteDeckTenantTestCase):
         self.assertIn('#111111', style)
         self.assertNotIn('#222222', style)
 
-    def test_returns_dark_color_for_dark_theme(self):
+    def test_color_style_from_mark__dark_color_for_dark_theme(self):
         """When a mark range applies and the user is on the dark theme, its dark color is used."""
         MarkRange.objects.all().delete()
         MarkRange.objects.create(name="Range", minimum_mark=0.0, color_light='#111111', color_dark='#222222')
