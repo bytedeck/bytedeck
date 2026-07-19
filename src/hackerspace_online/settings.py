@@ -976,6 +976,19 @@ if DEBUG and not TESTING:
     # }
 
 
+# Referrer-Policy value applied in production (see the security block below).
+# Named at module scope so it stays importable/testable even though the block
+# that applies it is skipped under TESTING. We deliberately deviate from
+# Django's "same-origin" default: under "same-origin" the browser sends *no*
+# Referer on cross-origin requests, which breaks third-party embeds that gate
+# on the referrer -- most visibly YouTube, whose iframe player refuses to load
+# and shows an error (issue #1896). "strict-origin-when-cross-origin" is the
+# modern browser default and web.dev's recommended value: it sends only the
+# origin (scheme + host, never the path) cross-origin, and the full URL
+# same-origin, so embeds work again while paths are still never leaked off-site.
+# Any non-None value keeps `check --deploy` (security.W022) green.
+PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 # PRODUCTION / STAGING SECURITY SETTINGS ###############################
 # Hardening applied whenever DEBUG is off -- i.e. production AND staging
 # (staging mirrors prod). These are intentionally NOT applied in local
@@ -1029,10 +1042,13 @@ if not DEBUG and not TESTING:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 
-    # Misc hardening flagged by `check --deploy`. NOSNIFF and the "same-origin"
-    # referrer policy match Django's own defaults; X_FRAME_OPTIONS "DENY" is
-    # already the effective default via XFrameOptionsMiddleware -- set here so
-    # the intent is explicit and the deploy check stays green.
+    # Misc hardening flagged by `check --deploy`. NOSNIFF and X_FRAME_OPTIONS
+    # "DENY" match the effective defaults (the latter via XFrameOptionsMiddleware)
+    # -- set here so the intent is explicit and the deploy check stays green.
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_REFERRER_POLICY = "same-origin"
     X_FRAME_OPTIONS = "DENY"
+    # Sends the origin (not the path) cross-origin so YouTube and other embeds
+    # load again; see PRODUCTION_SECURE_REFERRER_POLICY above and issue #1896.
+    # Excluded from coverage because this block only runs outside the test
+    # harness; the policy value itself is covered directly by ReferrerPolicyTest.
+    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY  # pragma: no cover

@@ -1,8 +1,13 @@
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.test import RequestFactory, SimpleTestCase
+from django.http import HttpResponse
+from django.middleware.security import SecurityMiddleware
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hackerspace_online.settings import _validate_deployment_settings
+from hackerspace_online.settings import (
+    PRODUCTION_SECURE_REFERRER_POLICY,
+    _validate_deployment_settings,
+)
 
 
 class SecureProxySSLHeaderTest(SimpleTestCase):
@@ -52,6 +57,31 @@ class DeploymentSettingsGuardTest(SimpleTestCase):
         """DEBUG=False with a unique SECRET_KEY on a real domain passes the guard."""
         # Should not raise.
         _validate_deployment_settings("bytedeck.com", False, "a-real-random-secret-key")
+
+
+class ReferrerPolicyTest(SimpleTestCase):
+    """The production Referrer-Policy must not be "same-origin". Under
+    "same-origin" the browser strips the Referer from every cross-origin request,
+    so YouTube's iframe player (and other referrer-gated embeds) refuse to load
+    and show an error -- issue #1896. The production block that applies the policy
+    is skipped under TESTING, so the value is exercised via its module-level
+    constant and Django's SecurityMiddleware rather than settings.SECURE_*."""
+
+    def test_production_referrer_policy__is_not_same_origin(self):
+        """The policy must be "strict-origin-when-cross-origin" (browser default,
+        web.dev recommended), never "same-origin", so cross-origin embeds still
+        receive the origin as referrer and load correctly."""
+        self.assertEqual(PRODUCTION_SECURE_REFERRER_POLICY, "strict-origin-when-cross-origin")
+        self.assertNotEqual(PRODUCTION_SECURE_REFERRER_POLICY, "same-origin")
+
+    def test_security_middleware__emits_the_referrer_policy_header(self):
+        """SecurityMiddleware must turn the production policy into a
+        Referrer-Policy response header, proving the chosen value is what
+        browsers (and thus the YouTube embed request) actually see."""
+        with override_settings(SECURE_REFERRER_POLICY=PRODUCTION_SECURE_REFERRER_POLICY):
+            middleware = SecurityMiddleware(lambda request: HttpResponse())
+            response = middleware(RequestFactory().get("/"))
+        self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
 
 
 class DatabaseConnectionSettingsTest(SimpleTestCase):
