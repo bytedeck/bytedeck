@@ -1,9 +1,11 @@
 from django.contrib import messages
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.conf import settings
 from django.core import serializers
 from django.core.cache import cache
 from django.db import connection
 from django.shortcuts import reverse
+from django.test import RequestFactory
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_tenant_model, get_tenant_domain_model
@@ -191,6 +193,23 @@ class ByteDeckTenantTestCase(TenantTestCase):
         cls.domain.delete()
         cls.tenant.delete(force_drop=True)
         cls.remove_allowed_test_domain()
+
+
+def request_with_messages(path='/'):
+    """Return a GET request with the messages framework wired up.
+
+    Admin actions and other code paths call ``messages.add_message()`` /
+    ``ModelAdmin.message_user()``, which need a request carrying a session and a
+    ``_messages`` storage. A bare ``RequestFactory`` request has neither, so this
+    attaches both.
+
+    :param path: the request path (rarely matters for the code under test).
+    :return: a ``WSGIRequest`` ready to pass to an admin action.
+    """
+    request = RequestFactory().get(path)
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    return request
 
 
 def generate_form_data(model=None, model_form=None, **kwargs):

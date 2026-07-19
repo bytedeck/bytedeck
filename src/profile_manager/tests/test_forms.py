@@ -17,9 +17,11 @@ class ProfileFormTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student user whose profile is used across the form tests."""
         cls.user = User.objects.create_user('test_student')
 
-    def test_init(self):
+    def test_init__with_and_without_request(self):
+        """ProfileForm can be instantiated both with and without a request kwarg."""
         # Without request
         ProfileForm(instance=self.user.profile)
 
@@ -27,7 +29,7 @@ class ProfileFormTest(ByteDeckTenantTestCase):
 
         ProfileForm(instance=self.user.profile, request=request)
 
-    def test_profile_save_without_request(self):
+    def test_save__without_request(self):
         """
         Test to increase coverage for ProfileForm
         """
@@ -37,6 +39,7 @@ class ProfileFormTest(ByteDeckTenantTestCase):
         form.save()
 
     def tearDown(self) -> None:
+        """Remove the test user after each test."""
         self.user.delete()
 
     def test_clean_email__valid(self):
@@ -45,7 +48,7 @@ class ProfileFormTest(ByteDeckTenantTestCase):
         """
         form = ProfileForm(instance=self.user.profile, data={'email': 'example@gmail.com'})
         with patch('dns.resolver.resolve') as mock_resolve:
-            mock_resolve.return_value = MagicMock()  # Mocking resolve() because we may not have interent access during tests.
+            mock_resolve.return_value = MagicMock()  # Mocking resolve() because we may not have internet access during tests.
             form.is_valid()
             cleaned_email = form.cleaned_data['email']
             self.assertEqual(cleaned_email, 'example@gmail.com')
@@ -97,22 +100,22 @@ class ProfileFormTest(ByteDeckTenantTestCase):
                     self.assertTrue(form.is_valid())
                     self.assertEqual(form.cleaned_data['email'], 'example@gmail.com')
 
-    def test_profile_with_custom_profile_field(self):
+    def test_save__with_custom_profile_field(self):
         """ tests if user can create a profile with `custom_profile_field` when SiteConfig.custom_profile_field
         is filled/not filled
         """
         config = SiteConfig.get()
 
         self.assertEqual(config.custom_profile_field, '')
-        self.assertEqual(self.user.profile.custom_profile_field, None)
+        self.assertIsNone(self.user.profile.custom_profile_field)
 
         form = ProfileForm(instance=self.user.profile, data={'custom_profile_field': 'test'})
         form.save()
 
         # should not affect profile because SiteConfig.custom_profile_field is empty
         # form's custom_profile_field should not exist either
-        self.assertEqual(form.fields.get('custom_profile_field'), None)
-        self.assertEqual(self.user.profile.custom_profile_field, None)
+        self.assertIsNone(form.fields.get('custom_profile_field'))
+        self.assertIsNone(self.user.profile.custom_profile_field)
 
         config.custom_profile_field = 'FIELD'
         config.save()

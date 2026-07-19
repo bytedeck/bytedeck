@@ -14,6 +14,7 @@ class QuestFormTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Provide a minimal set of valid QuestForm data shared across tests."""
         cls.minimal_valid_data = {
             "name": "Test Quest",
             "xp": 0,
@@ -26,12 +27,12 @@ class QuestFormTest(ByteDeckTenantTestCase):
             "tags": "",
         }
 
-    def test_minimal_valid_data(self):
+    def test_QuestForm__minimal_valid_data_is_valid(self):
         """The minimal_valid_data provided in the setup method should be valid!"""
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
 
-    def test_hideable_blocking_both_true(self):
+    def test_QuestForm__hideable_and_blocking_both_true_is_invalid(self):
         """If a quest is Blocking then it should not validate if it is also Hideable"""
         form_data = self.minimal_valid_data
 
@@ -42,7 +43,7 @@ class QuestFormTest(ByteDeckTenantTestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("Blocking quests cannot be Hideable.", form.errors['__all__'][0])
 
-    def test_repeat_per_semester_with_unlimited_repeats(self):
+    def test_QuestForm__repeat_per_semester_with_unlimited_repeats_is_invalid(self):
         """A quest with unlimited repeats (max_repeats=-1) should not validate if it
         also has repeat_per_semester: unlimited repeats never run out, so there is
         nothing for a new semester to reset, and the combination previously caused
@@ -57,7 +58,7 @@ class QuestFormTest(ByteDeckTenantTestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("unlimited repeats", form.errors['__all__'][0])
 
-    def test_repeat_per_semester_with_limited_repeats(self):
+    def test_QuestForm__repeat_per_semester_with_limited_repeats_is_valid(self):
         """A quest with a limited number of repeats can use repeat_per_semester."""
         form_data = self.minimal_valid_data
 
@@ -67,7 +68,7 @@ class QuestFormTest(ByteDeckTenantTestCase):
         form = QuestForm(data=form_data)
         self.assertTrue(form.is_valid())
 
-    def test_unlimited_repeats_without_repeat_per_semester(self):
+    def test_QuestForm__unlimited_repeats_without_repeat_per_semester_is_valid(self):
         """A quest with unlimited repeats is valid as long as repeat_per_semester is off."""
         form_data = self.minimal_valid_data
 

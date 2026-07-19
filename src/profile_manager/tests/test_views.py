@@ -26,6 +26,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, two students (one with a known password), and the active semester."""
         User = get_user_model()
 
         # test_student1 needs a known password so tests can POST the real login form (e.g. test_profile_update_email);
@@ -42,12 +43,14 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.active_sem = SiteConfig.get().active_semester
 
     def setUp(self):
+        """Create a tenant-aware test client for each test."""
         self.client = TenantClient(self.tenant)
 
     def tearDown(self):
+        """Clear the cache after each test."""
         cache.clear()
 
-    def test_all_profile_page_status_codes_for_anonymous(self):
+    def test_profile_pages__redirect_anonymous_to_login(self):
         """ If not logged in then all views should redirect to home page  """
 
         self.assertRedirectsLogin('profiles:profile_list')
@@ -57,8 +60,8 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
         self.assertRedirectsLogin('profiles:profile_delete', args=[1])
 
-    def test_all_profile_page_status_codes_for_students(self):
-
+    def test_profile_pages__student_access(self):
+        """Students can view their own profile pages but are blocked from staff/list/delete views."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -88,7 +91,8 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assert404('profiles:profile_update', args=[s2_pk])
 
-    def test_all_profile_page_status_codes_for_teachers(self):
+    def test_profile_pages__teacher_access(self):
+        """Teachers can access all profile detail, list, and management views."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -190,7 +194,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             quest_set = baker.make('quest_manager.quest', _quantity=quest_count)
 
             # add unique tag for each quest
-            [quest.tags.add(f'TAG-{str(count)}') for count, quest in enumerate(quest_set)]
+            [quest.tags.add(f'TAG-{count}') for count, quest in enumerate(quest_set)]
 
             # have a submission for one of the quests
             baker.make(
@@ -217,7 +221,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             # should only show the tag with the approved submission
             self.assertContains(response, 'TAG-0')
             for i in range(1, quest_count, 1):
-                self.assertNotContains(response, f'TAG-{str(i)}')
+                self.assertNotContains(response, f'TAG-{i}')
 
             # for sanity check (its true by default)
             site_config = SiteConfig.get()
@@ -230,7 +234,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
             # should contains all tags including the ones that don't have a submission from the user
             for i in range(quest_count):
-                self.assertContains(response, f'TAG-{str(i)}')
+                self.assertContains(response, f'TAG-{i}')
 
         finally:
             # Ensure the setting is reverted back to its original state
@@ -238,7 +242,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             site_config.show_all_tags_on_profiles = original_setting
             site_config.save()
 
-    def test_student_view_marks_404_if_disabled(self):
+    def test_student_view_marks__404_if_disabled(self):
         """
         Student marks should return 404 if disabled by admin.
         """
@@ -248,7 +252,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assert404('courses:my_marks')
 
-    def test_student_view_marks_200_if_enabled(self):
+    def test_student_view_marks__200_if_enabled(self):
         """
         Student marks page should be accessible if site admin has enabled it.
         """
@@ -361,11 +365,13 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(user_instance.profile.is_TA, form_data["is_TA"])
 
     def test_password_change_status_code__anonymous(self):
+        """Anonymous users are redirected to login from the change-password view."""
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assertRedirectsLogin("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
     def test_password_change_status_code__student(self):
+        """Students are forbidden from the change-password view for any user."""
         self.client.force_login(self.test_student1)
 
         self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
@@ -373,13 +379,14 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
     def test_password_change_status_code__staff(self):
+        """Staff can change students' passwords but not another staff member's."""
         self.client.force_login(self.test_teacher)
 
         self.assert403("profiles:change_password", kwargs={"pk": self.test_teacher.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student1.pk})
         self.assert200("profiles:change_password", kwargs={"pk": self.test_student2.pk})
 
-    def test_update_password(self):
+    def test_update_password__staff_changes_user_password(self):
         """
             quick test to see if staff can change their user's password using passwordchange form
         """
@@ -400,7 +407,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         success = self.client.login(username=user_instance.username, password=form_data['new_password1'])
         self.assertTrue(success)
 
-    def test_profile_list(self):
+    def test_profile_list__view_type_and_queryset(self):
         """
             quick test for ProfileList to see...
             - if profile_lists have the correct view_type
@@ -418,11 +425,11 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
 
         qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
-        self.assertTrue(qs.count(), 2)  # these are the test students
+        self.assertEqual(qs.count(), 2)  # these are the test students
         filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
         self.assertFalse(filtered_qs.exists())
 
-    def test_profile_list_current(self):
+    def test_profile_list_current__view_type(self):
         """
             quick test for ProfileListCurrent to see...
             - if profile_lists have the correct view_type
@@ -434,7 +441,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_current"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].CURRENT)
 
-    def test_profile_list_inactive(self):
+    def test_profile_list_inactive__view_type(self):
         """
             quick test for ProfileListInactive to see...
             - if profile_lists have the correct view_type
@@ -446,7 +453,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_inactive"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].INACTIVE)
 
-    def test_profile_list_staff(self):
+    def test_profile_list_staff__view_type_and_queryset(self):
         """
             quick test for ProfileListStaff to see...
             - if profile_lists have the correct view_type
@@ -487,7 +494,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
         self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
 
-    def test_profile_update_email(self):
+    def test_profile_update__email_confirmation_flow(self):
         """
         Test that updating your email sends a confirmation link and logging in will
         have a reminder to verify email address if not yet verified.
@@ -690,9 +697,10 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
 
     def setUp(self):
+        """Create a tenant-aware test client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_teacher_can_delete_profile(self):
+    def test_profile_delete__teacher_can_delete(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""
         self.client.force_login(self.teacher)
 
@@ -705,9 +713,8 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         # Ensure redirect to success_url after deletion
         self.assertRedirects(response, reverse("profiles:profile_list"))
 
-    def test_student_cannot_delete_profile(self):
+    def test_profile_delete__student_cannot_delete(self):
         """Ensure that student (non-staff) users cannot delete profiles."""
-        # student2 = baker.make(self.User)
         self.client.force_login(self.student)  # Log in as student (non-staff user)
 
         response = self.client.post(self.delete_url)
@@ -719,7 +726,7 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         # Ensure access is denied (403 Forbidden)
         self.assertEqual(response.status_code, 403)
 
-    def test_deleting_non_existent_profile_returns_404(self):
+    def test_profile_delete__non_existent_returns_404(self):
         """Ensure that trying to delete a non-existent profile results in a 404 error."""
         self.client.force_login(self.teacher)
 

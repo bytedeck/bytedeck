@@ -55,17 +55,21 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create 100 groups to search over via the auto-response JSON endpoint."""
         cls.groups = Group.objects.bulk_create(
             [Group(pk=pk, name=random_string(50)) for pk in range(100)]
         )
 
     def setUp(self):
+        """Build a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def _ct_pk(self, obj):
+        """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
-    def test_get(self):
+    def test_autoresponse__valid_field_id_returns_group(self):
+        """A valid signed field_id returns matching group results as JSON."""
         group = self.groups[0]
         form = GFKSelect2WidgetForm()
         assert form.as_p()
@@ -77,26 +81,30 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         assert data['results']
         assert {'id': self._ct_pk(group), 'text': smart_str(group)} in data['results'][0]['children']
 
-    def test_no_field_id(self):
+    def test_autoresponse__no_field_id_returns_404(self):
+        """A request missing field_id returns 404."""
         group = self.groups[0]
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'term': group.name})
         assert response.status_code == 404
 
-    def test_wrong_field_id(self):
+    def test_autoresponse__wrong_field_id_returns_404(self):
+        """An unsigned/invalid field_id returns 404."""
         group = self.groups[0]
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': 123, 'term': group.name})
         assert response.status_code == 404
 
-    def test_field_id_not_found(self):
+    def test_autoresponse__field_id_not_found_returns_404(self):
+        """A validly signed field_id with no cached widget returns 404."""
         group = self.groups[0]
         field_id = signing.dumps(123456789)
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 404
 
-    def test_pagination(self):
+    def test_autoresponse__pagination(self):
+        """Results are paginated, reporting 'more' and 404ing on out-of-range pages."""
         url = reverse('utilities:querysetsequence_auto-json')
         widget = GFKSelect2Widget(
             max_results=10,
@@ -121,7 +129,8 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         data = json.loads(response.content.decode('utf-8'))
         assert data['more'] is False
 
-    def test_label_from_instance(self):
+    def test_autoresponse__label_from_instance(self):
+        """A custom widget's label_from_instance is applied to the returned option text."""
         url = reverse('utilities:querysetsequence_auto-json')
 
         form = GFKSelect2WidgetForm()
@@ -129,7 +138,6 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         assert form.as_p()
         field_id = signing.dumps(form.fields['f'].widget.uuid)
 
-        # artist = artists[0]
         group = self.groups[0]
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 200
@@ -138,7 +146,8 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         assert data['results']
         assert {'id': self._ct_pk(group), 'text': smart_str(group.name.upper())} in data['results'][0]['children']
 
-    def test_url_check(self):
+    def test_autoresponse__url_mismatch_returns_404(self):
+        """A cached widget whose URL no longer matches the endpoint returns 404."""
         from django_select2.cache import cache
 
         group = self.groups[0]
@@ -158,6 +167,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a student for role-based access checks."""
         # need a teacher and a student so tests can log in as each via force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -165,16 +175,17 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student = User.objects.create_user('test_student')
 
     def setUp(self):
+        """Build a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login '''
         self.assertRedirectsLogin('utilities:menu_items')
         self.assertRedirectsLogin('utilities:menu_item_create')
         self.assertRedirectsLogin('utilities:menu_item_update', args=[1])
         self.assertRedirectsLogin('utilities:menu_item_delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         ''' If not logged in as admin then all views should redirect to 403 '''
         self.client.force_login(self.test_student)
 
@@ -184,13 +195,13 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('utilities:menu_item_update', args=[1])
         self.assert403('utilities:menu_item_delete', args=[1])
 
-    def test_MenuItemList_view(self):
+    def test_MenuItemListView__admin_can_view(self):
         ''' Admin should be able to view menu item list '''
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('utilities:menu_items'))
         self.assertEqual(response.status_code, 200)
 
-    def test_MenuItemCreate_view(self):
+    def test_MenuItemCreateView__admin_can_create(self):
         ''' Admin should be able to create a menu item '''
         self.client.force_login(self.test_teacher)
         data = {
@@ -222,7 +233,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         leading_slash_error = "Enter a valid URL."
         self.assertContains(response, leading_slash_error)
 
-    def test_MenuItemUpdate_view(self):
+    def test_MenuItemUpdateView__admin_can_update(self):
         """ Admin should be able to update a Menu Item """
         self.client.force_login(self.test_teacher)
         # set label and icon to something they wouldn't normally be
@@ -286,6 +297,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and login-required and public flatpages."""
         User = get_user_model()
 
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
@@ -295,9 +307,10 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
 
     def setUp(self):
+        """Build a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous(self):
         """
             Redirects to admin or returns 200 if user is not logged in
         """
@@ -308,7 +321,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('utilities:flatpage_edit', args=[1])
         self.assertRedirectsLogin('utilities:flatpage_delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         """
             Redirects to 403 or returns 200 if user is is_staff=False
         """
@@ -321,7 +334,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('utilities:flatpage_edit', args=[1])
         self.assert403('utilities:flatpage_delete', args=[1])
 
-    def test_all_page_status_codes_for_staff(self):
+    def test_all_page_status_codes__staff(self):
         """
             Should return 200 for all cases
         """
@@ -334,7 +347,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('utilities:flatpage_edit', args=[pk])
         self.assert200('utilities:flatpage_delete', args=[pk])
 
-    def test_login_requirements_for_flatpage(self):
+    def test_flatpage_access__login_requirements(self):
         """
             Flatpage with login required can only be accessed by users,
             while flatpages without can be accessed by all

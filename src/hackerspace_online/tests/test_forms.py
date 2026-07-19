@@ -29,12 +29,15 @@ User = get_user_model()
 class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
+        """No shared setup required for these form tests."""
         pass
 
-    def test_init(self):
+    def test_init__instantiates_without_error(self):
+        """CustomSignupForm can be constructed with no arguments."""
         CustomSignupForm()
 
-    def test_valid_data(self):
+    def test_valid_data__form_is_valid(self):
+        """A sign up form with a correct access code and matching passwords validates."""
         form = CustomSignupForm(
             {
                 'username': "username",
@@ -47,7 +50,7 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
         )
         self.assertTrue(form.is_valid())
 
-    def test_bad_access_codecoverage(self):
+    def test_bad_access_code__does_not_validate(self):
         """ Test that a sign up form with the wrong access code doesn't validate """
         form = CustomSignupForm(
             {
@@ -64,7 +67,8 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
         with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
             form.clean()
 
-    def test_sign_up_via_post(self):
+    def test_sign_up_via_post__creates_user(self):
+        """Posting valid sign up data creates the user and redirects to quests."""
         self.client = TenantClient(self.tenant)
         form_data = {
             'username': "username",
@@ -79,7 +83,8 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
         user = User.objects.get(username="username")
         self.assertEqual(user.first_name, "firsttest")
 
-    def test_sign_up_via_post_upcase_username(self):
+    def test_sign_up_via_post__upcase_username_lowercased(self):
+        """A mixed-case username is stored lowercased when signing up via POST."""
         self.client = TenantClient(self.tenant)
         form_data = {
             'username': "TestUser",
@@ -99,8 +104,8 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
         self.assertIsNotNone(user)
 
-    def test_sign_up_via_post_with_email(self):
-
+    def test_sign_up_via_post__with_email_sends_confirmation(self):
+        """Signing up with an email creates the user and sends a confirmation email."""
         self.client = TenantClient(self.tenant)
         form_data = {
             'email': 'email@example.com',
@@ -133,6 +138,7 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
 class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
+        """No shared setup required; each test builds its own social login."""
         pass
 
     def get_social_login(self, provider=None):
@@ -172,10 +178,11 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         config = SiteConfig.get()
         config._propagate_google_provider()
 
-    def test_init(self):
+    def test_init__instantiates_without_error(self):
+        """CustomSocialAccountSignupForm can be constructed from a social login."""
         CustomSocialAccountSignupForm(sociallogin=self.get_social_login())
 
-    def test_complete_fields(self):
+    def test_complete_fields__has_expected_fields(self):
         """
         Test in case there are changes from CustomSignupForm
         """
@@ -192,7 +199,8 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         self.assertEqual(len(form.fields), len(social_signup_form_fields))
         self.assertListEqual(sorted(social_signup_form_fields), sorted(form.fields.keys()))
 
-    def test_valid_data(self):
+    def test_valid_data__form_is_valid(self):
+        """A social sign up form with a correct access code validates."""
         form = CustomSocialAccountSignupForm(
             sociallogin=self.get_social_login(),
             data={
@@ -205,7 +213,7 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
 
         self.assertTrue(form.is_valid())
 
-    def test_bad_access_codecoverage(self):
+    def test_bad_access_code__does_not_validate(self):
         """ Test that a social sign up form with the wrong access code doesn't validate """
         form = CustomSocialAccountSignupForm(
             sociallogin=self.get_social_login(),
@@ -221,7 +229,8 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         with self.assertRaisesMessage(forms.ValidationError, "Access code unrecognized."):
             form.clean()
 
-    def test_sign_up_via_post(self):
+    def test_sign_up_via_post__creates_user(self):
+        """Completing the social sign up form via POST creates the user and redirects to quests."""
         self.client = TenantClient(self.tenant)
         session = self.client.session
         form_data = {
@@ -254,7 +263,7 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.internal.statekit.unstash_state')
-    def test_signin_via_post_connect_existing_account_automatically(
+    def test_signin_via_post__connect_existing_account_automatically(
         self,
         mock_unstash_state,
         mock_complete_login,
@@ -492,7 +501,7 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.internal.statekit.unstash_state')
-    def test_signin_via_post_google_signin_redirects_to_signup_page_on_new_account(
+    def test_signin_via_post__google_signin_redirects_to_signup_on_new_account(
         self,
         mock_unstash_state,
         mock_complete_login,
@@ -543,7 +552,7 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
     @patch('allauth.socialaccount.providers.oauth2.client.OAuth2Client.get_access_token')
     @patch('allauth.socialaccount.providers.google.views.GoogleOAuth2Adapter.complete_login')
     @patch('allauth.socialaccount.internal.statekit.unstash_state')
-    def test_signup_via_post_google_signin_change_email_and_revert_back_to_google_email(
+    def test_signup_via_post__change_email_and_revert_back_to_google_email(
         self,
         mock_unstash_state,
         mock_complete_login,
@@ -659,13 +668,15 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
 class CustomLoginFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
+        """Create a user to authenticate against in login tests."""
         self.user = User.objects.create_user(username='testuser', password='testuser')
 
-    def test_init(self):
+    def test_init__instantiates_without_error(self):
+        """CustomLoginForm can be constructed with no arguments."""
         CustomLoginForm()
 
-    def test_valid_data(self):
-
+    def test_valid_data__form_is_valid(self):
+        """Correct credentials passed with a request make the login form valid."""
         # django-allauth forms require `request` to be passed when instantiating the form
         # normally, forms are used from within a django view and the view passes the request object to the form
         # but in this case, we are just performing a test to the form itself so we need to have access to
@@ -683,7 +694,7 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         )
         self.assertTrue(form.is_valid())
 
-    def test_login_with_upcase_username(self):
+    def test_login__with_upcase_username(self):
         """
         User should still be able to login regardless of the username case
         """
@@ -696,7 +707,7 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('quests:quests'))
 
     @override_settings(SESSION_COOKIE_AGE=60 * 60 * 24)
-    def test_session_expires_based_on_SESSION_COOKIE_AGE(self):
+    def test_session_expires__based_on_SESSION_COOKIE_AGE(self):
         """
         Test that whatever the value of SESSION_COOKIE_AGE expires correctly
         """
@@ -717,7 +728,7 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         # probably after a couple of seconds after the `last_login` is set
         self.assertEqual((self.user.last_login + timedelta(seconds=settings.SESSION_COOKIE_AGE)).date(), session.get_expiry_date().date())
 
-    def test_remember_me_session_expires_on_browser_close(self):
+    def test_remember_me__session_expires_on_browser_close(self):
         """
         Test to see that disabling `Remember me` expires on browser close
         """
@@ -733,7 +744,7 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         session = response.wsgi_request.session
         self.assertTrue(session.get_expire_at_browser_close())
 
-    def test_remember_me_session_does_not_expire_on_browser_close(self):
+    def test_remember_me__session_does_not_expire_on_browser_close(self):
         """
         Test to see that enabling `Remember me` does not expire immediately even when the browser is closed
         """
@@ -751,19 +762,23 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         self.assertFalse(session.get_expire_at_browser_close())
 
     def tearDown(self) -> None:
+        """Remove the login test user after each test."""
         self.user.delete()
 
 
 class PublicContactFormTest(ByteDeckTenantTestCase):
 
     def setUp(self):
+        """No shared setup required for these form tests."""
         pass
 
-    def test_init(self):
+    def test_init__instantiates_without_error(self):
+        """PublicContactForm can be constructed with no arguments."""
         PublicContactForm()
 
     @patch("hackerspace_online.forms.ReCaptchaField.clean", return_value="PASSED")
-    def test_valid_data(self, mock_captcha):
+    def test_valid_data__form_is_valid(self, mock_captcha):
+        """A contact form with valid fields and a passing captcha validates."""
         # django-recaptcha 4 removed the RECAPTCHA_TESTING/'PASSED' test hook,
         # so mock the field like the deck-request tests do
         form = PublicContactForm(

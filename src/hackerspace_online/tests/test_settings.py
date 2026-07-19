@@ -1,8 +1,13 @@
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
-from django.test import RequestFactory, SimpleTestCase
+from django.http import HttpResponse
+from django.middleware.security import SecurityMiddleware
+from django.test import RequestFactory, SimpleTestCase, override_settings
 
-from hackerspace_online.settings import _validate_deployment_settings
+from hackerspace_online.settings import (
+    PRODUCTION_SECURE_REFERRER_POLICY,
+    _validate_deployment_settings,
+)
 
 
 class SecureProxySSLHeaderTest(SimpleTestCase):
@@ -10,18 +15,18 @@ class SecureProxySSLHeaderTest(SimpleTestCase):
     forwards to Django over plain HTTP, so Django must trust the forwarded scheme
     to recognize secure requests and build https:// URLs (e.g. in email links)."""
 
-    def test_secure_proxy_ssl_header_is_configured(self):
+    def test_secure_proxy_ssl_header__is_configured(self):
         """SECURE_PROXY_SSL_HEADER must name the X-Forwarded-Proto header nginx sets."""
         self.assertEqual(settings.SECURE_PROXY_SSL_HEADER, ("HTTP_X_FORWARDED_PROTO", "https"))
 
-    def test_forwarded_https_request_is_secure(self):
+    def test_forwarded_https_request__is_secure(self):
         """A request forwarded with X-Forwarded-Proto: https is treated as secure,
         so build_absolute_uri produces https:// links instead of http://."""
         request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="https")
         self.assertTrue(request.is_secure())
         self.assertTrue(request.build_absolute_uri("/decks/request/new/").startswith("https://"))
 
-    def test_forwarded_http_request_is_not_secure(self):
+    def test_forwarded_http_request__is_not_secure(self):
         """Without the https forwarded scheme, the request stays plain HTTP so the
         header can't be used to fake a secure request."""
         request = RequestFactory().get("/", HTTP_X_FORWARDED_PROTO="http")
@@ -33,25 +38,50 @@ class DeploymentSettingsGuardTest(SimpleTestCase):
     defaults; `_validate_deployment_settings` raises to prevent it, while leaving
     local development untouched."""
 
-    def test_local_development_is_never_blocked(self):
+    def test_local_development__is_never_blocked(self):
         """localhost is local dev, so the example DEBUG=True + default SECRET_KEY are allowed."""
         # Should not raise.
         _validate_deployment_settings("localhost", True, "Change.Me!")
 
-    def test_real_deployment_rejects_debug_true(self):
+    def test_real_deployment__rejects_debug_true(self):
         """DEBUG=True on a real domain is refused, so debug pages can't leak in production."""
         with self.assertRaises(ImproperlyConfigured):
             _validate_deployment_settings("bytedeck.com", True, "a-real-random-secret-key")
 
-    def test_real_deployment_rejects_default_secret_key(self):
+    def test_real_deployment__rejects_default_secret_key(self):
         """The example 'Change.Me!' SECRET_KEY is refused on a real domain."""
         with self.assertRaises(ImproperlyConfigured):
             _validate_deployment_settings("bytedeck.com", False, "Change.Me!")
 
-    def test_properly_configured_deployment_is_allowed(self):
+    def test_properly_configured_deployment__is_allowed(self):
         """DEBUG=False with a unique SECRET_KEY on a real domain passes the guard."""
         # Should not raise.
         _validate_deployment_settings("bytedeck.com", False, "a-real-random-secret-key")
+
+
+class ReferrerPolicyTest(SimpleTestCase):
+    """The production Referrer-Policy must not be "same-origin". Under
+    "same-origin" the browser strips the Referer from every cross-origin request,
+    so YouTube's iframe player (and other referrer-gated embeds) refuse to load
+    and show an error -- issue #1896. The production block that applies the policy
+    is skipped under TESTING, so the value is exercised via its module-level
+    constant and Django's SecurityMiddleware rather than settings.SECURE_*."""
+
+    def test_production_referrer_policy__is_not_same_origin(self):
+        """The policy must be "strict-origin-when-cross-origin" (browser default,
+        web.dev recommended), never "same-origin", so cross-origin embeds still
+        receive the origin as referrer and load correctly."""
+        self.assertEqual(PRODUCTION_SECURE_REFERRER_POLICY, "strict-origin-when-cross-origin")
+        self.assertNotEqual(PRODUCTION_SECURE_REFERRER_POLICY, "same-origin")
+
+    def test_security_middleware__emits_the_referrer_policy_header(self):
+        """SecurityMiddleware must turn the production policy into a
+        Referrer-Policy response header, proving the chosen value is what
+        browsers (and thus the YouTube embed request) actually see."""
+        with override_settings(SECURE_REFERRER_POLICY=PRODUCTION_SECURE_REFERRER_POLICY):
+            middleware = SecurityMiddleware(lambda request: HttpResponse())
+            response = middleware(RequestFactory().get("/"))
+        self.assertEqual(response.headers["Referrer-Policy"], "strict-origin-when-cross-origin")
 
 
 class DatabaseConnectionSettingsTest(SimpleTestCase):
@@ -60,7 +90,7 @@ class DatabaseConnectionSettingsTest(SimpleTestCase):
     failover, network blip, server-side timeout) surfaces as an intermittent
     error on whatever request draws it."""
 
-    def test_conn_health_checks_enabled(self):
+    def test_conn_health_checks__enabled(self):
         """CONN_HEALTH_CHECKS must be True so dead persistent connections are
         detected and transparently re-established at the start of a request."""
         self.assertTrue(settings.DATABASES["default"]["CONN_HEALTH_CHECKS"])
@@ -95,27 +125,27 @@ class CelerySettingsTest(SimpleTestCase):
     memory leaks, keep quick tasks from queueing behind long all-schema tasks,
     and kill hung tasks instead of losing a worker slot forever."""
 
-    def test_results_ignored(self):
+    def test_task_results__ignored(self):
         """No result backend is configured and nothing reads task results, so
         results must be ignored rather than stored on the broker."""
         self.assertTrue(settings.CELERY_TASK_IGNORE_RESULT)
 
-    def test_worker_recycling_enabled(self):
+    def test_worker_recycling__enabled(self):
         """Workers must recycle after a bounded number of tasks so leaks from
         the per-schema fan-out tasks can't grow without limit."""
         self.assertGreater(settings.CELERY_WORKER_MAX_TASKS_PER_CHILD, 0)
 
-    def test_prefetch_disabled_for_mixed_workload(self):
+    def test_prefetch__disabled_for_mixed_workload(self):
         """Prefetch multiplier must be 1 so seconds-long tasks don't get stuck
         prefetched behind minutes-long all-schema tasks."""
         self.assertEqual(settings.CELERY_WORKER_PREFETCH_MULTIPLIER, 1)
 
-    def test_time_limits_sane(self):
+    def test_time_limits__soft_fires_before_hard(self):
         """A soft limit must exist and fire before the hard kill so tasks get a
         chance to clean up (SoftTimeLimitExceeded) before the worker is killed."""
         self.assertLess(settings.CELERY_TASK_SOFT_TIME_LIMIT, settings.CELERY_TASK_TIME_LIMIT)
 
-    def test_broker_retry_on_startup(self):
+    def test_broker__retry_on_startup(self):
         """The worker must retry the broker connection at startup instead of
         dying if redis is momentarily slower to come up."""
         self.assertTrue(settings.CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP)
@@ -127,6 +157,6 @@ class Select2CacheTest(SimpleTestCase):
     maxmemory+noeviction an unbounded cache eventually makes Redis refuse all
     writes (breaking the shared celery broker too)."""
 
-    def test_select2_cache_has_finite_ttl(self):
+    def test_select2_cache__has_finite_ttl(self):
         """The select2 cache must have a finite TTL (default 24h), never None."""
         self.assertEqual(settings.CACHES["select2"]["TIMEOUT"], 60 * 60 * 24)

@@ -27,6 +27,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create teacher, students, a badge, badge type and assertion for the badge view tests."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
@@ -41,9 +42,10 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_assertion = baker.make(BadgeAssertion)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_badge_page_status_codes_for_anonymous(self):
+    def test_all_badge_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home  '''
         b_pk = self.test_badge.pk
         a_pk = self.test_assertion.pk
@@ -62,8 +64,8 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('badges:revoke', args=[a_pk])
         self.assertRedirectsLogin('badges:grant_qualifying', args=[b_pk])
 
-    def test_all_badge_page_status_codes_for_students(self):
-
+    def test_all_badge_page_status_codes__students(self):
+        """Students may view the list/detail pages but get 403 on all staff-only badge views."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -88,7 +90,8 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
 
-    def test_all_badge_page_status_codes_for_teachers(self):
+    def test_all_badge_page_status_codes__teachers(self):
+        """Teachers get 200 on every badge view, including create/update/grant/revoke."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -111,7 +114,8 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('badges:badge_prereqs_update', args=[b_pk])
         self.assert200('badges:grant_qualifying', args=[b_pk])
 
-    def test_badge_create(self):
+    def test_badge_create__creates_badge(self):
+        """Posting valid data to the create view creates a new badge and redirects to the list."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -142,11 +146,12 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         form_data = response.context['form'].initial
 
         # Badge name should have changed
-        self.assertEqual(form_data['name'], "Copy of " + self.test_badge.name)
+        self.assertEqual(form_data['name'], f"Copy of {self.test_badge.name}")
         # Tags should be the same as original
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
 
     def test_badge_copy__POST(self):
+        """Posting to the copy view creates a new badge from the submitted data."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -169,7 +174,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         new_badge = Badge.objects.latest('datetime_created')
         self.assertEqual(new_badge.name, "badge copy test")
 
-    def test_assertion_create_and_delete(self):
+    def test_assertion__create_and_delete(self):
         """ Ensure that the create and delete views properly add and remove the badges from the users profile
         and adds/subtracts XP."""
         # log in a teacher
@@ -211,7 +216,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
-    def test_assertion_create_no_xp(self):
+    def test_assertion_create__no_xp(self):
         """Don't grant XP for this badge assertion"""
         self.client.force_login(self.test_teacher)
 
@@ -229,9 +234,10 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse("badges:list"))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
-        self.assertEqual(new_assertion.do_not_grant_xp, True)
+        self.assertTrue(new_assertion.do_not_grant_xp)
 
-    def test_bulk_assertion_create(self):
+    def test_bulk_assertion_create__grants_to_all_selected(self):
+        """Bulk granting a badge to multiple students creates one assertion per student."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -385,7 +391,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
         self.assertFalse(any(grant_url in m for m in messages))
 
-    def test_scape_update_message_on_update_delete(self):
+    def test_scape_update_message__on_update_and_delete(self):
         """ Checks if delete and update function gives a success message when a badge is related to map """
         # setup
         badge = baker.make(Badge)
@@ -407,7 +413,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('badges:badge_list')
@@ -417,7 +423,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
     # Custom label tests
     def test_badge_views__header_custom_label_displayed(self):
@@ -481,6 +487,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student and a badge type for the badge type view tests."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
@@ -488,16 +495,17 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.badge_type = baker.make(BadgeType)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
         self.assertRedirectsLogin('badges:badge_types')
         self.assertRedirectsLogin('badges:badge_type_create')
         self.assertRedirectsLogin('badges:badge_type_update', args=[self.badge_type.pk])
         self.assertRedirectsLogin('badges:badge_type_delete', args=[self.badge_type.pk])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students_forbidden(self):
         ''' If not logged in then all views should redirect to 403 '''
         self.client.force_login(self.test_student1)
 
@@ -507,13 +515,13 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('badges:badge_type_update', args=[self.badge_type.pk])
         self.assert403('badges:badge_type_delete', args=[self.badge_type.pk])
 
-    def test_BadgeTypeList_view(self):
+    def test_BadgeTypeList_view__staff_can_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_types'))
         self.assertEqual(response.status_code, 200)
 
-    def test_BadgeTypeCreate_view(self):
+    def test_BadgeTypeCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -526,7 +534,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         test_badgetype = BadgeType.objects.get(name=data['name'])
         self.assertEqual(test_badgetype.name, data['name'])
 
-    def test_BadgeTypeUpdate_view(self):
+    def test_BadgeTypeUpdate_view__staff_can_update(self):
         """ Admin should be able to update a badge type """
         self.client.force_login(self.test_teacher)
         # set name and icon to something they wouldn't normally be
@@ -619,6 +627,7 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student with several badge assertions (and their notifications) for the popup tests."""
         cls.student = baker.make(User)
 
         # create multiple assertions of the same badge
@@ -634,9 +643,10 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.create_assertion_notification(cls.badge_single)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_status_codes(self):
+    def test_status_codes__badge_popup_endpoints(self):
         ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`
         403 - because not ajax
         302 - because of not logged in (LoginRequiredMixin)
@@ -667,7 +677,7 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_on_show_badge_popup(self):
+    def test_on_show_badge_popup__context_values(self):
         """ Checks if badge popup shows correct the correct context values and if
         the badges in "new_badges" have the correct "duplicates" variable
         """
@@ -708,7 +718,7 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(json_data['show'])
         self.assertFalse(json_data['html'])
 
-    def test_on_close_badge_popup(self):
+    def test_on_close_badge_popup__marks_notifications_read(self):
         """ Check if 'badges:ajax_on_close_badge_popup' closes all unread badge notifications
         """
         # check for initial notifications

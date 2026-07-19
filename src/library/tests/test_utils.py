@@ -5,8 +5,8 @@ from library.utils import library_schema_context
 
 class QuestLibraryUtilsTestCase(SimpleTestCase):
 
-    def test_library_schema_context(self):
-
+    def test_library_schema_context__switches_and_restores_schema(self):
+        """The context manager switches to the library schema and restores the previous one on exit."""
         previous_schema = connection.schema_name
 
         with library_schema_context():

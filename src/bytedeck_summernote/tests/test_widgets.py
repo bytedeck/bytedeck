@@ -6,7 +6,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 class TestByteDeckSummernoteSafeWidget(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Safe' variant"""
 
-    def test_widget(self):
+    def test_widget__safe_cleans_xss(self):
         """Safe widget (iframe variant) input is "cleaned" to prevent XSS scripts from executing"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
@@ -22,7 +22,7 @@ class TestByteDeckSummernoteSafeWidget(ByteDeckTenantTestCase):
 
         self.assertEqual(value, '&lt;script&gt;alert("Hello")&lt;/script&gt;')
 
-    def test_widget_inplace(self):
+    def test_widget_inplace__safe_cleans_xss(self):
         """Safe widget (non-iframe aka inplace variant) input is "cleaned" to prevent XSS scripts from executing"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget
 
@@ -37,7 +37,7 @@ class TestByteDeckSummernoteSafeWidget(ByteDeckTenantTestCase):
 
         self.assertEqual(value, '&lt;script&gt;alert("Hello")&lt;/script&gt;')
 
-    def test_config_codeview_filter(self):
+    def test_config_codeview_filter__safe_enabled(self):
         """Safe widget (iframe variant) configured to prevent XSS scripts from executing"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteSafeWidget
 
@@ -50,7 +50,7 @@ class TestByteDeckSummernoteSafeWidget(ByteDeckTenantTestCase):
 class TestByteDeckSummernoteAdvancedWidget(ByteDeckTenantTestCase):
     """ByteDeck's Summernote implementation, so called 'Advanced' variant"""
 
-    def test_widget(self):
+    def test_widget__advanced_preserves_input(self):
         """Advanced widget (iframe variant) input is preserved "as-is", no sanitization is done"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 
@@ -66,7 +66,7 @@ class TestByteDeckSummernoteAdvancedWidget(ByteDeckTenantTestCase):
 
         self.assertEqual(value, '<script>alert("Hello")</script>')
 
-    def test_widget_inplace(self):
+    def test_widget_inplace__advanced_preserves_input(self):
         """Advanced widget (non-iframe aka inplace variant) input is preserved "as-is", no sanitization is done"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
 
@@ -81,7 +81,7 @@ class TestByteDeckSummernoteAdvancedWidget(ByteDeckTenantTestCase):
 
         self.assertEqual(value, '<script>alert("Hello")</script>')
 
-    def test_config_codeview_filter(self):
+    def test_config_codeview_filter__advanced_disabled(self):
         """Advanced widget (iframe variant) configured to disable XSS protection"""
         from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedWidget
 

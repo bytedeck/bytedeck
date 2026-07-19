@@ -156,7 +156,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "short_description", "icon", "published")
+    fields = ("title", "short_description", "icon", "published", "map_order")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -180,7 +180,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "short_description", "icon", "published")
+    fields = ("title", "short_description", "icon", "published", "map_order")
     model = Category
     # no success_url: UpdateView falls back to the object's get_absolute_url(), returning
     # the user to the campaign detail view they started the edit from (issue #1931)
@@ -1558,7 +1558,11 @@ def unarchive(request, quest_id):
     Returns:
         HttpResponseRedirect: Redirects to the Drafts tab with a success message.
     """
-    quest = Quest.objects.all_including_archived().get(id=quest_id)
+    # Use get_object_or_404 (not QuerySet.get) so a manually entered/stale quest id
+    # returns a clean 404 instead of raising Quest.DoesNotExist as an unhandled 500
+    # (issue #1856). all_including_archived() is required because the default manager
+    # excludes archived quests -- the only ones this view acts on.
+    quest = get_object_or_404(Quest.objects.all_including_archived(), id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
     link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'

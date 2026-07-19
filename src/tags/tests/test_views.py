@@ -34,12 +34,14 @@ class AutoResponseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a tag for the autocomplete view tests."""
         Tag.objects.create(name="test-tag")
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_autocomplete_view(self):
+    def test_autocomplete_view__accessible(self):
         """ Make sure our custom django-select2 view for tag widget is accessible"""
         url = reverse('tags:auto-json')
         form = TaggitSelect2WidgetForm()
@@ -78,12 +80,14 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create teacher/student users and a tag for the CRUD view tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
 
         cls.tag = Tag.objects.create(name="test-tag")
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def test_page_status_code__anonymous(self):
@@ -117,7 +121,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('tags:update', args=[self.tag.pk])
         self.assert200('tags:delete', args=[self.tag.pk])
 
-    def test_ListView(self):
+    def test_ListView__displays_all_tags(self):
         """Make sure list view displays all tags correctly"""
         baker.make(Tag, _quantity=5)
 
@@ -307,7 +311,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
-    def test_CreateView(self):
+    def test_CreateView__creates_tag(self):
         """Make sure create view can create tags"""
         form_data = generate_form_data(model_form=TagForm)
 
@@ -341,7 +345,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Tag name too similar to existing tag: test-tag')
         self.assertFalse(Tag.objects.filter(name='TEST-TAG').exists())
 
-    def test_UpdateView(self):
+    def test_UpdateView__changes_name_and_slug(self):
         """Make sure update view can change name + update slug"""
         form_data = generate_form_data(model_form=TagForm)
 
@@ -353,7 +357,7 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(form_data['name'].lower(), tag.name)
         self.assertEqual(form_data['name'].lower(), tag.slug)
 
-    def test_DeleteView(self):
+    def test_DeleteView__deletes_tag(self):
         """Make sure delete view can delete tag"""
         self.client.force_login(self.test_teacher)
         self.client.post(reverse('tags:delete', args=[self.tag.pk]))

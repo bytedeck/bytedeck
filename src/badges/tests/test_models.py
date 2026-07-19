@@ -18,23 +18,25 @@ User = get_user_model()
 class BadgeRarityModelTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create rarities at known percentiles (clearing the defaults first)."""
         # clear default mark range variables
         BadgeRarity.objects.all().delete()
         cls.common = baker.make(BadgeRarity, percentile=90.0)
         cls.rare = baker.make(BadgeRarity, percentile=80.0)
         cls.ultrarare = baker.make(BadgeRarity, percentile=70.0)
 
-    def test_badge_rarity_creation(self):
+    def test_badge_rarity__creation(self):
+        """A BadgeRarity is created and its str is its name."""
         self.assertIsInstance(self.common, BadgeRarity)
         self.assertEqual(str(self.common), self.common.name)
 
-    def test_get_rarity(self):
-
+    def test_get_rarity__returns_matching_rarity_for_percentile(self):
+        """get_rarity() maps a percentile to its rarity, capping values above 100."""
         self.assertEqual(BadgeRarity.objects.get_rarity(69.0), self.ultrarare)
         self.assertEqual(BadgeRarity.objects.get_rarity(79.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(80.0), self.rare)
         self.assertEqual(BadgeRarity.objects.get_rarity(90.0), self.common)
-        self.assertEqual(BadgeRarity.objects.get_rarity(91), None)
+        self.assertIsNone(BadgeRarity.objects.get_rarity(91))
 
         ubercommon = baker.make(BadgeRarity, percentile=100.0)
         self.assertEqual(BadgeRarity.objects.get_rarity(100), ubercommon)
@@ -45,13 +47,15 @@ class BadgeRarityModelTest(ByteDeckTenantTestCase):
 class BadgeTypeModelTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a BadgeType for the class tests."""
         cls.badge_type = baker.make(BadgeType)
 
-    def test_badge_type_creation(self):
+    def test_badge_type__creation(self):
+        """A BadgeType is created and its str is its name."""
         self.assertIsInstance(self.badge_type, BadgeType)
         self.assertEqual(str(self.badge_type), self.badge_type.name)
 
-    def test_model_protection(self):
+    def test_model_protection__badge_type_with_badges(self):
         """ Badge types shouldn't be deleted if they have any assigned badges """
 
         # make sure initial variables are in place
@@ -66,9 +70,11 @@ class BadgeTypeModelTest(ByteDeckTenantTestCase):
 class BadgeSeriesTestModel(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a BadgeSeries for the class tests."""
         cls.badge_series = baker.make(BadgeSeries)
 
-    def test_badge_series_creation(self):
+    def test_badge_series__creation(self):
+        """A BadgeSeries is created and its str is its name."""
         self.assertIsInstance(self.badge_series, BadgeSeries)
         self.assertEqual(str(self.badge_series), self.badge_series.name)
 
@@ -77,16 +83,19 @@ class BadgeTestModel(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a Badge for the class tests."""
         cls.badge = baker.make(Badge)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_badge_creation(self):
+    def test_badge__creation(self):
+        """A Badge is created and its str is its name."""
         self.assertIsInstance(self.badge, Badge)
         self.assertEqual(str(self.badge), self.badge.name)
 
-    def test_get_icon_url(self):
+    def test_get_icon_url__default_and_custom(self):
         """If the badge has an icon, return its url, otherwise return default icon url from SiteConfig"""
 
         # doesn't have an icon, should return default
@@ -98,11 +107,13 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         self.badge.save()
         self.assertEqual(self.badge.get_icon_url(), self.badge.icon.url)
 
-    def test_badge_url(self):
+    def test_badge_url__absolute_url_returns_200(self):
+        """The badge's absolute url is reachable and returns 200."""
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
     def test_get_rarity_icon__without_rarity(self, mock_get_rarity):
+        """get_rarity_icon() returns an empty string when the badge has no rarity."""
         mock_get_rarity.return_value = None
 
         result = self.badge.get_rarity_icon()
@@ -113,6 +124,7 @@ class BadgeTestModel(ByteDeckTenantTestCase):
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
     @mock.patch('badges.models.Badge.percent_of_active_users_granted_this')
     def test_get_rarity_icon__with_rarity(self, mock_percentile, mock_get_rarity):
+        """get_rarity_icon() returns the rarity's icon html when the badge has a rarity."""
         mock_percentile.return_value = 80  # Set the desired percentile value
         mock_badge_rarity = mock.Mock()
         mock_badge_rarity.get_icon_html.return_value = '<span class="badge-icon">Icon</span>'
@@ -130,19 +142,17 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and student for the manager tests."""
         cls.sem = SiteConfig.get().active_semester
 
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
-        # cls.assertion = baker.make(BadgeAssertion, semester=cls.sem)
-        # cls.badge = Recipe(Badge, xp=20).make()
-
-        # cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_user_badge_assertion_count(self):
+    def test_user_badge_assertion_count__annotates_count_per_user(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
         the correct number of assertions for each user as an "assertion_count" annotation on the queryset"""
 
@@ -160,7 +170,7 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
 
-    def test_all_for_user_distinct(self):
+    def test_all_for_user_distinct__distinct_by_badge_and_sorted(self):
         """
         BadgeAssertion.objects.all_for_user_distinct() returns a queryset of BadgeAssertions assigned to a user
         that are distinct by badge, and sorted by badge.badge_type.sort_order, badge.sort_order
@@ -217,6 +227,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, student, badge and reusable assertion recipe."""
         cls.sem = SiteConfig.get().active_semester
 
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
@@ -227,16 +238,20 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_badge_assertion_creation(self):
+    def test_badge_assertion__creation(self):
+        """A BadgeAssertion is created and its str is its badge's name."""
         self.assertIsInstance(self.assertion, BadgeAssertion)
         self.assertEqual(str(self.assertion), self.assertion.badge.name)
 
-    def test_badge_assertion_url(self):
+    def test_badge_assertion_url__absolute_url_returns_200(self):
+        """The assertion's absolute url is reachable and returns 200."""
         self.assertEqual(self.client.get(self.assertion.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_badge_assertion_count(self):
+    def test_badge_assertion__count(self):
+        """count() returns the number of times the badge has been granted to the user."""
         num = 5
         for _ in range(num):
             badge_assertion = BadgeAssertion.objects.create_assertion(
@@ -251,7 +266,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         # print(num, count)
         self.assertEqual(num, count)
 
-    def test_badge_assertion_count_bootstrap_badge(self):
+    def test_count_bootstrap_badge__empty_when_below_two(self):
         """Returns empty string if count < 2, else returns proper count"""
         badge_assertion = baker.make(BadgeAssertion, semester=self.sem)
         self.assertEqual(badge_assertion.count_bootstrap_badge(), "")
@@ -269,7 +284,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         # print(num, count)
         self.assertEqual(num, count)
 
-    def test_badge_assertion_get_duplicate_assertions(self):
+    def test_get_duplicate_assertions__returns_all_duplicates(self):
+        """get_duplicate_assertions() returns every assertion of the same badge for the user."""
         num = 5
         values = []
         for _ in range(num):
@@ -279,7 +295,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         qs = badge_assertion.get_duplicate_assertions()
         self.assertQuerySetEqual(list(qs), values, )
 
-    def test_badge_assertions_dict_items_prefetches_duplicates(self):
+    def test_badge_assertions_dict_items__prefetches_duplicates(self):
         """badge_assertions_dict_items pre-populates each distinct badge's
         duplicate assertions, so get_duplicate_assertions() serves them from
         memory with no query per badge (the profile page renders one popover
@@ -300,8 +316,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         self.assertEqual(duplicate_counts[badge_a.id], 2)
         self.assertEqual(duplicate_counts[badge_b.id], 3)
 
-    def test_badge_assertion_manager_create_assertion(self):
-
+    def test_create_assertion__without_semester_or_teacher(self):
+        """create_assertion() builds a BadgeAssertion whether or not a teacher is passed."""
         # no semester
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student,
@@ -317,7 +333,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
 
-    def test_badge_assertion_manager_xp_to_date(self):
+    def test_calculate_xp_to_date__sums_granted_badge_xp(self):
+        """calculate_xp_to_date() totals the XP of the badges granted to the user by a date."""
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, 0)
 
@@ -330,7 +347,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         xp = BadgeAssertion.objects.calculate_xp_to_date(self.student, timezone.now())
         self.assertEqual(xp, self.badge.xp)
 
-    def test_badge_assertion_manager_get_by_type_for_user(self):
+    def test_get_by_type_for_user__one_entry_per_badge_type(self):
         """ get_by_type_for_user should return one entry per BadgeType, where the entry for the
         granted badge's type contains the user's assertion and all other entries are empty. """
         assertion = self.badge_assertion_recipe.make()
@@ -342,7 +359,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
             else:
                 self.assertQuerySetEqual(entry['list'], [])
 
-    def test_badge_assertion_manager_check_for_new_assertions(self):
+    def test_check_for_new_assertions__grants_unlocked_badges_recursively(self):
         """ check_for_new_assertions should grant badges whose prerequisites the user meets,
         including badges unlocked by a badge granted in the same call (recursion). """
         # chain: self.badge -> badge_a -> badge_b
@@ -361,7 +378,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
         self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_b, False).exists())
 
-    def test_fraction_of_active_users_granted_this(self):
+    def test_fraction_of_active_users_granted_this__matches_ratio(self):
+        """fraction/percent_of_active_users_granted_this() reflect the share of active users with the badge."""
         num_students_with_badge = 3
 
         students_with_badge = baker.make(User, _quantity=num_students_with_badge)
@@ -434,34 +452,34 @@ class BadgeRarityCacheInvalidationTest(ByteDeckTenantTestCase):
         """Populate the rarity cache so the test's write can be shown to invalidate it."""
         BadgeRarity.objects.get_rarities_cached()
 
-    def test_save_invalidates_cache(self):
+    def test_save__invalidates_cache(self):
         """Creating a BadgeRarity (via save) must invalidate the cache (post_save signal)."""
         self.warm_cache()
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.assertEqual(BadgeRarity.objects.get_rarity(0.1).pk, rarity.pk)
         self.assert_cache_matches_db()
 
-    def test_queryset_delete_invalidates_cache(self):
+    def test_queryset_delete__invalidates_cache(self):
         """Queryset .delete() must invalidate the cache (receivers disable fast-delete, so post_delete fires)."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()
         BadgeRarity.objects.filter(pk=rarity.pk).delete()
         self.assert_cache_matches_db()
 
-    def test_queryset_update_invalidates_cache(self):
+    def test_queryset_update__invalidates_cache(self):
         """Queryset .update() fires no signals; the BadgeRarityQuerySet.update override must invalidate the cache."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()
         BadgeRarity.objects.filter(pk=rarity.pk).update(percentile=0.456)
         self.assert_cache_matches_db()
 
-    def test_bulk_create_invalidates_cache(self):
+    def test_bulk_create__invalidates_cache(self):
         """bulk_create() fires no signals; the BadgeRarityQuerySet.bulk_create override must invalidate the cache."""
         self.warm_cache()
         BadgeRarity.objects.bulk_create([BadgeRarity(name='Bulk Rarity', percentile=0.123)])
         self.assert_cache_matches_db()
 
-    def test_bulk_update_invalidates_cache(self):
+    def test_bulk_update__invalidates_cache(self):
         """bulk_update() fires no signals; the BadgeRarityQuerySet.bulk_update override must invalidate the cache."""
         rarity = baker.make(BadgeRarity, name='Test Rarity', percentile=0.123)
         self.warm_cache()

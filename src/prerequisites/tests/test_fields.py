@@ -5,8 +5,8 @@ from prerequisites.models import IsAPrereqMixin
 
 class PrereqGFKChoiceFieldTest(ByteDeckTenantTestCase):
 
-    def test_hardcoded_prereq_model_choice(self):
-        """If this test fails, then probably means a new model implements `IsAPrereqMixin`, or a model was removed."""
+    def test_queryset__matches_registered_prereq_models(self):
+        """The field's queryset covers exactly the models registered via IsAPrereqMixin."""
         from prerequisites.forms import PrereqGFKChoiceField
 
         expected_list = IsAPrereqMixin.all_registered_model_classes()

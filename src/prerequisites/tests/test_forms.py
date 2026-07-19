@@ -18,14 +18,15 @@ class PrereqFormInlineMediaTest(ByteDeckTenantTestCase):
     CSS = 'prerequisites/css/advanced_prereqs_form.css'
 
     def setUp(self):
+        """Create a tenant client and a teacher user for the tests."""
         self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, is_staff=True)
 
-    def test_form_media_includes_prereq_css(self):
+    def test_media__includes_prereq_css(self):
         """PrereqFormInline declares the layout-fix stylesheet in its Media."""
         self.assertIn(self.CSS, str(PrereqFormInline().media))
 
-    def test_prereq_form_page_loads_the_css(self):
+    def test_advanced_prereqs_form_page__loads_the_css(self):
         """The stylesheet is actually emitted on the advanced prereqs form page — for both the
         quest and badge prereq forms, which share advanced_prereqs_form.html.
         """

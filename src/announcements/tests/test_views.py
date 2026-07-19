@@ -21,6 +21,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, students, and a published announcement shared across the test methods."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
@@ -30,9 +31,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.ann_pk = cls.test_announcement.pk
 
     def setUp(self):
+        """Set up a tenant test client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_announcement_page_status_codes_for_anonymous(self):
+    def test_all_announcement_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
 
         self.assertRedirectsLogin('announcements:list')
@@ -46,13 +48,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('announcements:copy', args=[1])
         self.assertRedirectsLogin('announcements:publish', args=[1])
 
-    def test_all_announcement_page_status_codes_for_students(self):
+    def test_all_announcement_page_status_codes__students(self):
+        """Students can view lists/comments but get 403 on staff-only announcement views."""
         # log in a student
         self.client.force_login(self.test_student1)
-
-        # all_fields = self.test_announcement._meta.get_fields()
-        # for field in all_fields:
-        #     print(field, getattr(self.test_announcement, field.name))
 
         # students should have access to these:
         self.assert200('announcements:list')
@@ -78,7 +77,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('announcements:publish', args=[1])
         self.assert403('announcements:archived')
 
-    def test_all_announcement_page_status_codes_for_teachers(self):
+    def test_all_announcement_page_status_codes__teachers(self):
+        """Teachers can access the list, archive, comment, and all staff-only announcement views."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -109,15 +109,18 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
 
-    def test_teachers_have_archive_button(self):
+    def test_archive_button__visible_to_teachers(self):
+        """Teachers see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_teacher)
         self.assertContains(self.client.get(reverse('announcements:list')), "Archived")
 
-    def test_students_do_not_see_archive_button(self):
+    def test_archive_button__hidden_from_students(self):
+        """Students do not see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_student1)
         self.assertNotContains(self.client.get(reverse('announcements:list')), "Archived")
 
-    def test_draft_announcement(self):
+    def test_draft_announcement__hidden_from_students_until_published(self):
+        """Students only see an announcement in the list once it is no longer a draft."""
         draft_announcement = baker.make(Announcement)  # default is draft
         self.assertTrue(draft_announcement.draft)
 
@@ -135,7 +138,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(self.client.get(reverse('announcements:list')), draft_announcement.title)
 
     # @patch('announcements.views.publish_announcement.apply_async')
-    def test_publish_announcement(self):
+    def test_publish_announcement__removes_publish_link(self):
+        """Posting to the publish view redirects to the announcement and the publish link disappears once published."""
         draft_announcement = baker.make(Announcement)
 
         # log in a teacher
@@ -159,7 +163,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # publish link for this announcement should no longer appear in the list:
         self.assertNotContains(self.client.get(reverse('announcements:list')), publish_link)
 
-    def test_create_announcement_from_past_date_auto_publish(self):
+    def test_create_announcement__past_date_auto_publish_invalid(self):
+        """The form rejects an auto-published announcement with a past release date."""
         draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
@@ -169,7 +174,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(form.errors['datetime_released'], ['An Announcement that is auto published cannot have a past release date.'])
 
-    def test_create_announcement_auto_publish_and_archive(self):
+    def test_create_announcement__auto_publish_and_archived_invalid(self):
+        """The form rejects an announcement that is both archived and auto-published."""
         draft_announcement = baker.make(
             Announcement,
             datetime_released=timezone.now() - timedelta(days=3),
@@ -184,7 +190,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(form.errors['auto_publish'], ['An Announcement that is archived cannot be auto published.'])
         # self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
-    def test_comment_on_announcement_by_student(self):
+    def test_comment_on_announcement__by_student(self):
+        """A student's comment post requires the comment_button, returning 404 without it."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -231,7 +238,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotIn('<img', comment.text)
         self.assertIn('&lt;script&gt;', comment.text)
 
-    def test_copy_announcement(self):
+    def test_copy_announcement__creates_new_announcement(self):
+        """Copying an announcement via POST creates a new announcement and redirects to it."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -334,14 +342,16 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, student, and a published announcement shared across the test methods."""
         cls.test_teacher = baker.make(User, is_staff=True)
         cls.test_student = baker.make(User)
         cls.test_announcement = baker.make(Announcement, draft=False)
 
     def setUp(self):
+        """Set up a tenant test client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_archived_announcement(self):
+    def test_archived_announcement__hidden_from_list(self):
         """ Archived announcements should not appear in announcements list"""
         archived_announcement = baker.make(Announcement, archived=True)
         self.assertTrue(archived_announcement.archived)
@@ -358,12 +368,13 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Users can now see it
         self.assertContains(self.client.get(reverse('announcements:list')), archived_announcement.title)
 
-    def test_archived_announcements_visible_on_archived_page(self):
+    def test_archived_announcements__visible_on_archived_page(self):
+        """Archived announcements appear on the dedicated archived page."""
         self.client.force_login(self.test_teacher)
         archived_announcement = baker.make(Announcement, archived=True)
         self.assertContains(self.client.get(reverse('announcements:archived')), archived_announcement.title)
 
-    def test_archived_announcements_are_paginated(self):
+    def test_archived_announcements__are_paginated(self):
         """2nd page after 20 announcements, and view forwards to announcements on 2nd page
         """
         # create enough announcements to create a second page, oldest should be on second page
@@ -376,7 +387,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "/announcements/archived/?page=2")
         self.assertNotContains(response, "/announcements/archived/?page=3")
 
-    def test_get_absolute_url_for_archived(self):
+    def test_get_absolute_url__for_archived(self):
         """get_absolute_url should redirect/load the proper page with the archived announcement"""
         # create enough announcements to create a second page
         oldest_announcement = baker.make(Announcement, archived=True, draft=False)
@@ -385,7 +396,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(oldest_announcement.get_absolute_url())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['archived'], True)
+        self.assertTrue(response.context['archived'])
         self.assertContains(response, oldest_announcement.title)
 
         # create enough announcements to create a second page, oldest should be on second page
@@ -401,7 +412,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, oldest_announcement.title)
 
-    def test_announcement_draft_not_archived_after_semester_close(self):
+    def test_announcement_draft__not_archived_after_semester_close(self):
         """ Draft announcements should not be archived when a semester is closed """
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 

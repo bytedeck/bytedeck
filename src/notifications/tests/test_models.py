@@ -18,14 +18,13 @@ class NotificationModelTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a student (a teacher must exist first or student creation fails)."""
         User = get_user_model()
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
-        # cls.assertion = baker.make(BadgeAssertion)
-        # cls.badge = Recipe(Badge, xp=20).make()
-        # cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge)
 
-    def test_notification_creation(self):
+    def test_notification_creation__creates_and_saves(self):
+        """A Notification can be created, cleaned, saved, and rendered to a string."""
         notification = Notification.objects.create(
             recipient=self.student,
             sender_content_type=ContentType.objects.get_for_model(self.teacher),
@@ -37,7 +36,8 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         self.assertIsInstance(notification, Notification)
         self.assertIsNotNone(str(notification))
 
-    def test_mark_read(self):
+    def test_mark_read__marks_notification_read(self):
+        """mark_read() flips an unread notification to read."""
         notification = baker.make(
             Notification,
             sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
@@ -46,25 +46,8 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         notification.mark_read()
         self.assertFalse(notification.unread)
 
-    def test_new_notification(self):
-        """
-        def new_notification(sender, **kwargs):
-        Creates notification when a signal is sent with notify.send(sender, **kwargs)
-        :param sender: the object (any Model) initiating/causing the notification
-        :param kwargs:
-            target (any Model): The object being notified about (Submission, Comment, BadgeAssertion, etc.)
-            action (any Model): Used alongside "verb" to create syntax of notification ie. "<user> <verb> with <action>"
-            recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
-            affected_users (list of Users): everyone who should receive the notification
-            verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
-            icon (html string): e.g.:
-                "<span class='fa-stack'>" + \
-                "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
-                "<i class='fa fa-ban fa-stack-2x text-danger'></i>" + \
-                "</span>"
-        :return:
-        """
-
+    def test_new_notification__creates_unread_for_recipient(self):
+        """new_notification() creates a single unread notification for the recipient."""
         # make sure the student doesn't have any notifications yet
         notes_before = self.student.notifications.all()
         self.assertEqual(notes_before.count(), 0)
@@ -155,14 +138,8 @@ class NotificationModelTest(ByteDeckTenantTestCase):
             self.assertTrue(note.unread)
             self.assertIsNone(note.time_read)
 
-    def test_url_correct_comment_hash(self):
-        """ Checks if instances where an url is given. There is a corresponding comment hash with it
-        ie. url...#comment-id.
-
-        So far the only functions that use target_object.get_absolute_url are:
-        - __str__
-        - get_url()
-        """
+    def test_url_correct_comment_hash__appends_comment_anchor(self):
+        """get_url() and str() append a #comment-<id> anchor only when the notification has a comment action."""
         # create notification with comment as an action and corresponding verb
         comment = baker.make('comments.Comment')
         new_notification(
@@ -188,13 +165,13 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         base_notification.full_clean()
         base_notification.save()
 
-        self.assertFalse('#comment-' in base_notification.get_url())
-        self.assertFalse('#comment-' in str(base_notification))
+        self.assertNotIn('#comment-', base_notification.get_url())
+        self.assertNotIn('#comment-', str(base_notification))
 
         # check if notification with comment has a hash
         comment_hash = f'#comment-{comment.id}'
-        self.assertTrue(comment_hash in notification.get_url())
-        self.assertTrue(comment_hash in str(notification))
+        self.assertIn(comment_hash, notification.get_url())
+        self.assertIn(comment_hash, str(notification))
 
 
 class NotificationModel_html_strip_Test(TestCase):
@@ -203,6 +180,7 @@ class NotificationModel_html_strip_Test(TestCase):
     """
 
     def setUp(self):
+        """No per-test setup is required for html_strip() tests."""
         pass
 
     def test_notification_html_strip__check_with_no_html(self):

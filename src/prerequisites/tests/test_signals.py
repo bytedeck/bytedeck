@@ -22,6 +22,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create teacher/student users and baseline badge, quest, and course records."""
         # the signal-count mocks below are per-test-method, so signals fired by
         # this class-level fixture creation are never included in their counts
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
@@ -41,10 +42,11 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
                                         active=False)
 
     def setUp(self):
+        """Create a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_create(self, task):
+    def test_update_conditions_met_for_user__triggered_by_badge_assertion_on_create(self, task):
         """
         Creation of a new badge assertion (granting a badge to a student) should trigger a signal
         """
@@ -52,7 +54,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_badge_assertion_on_update(self, task):
+    def test_update_conditions_met_for_user__triggered_by_badge_assertion_on_update(self, task):
         """
         Updating a new badge assertion (granting a badge to a student) should trigger a signal
         """
@@ -61,7 +63,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_quest_summission_on_create(self, task):
+    def test_update_conditions_met_for_user__triggered_by_quest_summission_on_create(self, task):
         """
         Creation of a new quest_submission (when starting a quest) should NOT trigger a signal
         """
@@ -69,7 +71,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 0)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_quest_summission_on_update(self, task):
+    def test_update_conditions_met_for_user__triggered_by_quest_summission_on_update(self, task):
         """
         Updating a quest_submission (when completing a quest) should trigger a signal
         """
@@ -79,22 +81,59 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_course_student_on_create(self, task):
+    def test_update_conditions_met_for_user__triggered_by_course_student_on_create(self, task):
+        """Creating a course-student enrollment triggers the conditions task and cache invalidation."""
         with patch('profile_manager.models.Profile.xp_invalidate_cache') as callback:
             baker.make(CourseStudent, user=self.student, active=False)
             self.assertEqual(task.call_count, 1)
             self.assertEqual(callback.call_count, 1)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
-    def test_update_conditions_met_for_user_triggered_by_course_student_on_update(self, task):
+    def test_update_conditions_met_for_user__triggered_by_course_student_on_update(self, task):
+        """Updating a course-student enrollment triggers the conditions task and cache invalidation."""
         with patch('profile_manager.models.Profile.xp_invalidate_cache') as callback:
             self.course_student.active = True
             self.course_student.save()
             self.assertEqual(task.call_count, 1)
             self.assertEqual(callback.call_count, 1)
 
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_cache_triggered_by_task_completion__skips_user_deletion_cascade(self, task):
+        """Deleting a user cascades to delete their submissions/badges/course-students, and
+        each of those deletions would normally queue update_quest_conditions_for_user. For a
+        user being removed that recompute is pointless, so the cascade must queue no such
+        task (issue #1754).
+        """
+        # self.student already has a BadgeAssertion, a QuestSubmission and a CourseStudent
+        # (created in setUpTestData). Make the submission complete+approved so that, absent
+        # the fix, its deletion WOULD fire the task -- proving the suppression is doing work.
+        self.quest_submission.is_completed = True
+        self.quest_submission.is_approved = True
+        self.quest_submission.save()
+        task.reset_mock()  # ignore the task the save above triggers
+
+        self.student.delete()
+
+        task.assert_not_called()
+
+    @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
+    def test_update_cache_triggered_by_task_completion__fires_on_direct_submission_delete(self, task):
+        """The user-deletion guard must not suppress the normal case: deleting a single
+        complete+approved submission (while its user remains) still recalculates that user's
+        available quests (issue #1754 regression guard).
+        """
+        self.quest_submission.is_completed = True
+        self.quest_submission.is_approved = True
+        self.quest_submission.save()
+        task.reset_mock()
+
+        self.quest_submission.delete()
+
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'], [self.student.id])
+
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
-    def test_update_prereq_cache_triggered_by_badge(self, task):
+    def test_update_prereq_cache__triggered_by_badge(self, task):
         """
         Creation and Update of a prereq where the parent is not a quest should not trigger a cache update
         """
@@ -104,7 +143,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 2)
 
     @patch('prerequisites.signals.update_quest_conditions_all_users.apply_async')
-    def test_update_cache_triggered_by_quest_without_prereqs(self, task):
+    def test_update_cache__triggered_by_quest_without_prereqs(self, task):
         """
         Creation and Update of a Quest without a prerequisite should trigger a cache update
         """
@@ -114,7 +153,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 2)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
-    def test_update_prereq_cache_triggered_by_quest(self, task):
+    def test_update_prereq_cache__triggered_by_quest(self, task):
         """Creation and Update of a quest should not trigger a cache update, only when a prereq is added to the quest (covered elsewhere).
         """
         quest = baker.make(Quest, verification_required=True)  # creation
@@ -123,7 +162,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 0)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
-    def test_update_prereq_cache_triggered_by_quest_available_outside_course(self, task):
+    def test_update_prereq_cache__triggered_by_quest_available_outside_course(self, task):
         """Creation and Update of a quest should trigger a cache update, only when it is available outside the course.
         """
         quest = baker.make(Quest, verification_required=True)  # creation
@@ -132,7 +171,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
-    def test_update_cache_triggered_by_non_quest_prereq(self, task):
+    def test_update_cache__triggered_by_non_quest_prereq(self, task):
         """
         Creation and Update of a prereq where the parent is not a quest should not trigger a cache update
         """
@@ -143,7 +182,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 0)
 
     @patch('prerequisites.tasks.grant_badge_assertions_for_badge.apply_async')
-    def test_badge_prereq_changes_do_not_auto_grant(self, task):
+    def test_badge_prereq_changes__do_not_auto_grant(self, task):
         """Creating, updating or deleting a prereq whose parent is a badge must NOT trigger
         the badge-granting task: a teacher may tweak a badge's prereqs while building it,
         so granting is teacher-initiated from the badge page instead (issue #1157).
@@ -158,7 +197,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 0)
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
-    def test_update_cache_triggered_by_quest_prereq_changes(self, task):
+    def test_update_cache__triggered_by_quest_prereq_changes(self, task):
         """Creation and Update of a prereq where the parent IS a quest should both trigger a cache update
         """
         quest = baker.make('quest_manager.quest')
@@ -169,7 +208,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         task.assert_called_with(kwargs={'quest_id': quest.id, 'start_from_user_id': 1}, queue='default')
 
     @patch('prerequisites.signals.update_conditions_for_quest.apply_async')
-    def test_update_cache_triggered_by_parent_object_deletion(self, task):
+    def test_update_cache__triggered_by_parent_object_deletion(self, task):
         """When a quest is deleted it will cascade to delete any prereqs for which it is a parent.
         That shouldn't break this signal.
         """
@@ -180,7 +219,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_count, 1)
 
     @patch('djcytoscape.tasks.regenerate_map.apply_async')
-    def test_prereq_regenerate_related_maps(self, task):
+    def test_regenerate_related_maps__on_save_and_delete(self, task):
         """ Tests if saving and deleting quest triggers `regenerate_map` task.
         Cant check if `regenerate_map` made new CytoElements. So checking if task args are accurate
         """

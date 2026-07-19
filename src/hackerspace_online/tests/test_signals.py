@@ -16,6 +16,7 @@ User = get_user_model()
 
 class SignalTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         self.client = TenantClient(self.tenant)
 
     def test_handle_tenant_site_domain_update__long_domain_truncates_site_name(self):
