@@ -370,6 +370,9 @@ if DB_LOGS_ENABLED:
         'level': 'DEBUG',
         'class': 'logging.handlers.TimedRotatingFileHandler',
         'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
+        # Bound retention: without backupCount, minute-rotation keeps a file
+        # forever, so an enabled tracer slowly fills /tmp. 60 = ~1h of history.
+        'backupCount': env.int('DB_LOGS_BACKUP_COUNT', default=60),
         'filename': os.path.join(LOGS_PATH, 'queries.log'),
         'formatter': 'verbose',
     }
