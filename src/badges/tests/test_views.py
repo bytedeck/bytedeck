@@ -146,7 +146,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         form_data = response.context['form'].initial
 
         # Badge name should have changed
-        self.assertEqual(form_data['name'], "Copy of " + self.test_badge.name)
+        self.assertEqual(form_data['name'], f"Copy of {self.test_badge.name}")
         # Tags should be the same as original
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
 
@@ -234,7 +234,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse("badges:list"))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
-        self.assertEqual(new_assertion.do_not_grant_xp, True)
+        self.assertTrue(new_assertion.do_not_grant_xp)
 
     def test_bulk_assertion_create__grants_to_all_selected(self):
         """Bulk granting a badge to multiple students creates one assertion per student."""
@@ -413,7 +413,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('badges:badge_list')
@@ -423,7 +423,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
     # Custom label tests
     def test_badge_views__header_custom_label_displayed(self):

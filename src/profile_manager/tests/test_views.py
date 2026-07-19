@@ -194,7 +194,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             quest_set = baker.make('quest_manager.quest', _quantity=quest_count)
 
             # add unique tag for each quest
-            [quest.tags.add(f'TAG-{str(count)}') for count, quest in enumerate(quest_set)]
+            [quest.tags.add(f'TAG-{count}') for count, quest in enumerate(quest_set)]
 
             # have a submission for one of the quests
             baker.make(
@@ -221,7 +221,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             # should only show the tag with the approved submission
             self.assertContains(response, 'TAG-0')
             for i in range(1, quest_count, 1):
-                self.assertNotContains(response, f'TAG-{str(i)}')
+                self.assertNotContains(response, f'TAG-{i}')
 
             # for sanity check (its true by default)
             site_config = SiteConfig.get()
@@ -234,7 +234,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
             # should contains all tags including the ones that don't have a submission from the user
             for i in range(quest_count):
-                self.assertContains(response, f'TAG-{str(i)}')
+                self.assertContains(response, f'TAG-{i}')
 
         finally:
             # Ensure the setting is reverted back to its original state

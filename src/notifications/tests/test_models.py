@@ -165,13 +165,13 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         base_notification.full_clean()
         base_notification.save()
 
-        self.assertFalse('#comment-' in base_notification.get_url())
-        self.assertFalse('#comment-' in str(base_notification))
+        self.assertNotIn('#comment-', base_notification.get_url())
+        self.assertNotIn('#comment-', str(base_notification))
 
         # check if notification with comment has a hash
         comment_hash = f'#comment-{comment.id}'
-        self.assertTrue(comment_hash in notification.get_url())
-        self.assertTrue(comment_hash in str(notification))
+        self.assertIn(comment_hash, notification.get_url())
+        self.assertIn(comment_hash, str(notification))
 
 
 class NotificationModel_html_strip_Test(TestCase):

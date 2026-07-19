@@ -311,7 +311,7 @@ class PrereqModelTest(ByteDeckTenantTestCase):
 
     def test_get_or_prereq__returns_none_when_unset(self):
         "returns the alternate prereq requirement"
-        self.assertEqual(self.prereq.get_or_prereq(), None)
+        self.assertIsNone(self.prereq.get_or_prereq())
 
     # Todo: need some massive mocking for this one
     # @patch('prereq_object.condition_met_as_prerequisite', return_value=True)

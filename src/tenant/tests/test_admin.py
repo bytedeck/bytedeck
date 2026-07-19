@@ -602,7 +602,7 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         # fifth case, delete user can delete, using correct confirmation keyword/phrase
         # should returns 302 (redirect to admin homepage)
         response = self.client.get(delete_url)
-        self.assertContains(response, "tenant/tenant/%s/" % self.extra_tenant.pk)
+        self.assertContains(response, f"tenant/tenant/{self.extra_tenant.pk}/")
         self.assertContains(response, "Summary")
         self.assertContains(response, "Tenants: 1")
         post = self.client.post(delete_url, delete_dict)

@@ -131,8 +131,8 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, ByteDeckT
         self.assertEqual(quest_submission_qs.count(), 2)
 
         # check if the submissions are the correct ones
-        self.assertTrue(submission_1 in quest_submission_qs)
-        self.assertTrue(submission_2 in quest_submission_qs)
+        self.assertIn(submission_1, quest_submission_qs)
+        self.assertIn(submission_2, quest_submission_qs)
 
     def test_get_badge_assertion_by_tags__correct_badge_assertion_tagged(self):
         """ check if 'correct tag' is retrieved and no other assertion from a different tag or no tag """
@@ -160,8 +160,8 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, ByteDeckT
         self.assertEqual(badge_assertion_qs.count(), 2)
 
         # check if the submissions are the correct ones
-        self.assertTrue(assertion_1 in badge_assertion_qs)
-        self.assertTrue(assertion_2 in badge_assertion_qs)
+        self.assertIn(assertion_1, badge_assertion_qs)
+        self.assertIn(assertion_2, badge_assertion_qs)
 
 
 class Tag_get_user_tags_and_xp_Tests(TagHelper, ByteDeckTenantTestCase):
@@ -260,9 +260,9 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, ByteDeckTenantTestCase):
         # check if only q_approved is in the query
         tags = [tag_tuple[0].name for tag_tuple in get_user_tags_and_xp(self.user)]
 
-        self.assertFalse('unrelated' in tags)
-        self.assertTrue('approved' in tags)
-        self.assertFalse('submitted' in tags)
+        self.assertNotIn('unrelated', tags)
+        self.assertIn('approved', tags)
+        self.assertNotIn('submitted', tags)
 
     def test_get_user_tags_and_xp__total_xp_is_correct(self):
         """ check if get_user_tags_and_xp's xp adds up correctly """

@@ -48,7 +48,7 @@ class ProfileFormTest(ByteDeckTenantTestCase):
         """
         form = ProfileForm(instance=self.user.profile, data={'email': 'example@gmail.com'})
         with patch('dns.resolver.resolve') as mock_resolve:
-            mock_resolve.return_value = MagicMock()  # Mocking resolve() because we may not have interent access during tests.
+            mock_resolve.return_value = MagicMock()  # Mocking resolve() because we may not have internet access during tests.
             form.is_valid()
             cleaned_email = form.cleaned_data['email']
             self.assertEqual(cleaned_email, 'example@gmail.com')
@@ -107,15 +107,15 @@ class ProfileFormTest(ByteDeckTenantTestCase):
         config = SiteConfig.get()
 
         self.assertEqual(config.custom_profile_field, '')
-        self.assertEqual(self.user.profile.custom_profile_field, None)
+        self.assertIsNone(self.user.profile.custom_profile_field)
 
         form = ProfileForm(instance=self.user.profile, data={'custom_profile_field': 'test'})
         form.save()
 
         # should not affect profile because SiteConfig.custom_profile_field is empty
         # form's custom_profile_field should not exist either
-        self.assertEqual(form.fields.get('custom_profile_field'), None)
-        self.assertEqual(self.user.profile.custom_profile_field, None)
+        self.assertIsNone(form.fields.get('custom_profile_field'))
+        self.assertIsNone(self.user.profile.custom_profile_field)
 
         config.custom_profile_field = 'FIELD'
         config.save()
