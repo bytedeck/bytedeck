@@ -5,8 +5,10 @@ from unittest.mock import MagicMock, PropertyMock
 
 
 class FilenameFilterTests(TestCase):
+    """Tests for the comment_tags.filename template filter."""
 
-    def test_filename_existing_file(self):
+    def test_filename__returns_basename_for_existing_file(self):
+        """The filter renders just the basename of the file's path."""
         file_field_mock = MagicMock()
         file_field_mock.file = MagicMock(spec=File)
         file_field_mock.file.name = 'path/to/existing/file.txt'
@@ -19,7 +21,7 @@ class FilenameFilterTests(TestCase):
         # Assert that the rendered output matches the expected filename
         self.assertEqual(rendered, "file.txt")
 
-    def test_filename_missing_file(self):
+    def test_filename__returns_warning_for_missing_file(self):
         """When accessing the underlying file raises FileNotFoundError, the filter
         returns a "File Missing" warning instead of blowing up."""
         from comments.templatetags.comment_tags import filename

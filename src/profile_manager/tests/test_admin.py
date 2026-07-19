@@ -70,12 +70,12 @@ class ProfileAdminDisplayMethodsTest(ByteDeckTenantTestCase):
         """Build a ProfileAdmin bound to a throwaway AdminSite."""
         self.admin = ProfileAdmin(model=Profile, admin_site=AdminSite())
 
-    def test_get_username(self):
+    def test_profile_admin__get_username(self):
         """get_username surfaces the related user's username."""
         user = baker.make(User, username='someone')
         self.assertEqual(self.admin.get_username(user.profile), 'someone')
 
-    def test_get_full_name(self):
+    def test_profile_admin__get_full_name(self):
         """get_full_name surfaces the related user's full name."""
         user = baker.make(User, first_name='Ada', last_name='Lovelace')
         self.assertEqual(self.admin.get_full_name(user.profile), 'Ada Lovelace')
