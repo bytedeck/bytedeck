@@ -1558,7 +1558,11 @@ def unarchive(request, quest_id):
     Returns:
         HttpResponseRedirect: Redirects to the Drafts tab with a success message.
     """
-    quest = Quest.objects.all_including_archived().get(id=quest_id)
+    # Use get_object_or_404 (not QuerySet.get) so a manually entered/stale quest id
+    # returns a clean 404 instead of raising Quest.DoesNotExist as an unhandled 500
+    # (issue #1856). all_including_archived() is required because the default manager
+    # excludes archived quests -- the only ones this view acts on.
+    quest = get_object_or_404(Quest.objects.all_including_archived(), id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
     link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
