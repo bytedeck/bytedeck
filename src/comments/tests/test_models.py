@@ -23,7 +23,7 @@ class CommentManagerTest(ByteDeckTenantTestCase):
 
         self.assertEqual(comment.user, user)
         self.assertEqual(comment.text, text)
-        self.assertEqual(comment.path, path + "#comment-" + str(comment.id))
+        self.assertEqual(comment.path, f"{path}#comment-{comment.id}")
         self.assertIsNone(comment.target_content_type)
         self.assertIsNone(comment.target_object_id)
         self.assertIsNone(comment.parent)
@@ -55,7 +55,7 @@ class CommentManagerTest(ByteDeckTenantTestCase):
 
         self.assertEqual(comment.user, user)
         self.assertEqual(comment.text, text)
-        self.assertEqual(comment.path, path + "#comment-" + str(comment.id))
+        self.assertEqual(comment.path, f"{path}#comment-{comment.id}")
         self.assertEqual(comment.target_content_type, ContentType.objects.get_for_model(target))
         self.assertEqual(comment.target_object_id, target.id)
         self.assertEqual(comment.parent, parent)

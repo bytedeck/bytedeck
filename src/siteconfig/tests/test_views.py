@@ -274,8 +274,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.config.site_name, 'site name changed to prove form was successful')
         self.assertEqual(self.config.custom_stylesheet.name, '')  # use `.name` because field files are never empty (ie. <FieldFile: None>)
         self.assertEqual(self.config.custom_javascript.name, '')
-        self.assertEqual(self.config.enable_shared_library, False)
-        self.assertEqual(self.config.allow_staff_export, False)
+        self.assertFalse(self.config.enable_shared_library)
+        self.assertFalse(self.config.allow_staff_export)
 
         # test deck owner fields on staff (non deck owner)
         # should not be affected by form data
@@ -289,8 +289,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()
-        self.assertFalse('staff' in self.config.custom_stylesheet.name)  # file fields modify name
-        self.assertFalse('staff' in self.config.custom_javascript.name)
+        self.assertNotIn('staff', self.config.custom_stylesheet.name)  # file fields modify name
+        self.assertNotIn('staff', self.config.custom_javascript.name)
         self.assertNotEqual(self.config.deck_owner, staff)
         self.assertNotEqual(self.config.enable_shared_library, True)
         self.assertFalse(self.config.allow_staff_export)
@@ -308,8 +308,8 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.config.refresh_from_db()
-        self.assertTrue('owner' in self.config.custom_stylesheet.name)  # file fields modify name
-        self.assertTrue('owner' in self.config.custom_javascript.name)
+        self.assertIn('owner', self.config.custom_stylesheet.name)  # file fields modify name
+        self.assertIn('owner', self.config.custom_javascript.name)
         self.assertEqual(self.config.deck_owner, staff)
-        self.assertEqual(self.config.enable_shared_library, True)
+        self.assertTrue(self.config.enable_shared_library)
         self.assertTrue(self.config.allow_staff_export)

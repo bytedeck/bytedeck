@@ -129,7 +129,7 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
 
         # assert changes
-        self.assertTrue(CourseStudent.objects.count(), 1)
+        self.assertEqual(CourseStudent.objects.count(), 1)
 
 
 class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
