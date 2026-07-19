@@ -61,7 +61,6 @@ class InitDbTest(TestCase, CommandMixin):
         - a Flatpage object with url /pages/home/
         """
         output = self.call_command()
-        print("*** INITDB Management Command: ", output)
 
         public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
