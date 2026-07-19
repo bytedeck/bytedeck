@@ -48,6 +48,7 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
     """
 
     def setUp(self):
+        """Use a tenant client and ensure RequestDataTooBigMiddleware is enabled."""
         self.client = TenantClient(self.tenant)
 
         # make sure RequestDataTooBig middleware is enabled for a testing purpose
@@ -57,10 +58,11 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
             settings.MIDDLEWARE = list(settings.MIDDLEWARE) + [middleware_class]
 
     def tearDown(self):
+        """Restore the original MIDDLEWARE setting after each test."""
         settings.MIDDLEWARE = self.old_MIDDLEWARE
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=2621440, ROOT_URLCONF=__name__)
-    def test_default(self):
+    def test_default__passes_request_through(self):
         """
         By default request should pass through middleware as-is, without exceptions.
         """
@@ -73,7 +75,7 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
 
     @without_requestdatatoobig_middleware
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_without_requestdatatoobig_middleware(self):
+    def test_request_data_too_big__without_middleware_returns_400(self):
         """
         Somehow request data exceeds the settings.DATA_UPLOAD_MAX_MEMORY_SIZE limit,
         that raises `RequestDataTooBig` exception.
@@ -90,7 +92,7 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
         self.assertEqual(len(messages), 0)  # nothing, cuz not handled properly
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_with_requestdatatoobig_middleware(self):
+    def test_request_data_too_big__with_middleware_redirects(self):
         """
         Somehow request data exceeds the settings.DATA_UPLOAD_MAX_MEMORY_SIZE limit,
         that raises `RequestDataTooBig` exception.
@@ -108,7 +110,7 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
         self.assertIn("requests exceeds the maximum size", str(messages[0]))
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
-    def test_request_data_too_big_exception_with_requestdatatoobig_middleware_skip_FILES(self):
+    def test_request_data_too_big__with_middleware_skips_files(self):
         """
         Custom middleware should handle uploaded files gracefully by simply skipping them
         """

@@ -13,10 +13,11 @@ User = get_user_model()
 
 class ShellUtilsTest(ByteDeckTenantTestCase):
     def setUp(self):
+        """No shared setup required for these shell-util tests."""
         # self.client = TenantClient(self.tenant)
         pass
 
-    def test_generate_students(self):
+    def test_generate_students__creates_requested_number(self):
         """ Generates the provided number of students (20, is_staff = False) """
         create_this_many = 20
         num_students_before = User.objects.filter(is_staff=False).count()
@@ -24,7 +25,7 @@ class ShellUtilsTest(ByteDeckTenantTestCase):
         num_students_after = User.objects.filter(is_staff=False).count()
         self.assertEqual(num_students_after, num_students_before + create_this_many)
 
-    def test_generate_quests(self):
+    def test_generate_quests__creates_requested_quests_and_campaigns(self):
         """ Generates the provided number of students (10) """
         num_quest = 5
         num_campaigns = 2

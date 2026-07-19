@@ -22,6 +22,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a published campaign with published, invisible, and archived quests in the library schema."""
         # Create campaign (category) and quests in library schema
         with library_schema_context():
             cls.category = baker.make(Category, title="Test Campaign", published=True)
@@ -65,7 +66,7 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.assertEqual(category.quest_count, 1)
             self.assertEqual(category.xp_sum, 100)
 
-    def test_excludes_categories_without_importable_quests(self):
+    def test_all_published_with_importable_quests__excludes_categories_without_importable_quests(self):
         """
         Ensures that published campaigns with no importable quests are excluded
         from the queryset.
@@ -121,9 +122,10 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student user shared across the queryset tests."""
         cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_not_in_progress_completed_or_cooldown(self):
+    def test_not_in_progress_completed_or_cooldown__all_five_conditions(self):
         """ Test that all 5 conditions are met for this queryset method:
         it should remove quests that are:
           1. already inprogress for the user (is_completed=False)
@@ -286,6 +288,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Capture the seed quests and create a teacher and student before tests add more quests."""
         # get a list all quests created in data migrations
         # convert to list for ease of comparison, and also to force
         #  evaluation before additional quests are created within tests
@@ -298,7 +301,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
         cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_quest_qs_exclude_hidden(self):
+    def test_exclude_hidden__omits_users_hidden_quests(self):
         """QuestQuerySet.datetime_available should return all quests that are not
         on a user profile's hidden quest list."""
 
@@ -320,7 +323,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
         # a couple hidden
         self.assertSetEqual(set(qs), set(expected_result))
 
-    def test_quest_qs_block_if_needed(self):
+    def test_block_if_needed__returns_only_blocking_quests_when_present(self):
         """QuestQuerySet.block_if_needed should return only blocking quests if one or more exist,
         otherwise, return full qs """
         baker.make(Quest, name='Quest-blocking', blocking=True)
@@ -333,7 +336,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
 
         # Test the user specific part via QuestManager.get_available test"
 
-    def test_quest_qs_datetime_available(self):
+    def test_datetime_available__returns_currently_available_quests(self):
         """QuestQuerySet.datetime_available should return quests available for curent"""
         cur_datetime = localtime()
         cur_date = cur_datetime.date()
@@ -358,7 +361,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
             set(['Quest-curent', 'Quest-earlier-today', 'Quest-yesterday'] + self.initial_quest_name_list)
         )
 
-    def test_quest_qs_not_expired(self):
+    def test_not_expired__returns_unexpired_quests(self):
         """
         QuestQuerySet.not_expired should return not expired quests including:
             If date_expired and time_expired are null: quest never expires
@@ -391,28 +394,28 @@ class QuestManagerTest(ByteDeckTenantTestCase):
         result = ['Quest-never-expired', 'Quest-expired-now', 'Quest-expired-today-midnight', 'Quest-expired-tomorrow']
         self.assertSetEqual(set(qs), set(result + self.initial_quest_name_list))
 
-    def test_quest_qs_visible(self):
+    def test_published__returns_only_published_quests(self):
         """QuestQuerySet.published should return published for students quests"""
         # baker.make(Quest, name='Quest-visible', published=True)
         baker.make(Quest, name='Quest-invisible', published=False)
         # self.assertListEqual(list(Quest.objects.all().published().values_list('name', flat=True)), ['Quest-visible'])
         self.assertListEqual(list(Quest.objects.all().published()), self.initial_quest_list)
 
-    def test_quest_qs_not_archived(self):
+    def test_not_archived__returns_unarchived_quests(self):
         """QuestQuerySet.not_archived should return not_archived quests"""
         baker.make(Quest, name='Quest-not-archived', archived=False)
         baker.make(Quest, name='Quest-archived', archived=True)
         qs = Quest.objects.all().not_archived().values_list('name', flat=True)
         self.assertSetEqual(set(qs), set(['Quest-not-archived'] + self.initial_quest_name_list))
 
-    def test_quest_qs_available_without_course(self):
+    def test_available_without_course__returns_quests_available_outside_course(self):
         """QuestQuerySet.available_without_course should return quests available_outside_course"""
         baker.make(Quest, name='Quest-available-without-course', available_outside_course=True)
         baker.make(Quest, name='Quest-not-available-without-course', available_outside_course=False)
         qs = Quest.objects.all().available_without_course().values_list('name', flat=True)
         self.assertQuerySetEqual(qs, ['Quest-available-without-course', 'Send your teacher a Message'], ordered=False)
 
-    def test_quest_qs_editable(self):
+    def test_editable__returns_quests_user_may_edit(self):
         """
         QuestQuerySet.editable should return quests allowed to edit for given user,
         when user is_staff or editor for the quest
@@ -426,49 +429,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(Quest.objects.all().editable(student1).count(), 1)
         self.assertEqual(Quest.objects.all().editable(student2).count(), 0)
 
-    # def test_quest_qs_get_list_not_submitted_or_inprogress(self):
-    #     """
-    #     QuestQuerySet.get_list_not_submitted_or_inprogress should return quests that
-    #     have not been started (in progress or submitted for approval),
-    #     or if it has been completed already, that it is a repeatable quest past the repeat time
-    #     """
-    #     self.make_test_quests_and_submissions_stack()
-
-    #     # jump ahead an hour so repeat cooldown is over
-    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-    #         qs = Quest.objects.all().get_list_not_submitted_or_inprogress(self.student)
-    #     self.assertListEqual(
-    #         list(qs.values_list('name', flat=True)),
-    #         ['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started']
-    #     )
-
-    # def test_quest_qs_not_submitted_or_inprogress(self):
-    #     self.make_test_quests_and_submissions_stack()
-
-    #     # jump ahead an hour so repeat cooldown is over
-    #     with freeze_time(localtime() + timedelta(hours=1, minutes=1)):
-    #         qs = Quest.objects.all().not_submitted_or_inprogress(self.student)
-    #     # compare sets so order doesn't matter
-    #     self.assertSetEqual(
-    #         set(qs.values_list('name', flat=True)),
-    #         set(['Quest-1hr-cooldown', 'Quest-blocking', 'Quest-not-started'] + self.initial_quest_name_list)
-    #     )
-
-    # def test_quest_qs_not_completed(self):
-    #     """Should return all the quests that do NOT have a completed submission (during active semester)"""
-    #     active_semester = self.make_test_quests_and_submissions_stack()
-    #     SiteConfig.get().set_active_semester(active_semester.id)
-    #     qs = Quest.objects.order_by('id').not_completed(self.student)
-    #     # compare sets so order doesn't matter
-    #     self.assertSetEqual(
-    #         set(qs.values_list('name', flat=True)),
-    #         set(
-    #             ['Quest-inprogress-sem2', 'Quest-completed-sem2', 'Quest-not-started', 'Quest-blocking', 'Quest-inprogress']
-    #             + self.initial_quest_name_list
-    #         )
-    #     )
-
-    def test_quest_qs_not_in_progress(self):
+    def test_not_in_progress__excludes_inprogress_submissions(self):
         """Should return all the quests that do NOT have an inprogress submission"""
         active_semester = self.make_test_quests_and_submissions_stack()
         SiteConfig.get().set_active_semester(active_semester.id)
@@ -480,7 +441,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
                  'Quest-1hr-cooldown'] + self.initial_quest_name_list)
         )
 
-    def test_get_available(self):
+    def test_get_available__excludes_unavailable_quests(self):
         """ DESCRIPTION FROM METHOD:
         Quests that should appear in the user's Available quests tab.   Should exclude:
         1. Quests whose available date & time has not past, or quest that have expired <<<< COVERED HERE
@@ -652,10 +613,11 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a student shared across the submission queryset tests."""
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
         cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_quest_submission_qs_get_user(self):
+    def test_get_user__returns_submissions_for_user(self):
         """QuestSubmissionQuerySet.get_user should return all quest submissions for given user"""
         first = baker.make(QuestSubmission, user=self.student)
         baker.make(QuestSubmission, user=self.teacher)
@@ -663,7 +625,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.all().get_user(self.student).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_block_if_needed(self):
+    def test_block_if_needed__returns_only_blocking_submissions_when_present(self):
         """QuestSubmissionQuerySet.block_if_needed:
         if there are blocking quests, only return them.  Otherwise, return full qs """
         first = baker.make(QuestSubmission)
@@ -678,7 +640,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.all().block_if_needed().values_list('id', flat=True)
         self.assertListEqual(list(qs), [blocked_sub.id])
 
-    def test_quest_submission_qs_get_quest(self):
+    def test_get_quest__returns_submissions_for_quest(self):
         """QuestSubmissionQuerySet.get_quest should return all quest submissions for given quest"""
         quest = baker.make(Quest, name='Sub')
         first, second = baker.make(QuestSubmission, quest=quest), baker.make(QuestSubmission, quest=quest)
@@ -686,7 +648,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.order_by('id').get_quest(quest).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id, second.id])
 
-    def test_quest_submission_qs_get_semester(self):
+    def test_get_semester__returns_submissions_for_semester(self):
         """QuestSubmissionQuerySet.get_semester should return all quest submissions for given semester"""
         semester = baker.make(Semester)
         first = baker.make(QuestSubmission, semester=semester)
@@ -694,7 +656,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.order_by('id').get_semester(semester).values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_exclude_archived_quests(self):
+    def test_exclude_archived_quests__omits_archived_quest_submissions(self):
         """
         QuestSubmissionQuerySet.exclude_archived_quests should return quest submissions
         without submissions for archived_quests
@@ -704,7 +666,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_archived_quests().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_quest_submission_qs_exclude_quests_not_published(self):
+    def test_exclude_quests_not_published__omits_unpublished_quest_submissions(self):
         """
         QuestSubmissionQuerySet.exclude_quests_not_published should return quest submissions
         without submissions for invisible quests
@@ -714,7 +676,7 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.order_by('id').exclude_quests_not_published().values_list('id', flat=True)
         self.assertListEqual(list(qs), [first.id])
 
-    def test_for_teacher_only(self):
+    def test_for_teacher_only__includes_block_students_and_notify_teacher(self):
         """Returned qs should only include sub my students in the teacher's block(s).  Also
         add a specific_teacher_to_notify and make sure that one appears too
         """
@@ -767,6 +729,7 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and a stack of submissions spanning two semesters."""
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
         cls.student = baker.make(User, username='student', is_staff=False)
 
@@ -774,23 +737,26 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         cls.active_semester = cls.sub1.semester
 
     def setUp(self):
+        """Set the active semester to the one holding sub1 before each test."""
         SiteConfig.get().set_active_semester(self.active_semester.id)
 
-    def test_get_queryset_default(self):
+    def test_get_queryset__default_returns_published_unarchived(self):
         """QuestSubmissionManager.get_queryset by default should return all published, not archived quest submissions"""
         qs = QuestSubmission.objects.get_queryset()
         self.assertQuerySetEqual(qs, [self.sub1, self.sub2], ordered=False)
 
-    def test_get_queryset_for_active_semester(self):
+    def test_get_queryset__active_semester_only(self):
+        """get_queryset with active_semester_only limits results to the active semester's submissions."""
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
         self.assertQuerySetEqual(qs, [self.sub1])
 
-    def test_get_queryset_for_all_quests(self):
+    def test_get_queryset__includes_archived_and_unpublished(self):
+        """get_queryset returns every submission when archived and unpublished filters are disabled."""
         qs = QuestSubmission.objects.get_queryset(
             exclude_archived_quests=False, exclude_quests_not_published=False)
         self.assertEqual(qs.count(), 7)
 
-    def test_all_for_user_quest(self):
+    def test_all_for_user_quest__returns_active_semester_submissions(self):
         """
         QuestSubmissionManager.all_for_user_quest should return all published not archived quest submissions
         for active semester, given user and quest
@@ -821,7 +787,7 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
 
         return sub1, sub2
 
-    def test_calculate_xp(self):
+    def test_calculate_xp__sums_approved_submissions(self):
         """QuestSubmissionManager.calculate_xp should return the correct amount of xp for some approved submissions"""
 
         # Create some approved submissions
@@ -831,7 +797,7 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         xp = QuestSubmission.objects.calculate_xp(self.student)
         self.assertEqual(xp, 13)
 
-    def test_calculate_xp_to_date(self):
+    def test_calculate_xp_to_date__excludes_xp_after_date(self):
         """QuestSubmissionManager.calculate_xp_to_date should not include xp earned up to and including the date.
         """
         # Create some approved submissions from after the `to_date``, should show up in XP

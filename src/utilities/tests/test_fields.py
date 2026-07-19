@@ -17,6 +17,7 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create two users and a group spanning two content types for choice building."""
         cls.user1 = User.objects.create(username="johndoe", first_name="John", last_name="Doe")
         cls.user2 = User.objects.create(username="janedoe", first_name="Jane", last_name="Doe")
         cls.group1 = Group.objects.create(name="Editors")
@@ -24,7 +25,8 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
     def _ct_pk(self, obj):
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
-    def test_basics(self):
+    def test_GFKChoiceField__choices_and_clean(self):
+        """Field groups choices by content type and clean() validates and resolves GFK values."""
         f = GFKChoiceField(
             queryset=QuerySetSequence(
                 User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]),
@@ -64,10 +66,11 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
 class RestrictedFileFieldTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Build a default and a content-type-restricted RestrictedFileField."""
         cls.default_file_field = RestrictedFileField()
         cls.image_file_field = RestrictedFileField(content_types=['image/jpeg', 'image/png'])
 
-    def test_content_type(self):
+    def test_content_type__default_and_custom(self):
         "Ensure the default content type is 'All', and that the content type can be set correctly."
 
         # ensure default content type is 'All'
@@ -80,10 +83,11 @@ class RestrictedFileFieldTest(ByteDeckTenantTestCase):
 class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Build a default and a content-type-restricted RestrictedFileFormField."""
         cls.default_file_field = RestrictedFileFormField()
         cls.image_file_field = RestrictedFileFormField(content_types=['image/jpeg', 'image/png'])
 
-    def test_content_type(self):
+    def test_content_type__default_and_custom(self):
         "Ensure the default content type is 'All', and that the content type can be set correctly."
 
         # ensure default content type is 'All'
@@ -106,7 +110,7 @@ class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
     forms to accept valid selections regardless of import timing.
     """
 
-    def test_deepcopy_rebuilds_empty_import_time_queryset(self):
+    def test_deepcopy__rebuilds_empty_import_time_queryset(self):
         """A field left empty at construction repopulates its choices when copied."""
         import copy
 
@@ -128,7 +132,7 @@ class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
         self.assertTrue(models, "deepcopy should have rebuilt a non-empty choice list")
         self.assertEqual(models, IsAPrereqMixin.all_registered_model_classes())
 
-    def test_form_instance_has_valid_choices_even_if_declared_field_is_empty(self):
+    def test_form_instance__has_valid_choices_even_if_declared_field_is_empty(self):
         """A form using the field accepts a valid GFK selection through its copied field."""
         import copy
 

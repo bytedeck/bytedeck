@@ -11,8 +11,8 @@ from comments.models import Comment
 
 class TestSubmissionSignals(ByteDeckTenantTestCase):
 
-    def test_pre_delete_signal(self):
-        """ test the pre delete signal for QuestSubmission """
+    def test_pre_delete_signal__removes_only_own_comments(self):
+        """Deleting a QuestSubmission removes only its own comments, not those of other submissions."""
         # create two submissions delete 1 and see if pre_delete
         # did not remove more comments than it needed to
 
@@ -52,6 +52,7 @@ class TestTidyHtml(unittest.TestCase):
         self.assertEqual(result, expected)
 
     def test_tidy_html__formatting_math(self):
+        """KaTeX math markup is preserved and not mangled into template braces."""
         markup = r"""<span class="note-math"><span class="katex"><span class="katex-mathml"><math><semantics><mrow><mrow><mi>x</mi></mrow></mrow><annotation encoding="application/x-tex">{x}</annotation></semantics></math></span>"""  # noqa
         result = tidy_html(markup)
         self.assertIn(markup, result)
@@ -59,7 +60,8 @@ class TestTidyHtml(unittest.TestCase):
         matches_found = re.search('({{)|(}})', result)
         self.assertIsNone(matches_found)
 
-    def test_quest_html_formatting_tabs(self):
+    def test_tidy_html__formatting_tabs(self):
+        """Various markup inputs are indented and repaired as expected."""
         markup_tests = [  # test, expected out come
             ("<p>some text</p>", "<p>\n  some text\n</p>\n"),
             ("<p>some text\n\n</p>", "<p>\n  some text\n</p>\n"),

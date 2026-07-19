@@ -29,6 +29,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a student for the rank view tests."""
         # need a teacher and a student so tests can log in as each with force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -36,9 +37,10 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student')
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_rank_page_status_codes_for_anonymous(self):
+    def test_all_rank_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
 
         self.assertRedirectsLogin('courses:ranks')
@@ -46,7 +48,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('courses:rank_update', args=[1])
         self.assertRedirectsLogin('courses:rank_delete', args=[1])
 
-    def test_all_rank_page_status_codes_for_students(self):
+    def test_all_rank_page_status_codes__students(self):
         ''' If logged in as student then all views except ranks list view should redirect to login page '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:ranks')
@@ -56,7 +58,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('courses:rank_update', args=[1])
         self.assert403('courses:rank_delete', args=[1])
 
-    def test_all_rank_page_status_codes_for_staff(self):
+    def test_all_rank_page_status_codes__staff(self):
         ''' If logged in as staff then all views should return code 200 for successful retrieval of page '''
         self.client.force_login(self.test_teacher)
 
@@ -65,7 +67,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('courses:rank_update', args=[1])
         self.assert200('courses:rank_delete', args=[1])
 
-    def test_RanksList_view(self):
+    def test_RanksList_view__accessible_when_logged_in(self):
         """ Admin and students should be able to view ranks. Anonymous users should be asked to login if they attempt to view ranks. """
 
         # Anonymous user
@@ -84,7 +86,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Should contain 13 default ranks e.g. Digital Novice, Digital Ameteur II, etc
         self.assertEqual(response.context['object_list'].count(), 13)
 
-    def test_RankCreate_view(self):
+    def test_RankCreate_view__staff_can_create(self):
         """ Admin should be able to create a rank """
         self.client.force_login(self.test_teacher)
         data = {
@@ -98,7 +100,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         rank = Rank.objects.get(name=data['name'])
         self.assertEqual(rank.name, data['name'])
 
-    def test_RankUpdate_view(self):
+    def test_RankUpdate_view__staff_can_update(self):
         """ Admin should be able to update a rank """
         self.client.force_login(self.test_teacher)
         data = {
@@ -112,7 +114,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(rank.name, data['name'])
         self.assertEqual(rank.xp, data['xp'])
 
-    def test_RankDelete_view(self):
+    def test_RankDelete_view__staff_can_delete(self):
         """ Admin should be able to delete a rank """
         self.client.force_login(self.test_teacher)
 
@@ -122,7 +124,7 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:ranks'))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
-    def test_scape_update_message_on_update_delete(self):
+    def test_scape_update_message__on_update_and_delete(self):
         """ Checks if delete and update function gives a success message when a rank is related to map """
         # setup
         rank = baker.make(Rank, name='rank')
@@ -154,6 +156,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, student, block, course and grade plus valid registration form data."""
         # need a teacher and a student so tests can log in as each with force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -172,9 +175,10 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         }
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home page '''
         self.assertRedirectsLogin('courses:create')
         self.assertRedirectsLogin('courses:join', args=[1])
@@ -207,7 +211,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Refer to rank specific tests for Rank CRUD views
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
         ''' Test student access to views '''
         self.client.force_login(self.test_student1)
         self.assert200('courses:create')
@@ -244,7 +248,8 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Refer to rank specific tests for Rank CRUD views
 
-    def test_all_page_status_codes_for_staff(self):
+    def test_all_page_status_codes__staff(self):
+        """Staff get 200 on all course management views."""
         self.client.force_login(self.test_teacher)
 
         # Staff access only
@@ -272,7 +277,8 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('courses:course_update', args=[1])
         self.assert200('courses:course_delete', args=[1])
 
-    def test_course_student_update_status_codes(self):
+    def test_course_student_update__status_codes(self):
+        """The CourseStudent update view is login-required, staff-only (403 for students, 200 for staff)."""
         course_student = baker.make(CourseStudent)
         # anon
         self.client.logout()
@@ -300,7 +306,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         active_sem.refresh_from_db()
         self.assertTrue(active_sem.closed)
 
-    def test_SemesterActivate(self):
+    def test_SemesterActivate__changes_active_semester(self):
         """When this view is accessed, the siteconfig's active semester should be changed
         and the view should redirect tot he semester_list """
         self.client.force_login(self.test_teacher)
@@ -309,7 +315,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
 
-    def test_CourseList_view(self):
+    def test_CourseList_view__staff_can_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:course_list'))
@@ -318,7 +324,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Should contain Default and another one via bake
         self.assertEqual(response.context['object_list'].count(), 2)
 
-    def test_CourseCreate_view(self):
+    def test_CourseCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -331,7 +337,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         course = Course.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
 
-    def test_CourseUpdate_view(self):
+    def test_CourseUpdate_view__staff_can_update(self):
         """ Admin should be able to update a course """
         self.client.force_login(self.test_teacher)
         data = {
@@ -384,6 +390,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, student, block, course and grade plus valid registration form data."""
         # need a teacher and a student so tests can log in as each with force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -402,9 +409,10 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         }
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_CourseStudentUpdate_view(self):
+    def test_CourseStudentUpdate_view__staff_can_update(self):
         """ Staff can update a student's course """
 
         course_student = baker.make(
@@ -426,7 +434,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         course_student.refresh_from_db()
         self.assertEqual(course_student.course.pk, new_course.pk)
 
-    def test_CourseAddStudent_view(self):
+    def test_CourseAddStudent_view__staff_can_add(self):
         '''Staff can add a student to a course'''
 
         # Almost similar to `test_CourseStudentCreate_view` but just uses courses:join
@@ -471,7 +479,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.id]))
         self.assertEqual(self.test_student1.coursestudent_set.count(), 2)
 
-    def test_CourseStudentDelete_view(self):
+    def test_CourseStudentDelete_view__teacher_can_delete(self):
         """ Teacher should be able to delete a student from a course (StudentCourse object)
         and should redirect to the student's profile when complete. """
         self.client.force_login(self.test_teacher)
@@ -487,7 +495,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('profiles:profile_detail', args=[self.test_student1.profile.id]))
         self.assertEqual(before_delete_count - 1, after_delete_count)
 
-    def test_CourseStudentCreate_view(self):
+    def test_CourseStudentCreate_view__student_self_registers(self):
         '''Students can register themselves in a course. Illegally accessing the registration view after registering will give an error 403'''
         self.client.force_login(self.test_student1)
 
@@ -595,6 +603,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and reusable MarkRange form data for create/update posts."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
         # set form data in setUpTestData to be used for posting to create/update forms
@@ -609,9 +618,10 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         }
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_MarkRangeList_view(self):
+    def test_MarkRangeList_view__lists_all(self):
         """The MarkRange list view's object list should contain all MarkRange objects"""
 
         # login a teacher
@@ -621,7 +631,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('courses:markranges'))
         self.assertQuerySetEqual(response.context['object_list'], MarkRange.objects.all())
 
-    def test_MarkRangeCreate_view(self):
+    def test_MarkRangeCreate_view__staff_can_create(self):
         """Staff users can create new MarkRange objects through the create view form"""
 
         # login a teacher
@@ -634,7 +644,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:markranges'))
         self.assertTrue(MarkRange.objects.filter(name="TestMarkRange").exists())
 
-    def test_MarkRangeUpdate_view(self):
+    def test_MarkRangeUpdate_view__staff_can_update(self):
         """Staff users can edit existing MarkRange objects through the update view form"""
 
         # login a teacher
@@ -647,7 +657,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:markranges'))
         self.assertEqual(MarkRange.objects.get(id=1).name, "TestMarkRange")
 
-    def test_MarkRangeDelete_view(self):
+    def test_MarkRangeDelete_view__staff_can_delete(self):
         """Staff users can delete MarkRange objects through the delete view"""
 
         # login a teacher
@@ -688,12 +698,15 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher for the class tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_SemesterList_view(self):
+    def test_SemesterList_view__lists_semesters(self):
+        """The semester list view renders each semester with its day counts and excluded-date counts."""
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('courses:semester_list'))
@@ -717,6 +730,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, str(semester))
 
     def test_SemesterCreate__without_ExcludedDates__view(self):
+        """Creating a semester with no excluded dates saves it and redirects to the list."""
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -770,7 +784,8 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertFalse(response.context['formset'].is_valid())
 
-    def test_SemesterUpdate_view(self):
+    def test_SemesterUpdate_view__updates_dates(self):
+        """Posting new dates to the update view saves them to the semester."""
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -895,7 +910,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         message = self.get_message_list(response)[0]
         self.assertIn('There are some students with negative XP', str(message))
 
-    def test_SemesterDelete_view(self):
+    def test_SemesterDelete_view__deletes_semester(self):
         """ Admin should be able to delete a semester, as long as:
             - it is not the active semester
             - it has no coursesstudent objects (students registered in a course in the semester)
@@ -914,12 +929,14 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher for the class tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_BlockList_view(self):
+    def test_BlockList_view__staff_can_view(self):
         """ Admin should be able to view block list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:block_list'))
@@ -928,7 +945,7 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Should contain one block
         self.assertEqual(response.context['object_list'].count(), 1)
 
-    def test_BlockCreate_view(self):
+    def test_BlockCreate_view__staff_can_create(self):
         """ Admin should be able to create a block """
         self.client.force_login(self.test_teacher)
         data = {
@@ -941,7 +958,7 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         block = Block.objects.get(name=data['name'])
         self.assertEqual(block.name, data['name'])
 
-    def test_BlockUpdate_view(self):
+    def test_BlockUpdate_view__staff_can_update(self):
         """ Admin should be able to update a block """
         self.client.force_login(self.test_teacher)
         data = {
@@ -990,7 +1007,7 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, dt_atag_link)
         self.assertContains(response, dt_well_ptag)
 
-    def test_BlockForm_initial_values(self):
+    def test_BlockForm__initial_values(self):
         """
             Test if the form passed through context has correct initial values
         """
@@ -1005,6 +1022,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, block, course and active/inactive semesters for the chart tests."""
         cls.teacher = baker.make(User, is_staff=True)
 
         cls.block = baker.make(Block)
@@ -1013,6 +1031,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         cls.inactive_semester = baker.make(Semester)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
     def create_student_course(self, xp):
@@ -1053,28 +1072,32 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         # without select_related('profile') each extra student adds a query
         self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
 
-    def test_non_ajax_status_code(self):
+    def test_non_ajax_status_code__forbidden(self):
+        """A non-ajax request to the mark distribution chart is forbidden (403)."""
         self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])
 
-    def test_ajax_status_code_for_anonymous(self):
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the mark distribution chart is redirected (302)."""
         # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 302)
 
-    def test_ajax_status_code_for_students(self):
+    def test_ajax_status_code__students(self):
+        """A logged-in student's ajax request to the mark distribution chart succeeds (200)."""
         user = baker.make(User)
         self.client.force_login(user)
 
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_ajax_status_code_for_teachers(self):
+    def test_ajax_status_code__teachers(self):
+        """A logged-in teacher's ajax request to the mark distribution chart succeeds (200)."""
         self.client.force_login(self.teacher)
 
         response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_no_users_outside_active_semester_in_histogram_values(self):
+    def test_histogram_values__exclude_users_outside_active_semester(self):
         """ histogram values should only belong to users who belong in the active semester"""
         # create inactive semester students
         inactive_sem_students = [self.create_student_course(100) for i in range(5)]
@@ -1099,7 +1122,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         self.assertNotEqual(total_students, len(inactive_sem_students))
         self.assertEqual(total_students, len(active_sem_students))
 
-    def test_no_test_users_in_histogram_values(self):
+    def test_histogram_values__exclude_test_users(self):
         """ test users should not show up in histogram values """
         # create test users students
         test_account_students = [self.create_student_course(100) for i in range(5)]
@@ -1129,6 +1152,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student registered in a course with a fixed-date active semester for the progress chart tests."""
         cls.student = baker.make(User)
         cls.block = baker.make(Block)
         cls.course = baker.make(Course)
@@ -1154,6 +1178,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.base_xp = 1
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
     def create_quest_and_submissions(self, xp, quest_submission_date, quest_submission_quantity=1):
@@ -1183,11 +1208,11 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         return quest, quest_submissions
 
-    def test_non_ajax_status_code(self):
+    def test_non_ajax_status_code__forbidden(self):
         """ 403 unless verified ajax POST request """
         self.assert403('courses:ajax_progress_chart', args=[self.student.pk])
 
-    def test_ajax_status_code_for_anonymous(self):
+    def test_ajax_status_code__anonymous_redirected(self):
         """ checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
         redirects because of LoginRequiredMixin
         """
@@ -1198,7 +1223,8 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 302)
 
-    def test_ajax_status_code_for_student(self):
+    def test_ajax_status_code__student(self):
+        """A student's ajax POST to the progress chart succeeds (200) while a GET returns 404."""
         self.client.force_login(self.student)
 
         # post
@@ -1344,6 +1370,7 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student registered in a course worth 1000 XP for 100% for the mark calculation tests."""
         cls.student = baker.make(User)
 
         cls.block = baker.make(Block)
@@ -1358,6 +1385,7 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
         # to show mark calculation page without 404 you need to turn this on
@@ -1428,12 +1456,14 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student for the rank popup tests."""
         cls.student = baker.make(User)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_status_codes(self):
+    def test_status_codes__ranked_popup_endpoints(self):
         ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`
         403 - because not ajax
         302 - because of not logged in (LoginRequiredMixin)
@@ -1464,7 +1494,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
-    def test_on_show_ranked_popup(self):
+    def test_on_show_ranked_popup__correct_ranks(self):
         """ Checks if earned_rank and next_rank are correct when requesting json from ranked popups
         """
         # make sure theres enough initial ranks for test
@@ -1551,7 +1581,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotEqual(context['earned_rank'], previous_rank)
         self.assertEqual(context['next_rank'], next_rank)
 
-    def test_on_close_ranked_popup(self):
+    def test_on_close_ranked_popup__marks_latest_read(self):
         """ Check if 'courses:ajax_on_show_ranked_popup' closes only the latest ranked notification
         """
         # create 2 rank up notifications

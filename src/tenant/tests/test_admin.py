@@ -65,7 +65,8 @@ class NonPublicTenantAdminTest(ByteDeckTenantTestCase):
 
     """
 
-    def test_nonpublic_tenant_admin_save_model(self):
+    def test_save_model__non_public_schema_raises(self):
+        """save_model raises when a tenant is created outside the public schema."""
         tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
 
         # Can't create tenant outside the `public` schema. Current schema is `test`, so should throw exception
@@ -76,24 +77,9 @@ class NonPublicTenantAdminTest(ByteDeckTenantTestCase):
 class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
     """TenantTestCase comes with a tenant: tenant.test.com"""
 
-    ###############################################################################
-    # Not sure why this doesn't work, but seems like TenantTestCase is
-    # stops using the test databse and is looking for the real databse? or something...
-    # So it fails on TravisCI where there is no database names `postgress`
-    ###############################################################################
-    # fixtures = ['tenant/tenants.json']
-
-    # # This doesn't seem to work when placed in SetUp, so make them class variables.
-    # tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
-    # public_tenant = Tenant.objects.get(schema_name="public")
-
-    # def test_public_tenant_exists(self):
-    #     self.assertIsInstance(self.public_tenant, Tenant)
-    #     self.assertEqual(self.public_tenant.domain_url, "localhost")
-    #################################################################################
-
     @classmethod
     def setUpTestData(cls):
+        """Build the public schema with a superuser and an extra tenant, and seed owner emails (verified/unverified)."""
         # create the public schema
         cls.public_tenant = Tenant(schema_name="public", name="public")
         with tenant_context(cls.public_tenant):
@@ -149,10 +135,11 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
                 email_address.save()
 
     def setUp(self):
+        """Build a TenantAdmin instance and a public-tenant client for each test."""
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         self.client = TenantClient(self.public_tenant)
 
-    def test_owner_full_name_text_column(self):
+    def test_owner_full_name_text__shown_in_changelist(self):
         """
         Test whether content of custom column "owner_full_name_text" is present in admin list view or not.
         """
@@ -170,7 +157,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
 
-    def test_owner_email_text_column(self):
+    def test_owner_email_text__shown_in_changelist(self):
         """
         Test whether content of custom column "owner_email_text" is present in admin list view or not.
         """
@@ -189,7 +176,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.assertContains(response, "john@doe.com")  # verified email
         self.assertContains(response, "jane@doe.com")  # unverified email
 
-    def test_paid_until_text_column(self):
+    def test_paid_until_text__shown_in_changelist(self):
         """
         Test whether content of htmlized column "paid_until_text" is present in admin list view or not.
         """
@@ -207,7 +194,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
 
-    def test_trial_end_date_text_column(self):
+    def test_trial_end_date_text__shown_in_changelist(self):
         """
         Test whether content of htmlized column "trial_end_date" is present in admin list view or not.
         """
@@ -225,7 +212,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
-    def test_search_on_custom_fields(self):
+    def test_search__on_custom_fields(self):
         """
         Test whether content of custom fields is searchable in admin list view or not.
         """
@@ -280,7 +267,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.assertContains(response, "0 result")
 
     @patch("tenant.admin.messages.add_message")
-    def test_enable_google_signin_admin_without_config(self, mock_add_message):
+    def test_enable_google_signin__without_public_config(self, mock_add_message):
         """
         Test where we attempt to enable google sign in but the public tenant has not yet configured
         the Google Provider Social App
@@ -308,7 +295,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
     # Getting this error django.contrib.messages.api.MessageFailure:
     #           You cannot add messages without installing django.contrib.messages.middleware.MessageMiddleware
     @patch("tenant.admin.messages.add_message")
-    def test_enable_and_disable_google_signin_admin(self, mock_add_message):
+    def test_enable_and_disable_google_signin__via_admin(self, mock_add_message):
         """
         Test where we enable/disable google signin for clients via admin
         """
@@ -366,8 +353,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
 
         mock_add_message.assert_called()
 
-    def test_public_tenant_admin_save_model(self):
-
+    def test_save_model__public_tenant_creates_schema(self):
+        """save_model on the public tenant creates a new tenant with a sanitized schema name."""
         with tenant_context(self.public_tenant):
             non_public_tenant = Tenant(
                 name="Non-Public",  # Not a valid name, but not validated in this test
@@ -422,6 +409,7 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Build baseline valid form data reused across the form validation tests."""
         cls.form_data = {
             'name': 'test',  # This is the name of the already existing test tenant
             # 'owner_full_name': None,
@@ -432,30 +420,33 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
             'trial_end_date': timezone.now()
         }
 
-    def test_public_tenant_not_editable(self):
+    def test_clean__public_tenant_not_editable(self):
+        """The reserved 'public' name is rejected by the admin form."""
         self.form_data["name"] = "public"
         form = TenantAdminForm(self.form_data)
         self.assertFalse(form.is_valid())
 
-    def test_new_non_public_tenant_valid(self):
+    def test_clean__new_non_public_tenant_valid(self):
+        """A new non-public tenant name validates on the admin form."""
         self.form_data["name"] = "non-public"
         form = TenantAdminForm(self.form_data)
         self.assertTrue(form.is_valid())
 
-    def test_existing_non_public_tenant_valid(self):
+    def test_clean__existing_non_public_tenant_valid(self):
         """ test tenant already exists as a part of the TenantTestCase """
         form = TenantAdminForm(self.form_data)
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertTrue(form.is_valid())
 
-    def test_cant_change_existing_name(self):
+    def test_clean__cant_change_existing_name(self):
+        """Renaming an existing tenant via the admin form is rejected."""
         # test tenant already exists and is connected in TenantTestCase
         self.form_data["name"] = "nottest"
         form = TenantAdminForm(self.form_data)
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertFalse(form.is_valid())
 
-    def test_cant_create_if_schema_still_exists(self):
+    def test_clean__cant_create_if_schema_still_exists(self):
         """
         Creating new tenant object with a name of existing schema, should fail with form (validation) error
         """
@@ -471,6 +462,7 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Build the public schema plus view/add/change/delete staff users with matching permissions and an extra tenant."""
         # create the public schema
         cls.public_tenant = Tenant(schema_name="public", name="public")
         with tenant_context(cls.public_tenant):
@@ -535,10 +527,17 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         cls.lib = 1 if Tenant.objects.filter(schema_name='library').exists() else 0
 
     def setUp(self):
+        """Build a public-tenant client for each test."""
         self.client = TenantClient(self.public_tenant)
 
+    # NOTE: this test's name sorts first in the class on purpose. It opens with an
+    # anonymous request through the public TenantClient, which leaves the DB
+    # connection on the public schema so the sibling tests' force_login() (their
+    # first DB touch) resolves the public-schema users. Renaming it to sort after a
+    # force_login-first sibling reintroduces "Save with update_fields did not affect
+    # any rows" on update_last_login.
     @override_settings(ROOT_URLCONF=__name__)
-    def test_delete_view(self):
+    def test_delete_view__enforces_permissions(self):
         """
         Delete view should restrict access and actually delete items.
 
@@ -613,7 +612,7 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
         self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
 
-    def test_delete_view_uses_delete_model(self):
+    def test_delete_view__uses_delete_model(self):
         """
         The delete view uses ModelAdmin.delete_model() method, that delete items, but leaves schemas in database.
         """
@@ -631,7 +630,8 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         # ...but schema still in database
         self.assertTrue(schema_exists("extra"))
 
-    def test_delete_view_nonexistent_obj(self):
+    def test_delete_view__nonexistent_obj(self):
+        """Deleting a nonexistent tenant redirects to the admin index with a not-found message."""
         self.client.force_login(self.deleteuser)
         url = reverse("admin:tenant_tenant_delete", args=("nonexistent",))
         response = self.client.get(url, follow=True)
@@ -647,6 +647,7 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Build the public schema, a superuser, an extra tenant, and seed owner emails (verified/unverified)."""
         # create the public schema
         cls.public_tenant = Tenant(schema_name="public", name="public")
         with tenant_context(cls.public_tenant):
@@ -700,15 +701,17 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
                 email_address.save()
 
     def setUp(self):
+        """Build a public-tenant client and force Celery tasks to run eagerly."""
         self.client = TenantClient(self.public_tenant)
 
         self.old_celery_always_eager = app.conf.task_always_eager
         app.conf.task_always_eager = True
 
     def tearDown(self):
+        """Restore the original Celery eager-execution setting."""
         app.conf.task_always_eager = self.old_celery_always_eager
 
-    def test_model_admin_message_unverified_action(self):
+    def test_message_unverified_action__emails_verified_and_unverified_owners(self):
         """
         The message_unverified action on public tenant sends emails to selected tenant "owners",
         using both *verified* and *unverified* email addresses.
@@ -795,7 +798,7 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         # one *unverified* object was selected (tenant)
         self.assertContains(response, ACTION_CHECKBOX_NAME, count=1)
 
-    def test_model_admin_message_verified_action(self):
+    def test_message_verified_action__emails_verified_owners_only(self):
         """
         The message_verified action on public tenant sends emails to selected tenant "owners",
         using *verified* only email addresses.

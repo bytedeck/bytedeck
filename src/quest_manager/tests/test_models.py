@@ -22,16 +22,19 @@ User = get_user_model()
 class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
     @classmethod
     def setUpTestData(cls):
+        """Create a test campaign (Category) shared across the tests."""
         cls.category = baker.make(Category, title="Test Campaign")
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_category_type_creation(self):
+    def test_category__creation_and_str(self):
+        """Creating a Category yields a Category instance whose str is its title."""
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
-    def test_condition_met_as_prerequisite(self):
+    def test_condition_met_as_prerequisite__all_unique_quests_completed(self):
         """ Test that all unique quests in a campaign are completed before the campaign is considered completed
         for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
 
@@ -82,10 +85,11 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         baker.make(QuestSubmission, quest=quest1, user=user, is_completed=True, is_approved=True)
         self.assertTrue(self.category.condition_met_as_prerequisite(user))
 
-    def test_category_url(self):
+    def test_get_absolute_url__category_page_loads(self):
+        """The campaign's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.category.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_current_quests(self):
+    def test_current_quests__returns_published_unarchived_quests(self):
         """ Test that the queryset of all quests in a campaign is returned correctly """
 
         # assert that the current campaign has no quests
@@ -101,7 +105,7 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         # assert that the current campaign has 2 valid quests after additions
         self.assertEqual(self.category.current_quests().count(), 2)
 
-    def test_xp_sum(self):
+    def test_xp_sum__sums_quest_xp(self):
         """ Test that the XP sum of all quests in a campaign is returned correctly """
 
         # create some quests as part of the test campaign
@@ -111,7 +115,7 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         # check that the XP sum is correct
         self.assertEqual(self.category.xp_sum(), 3)
 
-    def test_quest_count(self):
+    def test_quest_count__counts_quests(self):
         """ Test that the number of all quests in a campaign is returned correctly """
 
         # assert that the current campaign has no quests
@@ -128,9 +132,11 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
 class CommonDataTestModel(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a CommonData instance shared across the tests."""
         cls.common_data = baker.make(CommonData)
 
-    def test_badge_series_creation(self):
+    def test_common_data__creation_and_str(self):
+        """Creating CommonData yields a CommonData instance whose str is its title."""
         self.assertIsInstance(self.common_data, CommonData)
         self.assertEqual(str(self.common_data), self.common_data.title)
 
@@ -139,19 +145,23 @@ class QuestTestModel(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a Quest shared across the tests."""
         cls.quest = baker.make(Quest)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_quest_creation(self):
+    def test_quest__creation_and_str(self):
+        """Creating a Quest yields a Quest instance whose str is its name."""
         self.assertIsInstance(self.quest, Quest)
         self.assertEqual(str(self.quest), self.quest.name)
 
-    def test_quest_url(self):
+    def test_get_absolute_url__quest_page_loads(self):
+        """The quest's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_active(self):
+    def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """
         The active method of the Quest model's parent "XPItem" should return the correct values based on a quest object's settings.
 
@@ -254,7 +264,8 @@ class QuestTestModel(ByteDeckTenantTestCase):
         with freeze_time(dt + timezone.timedelta(hours=12)):
             self.assertTrue(quest.expired())
 
-    def test_quest_html_formatting(self):
+    def test_quest_html_formatting__no_linebreaks_around_span(self):
+        """Saving a quest reformats instructions without adding line breaks around span tags."""
         test_markup = "<p>this <span>span</span> tag should not break</p>"
         self.quest.instructions = test_markup
         # Auto formatting on save
@@ -266,7 +277,7 @@ class QuestTestModel(ByteDeckTenantTestCase):
         self.assertIsNone(matches_found)
 
     @freeze_time('2018-10-12 00:54:00', tz_offset=0)
-    def test_is_repeat_available(self):
+    def test_is_repeat_available__various_repeat_settings(self):
         """
         QuestManager.is_repeat_available should return True if:
             1. it is repeatable (is_repeatable != 0)
@@ -371,7 +382,8 @@ class QuestTestModel(ByteDeckTenantTestCase):
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
 
-    def test_correct_ordinal_submission(self):
+    def test_ordinal__increments_and_continues_after_delete(self):
+        """Submission ordinals increment and keep counting up even after an earlier submission is deleted."""
         student = baker.make('user')
         quest = baker.make(Quest, max_repeats=-1)
 
@@ -397,12 +409,14 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Capture the active semester shared across the tests."""
         cls.active_semester = SiteConfig.get().active_semester
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_approved(self):
+    def test_all_approved__filters_by_semester_quest_and_user(self):
         """ Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
         """
@@ -458,25 +472,27 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a semester, teacher, student, and a base submission shared across the tests."""
         cls.semester = baker.make(Semester)
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
         cls.submission = baker.make(QuestSubmission, quest__name="Test")
-        # cls.badge = Recipe(Badge, xp=20).make()
-
-        # cls.badge_assertion_recipe = Recipe(QuestSubmission, user=cls.student, badge=cls.badge)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_submission_creation(self):
+    def test_submission__creation_and_quest_name(self):
+        """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
         self.assertIsInstance(self.submission, QuestSubmission)
         self.assertEqual("Test", self.submission.quest.name)
 
-    def test_submission_url(self):
+    def test_get_absolute_url__submission_page_loads(self):
+        """The submission's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
-    def test_submission_mark_completed(self):
+    def test_mark_completed__sets_state_and_clears_draft(self):
+        """mark_completed sets completion state, records the submission time, and clears the draft comment."""
         user = baker.make(User)
         sub = baker.make(QuestSubmission, user=user)
         draft_comment = Comment.objects.create_comment(
@@ -497,7 +513,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         self.assertIsNotNone(sub.first_time_completed)
         self.assertIsNone(sub.draft_comment)
 
-    def test_submission_get_previous(self):
+    def test_get_previous__returns_prior_submission(self):
         """ If this is a repeatable quest and has been completed already, return that previous submission """
         repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
@@ -508,7 +524,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         second_sub = QuestSubmission.objects.create_submission(user=self.student, quest=repeat_quest)
         self.assertEqual(first_sub, second_sub.get_previous())
 
-    def test_submission_get_previous_automatic_fix_ordinal(self):
+    def test_get_previous__fixes_duplicate_ordinals(self):
         """Submissions that have the same ordinals will be automatically fixed"""
         repeat_quest = baker.make(Quest, name="repeatable-quest", max_repeats=-1)
         first_sub = baker.make(QuestSubmission, user=self.student, quest=repeat_quest, semester=self.semester)
@@ -557,7 +573,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         third_sub.refresh_from_db()
         self.assertEqual(third_sub.ordinal, old_third_submission_ordinal)
 
-    def test_get_minutes_to_complete(self):
+    def test_get_minutes_to_complete__returns_minutes_between_timestamps(self):
         """Completed quests should return the difference between the timestamp (creation) and time completed, in minutes."""
         minutes = 5
         time_delta = datetime.timedelta(0, minutes * 60)
@@ -573,7 +589,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         self.submission.mark_completed()
         self.assertEqual(self.submission.get_minutes_to_complete(), minutes)
 
-    def test_get_minutes_to_complete_if_not_completed(self):
+    def test_get_minutes_to_complete__none_if_not_completed(self):
         """Return None if the submission has not been completed yet."""
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
@@ -586,6 +602,7 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
     instead of issuing a query per call."""
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def test_expired__prefers_is_expired_annotation(self):
@@ -616,11 +633,13 @@ class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher (staff caller and quest editor) and a campaign shared across the tests."""
         # a teacher is needed both as staff caller and as each quest's editor
         cls.teacher = User.objects.create_user('teacher', is_staff=True)
         cls.campaign = baker.make(Category, title="Test Campaign")
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def _make_quests(self, **kwargs):

@@ -60,6 +60,7 @@ class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
     @classmethod
     def setUpTestData(cls):
+        """Create library and local quests plus teacher/student users."""
         with library_schema_context():
             # Create a quest in the library tenant
             cls.shared_quest = baker.make(Quest)
@@ -73,18 +74,19 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
+        """Set up a tenant client, site config, and active semester."""
         self.client = TenantClient(self.tenant)
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
-    def test_library_tenant_exists(self):
+    def test_library_tenant__exists(self):
         """
         Tests that the library tenant is created and exists in the database.
         """
         self.assertIsNotNone(self.library_tenant)
         self.assertTrue(schema_exists(self.library_tenant.schema_name))
 
-    def test_all_library_quest_page_status_codes_for_anonymous(self):
+    def test_all_library_quest_page_status_codes__for_anonymous(self):
         """
         Tests that the library pages redirect anonymous users to the login page.
         This is important to ensure that only authenticated users can access the library.
@@ -94,7 +96,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertRedirectsLogin('library:quest_list')
         self.assertRedirectsLogin('library:import_quest', args=[self.library_quest.import_id])
 
-    def test_all_library_quest_page_status_codes_for_students(self):
+    def test_all_library_quest_page_status_codes__for_students(self):
         """
         Tests that the library pages return the correct status codes for student users.
         """
@@ -104,7 +106,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assert403('library:quest_list')
         self.assert403('library:import_quest', args=[self.library_quest.import_id])
 
-    def test_all_library_quest_page_status_codes_for_staff(self):
+    def test_all_library_quest_page_status_codes__for_staff(self):
         """
         Tests that the library pages return the correct status codes for staff users.
         """
@@ -131,7 +133,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 200)
         self.assertNotEqual(len(response.context['library_quests']), non_library_quest_count)
 
-    def test_import_quest_to_current_deck(self):
+    def test_import_quest__to_current_deck(self):
         """
         Tests the quest import view for various scenarios:
 
@@ -425,6 +427,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
     @classmethod
     def setUpTestData(cls):
+        """Create library and local categories/quests plus teacher/student users."""
         cls.local_category = baker.make(Category)
         cls.shared_category = baker.make(Category)
 
@@ -442,13 +445,14 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
+        """Set up a tenant client, active semester, site config, and deck owner."""
         self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()
         self.deck_owner = self.config.deck_owner
 
-    def test_all_library_category_page_status_codes_for_anonymous(self):
+    def test_all_library_category_page_status_codes__for_anonymous(self):
         """
         Tests that the library pages redirect anonymous users to the login page.
         This is important to ensure that only authenticated users can access the library.
@@ -460,7 +464,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         # Category detail view
         self.assertRedirectsLogin('library:category_detail_view', args=[self.library_category.import_id])
 
-    def test_all_library_category_page_status_codes_for_students(self):
+    def test_all_library_category_page_status_codes__for_students(self):
         """
         Tests that the library pages return the correct status codes for student users.
         """
@@ -471,7 +475,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert403('library:import_category', args=[self.library_category.import_id])
         self.assert403('library:category_detail_view', args=[self.library_category.import_id])
 
-    def test_all_library_category_page_status_codes_for_staff(self):
+    def test_all_library_category_page_status_codes__for_staff(self):
         """
         Tests that the library pages return the correct status codes for staff users.
         """
@@ -483,6 +487,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:category_detail_view', args=[self.library_category.import_id])
 
     def test_import_campaign___already_exists(self):
+        """Importing a campaign already present on the deck shows a matching-name warning."""
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             # Create a category in the library tenant
@@ -497,6 +502,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
     def test_import_campaign___success(self):
+        """Importing a library campaign copies it and its quests as unpublished onto the deck."""
         self.client.force_login(self.test_teacher)
         # Capture baseline to assert relative change after import
         initial_category_count = Category.objects.count()
@@ -531,7 +537,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
-    def test_import_campaign_get_identifies_existing_local_quests(self):
+    def test_import_campaign_get__identifies_existing_local_quests(self):
         """
         Ensure the import campaign view correctly identifies which quests from the
         selected library campaign already exist locally and includes their import IDs
@@ -965,6 +971,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
     @classmethod
     def setUpTestData(cls):
+        """Create a published library campaign/quest plus teacher/student users."""
         with library_schema_context():
             # Set up a campaign to test with later
             cls.library_campaign = baker.make(Category, published=True)
@@ -976,9 +983,10 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_library_overview_redirects_anonymous(self):
+    def test_library_overview__redirects_anonymous(self):
         """
         Anonymous users should be redirected to the login page when accessing the library overview.
         """
@@ -990,14 +998,14 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         # Should redirect to login page with next param
         self.assertTrue(response.url.startswith('/accounts/login/'))
 
-    def test_library_overview_for_students(self):
+    def test_library_overview__for_students(self):
         """
         Authenticated students should receive a 403 Forbidden when trying to access the library
         """
         self.client.force_login(self.test_student)
         self.assert403('library:quest_list')
 
-    def test_library_overview_for_staff_default_tab(self):
+    def test_library_overview__for_staff_default_tab(self):
         """
         Staff users should see the library overview page with the Quests tab active by default
         """

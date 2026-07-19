@@ -8,7 +8,7 @@ from tenant import tasks
 class TenantTasksTests(ByteDeckTenantTestCase):
     """ Run tasks (from tenant module) asyncronously with apply() """
 
-    def test_send_email_message(self):
+    def test_send_email_message__delivers_to_recipients(self):
         """Async. task "send_email_message" sends email messages as expected."""
         # outbox is empty before executing the task
         self.assertEqual(len(mail.outbox), 0)

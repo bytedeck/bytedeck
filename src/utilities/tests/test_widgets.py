@@ -50,22 +50,26 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create 100 groups for the widget to render and filter over."""
         cls.groups = Group.objects.bulk_create(
             [Group(pk=pk, name=random_string(50)) for pk in range(100)]
         )
 
     def setUp(self):
+        """Build a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def _ct_pk(self, obj):
         return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
-    def test_initial_data(self):
+    def test_widget__renders_initial_data(self):
+        """Widget renders the initial GFK value's string in the form output."""
         group = self.groups[0]
         form = self.form.__class__(initial={'f': group})
         assert str(group) in form.as_p()
 
-    def test_label_from_instance_initial(self):
+    def test_label_from_instance__initial(self):
+        """Custom label_from_instance is applied to the initial value's rendered label."""
         group = self.groups[0]
         group.name = group.name.lower()
         group.save()
@@ -74,7 +78,8 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         assert group.name not in form.as_p(), form.as_p()
         assert group.name.upper() in form.as_p()
 
-    def test_selected_option(self):
+    def test_selected_option__marked_selected(self):
+        """Rendered output marks the chosen value as selected and leaves others unselected."""
         group = self.groups[0]
         another_group = self.groups[1]
         not_required_field = self.form.fields['f']
@@ -91,7 +96,8 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         assert selected_option in widget_output or selected_option_a in widget_output, widget_output
         assert unselected_option not in widget_output
 
-    def test_selected_option_label_from_instance(self):
+    def test_selected_option__label_from_instance(self):
+        """The selected option's label reflects the custom label_from_instance transform."""
         group = self.groups[0]
         group.name = group.name.lower()
         group.save()
@@ -109,14 +115,16 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
 
         assert any(o in widget_output for o in get_selected_options(group))
 
-    def test_get_queryset(self):
+    def test_get_queryset__raises_without_queryset(self):
+        """get_queryset raises NotImplementedError until a queryset is assigned."""
         widget = GFKSelect2Widget()
         with self.assertRaises(NotImplementedError):
             widget.get_queryset()
         widget.queryset = QuerySetSequence(Group.objects.all())
         assert isinstance(widget.get_queryset(), QuerySetSequence)
 
-    def test_get_search_fields(self):
+    def test_get_search_fields__raises_without_config(self):
+        """get_search_fields raises NotImplementedError until search_fields is configured."""
         widget = GFKSelect2Widget()
         with self.assertRaises(NotImplementedError):
             widget.get_search_fields(Group)
@@ -125,7 +133,8 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         assert isinstance(widget.get_search_fields(Group), collections.abc.Iterable)
         assert all(isinstance(x, str) for x in widget.get_search_fields(Group))
 
-    def test_filter_queryset(self):
+    def test_filter_queryset__matches_search_term(self):
+        """filter_queryset returns results matching a full or space-split search term."""
         widget = CustomGFKSelect2Widget()
         assert widget.filter_queryset(None, self.groups[0].name[:3]).exists()
 
@@ -133,14 +142,16 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         qs = widget.filter_queryset(None, " ".join([self.groups[0].name[:3], self.groups[0].name[3:]]))
         assert qs.exists()
 
-    def test_queryset_kwarg(self):
+    def test_filter_queryset__queryset_kwarg(self):
+        """A queryset passed via kwarg is searchable through filter_queryset."""
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         group = Group.objects.last()
         result = widget.filter_queryset(None, group.name)
         assert result.exists()
 
-    def test_queryset_is_filterable(self):
+    def test_filter_queryset__respects_queryset_constraints(self):
+        """filter_queryset honors the underlying queryset's include/exclude constraints."""
         group = self.groups[0]
 
         queryset = QuerySetSequence(Group.objects.filter(~Q(name__icontains=group.name)))
@@ -155,7 +166,8 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         result = widget.filter_queryset(None, group.name)
         assert result.exists()
 
-    def test_ajax_view_registration(self):
+    def test_render__registers_ajax_view(self):
+        """Rendering the widget registers it so the AJAX endpoint returns its results."""
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         widget.render('name', '1-1')
@@ -171,7 +183,8 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         assert data['results']
         assert self._ct_pk(group) in [result['id'] for result in data['results'][0]['children']]
 
-    def test_render(self):
+    def test_render__caches_widget_config(self):
+        """Rendering caches the widget's max_results, search_fields, and queryset."""
         from django_select2.cache import cache
 
         widget = GFKSelect2Widget(
@@ -184,12 +197,13 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         assert isinstance(cached_widget['queryset'][0][0], qs.get_querysets()[0].__class__)
         assert str(cached_widget['queryset'][0][1]) == str(qs.get_querysets()[0].query)
 
-    def test_get_url(self):
+    def test_get_url__returns_string(self):
+        """get_url returns the AJAX endpoint URL as a string."""
         widget = GFKSelect2Widget(
             queryset=QuerySetSequence(Group.objects.all()), search_fields={'auth': {'group': ['name__icontains']}})
         assert isinstance(widget.get_url(), str)
 
-    def test_order(self):
+    def test_get_queryset__preserves_id_ordering(self):
         """ Tests if there isn't any unexpected ordering issues when getting the queryset. """
         queryset_random = Quest.objects.order_by('name')
         queryset_expected = queryset_random.order_by('id')

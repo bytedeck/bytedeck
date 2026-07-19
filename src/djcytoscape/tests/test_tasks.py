@@ -15,6 +15,7 @@ class CytoScapeTaskTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a shared quest used as maps' initial object across the task tests."""
         cls.quest = baker.make('quest_manager.Quest')
 
     def _bad_map(self):
@@ -24,7 +25,7 @@ class CytoScapeTaskTests(ByteDeckTenantTestCase):
             name="Bad Map", initial_content_type=quest_ct, initial_object_id=999999,
         )
 
-    def test_regenerate_all_maps(self):
+    def test_regenerate_all_maps__regenerates_valid_deletes_broken_and_notifies(self):
         """regenerate_all_maps regenerates valid maps, deletes maps whose initial
         object is gone, and notifies the requesting user of the failure and of the
         overall completion."""
@@ -49,8 +50,8 @@ class CytoScapeTaskTests(ByteDeckTenantTestCase):
         regenerate_map.apply(args=[[bad_map.id]], queue='default').get()
         self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
 
-    def test_regenerate_map(self):
-        """ tests if regenerate map task runs successfully """
+    def test_regenerate_map__links_quest_to_related_maps(self):
+        """regenerate_map relinks a quest to every map that references it as a prereq."""
         map_origins = baker.make('quest_manager.Quest', _quantity=3)
 
         # create map for each origin (3 maps)

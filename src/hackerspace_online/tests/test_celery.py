@@ -86,7 +86,7 @@ class BeatScheduleTest(SimpleTestCase):
     installs app.conf.beat_schedule entries as PeriodicTask rows on startup, so
     presence in the dict is what gets it running in production."""
 
-    def test_clear_expired_sessions_scheduled(self):
+    def test_beat_schedule__includes_clear_expired_sessions(self):
         """The beat schedule includes the daily clearsessions fan-out task."""
         entry = app.conf.beat_schedule["Clear expired sessions in all schemas daily task"]
         self.assertEqual(entry["task"], "tenant.tasks.clear_expired_sessions_in_all_schemas")

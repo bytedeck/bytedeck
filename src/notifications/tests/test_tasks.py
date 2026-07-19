@@ -21,6 +21,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, two students, the AI user, and course enrollments for notification tasks."""
         cls.sem = SiteConfig.get().active_semester
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
@@ -38,13 +39,14 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         baker.make('courses.CourseStudent', user=cls.test_student2, semester=cls.sem)
 
     def setUp(self):
+        """Set the deck's short name per-test (SiteConfig writes populate the cross-test cache)."""
         # SiteConfig writes populate the cross-test SiteConfig cache, so keep this per-test
         config = SiteConfig.get()
         config.site_name_short = "Deck"
         config.save()
 
-    def test_get_notification_emails(self):
-        """ Test that the correct list of notification emails are generated"""
+    def test_get_notification_emails__respects_prefs_and_enrollment(self):
+        """Only enrolled students with email notifications enabled and unread notifications get an email."""
         root_url = f'https://{self.get_test_tenant_domain()}'
 
         # 0 notifications to start
@@ -110,11 +112,13 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertEqual(len(emails), 1)
         self.assertEqual(emails[0].to, [self.test_student2.email])
 
-    def test_email_notifications_to_users_on_all_schemas(self):
+    def test_email_notification_to_users_on_all_schemas__runs_successfully(self):
+        """The all-schemas email task completes successfully when applied."""
         task_result = tasks.email_notification_to_users_on_all_schemas.apply()
         self.assertTrue(task_result.successful())
 
-    def test_email_notifications_to_users(self):
+    def test_email_notifications_to_users_on_schema__runs_successfully(self):
+        """The per-schema email task completes successfully when applied."""
         task_result = tasks.email_notifications_to_users_on_schema.apply(
             kwargs={
                 "root_url": "https://test.com",
@@ -171,7 +175,8 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notification), html_content)  # Links to notifications
 
-    def test_does_not_generate_email_for_inactive_students(self):
+    def test_get_notification_emails__skips_inactive_students(self):
+        """A student not enrolled in any course gets no email even with notifications enabled."""
         root_url = 'https://test.com'
 
         # 0 notifications to start
@@ -197,6 +202,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 class DeleteOldNotificationsTestCase(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create one notification older than 3 months and one within 3 months."""
         cls.old_notification = baker.make(
             Notification,
             timestamp=timezone.now() - timedelta(days=90)  # Older than 3 months
@@ -209,7 +215,7 @@ class DeleteOldNotificationsTestCase(ByteDeckTenantTestCase):
 
         cls.notification_count = Notification.objects.count()
 
-    def test_task_deletes_old_notifications(self):
+    def test_delete_old_notifications__removes_old_keeps_recent(self):
         """Ensure old notifications >90 days are deleted but recent ones remain."""
         delete_old_notifications()
 
@@ -219,7 +225,7 @@ class DeleteOldNotificationsTestCase(ByteDeckTenantTestCase):
         self.recent_notification.refresh_from_db()  # Should still exist
 
     @patch('notifications.tasks.delete_old_notifications.delay')
-    def test_task_is_called_properly(self, mock_task):
+    def test_delete_old_notifications__can_be_scheduled_via_celery(self, mock_task):
         """Ensure the task can be scheduled via Celery."""
         delete_old_notifications.delay()
         mock_task.assert_called_once()
