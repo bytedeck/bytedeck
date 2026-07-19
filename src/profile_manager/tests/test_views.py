@@ -425,7 +425,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
 
         qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
-        self.assertTrue(qs.count(), 2)  # these are the test students
+        self.assertEqual(qs.count(), 2)  # these are the test students
         filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
         self.assertFalse(filtered_qs.exists())
 

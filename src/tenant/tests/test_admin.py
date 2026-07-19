@@ -281,7 +281,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         public_client.force_login(admin)
 
         self.tenant_model_admin.enable_google_signin(request=request, queryset=queryset)
-        mock_add_message.assert_called
+        mock_add_message.assert_called()
 
         for tenant in queryset:
             with tenant_context(tenant):
