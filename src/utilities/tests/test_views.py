@@ -65,6 +65,7 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client = TenantClient(self.tenant)
 
     def _ct_pk(self, obj):
+        """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
     def test_autoresponse__valid_field_id_returns_group(self):

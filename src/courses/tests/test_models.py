@@ -96,7 +96,7 @@ class BlockModelManagerTest(ByteDeckTenantTestCase):
 
     def test_grouped_teachers_blocks__single_teacher(self):
         """
-            Should only return 1 group of teachers if regardless of the number of Blocks
+            Should only return 1 group of teachers regardless of the number of Blocks
         """
 
         teacher_owner = User.objects.get(username='owner')
@@ -143,11 +143,11 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         cls.semester1 = baker.make(Semester, first_day=cls.semester_start, last_day=cls.semester_end)
 
     def test_get_current__returns_active_semester(self):
-        """ Get's the current semester as defined by SiteConfig """
+        """ Gets the current semester as defined by SiteConfig """
         self.assertEqual(Semester.objects.get_current(), SiteConfig.get().active_semester)
 
     def test_get_current__as_queryset(self):
-        """ Get's the current semester object in a quesryset  """
+        """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
 
@@ -377,7 +377,7 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         """ Currently returns the first course in the active semester, if there are more than one"""
         # Add a second course to the student during active semester (+ SetUp)
         sc2 = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
-        # order doesn't matter here, as long as it's one fo the courses the student is currently registered in
+        # order doesn't matter here, as long as it's one of the courses the student is currently registered in
         self.assertIn(CourseStudent.objects.current_course(self.student), [sc2, self.course_student])
 
     def test_all_for_user_semester__filters_by_user_and_semester(self):

@@ -23,6 +23,7 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
         cls.group1 = Group.objects.create(name="Editors")
 
     def _ct_pk(self, obj):
+        """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
         return f"{ContentType.objects.get_for_model(obj).pk}-{obj.pk}"
 
     def test_GFKChoiceField__choices_and_clean(self):

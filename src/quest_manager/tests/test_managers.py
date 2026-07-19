@@ -396,9 +396,7 @@ class QuestManagerTest(ByteDeckTenantTestCase):
 
     def test_published__returns_only_published_quests(self):
         """QuestQuerySet.published should return published for students quests"""
-        # baker.make(Quest, name='Quest-visible', published=True)
         baker.make(Quest, name='Quest-invisible', published=False)
-        # self.assertListEqual(list(Quest.objects.all().published().values_list('name', flat=True)), ['Quest-visible'])
         self.assertListEqual(list(Quest.objects.all().published()), self.initial_quest_list)
 
     def test_not_archived__returns_unarchived_quests(self):
