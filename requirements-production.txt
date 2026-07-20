@@ -1,4 +1,4 @@
-Django>=5.2.16,<5.3
+Django>=6.0.7,<6.1
 
 # Version policy: floors are the versions currently in use; ceilings block the
 # next MAJOR (allowing backwards-compatible minor/patch updates), except where a
