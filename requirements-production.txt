@@ -42,5 +42,5 @@ psycopg2-binary>=2.9.12,<3.0  # since our backend is PostgreSQL, Django and djan
 # pulled in via django-redis/celery. The old reason for <8 (the redis 5.0
 # server couldn't speak RESP3) is gone -- all environments now run redis:7 --
 # but the ceiling stays until celery/kombu declare redis-py 8 support.
-redis>=7.4.1,<8
+redis>=8.0.1,<9
 pillow>=12.3.0,<13.0  # used implicitly by django_resized (does not exist as an extra package either)
