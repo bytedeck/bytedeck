@@ -37,7 +37,7 @@
       </a>
     {% endif %}
   </div>
-  {{s.quest.submission_details|safe}}
+  <div class="user-content">{{s.quest.submission_details|safe}}</div>
 </li>
 {% if s.is_returned or completed %}
   <li class="list-group-item list-group-item-info">Submission Comments</li>

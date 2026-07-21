@@ -1158,3 +1158,22 @@ table[data-toggle="table"].bt-reveal {
 .bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
     display: none;
 }
+
+
+/* #811: rendered rich-text content (Summernote HTML) is sometimes shown inside a Bootstrap
+   .list-group, which is itself a <ul>. That makes a content list a *nested* <ul>, so the
+   browser marks its top level with the level-2 style (hollow circle) instead of level-1
+   (solid disc) — and one level deeper again. The templates wrap every such rendered block in
+   a .user-content container, so we re-establish depth-correct bullets counting from the
+   content list itself. Scoping to .user-content (rather than the container the content
+   happens to sit in) keeps this off Bootstrap's own component lists and doesn't depend on
+   the content lists lacking a class. */
+.user-content ul {
+    list-style-type: disc;
+}
+.user-content ul ul {
+    list-style-type: circle;
+}
+.user-content ul ul ul {
+    list-style-type: square;
+}
