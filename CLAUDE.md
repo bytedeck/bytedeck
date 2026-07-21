@@ -115,3 +115,15 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
   git push origin $C:refs/heads/pr-assets
   ```
   Prefer this for still images; note GitHub only renders `.webm`/`.mp4` as an inline player for *uploaded* attachments (drag-and-drop), not for raw URLs, so screen recordings still have to be handed to the user to attach.
+
+### Changelog conventions (`CHANGELOG.md`)
+
+The audience is **end users** (teachers/students on a deck), not developers — write for someone deciding whether a release affects them and what they now need to do differently. Detailed rationale lives in the linked PRs, so keep entries short and outcome-focused.
+
+* **Format**: newest entry on top, headed `### [x.y.z] YYYY-MM-DD Codename` (h3), with two blank lines between version entries. Each item links its issue(s) as `[#NNNN](https://github.com/bytedeck/bytedeck/issues/NNNN)`.
+* **Categories** (omit any that are empty): `New Features`, `Tweaks`, `Bugfixes`, `Codebase`, `Devops`.
+* **New Features** — say *how and when* a user would actually use it, not just that it exists. Name the button/field and where it lives, and describe the flow. E.g. don't write "added a badge-grant action"; write "when you change a badge's prerequisites, you're asked whether to check for students who newly qualify; confirm and a page shows how many, then grants them all at once".
+* **Tweaks** — brief is fine; one line on what visibly changed.
+* **Bugfixes** — describe the **actual problem the user hit** (why the change was needed), not just what code changed. E.g. "HTML typed into a comment was rendered as-is, so a crafted comment could run script for anyone who viewed it; comment text is now escaped" — not "escaped comment HTML".
+* **Codebase** — non-user-facing internal work (dependency/framework upgrades, test/lint/perf/refactor). No "(no user-facing change)" parenthetical — the heading already implies it.
+* **Devops** — deploys, CI, infrastructure, and public-tenant / project-operator concerns that don't affect a regular deck's users (e.g. the new-deck request flow starting at `/decks/request/`, which only the people running the project touch). Include the relevant URL when the change lives on a specific page.
