@@ -1127,17 +1127,18 @@ div.btn-group.action-btn-group {
    A "Loading content..." spinner (.bt-loading) is server-rendered right before each such
    table (snippets/table_loading.html), so it's on screen from the very first paint — a
    JS-inserted spinner would arrive too late, after the raw table has already been parsed.
-   This <head> CSS hides the raw table until bootstrap-table formats it, and hides the spinner
-   the moment its table is ready. */
+   This <head> CSS hides the raw table until custom.js reveals it. */
 table[data-toggle="table"] {
     /* Out of flow while hidden so a big table reserves no tall blank gap under the spinner. */
     position: absolute;
     visibility: hidden;
 }
-/* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — put it
-   back in flow and show it. The .bt-reveal fallback (custom.js) covers any table
-   bootstrap-table never initializes, so data is never left hidden. */
-.bootstrap-table table[data-toggle="table"],
+/* The table is revealed ONLY by the .bt-reveal class, which custom.js adds in the same step that
+   it hides the spinner. Revealing it automatically as soon as bootstrap-table wrapped it (via a
+   `.bootstrap-table table` rule) let the table appear a frame before the spinner was hidden, so the
+   table then jumped up when the spinner vanished (issue #1981). One JS-driven reveal keeps the
+   swap atomic. .bt-reveal also covers tables bootstrap-table never initializes (6s fallback), so
+   data is never left hidden. */
 table[data-toggle="table"].bt-reveal {
     position: static;
     visibility: visible;
@@ -1151,12 +1152,6 @@ table[data-toggle="table"].bt-reveal {
     justify-content: center;
     min-height: 120px;
     color: #999;
-}
-/* Hide the spinner the moment its table is formatted (wrapped in .bootstrap-table) or
-   force-revealed (.bt-reveal). custom.js also hides it, covering browsers without :has(). */
-.bt-loading:has(+ .bootstrap-table),
-.bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
-    display: none;
 }
 
 
