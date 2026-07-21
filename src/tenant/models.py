@@ -92,6 +92,7 @@ class Tenant(TenantMixin):
     )
     trial_end_date = models.DateField(
         null=True,
+        blank=True,  # clearing BOTH this and paid_until in the admin marks a deck comped/unmanaged (never suspended)
         default=default_trial_end_date,
         help_text="The date when the trial period ends. Blank or a date in the past means the deck is not in trial mode."
     )
@@ -185,10 +186,8 @@ class Tenant(TenantMixin):
         """Whether every clock this deck was ever given (trial and/or paid) has lapsed.
 
         A deck with BOTH dates blank is never suspended: that is the escape hatch for
-        comped/legacy decks managed outside the subscription lifecycle. Note it can't
-        currently be reached through the admin form (trial_end_date is null=True but
-        not blank=True, so the form requires a value) -- clearing both dates takes a
-        shell edit until blank=True is added in a follow-up.
+        comped/legacy decks managed outside the subscription lifecycle, reached by
+        clearing both date fields on the deck in the public-tenant admin.
         """
         if self.subscription_active or self.is_on_trial:
             return False
