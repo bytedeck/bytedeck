@@ -156,7 +156,7 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm({**base, "name": long_but_valid})
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_name_help_text_includes_length_limit(self):
+    def test_name_help_text__includes_length_limit(self):
         """The deck-name field's help text states the character limit (#1975)."""
         max_len = Tenant._meta.get_field("name").max_length
         form = TenantForm()
