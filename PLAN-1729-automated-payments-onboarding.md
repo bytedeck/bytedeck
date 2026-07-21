@@ -31,7 +31,7 @@ This plan covers the remainder of epic #1729 and its sub-issues:
 2. `Tenant.update_cached_fields()` saves the whole row (no `update_fields`), racing concurrent admin edits.
 3. The `TenantAdmin.get_queryset` N+1 refresh loop (the `FIX` comment) — replaced by the nightly task below.
 
-**Related artifact:** PR #1765 ("Automated Payments", yujinyuz, stale since 2025-03) sketched Checkout + webhook + `stripe_customer_id`/`stripe_subscription_id` fields. Its migration base predates #1903, it uses the old guessable-password owner setup, and it hardcodes a price ID. **Disposition: close as superseded** (mine its event list and metadata idea; do not rebase). Its recorded TODO — "price IDs in env or a db model?" — is answered below (neither: Stripe Price metadata).
+**Related artifact:** PR #1765 ("Automated Payments", yujinyuz, stale since 2025-03) sketched Checkout + webhook + `stripe_customer_id`/`stripe_subscription_id` fields. Its migration base predates #1903, it uses the old guessable-password owner setup, and it hardcodes a price ID. **Disposition: closed as superseded on 2026-07-21** (its event list and metadata idea are mined below; nothing is rebased). Its recorded TODO — "price IDs in env or a db model?" — is answered below (neither: Stripe Price metadata).
 
 ---
 
@@ -43,7 +43,7 @@ Key decisions and rationale:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Stripe library | Raw `stripe` SDK (`stripe>=12,<13`), not dj-stripe | dj-stripe 2.9.x is the last line supporting Py3.10/Django 4.2 and does **not** support Django 5.2 — it would break the repo's documented invariant that all deps are pinned to ranges supporting both 4.2 and 5.2 (`requirements-production.txt` header). It also lands ~30 public-schema tables through `migrate_schemas --shared` to obtain 4 scalars. The epic body itself asks only that subscription info be "cached in Django or easily retrievable via Stripe API". |
+| Stripe library | Raw `stripe` SDK (`stripe>=15,<16`), not dj-stripe | No dj-stripe release supports this repo's Python 3.10 together with Django ≥5.2 (verified against PyPI 2026-07: 2.11.0 — the first release declaring Django 5.2 — requires Python ≥3.11; the only Python-3.10-compatible line, 2.9.x, declares Django ≤5.1), so the choice holds both before and after the planned Django 5.2 flip. Version coupling aside, dj-stripe lands ~30 public-schema tables through `migrate_schemas --shared` to obtain 4 scalars, and its recent minors (2.10, 2.11) each fully **reset their migrations**, forcing stepwise upgrades — an unwelcome property for a multi-tenant shared-schema deploy. The raw SDK (requires-python ≥3.9, zero Django dependency) has no such coupling. The epic body itself asks only that subscription info be "cached in Django or easily retrievable via Stripe API". |
 | Billing state | **Derived properties**, no stored status enum | A stored `status` field duplicates state derivable from `trial_end_date`/`paid_until`, drifts when admins edit dates, and forces a risky production data migration classifying every live deck. Properties can't drift and need no backfill. |
 | Payment UX | Stripe-hosted Checkout + Customer Portal | No card handling, no plan-change UI, no PCI surface. Upgrades/downgrades/cancellation are Portal features. |
 | Tier configuration | Metadata on Stripe Prices (`metadata.max_active_users` = 40/80/120), mirrored nowhere | Adding/re-pricing tiers requires a dashboard edit, not a deploy. Resolves #1765's TODO. Fallback map in settings if metadata is absent. |
@@ -248,7 +248,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 | **4. Active-user cap** | `can_add_active_user()` live check; guards in `CourseStudentCreate` (incl. simplified path) + `CourseAddStudent`; refusal UX; archive-students help page. | #1730 trial mode ☑, #1734 mechanics |
 | **5. Reminder engine** | `DeckNotice` model; extend the daily task with cadence + limit warnings + suspension notice; email templates; deck-AI in-app notices. Report-only mode for the first cycle (§10.2). | #1733 |
 | **6. Stripe checkout** | `stripe` dep; `STRIPE_*` env plumbing; `stripe_customer_id`/`stripe_subscription_id` migration; `SubscriptionView` (Checkout/Portal) + polling success page; banner link switches to `decks:subscribe`. | #1731 (half) |
-| **7. Webhook + sync** | `stripe_webhook` (csrf_exempt, public-only, signature-verified); `StripeEventLog`; `sync_from_stripe_subscription`; admin "Sync from Stripe" action; nightly reconcile step; legacy-subscriber backfill command + report (§10.3). Close #1765 as superseded. | #1731 |
+| **7. Webhook + sync** | `stripe_webhook` (csrf_exempt, public-only, signature-verified); `StripeEventLog`; `sync_from_stripe_subscription`; admin "Sync from Stripe" action; nightly reconcile step; legacy-subscriber backfill command + report (§10.3). | #1731 |
 | **8. Suspension finish** | Whichever #1734 option is chosen: Option A = copy/notice polish only; Option B = `DeckStatusMiddleware` + suspended page behind a kill-switch. Record the decision on #1734. | #1734 |
 | **9. Optional guards** | `max_quests` gate in `QuestCreate`/`QuestCopy`; `is_open_for_signup` block for at-cap simplified-registration decks; retire the admin change-list jQuery colorizer in favor of status-driven rendering. | polish |
 
