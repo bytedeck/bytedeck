@@ -9,8 +9,9 @@ from freezegun import freeze_time
 from model_bakery import baker
 from hackerspace_online import settings
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from siteconfig.models import SiteConfig
 
-from tenant.models import Tenant, check_tenant_name, default_trial_end_date
+from tenant.models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name, default_trial_end_date
 
 User = get_user_model()
 
@@ -120,6 +121,184 @@ class CheckTenantNameTest(SimpleTestCase):
         check_tenant_name('t3nan4')
 
 
+# Today, as frozen for every billing-status test below. The clock is frozen at
+# midday UTC so that timezone.localdate() (which the properties use, computed in
+# settings.TIME_ZONE = America/Vancouver) still falls on this same calendar date.
+FROZEN_TODAY = date(2026, 8, 15)
+FROZEN_NOW = "2026-08-15 20:00:00"
+
+
+@freeze_time(FROZEN_NOW)
+class TenantBillingStatusTest(SimpleTestCase):
+    """Tests for the derived billing/lifecycle status properties on Tenant (epic #1729).
+
+    The properties are pure date logic, so they are exercised on unsaved in-memory
+    instances with today frozen at FROZEN_TODAY -- no database needed.
+    """
+
+    def make_tenant(self, trial_end_date=None, paid_until=None, max_active_users=5):
+        """Build an unsaved Tenant with explicit billing dates (overriding field defaults)."""
+        return Tenant(name='statustest', trial_end_date=trial_end_date, paid_until=paid_until, max_active_users=max_active_users)
+
+    def test_subscription_active__true_through_paid_until(self):
+        """A deck is subscription_active on and before its paid_until date."""
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY).subscription_active)
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=90)).subscription_active)
+
+    def test_subscription_active__true_within_grace_period(self):
+        """A deck stays subscription_active up to GRACE_PERIOD_DAYS past paid_until."""
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).subscription_active)
+
+    def test_subscription_active__false_after_grace_period(self):
+        """A deck is no longer subscription_active once the grace period has fully lapsed."""
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).subscription_active)
+
+    def test_subscription_active__false_when_paid_until_blank(self):
+        """A deck with no paid_until has no subscription, regardless of its trial date."""
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30)).subscription_active)
+
+    def test_in_grace_period__only_between_paid_until_and_grace_end(self):
+        """in_grace_period is True strictly after paid_until and only while subscription_active."""
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY).in_grace_period)
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
+
+    def test_is_on_trial__true_through_trial_end_date(self):
+        """A deck with no subscription is on trial through its trial_end_date."""
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY).is_on_trial)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_on_trial)
+
+    def test_is_on_trial__false_when_subscribed_or_dateless(self):
+        """An active subscription (or no trial date at all) means the deck is not on trial."""
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), paid_until=FROZEN_TODAY).is_on_trial)
+        self.assertFalse(self.make_tenant().is_on_trial)
+
+    def test_is_suspended__true_when_all_given_clocks_lapsed(self):
+        """A deck whose trial and/or paid clocks have all run out (past grace) is suspended."""
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_suspended)
+        # trial date cleared by an admin, paid_until lapsed beyond grace: still suspended
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).is_suspended)
+        self.assertTrue(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY - timedelta(days=100),
+                paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1),
+            ).is_suspended
+        )
+
+    def test_is_suspended__false_when_active_trialing_or_unmanaged(self):
+        """Subscribed, on-trial, and dateless (comped/legacy) decks are never suspended."""
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY).is_suspended)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY).is_suspended)
+        self.assertFalse(self.make_tenant().is_suspended)
+
+    def test_effective_max_active_users__subscribed_uses_field_value(self):
+        """An actively subscribed deck's cap is its max_active_users field."""
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=80).effective_max_active_users, 80)
+
+    def test_effective_max_active_users__trial_and_suspended_use_trial_cap(self):
+        """Trial and suspended decks are capped at TRIAL_MAX_ACTIVE_USERS regardless of the field ("back to trial mode")."""
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY, max_active_users=80).effective_max_active_users,
+            TRIAL_MAX_ACTIVE_USERS,
+        )
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=80).effective_max_active_users,
+            TRIAL_MAX_ACTIVE_USERS,
+        )
+
+    def test_effective_max_active_users__unlimited_passthrough(self):
+        """The admin-set unlimited sentinel (-1) is honored in every state."""
+        self.assertEqual(self.make_tenant(max_active_users=-1).effective_max_active_users, -1)
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=-1).effective_max_active_users,
+            -1,
+        )
+
+    def test_days_until_expiry__counts_down_to_governing_deadline(self):
+        """days_until_expiry counts down to paid_until when subscribed, else trial_end_date."""
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=10)).days_until_expiry, 10)
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=3)).days_until_expiry, 3)
+
+    def test_days_until_expiry__negative_after_deadline_and_none_when_unmanaged(self):
+        """days_until_expiry goes negative once the deadline passes (feeding the grace-window
+        reminder cadence), falls back to a lapsed paid_until when the trial date is cleared,
+        and is None for dateless decks."""
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=2)).days_until_expiry, -2)
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=5)).days_until_expiry, -5)
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 10)).days_until_expiry,
+            -(GRACE_PERIOD_DAYS + 10),
+        )
+        self.assertIsNone(self.make_tenant().days_until_expiry)
+
+    def test_days_until_expiry__suspended_deck_uses_latest_lapsed_clock(self):
+        """A lapsed ex-subscriber that still carries its ancient (never-cleared) trial date
+        reports expiry relative to the more recent paid_until, not the trial date."""
+        tenant = self.make_tenant(
+            trial_end_date=FROZEN_TODAY - timedelta(days=400),
+            paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 5),
+        )
+        self.assertTrue(tenant.is_suspended)
+        self.assertEqual(tenant.days_until_expiry, -(GRACE_PERIOD_DAYS + 5))
+
+
+class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
+    """Tests for the Tenant counting fix and cached-field save behavior (epic #1729 PR 1).
+
+    Counting: staff who are also enrolled in a course are counted once, and enrolled
+    (non-staff) test accounts never count -- the first two tests fail without the
+    students_only=True fix. Caching: update_cached_fields must not clobber concurrent
+    edits to non-cached columns.
+    """
+
+    def test_get_active_user_count__counts_enrolled_students_only(self):
+        """Only students registered in a course in the active semester count; an
+        unregistered student does not."""
+        baseline = self.tenant.get_active_user_count()
+        enrolled = baker.make(User)
+        baker.make('courses.CourseStudent', user=enrolled, semester=SiteConfig.get().active_semester)
+        baker.make(User)  # signed up but never registered in a course
+        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+
+    def test_get_active_user_count__staff_and_superusers_never_count(self):
+        """Staff and superusers don't consume seats, whether or not they're registered
+        in a course -- pricing is based on active students only."""
+        baseline = self.tenant.get_active_user_count()
+        staff = baker.make(User, is_staff=True)
+        baker.make('courses.CourseStudent', user=staff, semester=SiteConfig.get().active_semester)
+        superuser = baker.make(User, is_superuser=True, is_staff=False)
+        baker.make('courses.CourseStudent', user=superuser, semester=SiteConfig.get().active_semester)
+        baker.make(User, is_staff=True)  # unenrolled staff
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
+
+    def test_get_active_user_count__test_accounts_excluded(self):
+        """An enrolled test account does not count toward the active-user total."""
+        baseline = self.tenant.get_active_user_count()
+        student = baker.make(User)
+        student.profile.is_test_account = True
+        student.profile.save()
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
+
+    def test_get_active_user_count__archived_students_excluded(self):
+        """An enrolled student who is archived (is_active=False) stops counting --
+        archiving users is the documented way to get back under the cap (#1733)."""
+        baseline = self.tenant.get_active_user_count()
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+        student.is_active = False
+        student.save()
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
+
+    def test_update_cached_fields__does_not_clobber_concurrent_edits(self):
+        """A stale instance running update_cached_fields must not overwrite a concurrent
+        edit to a non-cached column such as paid_until."""
+        stale = Tenant.objects.get(pk=self.tenant.pk)
+        Tenant.objects.filter(pk=self.tenant.pk).update(paid_until=date(2030, 1, 1))
+        stale.update_cached_fields()
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, date(2030, 1, 1))
 class DefaultTrialEndDateTest(SimpleTestCase):
     """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
 

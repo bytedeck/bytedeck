@@ -438,6 +438,17 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertTrue(form.is_valid())
 
+    def test_clean__billing_dates_can_be_blanked(self):
+        """An admin can clear both trial_end_date and paid_until, putting the deck in
+        the comped/unmanaged state that is never suspended (fails without blank=True
+        on trial_end_date)."""
+        self.form_data['trial_end_date'] = ''
+        self.form_data['paid_until'] = ''
+        form = TenantAdminForm(self.form_data)
+        form.instance = Tenant.get()
+        self.assertTrue(form.is_valid())
+        self.assertIsNone(form.cleaned_data['trial_end_date'])
+
     def test_clean__cant_change_existing_name(self):
         """Renaming an existing tenant via the admin form is rejected."""
         # test tenant already exists and is connected in TenantTestCase
