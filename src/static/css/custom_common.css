@@ -1160,11 +1160,19 @@ table[data-toggle="table"].bt-reveal {
 }
 
 
-/* #811: the quest "General Info" (Common Data) sidebar panel is a narrow column, but its
-   list content (rendered from Summernote HTML) inherits the browser's ~40px default list
-   indent, wasting horizontal space. Tighten it to 15px per level so the text has more room
-   while nested lists still read as nested. */
-#common-data .panel-body ul,
-#common-data .panel-body ol {
-    padding-left: 15px;
+/* #811: quest/submission content (Summernote HTML) is rendered inside a Bootstrap
+   .list-group, which is itself a <ul>. That makes a content list a *nested* <ul>, so the
+   browser marks its top level with the level-2 style (hollow circle) instead of level-1
+   (solid disc) — and one level deeper again. Re-establish depth-correct bullets counting
+   from the content list itself. Scoped to class-less lists so Bootstrap's own component
+   lists (.list-unstyled, .dropdown-menu, .nav) — which set their own markers — are untouched
+   (Summernote content lists carry no class). */
+.list-group-item ul:not([class]) {
+    list-style-type: disc;
+}
+.list-group-item ul:not([class]) ul:not([class]) {
+    list-style-type: circle;
+}
+.list-group-item ul:not([class]) ul:not([class]) ul:not([class]) {
+    list-style-type: square;
 }
