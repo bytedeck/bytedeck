@@ -19,7 +19,14 @@
       "mcp__github__add_issue_comment",
       "mcp__github__add_reply_to_pull_request_comment",
       "mcp__github__pull_request_review_write",
-      "mcp__github__resolve_review_thread"
+      "mcp__github__resolve_review_thread",
+      "mcp__github__subscribe_pr_activity",
+      "mcp__github__unsubscribe_pr_activity",
+      "mcp__github__list_pull_requests",
+      "mcp__github__issue_read",
+      "mcp__github__list_issues",
+      "mcp__github__search_issues",
+      "mcp__github__issue_write"
     ]
   }
 }
