@@ -436,7 +436,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertIn(self.local_quest.name, message)
         self.assertIn(str(self.test_teacher), message)  # who shared it
         self.assertIn('Review and publish it here', message)  # where to review/publish
-        self.assertIn('library.test.com', message)            # the review link points at the Library deck
+        # The review/publish link is a real clickable href pointing at the Library deck.
+        self.assertIn('<a href="https://library.test.com', message)
         # The email names the source deck the content came from and links back to it (#1949).
         self.assertIn('<a href="https://tenant.test.com">https://tenant.test.com</a>', message)
 
@@ -959,7 +960,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertIn(self.local_category.name, message)
         self.assertIn(str(self.test_teacher), message)  # who shared it
         self.assertIn('Review and publish it here', message)  # where to review/publish
-        self.assertIn('library.test.com', message)            # the review link points at the Library deck
+        # The review/publish link is a real clickable href pointing at the Library deck.
+        self.assertIn('<a href="https://library.test.com', message)
         # The email names the source deck the content came from and links back to it (#1949).
         self.assertIn('<a href="https://tenant.test.com">https://tenant.test.com</a>', message)
 
