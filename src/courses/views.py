@@ -320,8 +320,29 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
     success_message = "You have been added to the %(course)s course"
+    template_name = 'courses/coursestudent_form.html'
+
+    @staticmethod
+    def _no_open_semester():
+        """Whether there is no semester open for a student to join a course into.
+
+        Closing a semester (``Semester.complete_active_semester``) sets ``closed=True`` but leaves
+        it as ``SiteConfig.active_semester``, so without this guard a student could still register
+        into a closed semester (issue #2060). A missing active semester counts as "not open" too.
+        """
+        active_semester = SiteConfig.get().active_semester
+        return active_semester is None or active_semester.closed
+
+    def _no_open_semester_response(self, request):
+        """Render the join page with a message explaining that no semester is open, instead of the
+        registration form, so a student can't join a course when there's nowhere to join (#2060).
+        """
+        return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
 
     def get(self, request, *args, **kwargs):
+        if self._no_open_semester():
+            return self._no_open_semester_response(request)
+
         # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
         # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
         simpleregistration = SiteConfig.get().simplified_course_registration

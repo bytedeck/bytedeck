@@ -50,6 +50,17 @@
         {% include 'messages-snippet.html' %}
     </div>
 
+    {# Warn staff when the deck has no open semester: students can't join a course until one is
+       opened, so point teachers at the semesters page to create and activate one (issue #2060). #}
+    {% if request.user.is_staff and config.active_semester.closed %}
+    <div class="alert alert-warning" role="alert">
+        <i class="fa fa-exclamation-triangle"></i>
+        This deck has no open semester, so students can't join a course.
+        <a href="{% url 'courses:semester_list' %}" class="alert-link">Create and activate a semester</a>
+        to let them register.
+    </div>
+    {% endif %}
+
     {% if not config.hs_closed or request.user.is_staff %}
         <!-- ** content_outer block ** -->
         {% block content_outer %}{% endblock %}
