@@ -1,5 +1,6 @@
 import uuid
 from copy import deepcopy
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.db import connection
@@ -407,6 +408,42 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
                     verb__icontains="exported a quest"
                 ).exists()
                 self.assertTrue(exists, f"Expected notification not found for staff user {user.username}.")
+
+    @patch("library.views.send_email_message.apply_async")
+    def test_export_post__emails_library_staff_and_messages_sharer(self, mock_apply_async):
+        """Pushing a quest emails active Library staff (with the quest name, who shared
+        it, and a review link) and tells the sharer it's pending review (#1949)."""
+        # Give the library a staff member with an email; the default library staff
+        # (deck_owner/deck_ai) have no address, so nothing would be sent otherwise.
+        with library_schema_context():
+            librarian = User.objects.create_user('librarian', email='librarian@example.com', is_staff=True)
+
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_quest', args=[self.local_quest.import_id])
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse('quests:quests'))
+
+        # An email was dispatched asynchronously to the library staff member.
+        mock_apply_async.assert_called_once()
+        subject, message, recipient_list = mock_apply_async.call_args.kwargs['args']
+        self.assertIn(librarian.email, recipient_list)
+        self.assertIn(self.local_quest.name, subject)
+        self.assertIn(self.local_quest.name, message)
+        self.assertIn(str(self.test_teacher), message)  # who shared it
+        self.assertIn('Review and publish it here', message)  # where to review/publish
+        self.assertIn('library.test.com', message)            # the review link points at the Library deck
+
+        # The sharer is told the content is pending review before it appears.
+        sharer_messages = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any('review and publish it' in m for m in sharer_messages),
+            f"Expected a pending-review message, got: {sharer_messages}",
+        )
 
     def test_export_post__denied_if_quest_already_exists_in_library(self):
         """
@@ -892,6 +929,42 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
                     ).exists(),
                     f"Notification not found for {user.username}"
                 )
+
+    @patch("library.views.send_email_message.apply_async")
+    def test_export_post__emails_library_staff_and_messages_sharer(self, mock_apply_async):
+        """Pushing a campaign emails active Library staff (with the campaign name, who
+        shared it, and a review link) and tells the sharer it's pending review (#1949)."""
+        # Give the library a staff member with an email; the default library staff
+        # (deck_owner/deck_ai) have no address, so nothing would be sent otherwise.
+        with library_schema_context():
+            librarian = User.objects.create_user('librarian', email='librarian@example.com', is_staff=True)
+
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        self.client.force_login(self.test_teacher)
+
+        url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
+        response = self.client.post(url)
+        self.assertRedirects(response, reverse('quests:categories'))
+
+        # An email was dispatched asynchronously to the library staff member.
+        mock_apply_async.assert_called_once()
+        subject, message, recipient_list = mock_apply_async.call_args.kwargs['args']
+        self.assertIn(librarian.email, recipient_list)
+        self.assertIn(self.local_category.name, subject)
+        self.assertIn(self.local_category.name, message)
+        self.assertIn(str(self.test_teacher), message)  # who shared it
+        self.assertIn('Review and publish it here', message)  # where to review/publish
+        self.assertIn('library.test.com', message)            # the review link points at the Library deck
+
+        # The sharer is told the content is pending review before it appears.
+        sharer_messages = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any('review and publish it' in m for m in sharer_messages),
+            f"Expected a pending-review message, got: {sharer_messages}",
+        )
 
     def test_export__campaign_with_conflicting_quests_clones_correctly(self):
         """

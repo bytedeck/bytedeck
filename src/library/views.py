@@ -2,6 +2,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import connection
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.loader import get_template
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -13,6 +14,8 @@ from hackerspace_online.decorators import staff_member_required
 from quest_manager.models import Quest, Category
 
 from siteconfig.models import SiteConfig
+from tenant.models import Tenant
+from tenant.tasks import send_email_message
 
 from notifications.signals import notify
 
@@ -22,6 +25,47 @@ from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
+
+
+def email_library_staff_of_push(content_type, content_name, exported_obj, sharer):
+    """Email active Library staff that freshly pushed content is awaiting review.
+
+    Shared content lands in the Library unpublished and must be reviewed and
+    published manually before it is visible to other decks (#1949). This sends
+    the staff that signal, in addition to the in-app notification.
+
+    Must be called from *within* the library schema context: the staff list and
+    the exported object's link are read from the library schema. The email is
+    dispatched via the shared Celery task (queued on ``default``) so the share
+    request doesn't block on SMTP. It is a no-op when no active staff member has
+    an email address (e.g. only the ``deck_ai`` bot user is staff).
+
+    Args:
+        content_type (str): "quest" or "campaign" -- used in the subject/body.
+        content_name (str): the human-readable name of the shared content.
+        exported_obj (Quest | Category): the copy now in the library schema,
+            used to build the review/publish link on the Library deck.
+        sharer (User): the user who pushed the content, from the source deck.
+    """
+    recipient_list = list(
+        User.objects.filter(is_active=True, is_staff=True)
+        .exclude(email="")
+        .values_list("email", flat=True)
+    )
+    if not recipient_list:
+        return
+
+    library_root_url = Tenant.objects.get(schema_name=get_library_schema_name()).get_root_url()
+    review_url = f"{library_root_url.rstrip('/')}{exported_obj.get_absolute_url()}"
+
+    subject = f"[ByteDeck Library] New {content_type} awaiting review: {content_name}"
+    message = get_template("library/email/content_pushed.txt").render({
+        "sharer": sharer,
+        "content_type": content_type,
+        "content_name": content_name,
+        "review_url": review_url,
+    })
+    send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
 
 
 @method_decorator([login_required, staff_member_required], name='dispatch')
@@ -395,9 +439,16 @@ class ExportQuestView(View, ExportPermissionMixin):
                 icon="<i class='fa fa-book'></i>"
             )
 
+            # Email active Library staff so they know there's a quest to review/publish (#1949).
+            email_library_staff_of_push("quest", quest.name, exported_quest, request.user)
+
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
-        messages.success(request, f"Successfully exported '{link}' to the shared library.")
+        messages.success(
+            request,
+            f"'{link}' has been shared to the Library. A Library admin has been notified — "
+            "it will appear in the Library once they review and publish it."
+        )
         return redirect('quests:quests')
 
 
@@ -497,8 +548,15 @@ class ExportCampaignView(View, ExportPermissionMixin):
                 icon="<i class='fa fa-book'></i>",
             )
 
+            # Email active Library staff so they know there's a campaign to review/publish (#1949).
+            email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user)
+
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
-        messages.success(request, f"Successfully exported '{link}' to the shared library.")
+        messages.success(
+            request,
+            f"'{link}' has been shared to the Library. A Library admin has been notified — "
+            "it will appear in the Library once they review and publish it."
+        )
         return redirect('quests:categories')
 
 

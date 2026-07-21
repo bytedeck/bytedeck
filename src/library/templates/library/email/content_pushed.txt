@@ -1,0 +1,10 @@
+{{ sharer }} shared a {{ content_type }} to the ByteDeck Library:
+
+    {{ content_name }}
+
+It has been added to the Library but is not visible to other decks until a Library admin reviews and publishes it.
+
+Review and publish it here:
+{{ review_url }}
+
+— ByteDeck Library
