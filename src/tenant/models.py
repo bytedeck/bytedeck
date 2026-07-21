@@ -40,6 +40,16 @@ def default_trial_end_date():
     return date.today() + timedelta(days=60)
 
 
+# Trial decks -- and suspended decks, which revert to trial limits (#1734) -- are
+# capped at this many active users.
+TRIAL_MAX_ACTIVE_USERS = 5
+
+# Days of continued paid access after `paid_until` before a deck counts as lapsed.
+# Codifies the 0-30-day "gold band" the tenant admin changelist has always shown
+# for recently expired decks (#1494).
+GRACE_PERIOD_DAYS = 30
+
+
 class Tenant(TenantMixin):
     # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
     #
@@ -139,9 +149,81 @@ class Tenant(TenantMixin):
 
         super().save(*args, **kwargs)
 
+    # BILLING / LIFECYCLE STATUS ######################################
+    # Derived from trial_end_date and paid_until rather than stored, so status can
+    # never drift from the dates admins see and edit. Groundwork for epic #1729.
+
+    @property
+    def subscription_active(self):
+        """Whether the deck currently has paid access: `paid_until` is set and today
+        is on or before it plus the grace period."""
+        return self.paid_until is not None and date.today() <= self.paid_until + timedelta(days=GRACE_PERIOD_DAYS)
+
+    @property
+    def in_grace_period(self):
+        """Whether the deck is past `paid_until` but still within the grace period
+        (access retained, expiry warnings due)."""
+        return self.subscription_active and date.today() > self.paid_until
+
+    @property
+    def is_on_trial(self):
+        """Whether the deck is in trial mode: no active subscription, and a trial
+        clock that hasn't run out."""
+        return (
+            not self.subscription_active
+            and self.trial_end_date is not None
+            and date.today() <= self.trial_end_date
+        )
+
+    @property
+    def is_suspended(self):
+        """Whether every clock this deck was ever given (trial and/or paid) has lapsed.
+
+        A deck with BOTH dates blank is never suspended: that state is only reachable
+        by explicit admin edit, and is the mechanism for comped/legacy decks that are
+        managed outside the subscription lifecycle.
+        """
+        if self.subscription_active or self.is_on_trial:
+            return False
+        return self.paid_until is not None or self.trial_end_date is not None
+
+    @property
+    def effective_max_active_users(self):
+        """The active-user cap that should be enforced right now: `max_active_users`
+        while a subscription is active, otherwise the trial cap ("back to trial mode",
+        #1734). -1 (unlimited, admin-set) is passed through unchanged."""
+        if self.max_active_users == -1:
+            return -1
+        return self.max_active_users if self.subscription_active else TRIAL_MAX_ACTIVE_USERS
+
+    @property
+    def days_until_expiry(self):
+        """Days until the governing deadline: `paid_until` while a subscription is
+        active, otherwise `trial_end_date`, otherwise a lapsed `paid_until`.
+
+        Negative once the deadline has passed (the reminder cadence keeps firing
+        through the grace window); None when the deck has no dates at all
+        (comped/legacy decks).
+        """
+        if self.subscription_active:
+            deadline = self.paid_until
+        elif self.trial_end_date is not None:
+            deadline = self.trial_end_date
+        else:
+            deadline = self.paid_until
+        if deadline is None:
+            return None
+        return (deadline - date.today()).days
+
+    # END BILLING / LIFECYCLE STATUS ##################################
+
     def update_cached_fields(self):
         """
         Updates the cached fields for the tenant so Django Admin displays the latest values.
+
+        Saves with update_fields so this instance (often loaded well before the save,
+        e.g. in an admin queryset loop) can't clobber a concurrent edit to any other
+        column, such as an admin adjusting paid_until.
         """
         self.owner_full_name_cached = self.get_owner_full_name_cached()
         self.owner_email_cached = self.get_owner_email_cached()
@@ -150,7 +232,15 @@ class Tenant(TenantMixin):
         self.quest_count = self.get_quest_count()
         self.last_staff_login = self.get_last_staff_login()
         self.google_signon_enabled = self.get_google_signon_enabled()
-        self.save()
+        self.save(update_fields=[
+            'owner_full_name_cached',
+            'owner_email_cached',
+            'active_user_count',
+            'total_user_count',
+            'quest_count',
+            'last_staff_login',
+            'google_signon_enabled',
+        ])
 
     def get_owner_full_name_cached(self):
         """
@@ -193,11 +283,16 @@ class Tenant(TenantMixin):
 
     def get_active_user_count(self):
         """
-        Returns he number of staff users, plus the number student users currently registered in a course in an active semester.
+        Returns the number of staff users, plus the number of student users currently
+        registered in a course in the active semester.
+
+        Enrolled users are counted with students_only=True so a staff member who is
+        also enrolled in a course isn't counted twice (once as staff, once as
+        enrolled), and so test accounts never count toward a deck's active-user cap.
         """
         staff_count = User.objects.filter(is_staff=True).count()
         CourseStudent = apps.get_model('courses', 'CourseStudent')
-        active_student_count = CourseStudent.objects.all_users_for_active_semester().count()
+        active_student_count = CourseStudent.objects.all_users_for_active_semester(students_only=True).count()
         return staff_count + active_student_count
 
     def get_quest_count(self):
