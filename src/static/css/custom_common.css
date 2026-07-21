@@ -1120,28 +1120,31 @@ div.btn-group.action-btn-group {
 
 
 /* === #1981: prevent the bootstrap-table "flash of unstyled table" ================= */
-/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the
-   browser paints the raw, unstyled table first and then — a second or two later on large
-   tables — bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout).
-   That rebuild is the visible "jump". This file is loaded in the render-blocking <head>, so
-   hiding the raw table here stops it from ever being painted; custom.js drops a spinner into
-   its place and the rules below reveal the finished table. */
+/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the browser
+   paints the raw, unstyled table first and then — a second or two later on large tables —
+   bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout). That
+   rebuild is the visible "jump", and while a large table parses the page looks blank/broken.
+   A "Loading content..." spinner (.bt-loading) is server-rendered right before each such
+   table (snippets/table_loading.html), so it's on screen from the very first paint — a
+   JS-inserted spinner would arrive too late, after the raw table has already been parsed.
+   This <head> CSS hides the raw table until bootstrap-table formats it, and hides the spinner
+   the moment its table is ready. */
 table[data-toggle="table"] {
-    /* take the raw table out of flow while hidden so a big table doesn't reserve a tall
-       blank gap under the spinner */
+    /* Out of flow while hidden so a big table reserves no tall blank gap under the spinner. */
     position: absolute;
     visibility: hidden;
 }
-
 /* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — put it
-   back in flow and show it. Version-independent and JS-free, so the table always appears. */
+   back in flow and show it. The .bt-reveal fallback (custom.js) covers any table
+   bootstrap-table never initializes, so data is never left hidden. */
 .bootstrap-table table[data-toggle="table"],
 table[data-toggle="table"].bt-reveal {
     position: static;
     visibility: visible;
 }
 
-/* Spinner shown in the table's place while it formats (inserted by custom.js). */
+/* Server-rendered loading spinner shown in the table's place, using the same
+   fa-spinner / "Loading content..." markup as the collapsed quest rows. */
 .bt-loading {
     display: flex;
     align-items: center;
@@ -1149,6 +1152,9 @@ table[data-toggle="table"].bt-reveal {
     min-height: 120px;
     color: #999;
 }
-.bt-loading .fa {
-    opacity: 0.6;
+/* Hide the spinner the moment its table is formatted (wrapped in .bootstrap-table) or
+   force-revealed (.bt-reveal). custom.js also hides it, covering browsers without :has(). */
+.bt-loading:has(+ .bootstrap-table),
+.bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
+    display: none;
 }

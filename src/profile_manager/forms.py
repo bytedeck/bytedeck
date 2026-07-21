@@ -68,6 +68,15 @@ class ProfileForm(forms.ModelForm):
     def clean_email(self):
         email = self.cleaned_data['email']
 
+        # The deck owner must always keep an email on file so ByteDeck can contact them: they may
+        # change it (once verified) but may not remove it entirely (#1502). Compare by id so this
+        # holds even when the deck owner is the one editing their own profile.
+        if not email and self.instance.user_id == SiteConfig.get().deck_owner_id:
+            raise forms.ValidationError(
+                "As the deck owner, you can't remove your email address — ByteDeck needs a way to "
+                "contact you. You can change it, but it can't be left blank."
+            )
+
         # Verify the domain is real
         if '@' in email:
             domain = email.split('@')[1]  # ["myemail", "gmail.com"]

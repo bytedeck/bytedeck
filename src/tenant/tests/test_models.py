@@ -11,7 +11,7 @@ from hackerspace_online import settings
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
-from tenant.models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name
+from tenant.models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name, default_trial_end_date
 
 User = get_user_model()
 
@@ -283,3 +283,21 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         stale.update_cached_fields()
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, date(2030, 1, 1))
+class DefaultTrialEndDateTest(SimpleTestCase):
+    """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
+
+    A new deck's trial runs for 60 days, so ``Tenant.trial_end_date`` defaults to
+    ``today + 60 days``. Time is frozen so "today" is deterministic.
+    """
+
+    @freeze_time("2024-02-29")  # a leap day, so the +60 arithmetic can't be faked with month math
+    def test_default_trial_end_date__is_60_days_from_today(self):
+        """The default_trial_end_date() helper returns exactly 60 days from today."""
+        self.assertEqual(default_trial_end_date(), date(2024, 2, 29) + timedelta(days=60))
+
+    @freeze_time("2024-02-29")
+    def test_new_tenant__trial_end_date_defaults_to_60_days_out(self):
+        """A newly built Tenant gets trial_end_date defaulted to today + 60 days."""
+        # Field defaults are applied at instantiation, so no save() (and no DB) is needed.
+        tenant = Tenant(schema_name="demo", name="demo")
+        self.assertEqual(tenant.trial_end_date, date(2024, 2, 29) + timedelta(days=60))

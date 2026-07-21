@@ -4,6 +4,38 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.29.0] 2026-07-21 Claude I
+* New Features:
+  - **Grant a badge to everyone who qualifies, on demand.** When you change a badge's prerequisites, you're now asked whether to check for students who newly qualify. Say yes and a confirmation page shows how many students would receive it; confirm and it's granted to all of them at once (their teachers are notified). Because it only runs when you ask, a badge is never handed out while you're still setting up its prerequisites [#1925](https://github.com/bytedeck/bytedeck/issues/1925)
+  - **New "Completion Statuses" button on a quest.** Opens a page listing every student's status on that quest — In Progress, Returned, Submitted, Approved, etc. — so you can see at a glance where each student is [#1934](https://github.com/bytedeck/bytedeck/issues/1934)
+  - **Order campaigns left-to-right on quest maps.** Edit a campaign and set its "Map order" field; campaigns with a lower number sit further to the left on the map [#1977](https://github.com/bytedeck/bytedeck/issues/1977)
+* Tweaks:
+  - YouTube (and other) video embeds load again [#1896](https://github.com/bytedeck/bytedeck/issues/1896)
+  - Data tables now show a loading spinner instead of a flash of unstyled/blank table while they load [#1981](https://github.com/bytedeck/bytedeck/issues/1981)
+  - Campaign quests stay vertically stacked on quest maps, and long campaign names no longer wrap [#1787](https://github.com/bytedeck/bytedeck/issues/1787) [#1289](https://github.com/bytedeck/bytedeck/issues/1289)
+  - Campaign publishing: clearer redirects, a publish button on the campaign list, and distinct icons [#1931](https://github.com/bytedeck/bytedeck/issues/1931)
+  - A quest can no longer be set to both "unlimited repeats" and "repeat per semester" — pick one [#1531](https://github.com/bytedeck/bytedeck/issues/1531)
+  - Removed the student-facing quick reply form [#1886](https://github.com/bytedeck/bytedeck/issues/1886)
+* Bugfixes:
+  - The sidebar "Quest Approvals" button opened the wrong approvals tab; it now opens Submitted [#1895](https://github.com/bytedeck/bytedeck/issues/1895)
+  - HTML typed into a comment was rendered as-is, so a crafted comment could run script for anyone who viewed it (stored XSS); comment text is now fully escaped [#1343](https://github.com/bytedeck/bytedeck/issues/1343)
+  - Racing/double-clicking "Start Quest" could create two submissions and award XP twice; starting the same quest twice at once no longer double-grants [#1964](https://github.com/bytedeck/bytedeck/issues/1964)
+  - Editing your profile email could error out (500) when the network's DNS lookup of the email's domain failed; validation now tolerates those lookup failures [#1976](https://github.com/bytedeck/bytedeck/issues/1976)
+  - A notification preview with more than one image spliced the images together and broke the notifications dropdown; multi-image previews now render correctly [#1761](https://github.com/bytedeck/bytedeck/issues/1761)
+  - Unpublished campaigns showed a blank value after "Published:"; it now reads correctly [#1930](https://github.com/bytedeck/bytedeck/issues/1930)
+  - Checkboxes on the prerequisites form were misaligned and overlapping; the layout is fixed [#1978](https://github.com/bytedeck/bytedeck/issues/1978)
+  - The badge action-button row wrapped awkwardly and its status button pointed at the wrong place; both are fixed [#1988](https://github.com/bytedeck/bytedeck/issues/1988)
+  - A semester with a missing start or end date crashed the pages that display it; those are now guarded [#912](https://github.com/bytedeck/bytedeck/issues/912)
+* Codebase:
+  - Upgraded to Django 5.2 LTS and Python 3.12, with a dependency-modernization pass [#2015](https://github.com/bytedeck/bytedeck/issues/2015) [#2017](https://github.com/bytedeck/bytedeck/issues/2017) [#1916](https://github.com/bytedeck/bytedeck/issues/1916)
+  - Test suite ~6–8× faster, brought up to conventions, and broadly expanded; linting moved from flake8 to ruff [#1997](https://github.com/bytedeck/bytedeck/issues/1997) [#2026](https://github.com/bytedeck/bytedeck/issues/2026) [#1993](https://github.com/bytedeck/bytedeck/issues/1993)
+  - Reduced N+1 queries across the campaign, tag, mark-chart, and notification pages [#1940](https://github.com/bytedeck/bytedeck/issues/1940) [#1941](https://github.com/bytedeck/bytedeck/issues/1941) [#1942](https://github.com/bytedeck/bytedeck/issues/1942) [#1943](https://github.com/bytedeck/bytedeck/issues/1943)
+  - Internal correctness/perf: prerequisite-cache uniqueness and skip-on-user-delete, XP-cache overflow, GFK choice caching, no-op prereq saves, comments `full_clean()` [#520](https://github.com/bytedeck/bytedeck/issues/520) [#1754](https://github.com/bytedeck/bytedeck/issues/1754) [#2035](https://github.com/bytedeck/bytedeck/issues/2035) [#1967](https://github.com/bytedeck/bytedeck/issues/1967) [#1989](https://github.com/bytedeck/bytedeck/issues/1989) [#2006](https://github.com/bytedeck/bytedeck/issues/2006)
+* Devops:
+  - Automated production/staging deploys via self-hosted runners (gated on green CI), self-hosted Redis, persistent DB connections, a templated nginx config, and ops-reliability/CI improvements [#1962](https://github.com/bytedeck/bytedeck/issues/1962) [#1954](https://github.com/bytedeck/bytedeck/issues/1954) [#1965](https://github.com/bytedeck/bytedeck/issues/1965) [#1950](https://github.com/bytedeck/bytedeck/issues/1950) [#2003](https://github.com/bytedeck/bytedeck/issues/2003) [#2004](https://github.com/bytedeck/bytedeck/issues/2004)
+  - Public-site deck requests (visitors start at `/decks/request/`): the flow now ends on a confirmation page explaining the next steps, and requesting a deck with a very long name no longer crashes deck creation [#1946](https://github.com/bytedeck/bytedeck/issues/1946) [#1948](https://github.com/bytedeck/bytedeck/issues/1948)
+
+
 ### [1.28.0] 2026-07-12 Marcus III
 * Deck Requests:
   - [New Feature] New decks can now be requested directly from the public ByteDeck site instead of by contacting us. Visitors fill in a short reCAPTCHA-protected form (name and email), click the verification link emailed to them (valid for one hour, good for one deck), and are guided through creating their own deck. The new deck's owner then receives a welcome email with their initial login credentials [#1892](https://github.com/bytedeck/bytedeck/issues/1892) [#1903](https://github.com/bytedeck/bytedeck/issues/1903)

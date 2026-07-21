@@ -54,7 +54,7 @@ def group_name():
     return SiteConfig.get().custom_name_for_group
 
 
-# https://docs.djangoproject.com/en/1.11/howto/custom-template-tags/#inclusion-tags
+# https://docs.djangoproject.com/en/5.2/howto/custom-template-tags/#inclusion-tags
 
 @register.inclusion_tag('utilities/list_of_links.html')
 def menu_list():

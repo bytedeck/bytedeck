@@ -2,10 +2,10 @@
 Django settings for hackerspace_online project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/1.8/topics/settings/
+https://docs.djangoproject.com/en/5.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/1.8/ref/settings/
+https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -189,7 +189,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
 
-    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
+    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/5.2/ref/contrib/flatpages/
 
     # third party apps
 
@@ -262,7 +262,7 @@ TAGGIT_CASE_INSENSITIVE = True
 
 MIDDLEWARE = [
     'django_tenants.middleware.TenantMiddleware',
-    # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
+    # caching: https://docs.djangoproject.com/en/5.2/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -285,6 +285,78 @@ MIDDLEWARE = [
 # the intended cap. 16 MiB leaves headroom under the nginx limit.
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=16 * 1024 * 1024)
 
+# LOGGING #########################################################
+#
+# With DEBUG=False (production/staging) Django's built-in logging emits almost
+# nothing to the container: its default `console` handler is filtered to
+# DEBUG-only, so it's silenced, and app loggers (getLogger(__name__)) fall back
+# to Python's WARNING-level "last resort" stderr handler -- so INFO and most app
+# logs vanish and `docker compose logs web` shows little between startup and a
+# 5xx. This config always ships leveled, timestamped logs to stdout (captured by
+# Docker's json-file driver, which the prod compose rotates), while preserving
+# Django's default "email ADMINS on an unhandled 5xx" behaviour.
+#
+# Level is env-tunable (DJANGO_LOG_LEVEL, default INFO). Under the test runner we
+# keep it at WARNING to match the pre-existing signal-to-noise (the old last-
+# resort handler only surfaced WARNING+), so the suite output isn't flooded with
+# INFO lines; assertLogs still works regardless since it sets its own level.
+LOG_LEVEL = env('DJANGO_LOG_LEVEL', default='WARNING' if 'test' in sys.argv else 'INFO')
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} | {asctime} | {process:d} | {name} | {message}',
+            'style': '{',
+        },
+    },
+    'filters': {
+        # AdminEmailHandler must only fire in real deployments -- never in local
+        # DEBUG, where email is printed to the console / _sent_mail dir.
+        'require_debug_false': {
+            '()': 'django.utils.log.RequireDebugFalse',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'stream': 'ext://sys.stdout',
+            'formatter': 'verbose',
+        },
+        # Mirrors Django's default so an unhandled 5xx (django.request ERROR)
+        # still emails ADMINS. Complements the celery task_failure alerter.
+        'mail_admins': {
+            'level': 'ERROR',
+            'class': 'django.utils.log.AdminEmailHandler',
+            'filters': ['require_debug_false'],
+        },
+    },
+    # Root catches app loggers (prerequisites.tasks, hackerspace_online.*, etc.),
+    # which use getLogger(__name__) and share no common prefix, via propagation.
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console', 'mail_admins'],
+            'level': LOG_LEVEL,
+            'propagate': False,
+        },
+        # Every SQL statement logs here at DEBUG; pin it to WARNING so
+        # DJANGO_LOG_LEVEL=DEBUG doesn't flood stdout with queries. Use the
+        # opt-in DB_LOGS_ENABLED tracer below to see queries instead.
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
+
+# Opt-in developer tool: trace every DB query to a rotating file (off by
+# default). Augments the base LOGGING above rather than replacing it.
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
 
 if DB_LOGS_ENABLED:
@@ -294,35 +366,20 @@ if DB_LOGS_ENABLED:
     if not os.path.exists(LOGS_PATH):
         os.mkdir(LOGS_PATH)
 
-    LOGGING = {
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {
-            'verbose': {
-                'format': '{levelname} | {asctime} | {process:d} {thread:d} | {message}',
-                'style': '{',
-            },
-        },
-        'handlers': {
-            'console': {
-                'level': 'DEBUG',
-                'class': 'logging.StreamHandler',
-                'formatter': 'verbose',
-            },
-            'file': {
-                'level': 'DEBUG',
-                'class': 'logging.handlers.TimedRotatingFileHandler',
-                'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
-                'filename': os.path.join(LOGS_PATH, 'queries.log'),
-                'formatter': 'verbose',
-            }
-        },
-        'loggers': {
-            'django.db.backends': {
-                'handlers': ['file'],
-                'level': 'DEBUG',
-            },
-        }
+    LOGGING['handlers']['db_queries_file'] = {
+        'level': 'DEBUG',
+        'class': 'logging.handlers.TimedRotatingFileHandler',
+        'when': 'M',  # Every minute (so that it would be much easier to view queries rather than by hour or day)
+        # Bound retention: without backupCount, minute-rotation keeps a file
+        # forever, so an enabled tracer slowly fills /tmp. 60 = ~1h of history.
+        'backupCount': env.int('DB_LOGS_BACKUP_COUNT', default=60),
+        'filename': os.path.join(LOGS_PATH, 'queries.log'),
+        'formatter': 'verbose',
+    }
+    LOGGING['loggers']['django.db.backends'] = {
+        'handlers': ['db_queries_file'],
+        'level': 'DEBUG',
+        'propagate': False,
     }
 
 
@@ -477,7 +534,7 @@ DATABASES = {
         # died while idle (RDS failover, network blip, server-side timeout).
         # Without this, a dead pooled connection surfaces as an intermittent
         # InterfaceError/OperationalError on whatever request draws it.
-        # https://docs.djangoproject.com/en/4.2/ref/settings/#conn-health-checks
+        # https://docs.djangoproject.com/en/5.2/ref/settings/#conn-health-checks
         'CONN_HEALTH_CHECKS': True,
     }
 }
@@ -994,7 +1051,7 @@ PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # (staging mirrors prod). These are intentionally NOT applied in local
 # development, where the site is served over plain http://localhost, nor
 # during tests. Django's `manage.py check --deploy` verifies these.
-# Docs: https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+# Docs: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 if not DEBUG and not TESTING:
 
     # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.

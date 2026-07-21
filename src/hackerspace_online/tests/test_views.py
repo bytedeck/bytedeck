@@ -19,7 +19,7 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         """Use a tenant-aware client for each test."""
         # Every test needs access to the request factory.
-        # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
+        # https://docs.djangoproject.com/en/5.2/topics/testing/advanced/#the-request-factory
         # self.factory = RequestFactory()
         self.client = TenantClient(self.tenant)
 

@@ -1,0 +1,9 @@
+<!--
+  #1981: loading spinner shown in place of a bootstrap-table until it finishes formatting.
+  Include this immediately BEFORE a <table data-toggle="table"> element. It is server-rendered
+  so it appears from the first paint; custom.js / custom_common.css hide it once the table is
+  ready. Uses the same fa-spinner markup as the "Loading content..." rows elsewhere.
+-->
+<div class="bt-loading" role="status" aria-label="Loading table">
+  <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>&nbsp;Loading content...
+</div>
