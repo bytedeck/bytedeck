@@ -46,6 +46,17 @@ class DeckStatusReportTest(ByteDeckTenantTestCase):
         self.assertRegex(tenant_line, r'\+[1-9]\d*$')
         self.assertIn('with a count delta', out.getvalue())
 
+    def test_deck_status_report__zero_delta_when_cache_is_fresh(self):
+        """A deck whose cached count already matches the recomputed count reports a zero delta."""
+        fresh = self.tenant.get_active_user_count()
+        Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=fresh)
+
+        out = StringIO()
+        call_command('deck_status_report', stdout=out)
+
+        tenant_line = next(line for line in out.getvalue().splitlines() if line.startswith(self.tenant.schema_name))
+        self.assertRegex(tenant_line, r'\+0$')
+
 
 @freeze_time(date(2026, 8, 15))
 class BillingStatusLabelTest(SimpleTestCase):
