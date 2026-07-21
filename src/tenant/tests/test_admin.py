@@ -118,6 +118,10 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
                     request=None, user=config.deck_owner, email="jane@doe.com")
                 email_address.set_as_primary()
                 email_address.save()
+            # the changelist displays CACHED owner fields; refresh them explicitly, as the
+            # nightly deck_status_check task does in production (the changelist no longer
+            # refreshes on page load -- #1729 PR 2)
+            cls.tenant.update_cached_fields()
 
         # update "owner" and add missing email address
         with tenant_context(cls.extra_tenant):
@@ -133,11 +137,27 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
                 email_address.set_as_primary()
                 email_address.verified = True
                 email_address.save()
+            # see the matching comment above: cached fields refresh explicitly now
+            cls.extra_tenant.update_cached_fields()
 
     def setUp(self):
         """Build a TenantAdmin instance and a public-tenant client for each test."""
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         self.client = TenantClient(self.public_tenant)
+
+    def test_get_queryset__does_not_refresh_cached_fields(self):
+        """Loading the changelist must NOT refresh each deck's cached fields anymore --
+        that per-row refresh was an N+1 across every tenant schema on every page load;
+        the nightly deck_status_check task is the canonical refresher now (#1729 PR 2)."""
+        # anonymous request first: it moves the client's connection to the public
+        # schema so force_login stores its session there (same dance as the
+        # changelist-display tests in this class)
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.client.force_login(self.superuser)
+        with patch("tenant.models.Tenant.update_cached_fields") as mock_update:
+            response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_not_called()
 
     def test_owner_full_name_text__shown_in_changelist(self):
         """

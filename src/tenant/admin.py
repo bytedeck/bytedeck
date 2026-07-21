@@ -214,17 +214,6 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             del actions["delete_selected"]
         return actions
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        # Update cached fields
-        #
-        # FIX: reduce number of SQL queries by triggering this only when Tenant (and/or related) objects are changed
-        for tenant in qs:
-            if tenant.name != get_public_schema_name():
-                with tenant_context(tenant):
-                    tenant.update_cached_fields()
-        return qs
-
     def delete_model(self, request, obj):
         # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
         obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema
