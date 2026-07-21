@@ -33,6 +33,7 @@
 </div>
 {% if category_displayed_quests %}
   <div id="available">
+    {% include 'snippets/table_loading.html' %}
     <table id="accordion-available"
            class="accordian-table"
            data-classes="table table-hover"

@@ -8,6 +8,7 @@
 {% load crispy_forms_tags %}
 {% if submissions %}
 
+  {% include 'snippets/table_loading.html' %}
   <table id="accordian-{% if completed %}completed{% else %}inprogress{% endif %}"
     class="accordian-table"
     data-classes="table table-hover"

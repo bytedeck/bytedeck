@@ -36,26 +36,34 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
-    // #1981: bootstrap-table reformats server-rendered tables on load. The head CSS
-    // (custom_common.css) replaces each raw table with a "Loading content…" spinner from the
-    // first paint and reveals the real table once bootstrap-table wraps it in .bootstrap-table.
-    // This is only a fallback: if bootstrap-table never initializes a table (e.g. one its
-    // script doesn't auto-handle), reveal the raw table after a timeout so its data is never
-    // left hidden behind the spinner.
-    $('table[data-toggle="table"]').each(function() {
-        var $table = $(this);
+    // #1981: bootstrap-table reformats server-rendered tables on load. A "Loading content..."
+    // spinner (.bt-loading) is server-rendered right before each data-toggle="table", so it's
+    // visible from the first paint; the head CSS (custom_common.css) hides the raw table until
+    // bootstrap-table formats it. Here we hide each spinner once its table is wrapped in
+    // .bootstrap-table — and, if bootstrap-table never initializes a table, reveal the raw
+    // table after a timeout so its data is never left hidden behind the spinner.
+    $('.bt-loading').each(function() {
+        var $spinner = $(this);
 
-        // Already wrapped/formatted (bootstrap-table's script ran first) — CSS revealed it.
-        if ($table.closest('.bootstrap-table').length) {
-            return;
+        // The table this spinner covers is the next sibling — still the raw <table>, or, if
+        // bootstrap-table already ran, the .bootstrap-table wrapper it was replaced with.
+        function findTable() {
+            var $next = $spinner.next();
+            return $next.is('table[data-toggle="table"]') ? $next : $next.find('table[data-toggle="table"]').first();
         }
 
-        // Give bootstrap-table time to wrap the table; if it never does, reveal the raw table.
-        setTimeout(function() {
-            if (!$table.closest('.bootstrap-table').length) {
-                $table.addClass('bt-reveal');
+        var start = Date.now();
+        var poll = setInterval(function() {
+            var $table = findTable();
+            var wrapped = $table.length && $table.closest('.bootstrap-table').length;
+            if (wrapped || Date.now() - start > 6000) {
+                clearInterval(poll);
+                if (!wrapped && $table.length) {
+                    $table.addClass('bt-reveal');
+                }
+                $spinner.hide();
             }
-        }, 6000);
+        }, 50);
     });
 
 });

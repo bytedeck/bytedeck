@@ -1120,60 +1120,41 @@ div.btn-group.action-btn-group {
 
 
 /* === #1981: prevent the bootstrap-table "flash of unstyled table" ================= */
-/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the
-   browser paints the raw, unstyled table first and then — a second or two later on large
-   tables — bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout).
-   That rebuild is the visible "jump", and on a large table the raw parse leaves the page
-   looking blank/broken until it happens. This file is loaded in the render-blocking <head>,
-   so the rules here turn each raw table into a "Loading content…" spinner from the very first
-   paint — no JS needed — matching the spinner shown inside collapsed quest rows. Once
-   bootstrap-table wraps the table (or the custom.js fallback fires) the real table is
-   revealed. */
+/* Data tables (data-toggle="table") are server-rendered as a plain <table>, so the browser
+   paints the raw, unstyled table first and then — a second or two later on large tables —
+   bootstrap-table tears it down and rebuilds it (pagination, search, fixed layout). That
+   rebuild is the visible "jump", and while a large table parses the page looks blank/broken.
+   A "Loading content..." spinner (.bt-loading) is server-rendered right before each such
+   table (snippets/table_loading.html), so it's on screen from the very first paint — a
+   JS-inserted spinner would arrive too late, after the raw table has already been parsed.
+   This <head> CSS hides the raw table until bootstrap-table formats it, and hides the spinner
+   the moment its table is ready. */
 table[data-toggle="table"] {
-    /* Center the placeholder spinner (its ::before/::after) and take the raw rows out of the
-       picture, so the huge unstyled table is never painted and reserves no tall blank gap. */
+    /* Out of flow while hidden so a big table reserves no tall blank gap under the spinner. */
+    position: absolute;
+    visibility: hidden;
+}
+/* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — put it
+   back in flow and show it. The .bt-reveal fallback (custom.js) covers any table
+   bootstrap-table never initializes, so data is never left hidden. */
+.bootstrap-table table[data-toggle="table"],
+table[data-toggle="table"].bt-reveal {
+    position: static;
+    visibility: visible;
+}
+
+/* Server-rendered loading spinner shown in the table's place, using the same
+   fa-spinner / "Loading content..." markup as the collapsed quest rows. */
+.bt-loading {
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 120px;
+    color: #999;
 }
-/* Hide the raw table's own content (thead/tbody) while it stands in as a spinner. */
-table[data-toggle="table"] > * {
+/* Hide the spinner the moment its table is formatted (wrapped in .bootstrap-table) or
+   force-revealed (.bt-reveal). custom.js also hides it, covering browsers without :has(). */
+.bt-loading:has(+ .bootstrap-table),
+.bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
     display: none;
-}
-/* Spinning icon — fa-spinner fa-pulse, the same icon/animation as the "Loading content…"
-   rows (Font Awesome 4.7, glyph \f110). */
-table[data-toggle="table"]::before {
-    content: "\f110";
-    font-family: FontAwesome;
-    font-size: 2em;
-    color: #999;
-    -webkit-animation: fa-spin 1s infinite steps(8);
-    animation: fa-spin 1s infinite steps(8);
-}
-/* Label next to the icon, spaced like the fa-fw gap in the row spinner. */
-table[data-toggle="table"]::after {
-    content: "Loading content\2026"; /* \2026 = … */
-    color: #999;
-    margin-left: 0.5em;
-}
-
-/* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — restore
-   the real table and drop the placeholder spinner. Version-independent and JS-free, so the
-   table always appears. The .bt-reveal fallback (custom.js) covers any table bootstrap-table
-   never initializes, so data is never left hidden behind the spinner. */
-.bootstrap-table table[data-toggle="table"],
-table[data-toggle="table"].bt-reveal {
-    display: table;
-    min-height: 0;
-}
-.bootstrap-table table[data-toggle="table"] > *,
-table[data-toggle="table"].bt-reveal > * {
-    display: revert;
-}
-.bootstrap-table table[data-toggle="table"]::before,
-.bootstrap-table table[data-toggle="table"]::after,
-table[data-toggle="table"].bt-reveal::before,
-table[data-toggle="table"].bt-reveal::after {
-    content: none;
 }
