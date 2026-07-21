@@ -18,41 +18,37 @@
 
     <div class="media-body">
       <div class="row">
-        <div class="col-xs-12 col-sm-8">
+        <div class="col-xs-12 col-sm-7">
           {{ badge.short_description|safe }}
         </div>
 
         {% if request.user.is_staff %}
-        <div class="col-xs-12 col-sm-4 text-right">
-          {# Two groups so the actions don't overflow: "manage" (edit/copy/delete) and "grant"
-             (one / several / all who qualify). btn-toolbar spaces the groups and lets them wrap
-             to a second row when the column is narrow. fa-fw gives the icons a uniform width. #}
-          <div class="btn-toolbar pull-right" role="toolbar" aria-label="{{ config.custom_name_for_badge }} actions">
-            <div class="btn-group" role="group" aria-label="Manage">
-              <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
-                <i class="fa fa-fw fa-edit"></i>
-              </a>
-              <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}">
-                <i class="fa fa-fw fa-copy"></i>
-              </a>
-              <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}">
-                <i class="fa fa-fw fa-trash-o"></i>
-              </a>
-            </div>
-            <div class="btn-group" role="group" aria-label="Grant">
-              <a class="btn btn-success" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}">
-                <i class="fa fa-fw fa-user"></i>
-              </a>
-              <a class="btn btn-success" title="Bulk grant to multiple students" href="{% url 'badges:bulk_grant_badge' badge.id %}">
-                <i class="fa fa-fw fa-users"></i>
-              </a>
-              {% if badge.published %}
-              <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
-                 href="{% url 'badges:grant_qualifying' badge.id %}">
-                <i class="fa fa-fw fa-user-plus"></i>
-              </a>
-              {% endif %}
-            </div>
+        <div class="col-xs-12 col-sm-5 text-right">
+          {# One btn-group keeps every action button the same height and connected (like the
+             Current/All Active toggle below); fa-fw gives the icons a uniform width. The column is
+             col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. #}
+          <div class="btn-group pull-right" role="group" aria-label="{{ config.custom_name_for_badge }} actions">
+            <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
+              <i class="fa fa-fw fa-edit"></i>
+            </a>
+            <a class="btn btn-primary" title="Copy" href="{% url 'badges:badge_copy' badge.id %}">
+              <i class="fa fa-fw fa-copy"></i>
+            </a>
+            <a class="btn btn-danger" title="Delete" href="{% url 'badges:badge_delete' badge.id %}">
+              <i class="fa fa-fw fa-trash-o"></i>
+            </a>
+            <a class="btn btn-success" title="Grant to a student" href="{% url 'badges:grant' badge.id 0 %}">
+              <i class="fa fa-fw fa-user"></i>
+            </a>
+            <a class="btn btn-success" title="Bulk grant to multiple students" href="{% url 'badges:bulk_grant_badge' badge.id %}">
+              <i class="fa fa-fw fa-users"></i>
+            </a>
+            {% if badge.published %}
+            <a class="btn btn-success" title="Grant to all students who meet this {{ config.custom_name_for_badge|lower }}'s prerequisites"
+               href="{% url 'badges:grant_qualifying' badge.id %}">
+              <i class="fa fa-fw fa-user-plus"></i>
+            </a>
+            {% endif %}
           </div>
         </div>
         {% endif %}

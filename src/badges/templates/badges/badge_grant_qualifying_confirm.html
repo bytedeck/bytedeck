@@ -14,19 +14,22 @@
   <p></p>
 
   {% if qualifying_students %}
-    <div class="alert alert-info">
-      <p>
-        <strong>{{ qualifying_students|length }}</strong>
-        student{{ qualifying_students|length|pluralize }} currently enrolled in a course
-        {{ qualifying_students|length|pluralize:"meets,meet" }} this
-        {{ config.custom_name_for_badge|lower }}'s prerequisites but
-        {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet:
-      </p>
-      <ul>
-        {% for student in qualifying_students %}
-          <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
-        {% endfor %}
-      </ul>
+    <div class="panel panel-info">
+      <div class="panel-heading"><h3 class="panel-title">Students who qualify</h3></div>
+      <div class="panel-body">
+        <p>
+          <strong>{{ qualifying_students|length }}</strong>
+          student{{ qualifying_students|length|pluralize }} currently enrolled in a course
+          {{ qualifying_students|length|pluralize:"meets,meet" }} this
+          {{ config.custom_name_for_badge|lower }}'s prerequisites but
+          {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet:
+        </p>
+        <ul>
+          {% for student in qualifying_students %}
+            <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
     </div>
     <form action="" method="post">{% csrf_token %}
       <p>Granting will also notify each student's teacher. Only students enrolled in a course this
@@ -35,12 +38,15 @@
       <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
     </form>
   {% else %}
-    <div class="alert alert-info">
-      <p>
-        No students enrolled in a course this semester meet this
-        {{ config.custom_name_for_badge|lower }}'s prerequisites without already having it,
-        so there is nothing to grant.
-      </p>
+    <div class="panel panel-info">
+      <div class="panel-heading"><h3 class="panel-title">No students to grant</h3></div>
+      <div class="panel-body">
+        <p>
+          No students enrolled in a course this semester meet this
+          {{ config.custom_name_for_badge|lower }}'s prerequisites without already having it,
+          so there is nothing to grant.
+        </p>
+      </div>
     </div>
     <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Back to {{ config.custom_name_for_badge|lower }}</a>
   {% endif %}
