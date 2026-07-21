@@ -503,7 +503,7 @@ class ViewTestUtilsMixin():
     def get_message_list(self, response):
         """ Django messages missing from context of redirected views, so get another way
         https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages
-        https://docs.djangoproject.com/en/3.0/ref/contrib/messages/
+        https://docs.djangoproject.com/en/5.2/ref/contrib/messages/
         """
         return list(response.wsgi_request._messages)
 

@@ -231,3 +231,52 @@ class NotificationModel_html_strip_Test(TestCase):
             Notification.html_strip(test_case),
             expected_case
         )
+
+    def test_notification_html_strip__multiple_img_tags_are_not_mangled(self):
+        """Content with more than one <img> keeps every image well-formed and resized.
+
+        Regression for issue #1761: the previous index-based implementation spliced one
+        image tag into the middle of another and dropped the resize, leaving oversized
+        images and broken markup that wrecked the notification dropdown's layout.
+        """
+        test_case = (
+            'A <img src="one.png" style="width: 50%;"> B <img src="two.png" style="width: 25%;"> C'
+        )
+        expected_case = (
+            'A <img height="20px" src="one.png" style="" width="auto"/> '
+            'B <img height="20px" src="two.png" style="" width="auto"/> C'
+        )
+        self.assertEqual(Notification.html_strip(test_case), expected_case)
+
+    def test_notification_html_strip__truncates_long_text_with_ellipsis(self):
+        """Text longer than the character limit is cut and gets a trailing ellipsis."""
+        long_text = "x" * 200
+        result = Notification.html_strip(long_text, char_limit=50)
+        self.assertEqual(result, "x" * 50 + "...")
+
+    def test_notification_html_strip__empty_and_none_return_empty_string(self):
+        """Falsy input (empty string or None) yields an empty string, not an error."""
+        self.assertEqual(Notification.html_strip(""), "")
+        self.assertEqual(Notification.html_strip(None), "")
+
+    def test_notification_html_strip__coerces_non_string_input(self):
+        """A non-string value is coerced to str before stripping (e.g. an int)."""
+        self.assertEqual(Notification.html_strip(12345), "12345")
+
+    def test_notification_html_strip__strips_html_comments(self):
+        """HTML comments are dropped, not rendered as visible text or counted toward the limit."""
+        self.assertEqual(Notification.html_strip("a<!-- hidden -->b"), "ab")
+
+    def test_notification_html_strip__resize_image_false_keeps_original_img(self):
+        """With resize_image=False the <img> is preserved but not resized."""
+        self.assertEqual(
+            Notification.html_strip('<img src="SOURCE">', resize_image=False),
+            '<img src="SOURCE"/>',
+        )
+
+    def test_notification_html_strip__truncation_drops_trailing_content(self):
+        """Once the character limit is hit, later nodes (text and images) are dropped
+        and the result is ellipsised."""
+        test_case = 'ab <img src="x.png"> cd'
+        # char_limit=1 is consumed by "a"; everything after is dropped.
+        self.assertEqual(Notification.html_strip(test_case, char_limit=1), "a...")

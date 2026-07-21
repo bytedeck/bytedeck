@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -38,6 +39,16 @@ class ProfileTestModel(ByteDeckTenantTestCase):
 
     def create_active_course_registration(self):
         return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem, course=baker.make('courses.Course'))
+
+    def test_mark_cached__stores_marks_above_999_9(self):
+        """A profile mark above the old 999.9 ceiling saves and round-trips instead
+        of raising DataError -- regression for #2035, where an uncapped early-semester
+        mark projects to thousands of percent and overflowed the max_digits=4 column."""
+        profile = self.user.profile
+        profile.mark_cached = Decimal("1500.0")
+        profile.save()  # would raise DataError on the old max_digits=4 field
+        profile.refresh_from_db()
+        self.assertEqual(profile.mark_cached, Decimal("1500.0"))
 
     def test_profile_creation__on_user_create(self):
         """Profile is automatically created when a user is created in setUp()"""
