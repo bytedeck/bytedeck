@@ -1504,6 +1504,26 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # the teacher teaches no blocks in this test, so the my_blocks column is empty
         self.assertEqual(breakdown['Approved']['my_blocks']['count'], 0)
 
+    def test_quest_user_status__started_but_not_submitted_shows_in_progress(self):
+        """A submission that has been started but not completed/returned/approved shows In Progress."""
+        QuestSubmission.objects.create(
+            quest=self.quest, user=self.student1, is_approved=False, is_completed=False,
+            ordinal=1, semester=SiteConfig.get().active_semester,
+        )
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=active')
+
+        statuses = {entry['user'].username: entry['status'] for entry in response.context['user_status_list']}
+        self.assertEqual(statuses[self.student1.username], 'In Progress')
+
+    def test_quest_user_status__unknown_scope_falls_back(self):
+        """An unrecognised ?scope value is treated as the default (and then falls back to all active
+        students when the teacher teaches no blocks)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=bogus')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['scope'], 'active')
+
 
 class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
