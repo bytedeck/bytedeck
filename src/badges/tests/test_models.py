@@ -8,6 +8,7 @@ from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 from notifications.models import Notification
 from prerequisites.models import Prereq
@@ -136,6 +137,44 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         mock_get_rarity.assert_called_once_with(80)  # Verify the correct percentile is passed
         mock_badge_rarity.get_icon_html.assert_called_once()
         self.assertEqual(result, '<span class="badge-icon">Icon</span>')
+
+
+class BadgeStudentsWhoQualifyUngrantedTest(ByteDeckTenantTestCase):
+    """Badge.students_who_qualify_ungranted() previews who a teacher-initiated grant-check would
+    grant. It must consider only students currently enrolled in a course this semester — not
+    unenrolled users, and not staff/test accounts that happen to be enrolled (issue #2061).
+    """
+
+    def setUp(self):
+        """A badge whose only prereq is completing a quest, plus the active semester."""
+        self.badge = baker.make(Badge)
+        self.quest = baker.make(Quest)
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        self.semester = SiteConfig.get().active_semester
+
+    def _make_qualifier(self, *, is_staff=False, enrolled=True):
+        """Make a user who has completed the prereq quest; optionally enrolled and/or staff."""
+        user = baker.make(User, is_staff=is_staff)
+        if enrolled:
+            baker.make('courses.CourseStudent', user=user, semester=self.semester)
+        baker.make(QuestSubmission, user=user, quest=self.quest,
+                   is_completed=True, is_approved=True, semester=self.semester)
+        return user
+
+    def test_students_who_qualify_ungranted__includes_enrolled_student(self):
+        """An enrolled student who meets the prereqs and lacks the badge is listed."""
+        student = self._make_qualifier()
+        self.assertIn(student, self.badge.students_who_qualify_ungranted())
+
+    def test_students_who_qualify_ungranted__excludes_unenrolled_user(self):
+        """A qualifying user not enrolled in a course this semester is not listed."""
+        unenrolled = self._make_qualifier(enrolled=False)
+        self.assertNotIn(unenrolled, self.badge.students_who_qualify_ungranted())
+
+    def test_students_who_qualify_ungranted__excludes_enrolled_staff(self):
+        """A staff member enrolled as a CourseStudent is not listed — the check is for students."""
+        staff = self._make_qualifier(is_staff=True)
+        self.assertNotIn(staff, self.badge.students_who_qualify_ungranted())
 
 
 class BadgeAssertionManagerTest(ByteDeckTenantTestCase):

@@ -14,10 +14,10 @@
   <p></p>
 
   {% if qualifying_students %}
-    <div class="well">
+    <div class="alert alert-info">
       <p>
         <strong>{{ qualifying_students|length }}</strong>
-        student{{ qualifying_students|length|pluralize }} currently
+        student{{ qualifying_students|length|pluralize }} currently enrolled in a course
         {{ qualifying_students|length|pluralize:"meets,meet" }} this
         {{ config.custom_name_for_badge|lower }}'s prerequisites but
         {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet:
@@ -29,19 +29,17 @@
       </ul>
     </div>
     <form action="" method="post">{% csrf_token %}
-      <p>
-        Grant this {{ config.custom_name_for_badge|lower }} to the
-        {{ qualifying_students|length }} student{{ qualifying_students|length|pluralize }} above?
-        Their teachers will be notified.
-      </p>
+      <p>Granting will also notify each student's teacher. Only students enrolled in a course this
+        semester are checked.</p>
       <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Cancel</a>
       <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
     </form>
   {% else %}
-    <div class="well">
+    <div class="alert alert-info">
       <p>
-        No current students meet this {{ config.custom_name_for_badge|lower }}'s prerequisites
-        without already having it, so there is nothing to grant.
+        No students enrolled in a course this semester meet this
+        {{ config.custom_name_for_badge|lower }}'s prerequisites without already having it,
+        so there is nothing to grant.
       </p>
     </div>
     <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Back to {{ config.custom_name_for_badge|lower }}</a>
