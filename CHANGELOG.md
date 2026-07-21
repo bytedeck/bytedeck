@@ -4,7 +4,7 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.29.0] 2026-07-21 Marcus IV
+### [1.29.0] 2026-07-21 Claude I
 * Platform — Django 5.2 & Python 3.12:
   - [New Feature] Upgraded the platform to **Django 5.2 LTS** [#2015](https://github.com/bytedeck/bytedeck/issues/2015) and the **Python 3.12** runtime [#2017](https://github.com/bytedeck/bytedeck/issues/2017). This was staged so the app ran on both Django 4.2 and 5.2 during the transition: a phased modernization of third-party dependencies [#1916](https://github.com/bytedeck/bytedeck/issues/1916) [#1996](https://github.com/bytedeck/bytedeck/issues/1996), library upgrades (numpy, beautifulsoup4, html2text, and others) [#1995](https://github.com/bytedeck/bytedeck/issues/1995) [#1998](https://github.com/bytedeck/bytedeck/issues/1998) [#2000](https://github.com/bytedeck/bytedeck/issues/2000), and pinning dependency floors to current versions with ceilings capped at the next major [#2021](https://github.com/bytedeck/bytedeck/issues/2021)
   - [Tweak] Switched linting from flake8 to ruff (lint only, no code churn) [#1993](https://github.com/bytedeck/bytedeck/issues/1993)
