@@ -295,4 +295,25 @@ Existing paying decks subscribed via the manual `/pages/subscribe/` checkout: St
 
 ---
 
+## Appendix A — the dj-stripe evaluation (why the raw SDK)
+
+Verified against PyPI metadata and dj-stripe release notes (2026-07-21), for reviewers who'd reasonably ask "why not dj-stripe?":
+
+| dj-stripe line | Python | Django | Notes |
+|---|---|---|---|
+| 2.9.x (last: 2.9.2, 2026-01) | ≥3.10 | 4.2 / 5.0 / 5.1 declared | stripe SDK capped `<12` |
+| 2.10.x (last: 2.10.4, 2026-06) | ≥3.11 | 5.0 / 5.1 | **Full migration reset**; most concrete columns removed in favour of a `stripe_data` JSONField |
+| 2.11.0 (2026-06, latest) | ≥3.11 | ≥5.2 (first 5.2/6.0 support) | **Second full migration reset**; `Plan` model removed; stripe SDK `>=15.0.1,<16` |
+
+On the current stack (Python 3.12 / Django 5.2) dj-stripe 2.11.0 **is installable** — the choice is architectural, not forced:
+
+1. **Scale mismatch**: dj-stripe installs ~30 public-schema tables (all flowing through `migrate_schemas --shared` on every container start) to obtain the four scalars this epic needs on `Tenant`.
+2. **Migration churn on a multi-tenant deploy**: 2.10 and 2.11 each reset their migrations entirely, making upgrades stepwise (2.9 → 2.10 → 2.11) — the planned "3.0" rewrite was abandoned in favour of exactly this kind of rolling restructuring, so more resets are plausible.
+3. **The mirror's value shrank**: since 2.10, most mirrored Stripe data lives in a `stripe_data` JSONField rather than queryable columns — the strongest historical argument for dj-stripe (a queryable local mirror) is much weaker now.
+4. The raw `stripe` SDK (15.3.1 current; requires-python ≥3.9; depends only on `requests`/`typing_extensions`) has zero Django coupling, and this plan's webhook surface is five event types funnelling into one idempotent sync method with a `StripeEventLog` — small enough to own outright.
+
+Worth revisiting if in-app invoice history or richer billing UX ever lands on the roadmap; dj-stripe is actively maintained (accelerating release cadence through 2026).
+
+---
+
 *Prepared by Claude Code from a full-codebase and issue-history survey; see epic #1729 for the sub-issues this phasing closes.*
