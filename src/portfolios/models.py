@@ -38,7 +38,7 @@ class Artwork(models.Model):
                                    help_text="OPTION 1. Your artwork or photograph to display. "
                                              "If a video file is also uploaded, "
                                              "this will be used as the video's preview image.")
-    # TODO: set custom validator: https://docs.djangoproject.com/en/1.10/ref/validators/
+    # TODO: set custom validator: https://docs.djangoproject.com/en/5.2/ref/validators/
     video_file = models.FileField(upload_to='portfolios/video/%Y/%m', null=True, blank=True,
                                   help_text='OPTION 2. HTML5 Video types supported by all browsers are: '
                                             'MP4 (H.264 video +AAC or +MP3 audio) and WebM (VP8 video +Vorbis audio).'

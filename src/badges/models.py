@@ -376,7 +376,7 @@ class BadgeAssertionManager(models.Manager):
         """
         Return a list of distinct badges the user has earned, as an assertion queryset
         This only works in a postgresql database, but the app is designed around postgres
-        https://docs.djangoproject.com/en/1.10/ref/models/querysets/#distinct
+        https://docs.djangoproject.com/en/5.2/ref/models/querysets/#distinct
         """
         # the secondary ordering by id makes DISTINCT ON deterministic: it always keeps
         # the earliest assertion of each badge (postgres returns the first row per group)
