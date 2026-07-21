@@ -36,4 +36,34 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
+    // #1981: bootstrap-table reformats server-rendered tables on load. A "Loading content..."
+    // spinner (.bt-loading) is server-rendered right before each data-toggle="table", so it's
+    // visible from the first paint; the head CSS (custom_common.css) hides the raw table until
+    // bootstrap-table formats it. Here we hide each spinner once its table is wrapped in
+    // .bootstrap-table — and, if bootstrap-table never initializes a table, reveal the raw
+    // table after a timeout so its data is never left hidden behind the spinner.
+    $('.bt-loading').each(function() {
+        var $spinner = $(this);
+
+        // The table this spinner covers is the next sibling — still the raw <table>, or, if
+        // bootstrap-table already ran, the .bootstrap-table wrapper it was replaced with.
+        function findTable() {
+            var $next = $spinner.next();
+            return $next.is('table[data-toggle="table"]') ? $next : $next.find('table[data-toggle="table"]').first();
+        }
+
+        var start = Date.now();
+        var poll = setInterval(function() {
+            var $table = findTable();
+            var wrapped = $table.length && $table.closest('.bootstrap-table').length;
+            if (wrapped || Date.now() - start > 6000) {
+                clearInterval(poll);
+                if (!wrapped && $table.length) {
+                    $table.addClass('bt-reveal');
+                }
+                $spinner.hide();
+            }
+        }, 50);
+    });
+
 });

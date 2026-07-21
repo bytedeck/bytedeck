@@ -16,10 +16,11 @@ class AnnouncementsSignalsTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and student shared across the test methods."""
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
         cls.student = baker.make(User, username='student', is_staff=False)
 
-    def test_save_announcement_signal(self):
+    def test_save_announcement_signal__creates_and_deletes_publish_task(self):
         """
         Test that after a model is saved that a celery-beat tasks exists to publish it if conditions are correct.
         The task should also exists in the public schema.

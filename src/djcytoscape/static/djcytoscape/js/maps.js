@@ -121,6 +121,41 @@ cy.style()
  *
 /**************************************/
 
+// #1787: Keep a campaign's quests vertically stacked even when one of them is also a
+// prerequisite for a quest OUTSIDE the campaign.
+//
+// dagre positions each node horizontally (Brandes-Köpf) by aligning it under the
+// *median* of its neighbours, and it ignores edge weight when doing so. So a quest that
+// is a prereq for both its in-campaign successor and an out-of-campaign quest gets
+// centred between the two, dragging the in-campaign successor sideways instead of
+// keeping it directly below.
+//
+// dagre counts each parallel edge as a separate neighbour (its graph is a multigraph),
+// so temporarily adding a hidden duplicate of every intra-campaign edge — one whose
+// source and target share the same compound/campaign parent — pulls the median back
+// onto the in-campaign successor. The chain stacks vertically and the out-of-campaign
+// branch is pushed off to the side. When a quest branches to two quests that are BOTH
+// in the campaign, both edges are duplicated equally, so they still spread apart as
+// before (matching the issue's "unless both subsequent quests are within the same
+// campaign"). The duplicates only bias the layout; they're removed right after
+// positioning (dagre runs synchronously here since animation is off), so they never
+// render or affect interaction.
+var campaignLayoutEdges = [];
+cy.edges().forEach(function (edge) {
+    var sourceParent = edge.source().parent();
+    // nonempty() guards the top-level case: two parent-less nodes both have an empty
+    // parent collection, and empty.same(empty) is true, which would wrongly match
+    // every edge between quests that aren't in any campaign.
+    if (sourceParent.nonempty() && sourceParent.same(edge.target().parent())) {
+        campaignLayoutEdges.push({
+            group: 'edges',
+            data: { source: edge.source().id(), target: edge.target().id() },
+            classes: 'hidden',
+        });
+    }
+});
+var addedCampaignLayoutEdges = cy.add(campaignLayoutEdges);
+
 var layout = cy.layout({
 
     // name: 'breadthfirst',
@@ -137,6 +172,9 @@ var layout = cy.layout({
     "rankSep": 15,  // vertical seperation of nodes // try 24 for taxi?
 });
 layout.run()
+
+// Remove the layout-only helper edges now that every node has its position.
+addedCampaignLayoutEdges.remove();
 
 /***************************************
  *

@@ -1,9 +1,11 @@
 from django.contrib import messages
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.conf import settings
 from django.core import serializers
 from django.core.cache import cache
 from django.db import connection
 from django.shortcuts import reverse
+from django.test import RequestFactory
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.utils import get_tenant_model, get_tenant_domain_model
@@ -149,7 +151,8 @@ class ByteDeckTenantTestCase(TenantTestCase):
         # cls) skips django-tenants' override (which would rebuild the schema).
         super(TenantTestCase, cls).setUpClass()
 
-    def _fixture_setup(self):
+    @classmethod
+    def _fixture_setup(cls):
         """Start the per-test savepoint, then clear the schema-keyed cache.
 
         Each test rolls back to a savepoint afterwards, but the process-global
@@ -160,6 +163,11 @@ class ByteDeckTenantTestCase(TenantTestCase):
         Clearing here — for every test, regardless of setUp overrides — guarantees
         each test reads cache-backed singletons fresh from its own pristine DB
         state. (Runs in addition to any cache.clear() a test's own setUp does.)
+
+        A ``classmethod`` since Django 5.1 made ``TestCase._fixture_setup`` one;
+        it is still invoked once per test method (it enters the per-test savepoint
+        that ``_fixture_teardown`` rolls back), so the cache is still cleared per
+        test — only the binding changed from instance to class.
         """
         super()._fixture_setup()
         cache.clear()
@@ -185,6 +193,23 @@ class ByteDeckTenantTestCase(TenantTestCase):
         cls.domain.delete()
         cls.tenant.delete(force_drop=True)
         cls.remove_allowed_test_domain()
+
+
+def request_with_messages(path='/'):
+    """Return a GET request with the messages framework wired up.
+
+    Admin actions and other code paths call ``messages.add_message()`` /
+    ``ModelAdmin.message_user()``, which need a request carrying a session and a
+    ``_messages`` storage. A bare ``RequestFactory`` request has neither, so this
+    attaches both.
+
+    :param path: the request path (rarely matters for the code under test).
+    :return: a ``WSGIRequest`` ready to pass to an admin action.
+    """
+    request = RequestFactory().get(path)
+    request.session = {}
+    request._messages = FallbackStorage(request)
+    return request
 
 
 def generate_form_data(model=None, model_form=None, **kwargs):
@@ -478,7 +503,7 @@ class ViewTestUtilsMixin():
     def get_message_list(self, response):
         """ Django messages missing from context of redirected views, so get another way
         https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages
-        https://docs.djangoproject.com/en/3.0/ref/contrib/messages/
+        https://docs.djangoproject.com/en/5.2/ref/contrib/messages/
         """
         return list(response.wsgi_request._messages)
 

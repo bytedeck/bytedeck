@@ -9,6 +9,7 @@
           href="{% url 'portfolios:current_user' %}">View Your Portfolio</a></p>
 
     <!-- <table class="table table-striped"> -->
+    {% include 'snippets/table_loading.html' %}
     <table data-toggle='table'
             data-sort-name='username'
             data-sort-order='asc'

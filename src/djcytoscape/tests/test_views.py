@@ -18,6 +18,7 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and a map pinned to a dedicated initial quest."""
         # need a teacher and a student so tests can log in as each via force_login()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -43,9 +44,10 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
 
         self.assertRedirectsLogin('djcytoscape:index')
@@ -63,7 +65,8 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('djcytoscape:update', args=[1])
         self.assertRedirectsLogin('djcytoscape:delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_page_status_codes__students(self):
+        """Students can view maps but are forbidden from edit/regenerate/generate views."""
         self.client.force_login(self.test_student1)
 
         self.assert200('djcytoscape:index')
@@ -81,7 +84,8 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('djcytoscape:generate_map', kwargs={'quest_id': 1, 'scape_id': 1})
         self.assert403('djcytoscape:generate_unseeded')
 
-    def test_all_page_status_codes_for_teachers(self):
+    def test_all_page_status_codes__teachers(self):
+        """Teachers can view maps and access the edit/generate views."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -170,7 +174,8 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
-    def test_initial_map_generated_on_first_view(self):
+    def test_primary__generates_initial_map_on_first_view(self):
+        """Viewing the primary map for the first time generates the 'Main' map."""
         # shouldn't be any maps from the start
         self.assertFalse(CytoScape.objects.exists())
 
@@ -191,6 +196,7 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Generate the real primary map and a staff user for the regenerate views."""
         from .test_models import generate_real_primary_map
 
         # regeneration in tests only touches the DB, which is rolled back per test
@@ -198,16 +204,19 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.staff_user = User.objects.create_user(username="test_staff_user", is_staff=True)
 
     def setUp(self):
+        """Set up a tenant client logged in as the staff user."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
-    def test_regenerate(self):
+    def test_regenerate__redirects_to_quest_map(self):
+        """Regenerating a good map redirects back to that map's quest_map page."""
         self.assertRedirects(
             response=self.client.get(reverse('djcytoscape:regenerate', args=[self.map.id])),
             expected_url=reverse('djcytoscape:quest_map', args=[self.map.id]),
         )
 
-    def test_regenerate_with_deleted_object(self):
+    def test_regenerate__with_deleted_object(self):
+        """Regenerating a map whose initial object is gone redirects to the primary map."""
         bad_map = CytoScape.objects.create(
             name="bad map",
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
@@ -218,13 +227,15 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             expected_url=reverse('djcytoscape:primary'),
         )
 
-    def test_regenerate_all(self):
+    def test_regenerate_all__redirects_to_primary(self):
+        """Regenerating all maps redirects to the primary map."""
         self.assertRedirects(
             response=self.client.get(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),
         )
 
-    def test_regenerate_all_with_bad_map(self):
+    def test_regenerate_all__with_bad_map(self):
+        """Regenerating all maps still redirects to primary when a broken map is present."""
         CytoScape.objects.create(
             name="bad map",
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
@@ -234,3 +245,24 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             response=self.client.get(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),
         )
+
+    def test_regenerate_all__many_maps_processed_in_background(self):
+        """With more than 5 maps, regeneration is offloaded to a background task
+        and the user is warned it is being processed in the background."""
+        for i in range(6):
+            CytoScape.generate_map(baker.make('quest_manager.Quest'), f"Extra Map {i}")
+        self.assertGreater(CytoScape.objects.count(), 5)
+
+        response = self.client.get(reverse('djcytoscape:regenerate_all'), follow=True)
+        self.assertTrue(
+            any("background" in str(m) for m in response.context['messages']),
+            "expected a 'processed in the background' warning message",
+        )
+
+    def test_quest_map_interlink__existing_map_renders(self):
+        """Interlinking to an object that already initiates a map renders that map."""
+        response = self.client.get(reverse(
+            'djcytoscape:quest_map_interlink',
+            args=[self.map.initial_content_type_id, self.map.initial_object_id, self.map.id],
+        ))
+        self.assertEqual(response.status_code, 200)

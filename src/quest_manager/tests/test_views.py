@@ -66,6 +66,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, two students (one enrolled), and a few quests shared across the tests."""
         cls.sem = SiteConfig.get().active_semester
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -84,13 +85,15 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # cls.sub2 = baker.make(QuestSubmission, quest=cls.quest1)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_quest_page_status_codes_for_anonymous(self):
+    def test_all_quest_pages__anonymous_redirected_to_login(self):
         """ If not logged in then all views should redirect to home page  """
         self.assertRedirectsLogin('quests:quests')
 
-    def test_all_quest_page_status_codes_for_students(self):
+    def test_all_quest_pages__student_access_codes(self):
+        """Students can reach their own quest pages but are forbidden from staff-only views."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -144,7 +147,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
 
-    def test_all_quest_page_status_codes_for_teachers(self):
+    def test_all_quest_pages__teacher_access_codes(self):
+        """Teachers can reach the staff quest management and summary views."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -184,7 +188,8 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNotNone(match, "Sidebar approvals menu not found in the rendered page")
         self.assertEqual(match.group(1), reverse('quests:approvals'))
 
-    def test_start(self):
+    def test_start__creates_or_reuses_submission(self):
+        """Starting a quest 404s when unavailable, otherwise creates one submission and reuses it on repeat starts."""
         # log in a student from setUp
         self.client.force_login(self.test_student1)
 
@@ -213,7 +218,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # the view should have redirect to the same submission:
         self.assertRedirects(response, sub.get_absolute_url())
 
-    def test_student_no_quests_help_text(self):
+    def test_student_no_quests_help_text__varies_by_situation(self):
         """
             When student has no quests but have:
 
@@ -314,7 +319,7 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "You have no new quests available")
         self.assertContains(response, "but you do have hidden quests which you can view by hitting the 'Show Hidden Quests' button above.")
 
-    def test_teacher_can_unarchive_quest(self):
+    def test_unarchive__teacher_can_unarchive_quest(self):
         """
         Test that staff users can successfully unarchive an archived quest.
 
@@ -354,6 +359,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, two students, three quests, and several submissions shared across the tests."""
         User = get_user_model()
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -377,9 +383,11 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         )
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_submission_page_status_codes_for_students(self):
+    def test_all_submission_pages__student_access_codes(self):
+        """Students can reach their own submission pages but are forbidden or 404 on others' and staff-only actions."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -419,7 +427,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # These Needs to be completed via POST
         self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
 
-    def test_student_can_view_completed_submission_when_hidden(self):
+    def test_submission__student_can_view_completed_submission_when_hidden(self):
         """
         Make sure user can view quest even when published is False
         and a student has a submission to it.
@@ -446,7 +454,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
 
-    def test_student_can_drop_completed_submission_when_hidden(self):
+    def test_drop__student_can_drop_completed_submission_when_hidden(self):
         """
         Make sure student can drop a submission from a quest when an admin decides
         to hide it.
@@ -459,7 +467,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:drop', args=[s4_pk]))
         self.assertEqual(response.status_code, 200)
 
-    def test_hidden_submission_does_not_contain_submit_button(self):
+    def test_submission__hidden_quest_hides_submit_button(self):
         """
         Make sure that submit for approval button is hidden since it's not available
         for students to submit anymore.
@@ -471,7 +479,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertNotContains(response, 'Submit Quest for Approval')
 
-    def test_drop_button_not_visible_when_submission_approved(self):
+    def test_submission__drop_button_hidden_when_approved(self):
         """
         Make sure drop button is not visible when quest submission is already approved
         """
@@ -484,7 +492,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertNotContains(response, 'Drop Quest')
 
-    def test_drop_approved_submission_results_to_404(self):
+    def test_drop__approved_submission_returns_404(self):
         """
         Make sure a student cannot drop an approved submission
         """
@@ -497,7 +505,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:drop', args=[s4_pk]))
         self.assertEqual(response.status_code, 404)
 
-    def test_drop_deletes_comment_and_submission(self):
+    def test_drop__deletes_comment_and_submission(self):
         """Ensure that the draft_comment (foreignkey to Comment object) is deleted
         when a submission is dropped. Also ensure the QuestSubmission object is deleted."""
         self.client.force_login(self.test_student1)
@@ -515,7 +523,8 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertFalse(Comment.objects.filter(id=draft_comment_id).exists())
         self.assertFalse(QuestSubmission.objects.filter(id=sub_id).exists())
 
-    def test_all_submission_page_status_codes_for_teachers(self):
+    def test_all_submission_pages__teacher_access_codes(self):
+        """Teachers can view, flag, unflag, and skip submissions, with 404s for nonexistent ones."""
         # log in a teacher
         self.client.force_login(self.test_teacher)
 
@@ -556,7 +565,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
         self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
 
-    def test_submission_when_quest_not_visible(self):
+    def test_submission__quest_not_visible_returns_404(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
         # log in a student
         self.client.force_login(self.test_student1)
@@ -569,8 +578,8 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # TODO: should redirect, not 404?
         self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
 
-    def test_submission_xp_entered_remains_even_when_submission_returned(self):
-
+    def test_submission__xp_entered_remains_when_submission_returned(self):
+        """A student's requested XP is preserved on the form after a submission is returned."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -587,7 +596,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
 
-    def test_ajax_save_draft_has_changes(self):
+    def test_ajax_save_draft__has_changes(self):
         """Should save if there are changes in the draft text"""
         # loging required for this view
         self.client.force_login(self.test_student1)
@@ -614,7 +623,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)  # fAILS CUS MODEL DIDN'T SAVE! aRGH..
 
-    def test_ajax_save_draft_no_submission_draft_comment(self):
+    def test_ajax_save_draft__no_submission_draft_comment(self):
         """If a draft comment is not associated with the submission, then there is no submission in progress,
         so return 404"""
         self.client.force_login(self.test_student1)
@@ -633,7 +642,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_ajax_save_draft_no_changes(self):
+    def test_ajax_save_draft__no_changes(self):
         """Should not save if there are no changes in the draft text"""
         # loging required for this view
         self.client.force_login(self.test_student1)
@@ -660,7 +669,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(draft_text, sub.draft_comment.text)
 
-    def test_ajax_save_draft_blank_comment(self):
+    def test_ajax_save_draft__blank_comment(self):
         """Should not cause an error if the comment is blank"""
         # loging required for this view
         self.client.force_login(self.test_student1)
@@ -698,6 +707,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, a quest, and an in-progress submission shared across the tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
 
@@ -708,6 +718,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                              draft_comment=cls.draft_comment, semester=cls.semester)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the student for all tests."""
         self.client = TenantClient(self.tenant)
 
         # log in the student for all tests here
@@ -726,7 +737,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             )
         return response
 
-    def test_complete_quick_reply_form(self):
+    def test_complete__quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
         Are redirected to their available quests page, submission is marked completed and has a completion time.
         Tests for file-less submissions are labeled under the quick reply form because of the form selection
@@ -850,7 +861,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.xp_requested, 10)  # Ensure XP wasn't updated
 
-    def test_no_comment_verification_not_required_quick_reply_form(self):
+    def test_complete__no_comment_when_verification_not_required(self):
         """ When a quest is automatically approved, it does not require a comment
         """
         self.sub.quest.verification_required = False
@@ -863,7 +874,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertSuccessMessage(response)
 
-    def test_no_comment_but_verification_required_quick_reply_form(self):
+    def test_complete__no_comment_but_verification_required(self):
         """ When a quest requires teacher's approval, it means they must include either files or a comment
         """
         self.sub.quest.verification_required = True
@@ -925,7 +936,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         staff_sub.refresh_from_db()
         self.assertFalse(staff_sub.is_completed)
 
-    def test_notifications_own_student(self):
+    def test_complete__no_notification_for_own_teacher(self):
         """ Teacher should NOT be notified when their student complete's a quest, because it
         will appear in there approvals tab anyway, so redundant
         """
@@ -937,7 +948,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
-    def test_notifications_comment_when_verification_not_required(self):
+    def test_complete__notifies_teacher_on_comment_when_no_verification(self):
         """ Teacher SHOULD be notified when their student complete's a quest if:
         1. it has a comment, AND
         2. it does not require verification
@@ -951,7 +962,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
 
-    def test_notifications_no_comment_when_verification_not_required(self):
+    def test_complete__no_notification_when_no_comment_and_no_verification(self):
         """ Teacher should NOT be notified when there is no comment and it's auto-approved (verification_required=False):
         """
         self.sub.quest.verification_required = False
@@ -962,7 +973,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
-    def test_specific_teacher_to_notify_own_teacher(self):
+    def test_complete__specific_teacher_is_own_teacher_no_notification(self):
         """
         If a quest has a specific teacher set to notify and that teacher is also the student's current teacher,
         then no notification should be sent, because the submission will already appear in their "Approvals" tab.
@@ -975,7 +986,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
-    def test_specific_teacher_to_notify_other_teacher(self):
+    def test_complete__specific_teacher_is_other_teacher_no_notification(self):
         """
         If a quest has a specific teacher set to notify who is not the student's current teacher,
         the submission should appear in that teacher's "Approvals" tab, and no notification should be sent
@@ -999,7 +1010,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
-    def test_comment_completed(self):
+    def test_comment__on_completed_quest(self):
         """ Students can comment on already completed quests.
         """
         comment = "test submission comment"
@@ -1012,7 +1023,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
-    def test_comment_button_no_comment_verification_not_required(self):
+    def test_comment__no_comment_verification_not_required(self):
         """ When commenting on an already completed quest, needs to actually comment with something
         whether or not verification was required originally
         """
@@ -1024,7 +1035,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
         self.assertErrorMessage(response)
 
-    def test_comment_button_no_comment_but_verification_required(self):
+    def test_comment__no_comment_but_verification_required(self):
         """ When commenting on an already completed quest, needs to actually comment with something
         whether or not verification was required originally
         """
@@ -1040,7 +1051,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertErrorMessage(response)
 
-    def test_comment_button_notifications_own_student(self):
+    def test_comment__notifies_own_teacher(self):
         """ Teacher should be notified when their student comments on an already complete's a quest
         """
         self.sub.quest.verification_required = True  # default anyway, but make it explicit
@@ -1062,7 +1073,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
 
-    def test_comment_button_specific_teacher_to_notify_own_teacher(self):
+    def test_comment__specific_teacher_is_own_teacher_notifies_once(self):
         """ If comment is left on an already completed quest that has a specific teacher linked to it,
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
 
@@ -1076,7 +1087,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
 
-    def test_comment_button_specific_teacher_to_notify_other_teacher(self):
+    def test_comment__specific_teacher_is_other_teacher_notifies_both(self):
         """ If comment is left on an already completed quest that has a specific teacher linked to it,
         both of them should be notified of the comment (the specific teacher, and the normal teacher)
         """
@@ -1093,7 +1104,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 1)
 
-    def test_notification_when_teacher_comments(self):
+    def test_comment__teacher_comment_notifies_student(self):
         """ When a teacher comments on submission and student gets notified
         """
         # log in a teacher to comment on the submission
@@ -1108,7 +1119,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_student, self.sub)
         self.assertEqual(notifications.count(), 1)
 
-    def test_comment_button_files_in_form(self):
+    def test_comment__files_attached_in_form(self):
         """ Files can be uploaded and attached to comments when completing or commenting on quests
         and a link to the file is included in the comment.
         """
@@ -1134,7 +1145,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
 
-    def test_comment_multiple_comments_from_user(self):
+    def test_comment__multiple_comments_from_user(self):
         """ Tests the functionality of comments made by user using standard and quick reply forms.
         """
         # complete quest as the only way user can comment is if they complete
@@ -1144,22 +1155,22 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
         self.post_complete(button='comment', submission_comment='comment from submission #1')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from submission #1').exists())
 
         self.assert200('quests:submission', args=[self.sub.id])  # simulate user going to submission to comment
         self.post_complete(button='comment', submission_comment='comment from submission #2')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from submission #2').exists())
 
         # comments using quick reply
         self.post_complete(button='comment', submission_comment='comment from quick reply #1')
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.draft_comment, None)
+        self.assertIsNone(self.sub.draft_comment)
         self.assertTrue(Comment.objects.filter(text__contains='comment from quick reply #1').exists())
 
-    def test_unrecognized_submit_button(self):
+    def test_complete__unrecognized_submit_button_returns_404(self):
         """ Unrecognized form submit button should 404.
         In some views Summernote was causing problems by submitting the form via ajax """
         response = self.post_complete(button="non_existant_button")
@@ -1169,6 +1180,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and an unpublished and a published quest shared across the tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
         cls.url = reverse("quests:bulk_edit_quests")
@@ -1177,6 +1189,7 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.quest2 = baker.make(Quest, published=True)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the teacher."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
@@ -1254,7 +1267,7 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(Quest.objects.filter(id=self.quest1.id).exists())
 
-    def test_bulk_edit_mode_flag(self):
+    def test_bulk_edit__mode_flag_reflects_query_param(self):
         """
         bulk_edit_mode should be True when '?bulk_edit' param is present,
         and False when missing.
@@ -1306,6 +1319,7 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a staff user, a quest, and three enrolled students shared across the tests."""
         # staff user to login as
         cls.staff_user = baker.make(User, username='staff', is_staff=True)
 
@@ -1320,10 +1334,11 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             baker.make('courses.CourseStudent', user=u, semester=SiteConfig.get().active_semester)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the staff user."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
-    def test_view_displays_users_and_statuses(self):
+    def test_quest_user_status__displays_users_and_statuses(self):
         """
         Verify that the quest_user_status view:
         - Lists all relevant users with the correct status label
@@ -1396,7 +1411,8 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(stats_dict['Returned']['percent'], "33%")
         self.assertEqual(stats_dict['Awaiting Approval']['percent'], "33%")
 
-    def test_users_with_no_submission_show_not_started(self):
+    def test_quest_user_status__users_with_no_submission_show_not_started(self):
+        """Students without a submission are listed with the 'Not Started' status and no submission."""
         url = reverse('quests:quest_user_status', args=[self.quest.id])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
@@ -1407,7 +1423,7 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(entry['status'], 'Not Started')
             self.assertIsNone(entry['submission'])
 
-    def test_latest_attempt_is_used_when_multiple_submissions_exist(self):
+    def test_quest_user_status__latest_attempt_used_when_multiple_submissions_exist(self):
         """
         If a student has an older approved submission and then makes a new attempt
         (awaiting approval), the status should reflect the newest attempt.
@@ -1450,6 +1466,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and minimal valid quest form data shared across the tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
 
@@ -1466,9 +1483,11 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         }
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_teacher_can_create_and_delete_quests(self):
+    def test_quest_create__teacher_can_create_and_delete(self):
+        """Teachers can create quests and delete both live and archived quests."""
         # simulate a logged in teacher
         self.client.force_login(self.test_teacher)
 
@@ -1504,7 +1523,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         with self.assertRaises(Quest.DoesNotExist):
             Quest.objects.get(id=archived_quest.id)
 
-    def test_TA_can_create_draft_quests_and_delete_own(self):
+    def test_quest_create__TA_creates_drafts_and_deletes_own(self):
+        """TAs can create draft quests (as editor) and delete their own but not others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
         test_ta = User.objects.create_user('test_ta')
         test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
@@ -1542,7 +1562,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(reverse('quests:quest_delete', args=[other_quest.id]))
         self.assertEqual(response.status_code, 403)
 
-    def test_teacher_can_update_quests(self):
+    def test_quest_update__teacher_can_update(self):
+        """Teachers can access the update view and save changes to any quest."""
         # simulate a logged in teacher
         self.client.force_login(self.test_teacher)
 
@@ -1570,7 +1591,8 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
-    def test_ta_can_update_their_own_quests(self):
+    def test_quest_update__ta_can_update_own_draft(self):
+        """TAs can update only their own unpublished quests, not published ones or others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
         test_ta = User.objects.create_user('test_ta')
         test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
@@ -1614,7 +1636,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
-    def test_scape_update_message_on_update_delete(self):
+    def test_quest_update__scape_message_on_update_and_delete(self):
         """ Checks if delete and update function gives a success message when a quest is related to map """
         # setup
         quest = baker.make(Quest)
@@ -1627,7 +1649,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
         # to clear any messages before next test
         self.assert200('quests:')
@@ -1637,13 +1659,13 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
         self.assertEqual(len(messages), 1)
-        self.assertTrue(scape.name in str(messages[0]))
+        self.assertIn(scape.name, str(messages[0]))
 
     # TODO
     # TAs should not be able to make a quest published
     # When a quest is published by a teacher, the editor should be removed
 
-    def test_create_with_new_prereqs(self):
+    def test_quest_create__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
         self.client.force_login(self.test_teacher)
         self.minimal_valid_form_data['new_quest_prerequisite'] = baker.make(Quest).id
@@ -1653,7 +1675,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, new_quest.get_absolute_url())
         self.assertEqual(new_quest.prereqs().count(), 2)
 
-    def test_update_with_new_prereqs(self):
+    def test_quest_update__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
         self.client.force_login(self.test_teacher)
         quest_to_update = baker.make(Quest)
@@ -1707,6 +1729,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.existing_prereq = cls.parent_quest.prereqs().first()
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def build_formset_form_data(self, form_prefix, form_number, **data):
@@ -1730,7 +1753,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             formset_dict.update(form_dict)
         return formset_dict
 
-    def test_post_cancel_button(self):
+    def test_post__cancel_button_redirects_to_detail(self):
         """ Cancel button should redirect to the quest detail view """
         self.client.force_login(self.test_teacher)
         response = self.client.post(
@@ -1859,6 +1882,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, teacher, TA, a tagged quest, and valid copy form data shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
@@ -1885,9 +1909,10 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         })
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_teacher_copy_quest_GET(self):
+    def test_quest_copy__teacher_get_initial_values(self):
         """ initial values in form GET is the same as the self.quest (quest that is being copied)  """
         self.client.force_login(self.test_teacher)
 
@@ -1904,7 +1929,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
 
-    def test_teacher_copy_quest_POST(self):
+    def test_quest_copy__teacher_post_creates_copy(self):
         """ values after being saved is the same as copied quest + '- COPY' being appended to name """
         self.client.force_login(self.test_teacher)
 
@@ -1926,8 +1951,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Copied quest should have tag
         self.assertEqual(new_quest.tags.count(), 1)
 
-    def test_TA_can_copy_quest_GET(self):
-
+    def test_quest_copy__ta_get_initial_values(self):
+        """A TA copying a quest sees the same copied initial form values as a teacher."""
         self.client.force_login(self.test_ta)
         get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
         self.assertEqual(get_response.status_code, 200)
@@ -1946,7 +1971,8 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Also, TA's should not be able to set published, but it is by default
         # just make sure it is published, and then check again after form is posted
 
-    def test_TA_copy_quest_POST(self):
+    def test_quest_copy__ta_post_forces_draft(self):
+        """A TA's copied quest is forced unpublished with the TA set as editor."""
         self.client.force_login(self.test_ta)
         response = self.client.post(
             reverse('quests:quest_copy', args=[self.quest.id]),
@@ -1973,7 +1999,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Copied quest should have tag
         self.assertEqual(new_quest.tags.count(), 1)
 
-    def test_copy_with_new_prereqs(self):
+    def test_quest_copy__with_new_prereqs(self):
         """ When copying a quest should be able to set new prereqs """
         self.client.force_login(self.test_teacher)
 
@@ -2007,15 +2033,17 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and a quest shared across the tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
 
         cls.quest1 = baker.make(Quest)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_quest_id_provided_to_view(self):
+    def test_quest_list__quest_id_provided_to_view(self):
         """
         This test handles the view when accessed via:
         url(r'^list/(?P<quest_id>[0-9]+)/$', views.quest_list, name='quest_active'
@@ -2049,13 +2077,14 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # should now see the quest
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
 
-    def test_student_sees_quests_available_outside_course(self):
+    def test_quest_list__student_sees_quests_available_outside_course(self):
+        """A quest flagged available_outside_course appears for a student not in a course."""
         self.client.force_login(self.test_student)
         quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
         response = self.client.get(reverse('quests:quest_active', args=[quest_avail_outside_course.id]))
         self.assertContains(response, f'id="heading-quest-{quest_avail_outside_course.id}')
 
-    def test_student_does_not_see_quick_reply_form(self):
+    def test_quest_list__student_does_not_see_quick_reply_form(self):
         """Regression for #1886 / #1759: the student quick reply form (which
         404'd when resubmitting a returned quest) was removed. A returned
         submission must still render on the quests page, but without the inline
@@ -2083,7 +2112,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotContains(response, f'quick_reply{returned_sub.id}')
         self.assertNotContains(response, 'Re-Submit Quest')
 
-    def test_show_hidden(self):
+    def test_quest_list__show_hidden_button_visibility(self):
         """ Test of:
         url(r'^available/all/$', views.quest_list, name='available_all'),
         """
@@ -2101,7 +2130,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:available'))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].AVAILABLE)
-        self.assertEqual(response.context['remove_hidden'], True)
+        self.assertTrue(response.context['remove_hidden'])
 
         # Still not there though, because student doesn't have an active course
         self.assertNotContains(response, 'Show Hidden Quests')
@@ -2123,7 +2152,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # and no button when already viewing hidden quests
         self.assertNotContains(response, 'Show Hidden Quests')
 
-    def test_available_quest_list_ordering(self):
+    def test_quest_list__available_ordering(self):
         """Parses for queryset used as context for "Available Quests" list and asserts equal to a
         manually ordered queryset.
         """
@@ -2146,7 +2175,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             # assert ordered view is unchanged from displayed view
             self.assertQuerySetEqual(displayed_order, intended_order)
 
-    def test_context_correct_tab_types(self):
+    def test_quest_list__context_correct_tab_types(self):
         """ Checks each possible tab for student and teacher individually if it can be activated
         by accessing the tabs corresponding url
         """
@@ -2223,6 +2252,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a student shared across the tests."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
@@ -2230,9 +2260,10 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # cls.category = baker.make('quests_manager.category', name="testcat")
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_page_status_codes_for_anonymous(self):
+    def test_all_category_pages__anonymous_redirected_to_login(self):
         ''' If not logged in then all views should redirect to home page '''
 
         self.assertRedirectsLogin('quests:categories')
@@ -2241,7 +2272,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirectsLogin('quests:category_update', args=[1])
         self.assertRedirectsLogin('quests:category_delete', args=[1])
 
-    def test_all_page_status_codes_for_students(self):
+    def test_all_category_pages__student_access_codes(self):
         ''' If not logged in then all views should redirect to 403'''
         self.client.force_login(self.test_student1)
 
@@ -2254,20 +2285,20 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Student access
         self.assert200('quests:category_detail', kwargs={"pk": 1})
 
-    def test_all_page_status_codes_for_staff(self):
+    def test_all_category_pages__staff_access_codes(self):
         ''' If not logged in then all views should redirect to home page or admin login '''
         self.client.force_login(self.test_teacher)
 
         # Staff access only
         self.assert200('quests:categories')
 
-    def test_CategoryList_view(self):
+    def test_CategoryList_view__staff_can_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('quests:categories'))
         self.assertEqual(response.status_code, 200)
 
-    def test_CategoryDetail_view(self):
+    def test_CategoryDetail_view__student_vs_admin_visibility(self):
         """ Admin and students should be able to view course details
 
         Students accessing the category detail view should only see active quests
@@ -2344,20 +2375,23 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
         self.assertContains(response, "Published: True")
 
-    def test_CategoryCreate_view(self):
+    def test_CategoryCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
         data = {
             'title': 'New category',
             'published': True,
+            'map_order': 5,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
 
         course = Category.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
+        # map_order is a writable create field (issue #1977), so the posted value persists
+        self.assertEqual(course.map_order, data['map_order'])
 
-    def test_CategoryUpdate_view(self):
+    def test_CategoryUpdate_view__staff_can_update(self):
         """ Admin should be able to update a course. Saving returns to the campaign's
         detail view (the page the edit was started from), not the campaigns list
         (issue #1931). """
@@ -2365,12 +2399,24 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         data = {
             'title': 'My Updated Title',
             'published': False,
+            'map_order': 0,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
         course = Category.objects.get(id=1)
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
+
+    def test_CategoryUpdate_view__sets_map_order(self):
+        """The campaign update form exposes map_order (the quest-map left-to-right ordering,
+        issue #1977) and saves it."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('quests:category_update', args=[1]))
+        self.assertContains(response, 'name="map_order"')
+
+        data = {'title': 'Ordered Campaign', 'published': True, 'map_order': 5}
+        self.client.post(reverse('quests:category_update', args=[1]), data=data)
+        self.assertEqual(Category.objects.get(id=1).map_order, 5)
 
     def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
         """The cancel button on the campaign update form must link back to the
@@ -2386,7 +2432,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:category_create'))
         self.assertContains(response, f'href="{reverse("quests:categories")}"')
 
-    def test_CategoryDelete_view(self):
+    def test_CategoryDelete_view__blocked_when_published_quests(self):
         """
         Staff should be able to delete a campaign *only* if it has no published quests.
 
@@ -2468,7 +2514,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             "You can't delete this campaign because it contains published quests"
         )
 
-    def test_CategoryPublish_view(self):
+    def test_CategoryPublish_view__publishes_campaign_and_quests(self):
         """
         Test CategoryPublish end-to-end:
         - Staff can see the "Publish Campaign and all its Quests" button on an unpublished campaign.
@@ -2615,6 +2661,7 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, a teacher, a quest, and enroll the student in the teacher's block."""
         cls.test_student = User.objects.create_user('test_student')
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.quest = baker.make(Quest, name="Test Quest")
@@ -2624,14 +2671,15 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                    user=cls.test_student, semester=SiteConfig.get().active_semester)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
-    def test_get_returns_403(self):
+    def test_ajax_submission_count__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
         self.assert403('quests:ajax_submission_count')
 
-    def test_non_ajax_post_returns_403(self):
+    def test_ajax_submission_count__non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.client.force_login(self.test_teacher)
         response = self.client.post(
@@ -2639,7 +2687,7 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_student_access_granted(self):
+    def test_ajax_submission_count__student_access_granted(self):
         """ The current behavior is that students can access the view.
         This test acknowledges that behavior."""
         self.client.force_login(self.test_student)
@@ -2650,7 +2698,8 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_ajax_returns_json(self):
+    def test_ajax_submission_count__returns_json(self):
+        """An ajax POST returns a JsonResponse with a 200 status."""
         self.client.force_login(self.test_teacher)
         response = self.client.post(
             reverse('quests:ajax_submission_count'),
@@ -2661,7 +2710,7 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(type(response), JsonResponse)
 
-    def test_ajax_returns_correct_count(self):
+    def test_ajax_submission_count__returns_correct_count(self):
         """ Should return the number of pending submissions for the quest"""
         self.client.force_login(self.test_teacher)
         # Only submissions that are "completed" but not "approved" should be counted.
@@ -2705,26 +2754,28 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, a quest, and a teacher shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
         cls.quest = baker.make(Quest)
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the student."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
-    def test_get_returns_403(self):
+    def test_ajax_quest_info__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.assert403('quests:ajax_quest_info', args=[self.quest.id])
 
-    def test_non_ajax_post_returns_403(self):
+    def test_ajax_quest_info__non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id])
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_ajax_get_returns_404(self):
+    def test_ajax_quest_info__ajax_get_returns_404(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.get(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
@@ -2733,7 +2784,8 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_ajax_returns_json(self):
+    def test_ajax_quest_info__returns_json(self):
+        """An ajax POST (with or without a quest id) returns a JsonResponse with a 200 status."""
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
             content_type='application/json',
@@ -2753,7 +2805,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(type(response), JsonResponse)
 
-    def test_can_export_student_false(self):
+    def test_ajax_quest_info__can_export_student_false(self):
         """
         Students should never see can_export=True in the rendered preview.
         """
@@ -2769,7 +2821,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # The export button is rendered only if can_export=True
         self.assertNotIn('id="export-quest"', html)
 
-    def test_can_export_staff_true(self):
+    def test_ajax_quest_info__can_export_staff_true(self):
         """
         Staff should see can_export=True if allowed by site config and schema is not library.
         """
@@ -2790,7 +2842,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # There should be something in the HTML rendered only if can_export=True
         self.assertIn('title="Export this quest to the Library"', html)
 
-    def test_can_export_false_on_library_schema(self):
+    def test_ajax_quest_info__can_export_false_on_library_schema(self):
         """
         When on the Library, should not be able to export to the Library
         """
@@ -2819,27 +2871,29 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, a quest, and a submission shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
         cls.quest = baker.make(Quest)
         cls.submission = baker.make(QuestSubmission)
         # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the student."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
-    def test_get_returns_403(self):
+    def test_ajax_approval_info__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.assert403('quests:ajax_approval_info', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_403(self):
+    def test_ajax_approval_info__non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id])
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_ajax_get_returns_404(self):
+    def test_ajax_approval_info__ajax_get_returns_404(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.get(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
@@ -2848,7 +2902,8 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_ajax_returns_json(self):
+    def test_ajax_approval_info__returns_json(self):
+        """An ajax POST returns a JsonResponse with the submission in context; missing id 404s."""
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id]),
             content_type='application/json',
@@ -2885,27 +2940,30 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, a quest, and one of the student's submissions shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
         cls.quest = baker.make(Quest)
         cls.submission = baker.make(QuestSubmission, user=cls.test_student)
         # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the student."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
-    def test_get_returns_403(self):
+    def test_ajax_submission_info__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         self.assert403('quests:ajax_info_in_progress', args=[self.submission.id])
 
-    def test_non_ajax_post_returns_403(self):
+    def test_ajax_submission_info__non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.post(
             reverse('quests:ajax_info_in_progress', args=[self.submission.id])
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_ajax_info_in_progress(self):
+    def test_ajax_submission_info__in_progress(self):
+        """An in-progress submission returns JSON with completed and past both False; missing id 404s."""
         response = self.client.post(
             reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
             content_type='application/json',
@@ -2917,8 +2975,8 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], False)
-        self.assertEqual(response.context['past'], False)
+        self.assertFalse(response.context['completed'])
+        self.assertFalse(response.context['past'])
 
         # Without a submission ID fails, 404:
         response = self.client.post(
@@ -2928,7 +2986,7 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 404)
 
-    def test_ajax_info_completed(self):
+    def test_ajax_submission_info__completed(self):
         """ url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/completed/$', views.ajax_submission_info,
         name='ajax_info_completed')
         """
@@ -2956,10 +3014,10 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], True)
-        self.assertEqual(response.context['past'], False)
+        self.assertTrue(response.context['completed'])
+        self.assertFalse(response.context['past'])
 
-    def test_ajax_info_past(self):
+    def test_ajax_submission_info__past(self):
         """ Completed and in a past semester
 
         url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past')
@@ -2975,8 +3033,8 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # Check context variables
         self.assertEqual(response.context['s'], self.submission)
-        self.assertEqual(response.context['completed'], False)
-        self.assertEqual(response.context['past'], True)
+        self.assertFalse(response.context['completed'])
+        self.assertTrue(response.context['past'])
 
 
 class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
@@ -2991,23 +3049,27 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, and a quest shared across the tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
 
         cls.quest = baker.make(Quest, name="Test Quest")
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the student."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
-    def test_quest_is_available(self):
+    def test_detail__quest_is_available(self):
+        """When the quest is available, the detail view renders with available=True."""
         with patch('quest_manager.models.Quest.is_available', return_value=True):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
-    def test_quest_preview_is_available_to_student_without_course(self):
+    def test_detail__preview_available_to_student_without_course(self):
+        """A quest available outside a course is shown as available to a student with no current course."""
         self.client.force_login(self.test_student)
 
         quest_avail_outside_course = baker.make(Quest, available_outside_course=True)
@@ -3017,14 +3079,15 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertTrue(response.context['available'])
 
-    def test_quest_is_editable(self):
+    def test_detail__quest_is_editable(self):
+        """When the quest is editable, the detail view renders with available=True."""
         with patch('quest_manager.models.Quest.is_editable', return_value=True):
             response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
 
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
-    def test_quest_is_not_available_nor_editable(self):
+    def test_detail__not_available_nor_editable_shows_preview(self):
         """ Should only display a preview version of the quest
         """
 
@@ -3039,7 +3102,7 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "Quest Preview")  # Should be something on the page indicating it's a preview
         self.assertNotContains(response, "Start Quest")  # Definitely no "Start Quest" button
 
-    def test_quest_is_not_available_nor_editable_but_submission_exists(self):
+    def test_detail__not_available_but_submission_exists_redirects(self):
         """ If they have a submission, it should redirect to that,
         otherwise only display a (preview) version of the quest
         """
@@ -3054,7 +3117,7 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
 
-    def test_can_export_in_detail_view(self):
+    def test_detail__can_export_context(self):
         """
         Verify 'can_export' context variable is correctly set in quest detail view
         for staff and students, and that it is disabled in the library schema.
@@ -3096,6 +3159,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student, a teacher, a quest, and a submission shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
 
@@ -3103,14 +3167,16 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.sub = baker.make(QuestSubmission, quest=cls.quest, user=cls.test_student)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the teacher."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
-    def test_get_404(self):
+    def test_approve__get_returns_404(self):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
 
-    def test_approve_with_comment_only_quick_reply_form(self):
+    def test_approve__with_comment_quick_reply_form(self):
+        """Approving via the quick reply form approves the submission, adds the comment, and notifies the student."""
         comment_text = "Lorum Ipsum"
         quick_reply_form_data = {
             'comment_text': comment_text,
@@ -3145,7 +3211,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.assertEqual(len(messages), 1)
         # self.assertEqual(messages[0].tags, 'success')
 
-    def test_approve_with_badge_quick_reply_form(self):
+    def test_approve__with_badge_quick_reply_form(self):
         """ Test that the badge is granted """
         test_badge = baker.make('badges.Badge')
         comment_text = "Lorum Ipsum"
@@ -3169,7 +3235,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         badges_earned = self.test_student.badgeassertion_set.filter(badge=test_badge)
         self.assertEqual(badges_earned.count(), 1)
 
-    def test_approve_other_teachers_student(self):
+    def test_approve__other_teachers_student_notifies_current_teacher(self):
         """ When a teacher approves/rejects/comments on another teacher's student
         The student's actual teacher(s) should get notified
 
@@ -3214,7 +3280,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notification_for_sub = Notification.objects.get_user_target(current_teacher, self.sub)
         self.assertTrue(notification_for_sub)
 
-    def test_approve_without_comment(self):
+    def test_approve__without_comment_uses_default_text(self):
         """ If no comment is provided when approving a quest, then the default approval comment from SiteConfig should be used"""
         quick_reply_form_data = {'comment_text': "", 'approve_button': True}
         self.client.post(reverse('quests:approve', args=[self.sub.id]), data=quick_reply_form_data)
@@ -3225,7 +3291,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
 
-    def test_approve_with_mutiple_badges_staff_submission_form(self):
+    def test_approve__with_multiple_badges_staff_form(self):
         """ Test that multiple badges can be granted from the SubmissionFormStaff form"""
         test_badge1 = baker.make('badges.Badge')
         test_badge2 = baker.make('badges.Badge')
@@ -3267,7 +3333,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
 
-    def test_approve_with_files_submission_form(self):
+    def test_approve__with_files_staff_form(self):
         """ Files can be uploaded and attached to comments when approving/commenting/rejecting quests
         and a link to the file is included in the comment.
         """
@@ -3304,7 +3370,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(os.path.basename(comment_files[0].docfile.name), test_files[0].name)
         self.assertEqual(os.path.basename(comment_files[1].docfile.name), test_files[1].name)
 
-    def test_comment_button(self):
+    def test_approve__comment_button_only_comments(self):
         """ The comment button should only leave a comment and not change the status of the submission """
         comment_text = "Lorum Ipsum"
         quick_reply_form_data = {
@@ -3333,7 +3399,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
 
-    def test_return_button(self):
+    def test_approve__return_button_marks_returned(self):
         """ The return button should mark the submission as returned """
         comment_text = "Lorum Ipsum"
         form_data = {'comment_text': comment_text, 'return_button': True}
@@ -3345,7 +3411,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_returned)
 
-    def test_no_comment_return_button(self):
+    def test_approve__return_button_without_comment_uses_default(self):
         """ When a submission is returned without comment, the SiteConfig's blank_return_text should be inserted """
 
         form_data = {'comment_text': "", 'return_button': True}
@@ -3358,13 +3424,13 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_return_text}</p>")
 
-    def test_non_existant_submit_button(self):
+    def test_approve__nonexistent_submit_button_404(self):
         """Can this even happen?  Somehow the form was submitted with a button that doesn't exist"""
         form_data = {'non_existant_submit_button': True}
         response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data=form_data)
         self.assertEqual(response.status_code, 404)
 
-    def test_skip_button(self):
+    def test_approve__skip_button_marks_no_xp(self):
         """ The skip button should mark the submission as approved and leave a comment,
             but not grant XP to the user
         """
@@ -3392,7 +3458,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
-    def test_ajax_approve(self):
+    def test_approve__ajax_all_button_types(self):
         """ Checks functionality of approve using ajax for all valid button types using ajax
         """
         post_request = {
@@ -3404,19 +3470,19 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(**post_request, data={'approve_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, True)
+        self.assertTrue(self.sub.is_approved)
 
         # 'return_button' self.sub.is_approved is False
         response = self.client.post(**post_request, data={'return_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, False)
+        self.assertFalse(self.sub.is_approved)
 
         # 'skip_button' self.sub.is_approved is True
         response = self.client.post(**post_request, data={'skip_button': ''})
         self.assertEqual(response.status_code, 200)
         self.sub.refresh_from_db()
-        self.assertEqual(self.sub.is_approved, True)
+        self.assertTrue(self.sub.is_approved)
 
         # 'comment_button' new comment should exist
         response = self.client.post(**post_request, data={
@@ -3455,6 +3521,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher, a student, a quest, and a submission shared across the tests."""
         # A teacher with a student (connected by the Block in the CourseStudent)
         cls.test_student = User.objects.create_user('test_student')
         cls.current_teacher = User.objects.create_user('test_current_teacher', is_staff=True)
@@ -3473,10 +3540,11 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.sub = baker.make(QuestSubmission, quest=cls.quest)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the teacher."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.current_teacher)
 
-    def test_submitted(self):
+    def test_approvals__submitted_tab(self):
         """ Completed quests awaiting approval for current teacher (teachers are connected by Block)
         A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions
         appear here
@@ -3492,7 +3560,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:submitted'))
 
-    def test_submitted_all(self):
+    def test_approvals__submitted_all_tab(self):
         """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block)
         """
         with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
@@ -3505,7 +3573,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][1]['url'], reverse('quests:submitted'))
 
-    def test_returned(self):
+    def test_approvals__in_progress_tab(self):
         """ Completed quests for current teacher that have been returned to the student. """
         with patch('quest_manager.views.QuestSubmission.objects.all_not_completed', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:in_progress'))
@@ -3517,7 +3585,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][0]['url'], reverse('quests:in_progress'))
 
-    def test_approved(self):
+    def test_approvals__approved_tab(self):
         """ Completed quests (submissions) that have been approved by a teacher """
 
         with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
@@ -3586,7 +3654,8 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.test_student.refresh_from_db()
         self.assertEqual(self.test_student.profile.xp_cached, 80)
 
-    def test_flagged(self):
+    def test_approvals__flagged_tab(self):
+        """The flagged tab lists flagged submissions and activates the Flagged tab."""
         with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):
             response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.status_code, 200)
@@ -3597,18 +3666,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(response.context['quest'])
         self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:flagged'))
 
-    # def test_skipped(self):
-    #     with patch('quest_manager.views.QuestSubmission.objects.all_skipped', return_value=[self.sub]):
-    #         response = self.client.get(reverse('quests:skipped'))
-    #     self.assertEqual(response.status_code, 200)
-    #     self.assertContains(response, str(self.sub))
-    #     # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3- Flagged
-    #     self.assertTrue(response.context['tab_list'][3]['active'])
-    #     self.assertTrue(response.context['current_teacher_only'])
-    #     self.assertIsNone(response.context['quest'])
-    #     self.assertURLEqual(response.context['tab_list'][3]['url'], reverse('quests:skipped'))
-
-    def test_approved_for_quest(self):
+    def test_approvals__approved_for_quest(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
         with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
@@ -3648,7 +3706,7 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:approvals'))
         self.assertNotContains(response, 'My groups')
 
-    def test_context_correct_tab_types(self):
+    def test_approvals__context_correct_tab_types(self):
         """ Checks each possible tab if it can be activated by accessing the tabs corresponding url
         """
 
@@ -3678,6 +3736,7 @@ class Is_staff_or_TA_test(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a user shared across the tests."""
         cls.user = baker.make(User)
 
     def test_is_staff_or_TA___staff(self):
@@ -3711,20 +3770,24 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and a CommonData instance shared across the tests."""
         cls.teacher = baker.make(User, is_staff=True)
 
         cls.cqi = baker.make(CommonData)
 
     def setUp(self):
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
     def test_page_status_code__anonymous(self):
+        """Anonymous users are redirected to login for all CommonData views."""
         self.assertRedirectsLogin("quest_manager:commonquestinfo_list")
         self.assertRedirectsLogin("quest_manager:commonquestinfo_create")
         self.assertRedirectsLogin("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
         self.assertRedirectsLogin("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
 
     def test_page_status_code__student(self):
+        """Students are forbidden (403) from all CommonData views."""
         stu = baker.make(User)
         self.client.force_login(stu)
 
@@ -3734,6 +3797,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
 
     def test_page_status_code__teacher(self):
+        """Teachers can access all CommonData views (200)."""
         self.client.force_login(self.teacher)
 
         self.assert200("quest_manager:commonquestinfo_list")
@@ -3741,7 +3805,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200("quest_manager:commonquestinfo_update", args=[self.cqi.pk])
         self.assert200("quest_manager:commonquestinfo_delete", args=[self.cqi.pk])
 
-    def test_CommonDataList_view(self):
+    def test_CommonDataList_view__lists_all(self):
         """
             Test if CommonData displays all CQI obj
         """
@@ -3756,7 +3820,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         for model_obj, ctx_obj in zip(CommonData.objects.all(), object_list):
             self.assertEqual(model_obj.pk, ctx_obj.pk)
 
-    def test_CommonDataCreate_view(self):
+    def test_CommonDataCreate_view__creates(self):
         """
             Test if CQI can be created using CreateView via form_data
         """
@@ -3767,7 +3831,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(CommonData.objects.count(), 2)
 
-    def test_CommonDataUpdate_view(self):
+    def test_CommonDataUpdate_view__updates(self):
         """
             Test if CQI can be updated using UpdateView via form_data
         """
@@ -3785,7 +3849,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotEqual(new.title, old.title)
         self.assertEqual(new.instructions, old.instructions)
 
-    def test_CommonDataDelete_view(self):
+    def test_CommonDataDelete_view__deletes(self):
         """
             Test if CQI can be deleted using DeleteView
         """
@@ -3802,6 +3866,7 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 class QuestArchiveViewTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Create a staff user and two quests where Quest B has Quest A as a prerequisite."""
         cls.staff_user = User.objects.create_user(username='staff', is_staff=True)
 
         # Quest A: This quest will be used as a prerequisite for another quest (Quest B).
@@ -3816,6 +3881,7 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         Prereq.add_simple_prereq(parent_object=cls.quest_b, prereq_object=cls.quest_a)
 
     def setUp(self):
+        """Set up a tenant-aware test client and log in the staff user."""
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
@@ -3897,3 +3963,46 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
         # Confirm redirect to archived quests page
         self.assertRedirects(response, reverse('quests:archived'))
+
+    def test_get__already_archived_quest_returns_404(self):
+        """The archive confirmation page 404s for an already-archived quest (#1856).
+
+        QuestArchive is a DetailView whose default queryset excludes archived quests,
+        so there is nothing left to confirm-archive once a quest is archived.
+        """
+        archived_quest = baker.make(Quest, name="Already Archived", archived=True)
+        url = reverse('quests:quest_archive', args=[archived_quest.id])
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_post__already_archived_quest_returns_404(self):
+        """Posting to archive an already-archived quest 404s instead of re-running the
+        archive logic (#1856).
+
+        Archiving is effectively a no-op once a quest is archived; because the view's
+        default queryset excludes archived quests, the object lookup 404s and the
+        submission-deletion/XP-invalidation side effects never run a second time.
+        """
+        archived_quest = baker.make(Quest, name="Already Archived", archived=True)
+        url = reverse('quests:quest_archive', args=[archived_quest.id])
+        self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_post__nonexistent_quest_returns_404(self):
+        """Posting to archive a quest id that does not exist 404s cleanly rather than
+        raising an unhandled exception (#1856).
+        """
+        nonexistent_id = 9999999
+        self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
+        url = reverse('quests:quest_archive', args=[nonexistent_id])
+        self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_unarchive__nonexistent_quest_returns_404(self):
+        """Unarchiving a quest id that does not exist 404s cleanly (#1856).
+
+        The view previously looked the quest up with ``QuerySet.get()``, which raised
+        ``Quest.DoesNotExist`` for a bad id and surfaced as an unhandled 500; it now
+        uses ``get_object_or_404``.
+        """
+        nonexistent_id = 9999999
+        self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
+        url = reverse('quests:unarchive', args=[nonexistent_id])
+        self.assertEqual(self.client.post(url).status_code, 404)

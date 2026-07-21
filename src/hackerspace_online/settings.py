@@ -2,10 +2,10 @@
 Django settings for hackerspace_online project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/1.8/topics/settings/
+https://docs.djangoproject.com/en/5.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/1.8/ref/settings/
+https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -189,7 +189,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
 
-    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
+    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/5.2/ref/contrib/flatpages/
 
     # third party apps
 
@@ -262,7 +262,7 @@ TAGGIT_CASE_INSENSITIVE = True
 
 MIDDLEWARE = [
     'django_tenants.middleware.TenantMiddleware',
-    # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
+    # caching: https://docs.djangoproject.com/en/5.2/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -477,7 +477,7 @@ DATABASES = {
         # died while idle (RDS failover, network blip, server-side timeout).
         # Without this, a dead pooled connection surfaces as an intermittent
         # InterfaceError/OperationalError on whatever request draws it.
-        # https://docs.djangoproject.com/en/4.2/ref/settings/#conn-health-checks
+        # https://docs.djangoproject.com/en/5.2/ref/settings/#conn-health-checks
         'CONN_HEALTH_CHECKS': True,
     }
 }
@@ -950,7 +950,6 @@ if DEBUG and not TESTING:
     MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware', ]
     INSTALLED_APPS += (
         'debug_toolbar',
-        'template_timings_panel',
         # http://django-cachalot.readthedocs.io
         # 'cachalot',
     )
@@ -963,7 +962,6 @@ if DEBUG and not TESTING:
         'debug_toolbar.panels.sql.SQLPanel',
         'debug_toolbar.panels.staticfiles.StaticFilesPanel',
         'debug_toolbar.panels.templates.TemplatesPanel',
-        'template_timings_panel.panels.TemplateTimings.TemplateTimings',
         # 'cachalot.panels.CachalotPanel',
         'debug_toolbar.panels.cache.CachePanel',
         'debug_toolbar.panels.signals.SignalsPanel',
@@ -978,12 +976,25 @@ if DEBUG and not TESTING:
     # }
 
 
+# Referrer-Policy value applied in production (see the security block below).
+# Named at module scope so it stays importable/testable even though the block
+# that applies it is skipped under TESTING. We deliberately deviate from
+# Django's "same-origin" default: under "same-origin" the browser sends *no*
+# Referer on cross-origin requests, which breaks third-party embeds that gate
+# on the referrer -- most visibly YouTube, whose iframe player refuses to load
+# and shows an error (issue #1896). "strict-origin-when-cross-origin" is the
+# modern browser default and web.dev's recommended value: it sends only the
+# origin (scheme + host, never the path) cross-origin, and the full URL
+# same-origin, so embeds work again while paths are still never leaked off-site.
+# Any non-None value keeps `check --deploy` (security.W022) green.
+PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+
 # PRODUCTION / STAGING SECURITY SETTINGS ###############################
 # Hardening applied whenever DEBUG is off -- i.e. production AND staging
 # (staging mirrors prod). These are intentionally NOT applied in local
 # development, where the site is served over plain http://localhost, nor
 # during tests. Django's `manage.py check --deploy` verifies these.
-# Docs: https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+# Docs: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 if not DEBUG and not TESTING:
 
     # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
@@ -1031,10 +1042,13 @@ if not DEBUG and not TESTING:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = env("SECURE_HSTS_PRELOAD", default=False)
 
-    # Misc hardening flagged by `check --deploy`. NOSNIFF and the "same-origin"
-    # referrer policy match Django's own defaults; X_FRAME_OPTIONS "DENY" is
-    # already the effective default via XFrameOptionsMiddleware -- set here so
-    # the intent is explicit and the deploy check stays green.
+    # Misc hardening flagged by `check --deploy`. NOSNIFF and X_FRAME_OPTIONS
+    # "DENY" match the effective defaults (the latter via XFrameOptionsMiddleware)
+    # -- set here so the intent is explicit and the deploy check stays green.
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_REFERRER_POLICY = "same-origin"
     X_FRAME_OPTIONS = "DENY"
+    # Sends the origin (not the path) cross-origin so YouTube and other embeds
+    # load again; see PRODUCTION_SECURE_REFERRER_POLICY above and issue #1896.
+    # Excluded from coverage because this block only runs outside the test
+    # harness; the policy value itself is covered directly by ReferrerPolicyTest.
+    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY  # pragma: no cover

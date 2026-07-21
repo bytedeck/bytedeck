@@ -6,7 +6,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 class TestCSSSanitizer(ByteDeckTenantTestCase):
     """ByteDeck's CSSSanitizer implementation, fixes various issues"""
 
-    def test_sanitize_css(self):
+    def test_sanitize_css__preserves_escaped_values(self):
         """The sanitizer should not strip/remove escaped CSS values."""
         from bytedeck_summernote.css_sanitizer import CSSSanitizer
         from bytedeck_summernote.settings import STYLES

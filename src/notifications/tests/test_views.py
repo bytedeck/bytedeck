@@ -21,15 +21,17 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a teacher and two students (a teacher must exist first or profile creation fails)."""
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
 
     def setUp(self):
+        """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_all_notification_page_status_codes_for_anonymous(self):
+    def test_notification_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
 
         self.assertRedirectsLogin('notifications:list')
@@ -42,7 +44,8 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
         self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
 
-    def test_all_notification_page_status_codes_for_students(self):
+    def test_notification_page_status_codes__students(self):
+        """A logged-in student can view list pages but not the ajax-only endpoints."""
         # log in student1
         self.client.force_login(self.test_student1)
 
@@ -62,7 +65,8 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
         self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
 
-    def test_all_notification_page_status_codes_for_teachers(self):
+    def test_notification_page_status_codes__teachers(self):
+        """A logged-in teacher can view list pages but not the ajax-only endpoints."""
         # log in student1
         self.client.force_login(self.test_teacher)
 
@@ -88,9 +92,8 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
         self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 404)
 
-    def test_ajax_mark_read(self):
-        """ Marks a Notification as read via Ajax (by setting unread = FALSE)
-        """
+    def test_ajax_mark_read__marks_notification_read(self):
+        """Marks a Notification as read via Ajax (by setting unread = FALSE)."""
         # log in student1
         self.client.force_login(self.test_student1)
 
@@ -112,7 +115,8 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_ajax(self):
+    def test_ajax__returns_200_for_logged_in_student(self):
+        """A logged-in student's ajax POST to the notifications endpoint returns 200."""
         # log in student1
         self.client.force_login(self.test_student1)
 

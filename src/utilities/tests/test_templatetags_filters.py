@@ -3,7 +3,8 @@ from django.template import Template, Context
 
 
 class PossessiveFilterTest(TestCase):
-    def test_possessive_filter(self):
+    def test_add_possessive__various_name_endings(self):
+        """Filter appends the correct possessive suffix for names ending in s, 's, 's, and other letters."""
         template = Template("{% load filters %}{{ name|add_possessive }}")
 
         # Test a name that ends with "s"

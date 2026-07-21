@@ -19,11 +19,12 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """
 
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         self.client = TenantClient(self.tenant)
 
     @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
     @patch('tenant.views.connection', schema_name=get_public_schema_name())
-    def test_public_tenant(self, mock_connection1, mock_connection2):
+    def test_public_tenant__allauth_views_return_404(self, mock_connection1, mock_connection2):
         """
         Overriden (decorated) `allauth` view should not be accessible for public tenant schemas,
         ie. return 404 (not found) for general public.
@@ -42,7 +43,7 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert404('account_reset_password_from_key', kwargs={'uidb36': '123', 'key': '123'})  # not found
         self.assert404('account_reset_password_from_key_done')  # not found
 
-    def test_non_public_tenant(self):
+    def test_non_public_tenant__allauth_views_accessible(self):
         """
         Overriden (decorated) `allauth` view should be accessible for non-public tenant schemas only,
         ie. return anything except 404 (not found) for non-public tenant.
@@ -66,14 +67,16 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a student with a known email for password-reset scenarios."""
         cls.test_email = 'test_email@bytedeck.com'
         cls.test_password = 'password'
         cls.test_student1 = User.objects.create_user('test_student', email=cls.test_email, password=cls.test_password)
 
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_user_cannot_request_password_reset(self):
+    def test_request_password_reset__fails_for_unassigned_email(self):
         """ User should not be able to request password reset if they registered without an email """
         data = {
             'email': 'nonexistentemail@gmail.com'
@@ -82,7 +85,7 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'error_1_id_email')  # invalid with error message
         self.assertContains(response, 'This e-mail address is not assigned')
 
-    def test_email_sent_to_requesting_user(self):
+    def test_reset_password__email_sent_to_requesting_user(self):
         """ Email should be sent to the requesting user containing the password verification link """
         data = {
             'email': self.test_email

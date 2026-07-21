@@ -17,15 +17,18 @@ User = get_user_model()
 
 class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         # Every test needs access to the request factory.
-        # https://docs.djangoproject.com/en/3.0/topics/testing/advanced/#the-request-factory
+        # https://docs.djangoproject.com/en/5.2/topics/testing/advanced/#the-request-factory
         # self.factory = RequestFactory()
         self.client = TenantClient(self.tenant)
 
-    def test_secret_view(self):
+    def test_secret_view__returns_200(self):
+        """The 'simple' secret view responds with 200."""
         self.assert200('simple')
 
-    def test_home_view_staff(self):
+    def test_home_view__staff_redirected_to_approvals(self):
+        """A logged-in staff user hitting home is redirected to the approvals page."""
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
         self.client.force_login(staff_user)
         response = self.client.get(reverse('home'))
@@ -34,12 +37,14 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             reverse('quests:approvals')
         )
 
-    def test_home_view_authenticated(self):
+    def test_home_view__authenticated_redirected_to_quests(self):
+        """A logged-in student hitting home is redirected to the quests page."""
         user = User.objects.create_user(username="test_user", password="password")
         self.client.force_login(user)
         self.assertRedirectsQuests('home')
 
-    def test_home_view_anonymous(self):
+    def test_home_view__anonymous_redirected_to_login(self):
+        """An anonymous visitor hitting home is redirected to the login page."""
         response = self.client.get(reverse('home'))
         self.assertRedirects(
             response,
@@ -48,7 +53,7 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
     @patch('tenant.views.connection', schema_name=get_public_schema_name())
-    def test_home_public_tenant(self, mock_connection1, mock_connection2):
+    def test_home_view__public_tenant_redirects_to_flatpage(self, mock_connection1, mock_connection2):
         """Home view for public tenant should permanent redirect (301) to the public flatpage called 'home'
         """
         self.assertRedirects(
@@ -59,23 +64,8 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
     # Contact Form removed
-    # @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
-    # @patch('tenant.views.connection', schema_name=get_public_schema_name())
-    # def test_home_public_contact_form(self, mock_connection1, mock_connection2):
-    #     form_data = {
-    #         'name': 'First Last',
-    #         'email': 'test@example.com',
-    #         'message': 'Test Message',
-    #         'g-recaptcha-response': 'PASSED',
-    #     }
-    #     response = self.client.post(reverse('home'), data=form_data)
-    #     # Form submission redirects to same home page
-    #     self.assertEqual(response.status_code, 302)
-    #     self.assertEqual(response.url, reverse('home'))
-    #     # The view should be sent via email with form info if successfull
-    #     self.assertEqual(len(mail.outbox), 1)
 
-    def test_favicon(self):
+    def test_favicon__redirects_to_site_favicon(self):
         """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
         response = self.client.get('/favicon.ico')
         self.assertEqual(response.status_code, 301)  # permanent redirect
@@ -83,13 +73,14 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
     @patch('tenant.views.connection', schema_name=get_public_schema_name())
-    def test_favicon_public_tenant(self, mock_connection1, mock_connection2):
+    def test_favicon__public_tenant_redirects_to_static_favicon(self, mock_connection1, mock_connection2):
         """ Requests for /favicon.ico made by browsers is redirected to the site's favicon """
         response = self.client.get('/favicon.ico')
         self.assertEqual(response.status_code, 301)  # permanent redirect
         self.assertEqual(response.url, static('icon/favicon.ico'))
 
-    def test_achievements_redirect_to_badges_views(self):
+    def test_achievements__redirect_to_badges_views(self):
+        """Legacy /achievements/ URLs redirect to their corresponding badges views."""
         # log in a teacher
         staff_user = User.objects.create_user(username="test_staff_user", password="password", is_staff=True)
         self.client.force_login(staff_user)
@@ -105,9 +96,10 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
+        """Use a tenant-aware client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_enable_google_signin_is_False(self):
+    def test_enable_google_signin__False_hides_button(self):
         """
         Test to verify that Google sign in button is not showing in the page when it is disabled
         """
@@ -118,7 +110,7 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('account_signup'))
         self.assertNotIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
 
-    def test_enable_google_signin_is_True(self):
+    def test_enable_google_signin__True_shows_button(self):
         """
         Test to verify that Google sign in button is showing in the page when it is enabled
         """

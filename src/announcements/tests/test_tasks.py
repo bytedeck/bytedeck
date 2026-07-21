@@ -24,6 +24,7 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create an announcement, teacher, students, and AI user shared across the test methods."""
         cls.announcement = baker.make(Announcement)
 
         # need a teacher before students can be created or the profile creation will fail when trying to notify
@@ -38,7 +39,7 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
             },
         )
 
-    def test_get_users_to_email(self):
+    def test_get_users_to_email__returns_only_verified_opted_in_users(self):
         """Should return correct list of users to email"""
 
         course = baker.make(Course)
@@ -96,8 +97,8 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
 
         self.assertEqual(len(emails), 12 if settings.TENANT_DEFAULT_OWNER_EMAIL else 11)  # 11 + deck owner = 12
 
-    def test_send_announcement_emails(self):
-
+    def test_send_announcement_emails__task_succeeds(self):
+        """The send_announcement_emails task runs to completion successfully."""
         task_result = tasks.send_announcement_emails.apply(
             kwargs={
                 "content": "",
@@ -107,7 +108,8 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
         )
         self.assertTrue(task_result.successful())
 
-    def test_publish_announcement(self):
+    def test_publish_announcement__clears_draft_and_removes_task(self):
+        """Publishing marks the announcement non-draft, disables auto_publish, and removes its periodic task."""
         self.assertTrue(self.announcement.draft)
         task_result = tasks.publish_announcement.apply(
             kwargs={
@@ -132,7 +134,8 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
             with schema_context(get_public_schema_name()):
                 PeriodicTask.objects.get(name=task_name)
 
-    def test_publish_announcement_past_date(self):
+    def test_publish_announcement__past_release_date(self):
+        """An announcement with a past release date is still published (draft cleared)."""
         past_announcement = baker.make(Announcement,
                                        datetime_released=timezone.now() - timedelta(days=90))
         self.assertTrue(past_announcement.draft)
@@ -150,8 +153,8 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
         past_announcement.refresh_from_db()
         self.assertFalse(past_announcement.draft)
 
-    def test_send_notifications(self):
-
+    def test_send_notifications__task_succeeds(self):
+        """The send_notifications task runs to completion successfully, directly and via apply()."""
         tasks.send_notifications(self.ai_user.id, self.announcement.id)
 
         # run method as synchronous task

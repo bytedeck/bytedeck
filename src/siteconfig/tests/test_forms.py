@@ -19,10 +19,8 @@ class SiteConfigFormTest(ByteDeckTenantTestCase):
         """
         self.config = SiteConfig.get()
 
-    def test_clean_custom_stylesheet_method(self):
-        """
-        Tests CSS validation for form uploads done by `clean_custom_stylesheet` method.
-        """
+    def test_clean_custom_stylesheet__validates_css(self):
+        """Tests CSS validation for form uploads done by `clean_custom_stylesheet` method."""
         form_data = model_to_form_data(self.config, SiteConfigForm)
         del form_data["custom_stylesheet"]
 
@@ -70,14 +68,10 @@ class SiteConfigFormTest(ByteDeckTenantTestCase):
             charset="utf-8",
         )
         form = SiteConfigForm(form_data, files={"custom_stylesheet": custom_stylesheet}, instance=self.config, is_deck_owner=True)
-        # print(form.errors)
         self.assertTrue(form.is_valid())
 
-    def test_custom_stylesheet_file_submission_removal(self):
-        """
-        Custom CSS file can be uploaded (submitted) and attached to `SiteConfig` model,
-        and existing file can be cleared.
-        """
+    def test_custom_stylesheet__submission_and_removal(self):
+        """Custom CSS file can be uploaded and attached to `SiteConfig`, and an existing file can be cleared."""
         valid_css = b"""body { color: black; }"""
         custom_stylesheet = InMemoryUploadedFile(
             BytesIO(valid_css),
@@ -114,8 +108,8 @@ class SiteConfigFormTest(ByteDeckTenantTestCase):
         with self.assertRaises(ValueError):
             SiteConfig.get().custom_stylesheet.read()
 
-    def test_clean_clean_custom_profile_field_method(self):
-        """ Test if `clean_clean_custom_profile_field()` strips whitespace'd ends """
+    def test_clean_custom_profile_field__strips_whitespace(self):
+        """Test if `clean_clean_custom_profile_field()` strips whitespace'd ends."""
         form_data = model_to_form_data(self.config, SiteConfigForm)
 
         # check with whitespace only

@@ -14,7 +14,7 @@ PUBLIC_SCHEMA = get_public_schema_name()
 
 class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
 
-    def test_save_CronSchedule_signal(self):
+    def test_save_CronSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a CronSchedule model should also save it in the public schema """
 
         cron_schedule = CrontabSchedule(minute=5, hour=23, day_of_month=26, month_of_year=11)
@@ -34,7 +34,7 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(cron_schedule.day_of_month, public_cron_schedule.day_of_month)
         self.assertEqual(cron_schedule.month_of_year, public_cron_schedule.month_of_year)
 
-    def test_save_ClockedSchedule_signal(self):
+    def test_save_ClockedSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a ClockedSchedule model should also save it in the public schema """
 
         now = timezone.now()
@@ -50,7 +50,7 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
         clocked_schedule.refresh_from_db()
         self.assertEqual(clocked_schedule.clocked_time, public_clocked_schedule.clocked_time)
 
-    def test_save_IntervalSchedule_signal(self):
+    def test_save_IntervalSchedule_signal__also_saves_to_public_schema(self):
         """ Saving an IntervalSchedule model should also save it in the public schema """
 
         interval_schedule = IntervalSchedule(every=5, period=IntervalSchedule.DAYS)
@@ -67,7 +67,7 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(interval_schedule.period, public_interval_schedule.period)
         self.assertEqual(str(interval_schedule), str(public_interval_schedule))
 
-    def test_save_SolarSchedule_signal(self):
+    def test_save_SolarSchedule_signal__also_saves_to_public_schema(self):
         """ Saving a SolarSchedule model should also save it in the public schema """
 
         params = {
@@ -89,7 +89,7 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(solar_schedule.latitude, public_solar_schedule.latitude)
         self.assertEqual(solar_schedule.longitude, public_solar_schedule.longitude)
 
-    def test_save_PeriodicTask_signal(self):
+    def test_save_PeriodicTask_signal__also_saves_to_public_schema(self):
         """ Saving a periodic task should also save it in the public schema """
 
         schedule = CrontabSchedule(minute='5')

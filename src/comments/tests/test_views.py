@@ -16,6 +16,7 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create users, an announcement, and comments shared across the test methods."""
         cls.student = baker.make(User)
         cls.teacher = baker.make(User, is_staff=True)
         cls.announcement = baker.make('announcements.Announcement')
@@ -31,10 +32,11 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.comment_decoy = baker.make('comments.Comment', target_content_type=None)
 
     def setUp(self):
+        """Set up a tenant test client for each test."""
         self.client = TenantClient(self.tenant)
 
     @patch('comments.models.Comment.unflag')
-    def test_unflag(self, mock_unflag):
+    def test_unflag__staff_only_calls_unflag(self, mock_unflag):
         """Test that unflag view is only accessible to staff users,
         and that it calls the unflag method on the comment and redirects to the comment's path
         """
@@ -55,7 +57,7 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         mock_unflag.assert_called_once()
 
     @patch('comments.models.Comment.flag')
-    def test_flag(self, mock_flag):
+    def test_flag__staff_only_calls_flag(self, mock_flag):
         """Test that unflag view is only accessible to staff users,
         and that it calls the flag method on the comment and redirects to the comment's path
         """
@@ -76,7 +78,7 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         mock_flag.assert_called_once()
 
     @patch('comments.models.Comment.flag')
-    def test_delete(self, mock_flag):
+    def test_delete__staff_only_removes_comment(self, mock_flag):
         """Test that delete view is only accessible to staff users,
         and that deletes the comment and redirects tot he comments (former) path
         """
@@ -106,7 +108,7 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, path)
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
-    def test_delete_comment_path(self):
+    def test_delete_comment__cancel_button_path(self):
         ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
         correctly contains the `comment.path` as its href attribute.
         '''

@@ -30,43 +30,44 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.config = SiteConfig.get()
 
     def tearDown(self):
+        """Clear the cache after each test so cached SiteConfig data does not leak."""
         cache.clear()
 
-    def test_get(self):
-        """ Each tenant should have a single SiteConfig object
-        that is created upon first access via the get() method
-        """
+    def test_get__returns_singleton(self):
+        """Each tenant should have a single SiteConfig object created on first get()."""
         self.assertIsInstance(self.config, SiteConfig)
         self.assertEqual(SiteConfig.objects.count(), 1)
 
-    def test_semester_created(self):
-        """ If one doesn't exists yet, a semester should be created
-        to act as the active semester """
+    def test_active_semester__created_by_default(self):
+        """If one doesn't exist yet, a semester is created to act as the active semester."""
         self.assertIsNotNone(self.config.active_semester)
 
-    def test_get_absolute_url(self):
-        """ Provides url to the update form """
+    def test_get_absolute_url__returns_update_form_url(self):
+        """Provides url to the update form."""
         self.assertEqual(reverse('config:site_config_update_own'), self.config.get_absolute_url())
 
-    def test_get_site_logo(self):
-        """ Returns a default logo """
+    def test_get_site_logo_url__returns_default(self):
+        """Returns a default logo."""
         self.assertEqual(self.config.get_site_logo_url(), static('img/default_icon.png'))
 
-    def test_get_default_icon_url(self):
-        """ By default should return the site logo """
+    def test_get_default_icon_url__returns_site_logo(self):
+        """By default should return the site logo."""
         self.assertEqual(self.config.get_default_icon_url(), static('img/default_icon.png'))
 
-    def test_get_favicon_url(self):
-        """ Returns default if no favicon set """
+    def test_get_favicon_url__returns_default(self):
+        """Returns default if no favicon set."""
         self.assertEqual(self.config.get_favicon_url(), static('icon/favicon.ico'))
 
-    def test_get_banner_image_url(self):
+    def test_get_banner_image_url__returns_default(self):
+        """Returns the default banner image when none is set."""
         self.assertEqual(self.config.get_banner_image_url(), static('img/banner.png'))
 
-    def test_get_banner_image_dark_url(self):
+    def test_get_banner_image_dark_url__returns_default(self):
+        """Returns the default dark banner image when none is set."""
         self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner.png'))
 
-    def test_set_active_semester(self):
+    def test_set_active_semester__updates_active_semester(self):
+        """set_active_semester() switches the config's active semester to the given one."""
         # make sure default active semester is created first
         default_active_sem = self.config.active_semester
         new_semester = baker.make('courses.Semester')
@@ -78,15 +79,15 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         # make sure it is now the active semester
         self.assertEqual(self.config.active_semester.id, new_semester.id)
 
-    def test_SiteConfig_get_caches(self):
-        """ SiteConfig should be in cache """
+    def test_get__caches_config(self):
+        """SiteConfig should be in cache after get()."""
         cached_config = cache.get(SiteConfig.cache_key())
 
         self.assertIsNotNone(cached_config)
         self.assertEqual(self.config, cached_config)
 
-    def test_SiteConfig_save_sets_new_cache_properly(self):
-        """ SiteConfig.save should invalidate previous cache and set newer cache """
+    def test_save__resets_cache(self):
+        """SiteConfig.save should invalidate previous cache and set newer cache."""
         old_config_cache = cache.get(SiteConfig.cache_key())
 
         new_site_name = 'My New Site Name'
@@ -100,8 +101,8 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         # Cache should be set after calling SiteConfig.get()
         self.assertEqual(cache.get(SiteConfig.cache_key()).site_name, new_config_cache.site_name)
 
-    def test_SiteConfig_cache_expires(self):
-        """ SiteConfig cache should expire after a certain period """
+    def test_get__cache_expires(self):
+        """SiteConfig cache should expire after a certain period."""
 
         # Cache should not be empty as of this moment
         self.assertIsNotNone(cache.get(SiteConfig.cache_key()))
@@ -140,7 +141,7 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.assertNotEqual(get_default_deck_owner(), old_owner_pk)
         self.assertEqual(get_default_deck_owner(), User.objects.last().pk)  # since it gets created it should be at the back. Assume sorted by pk
 
-    def test_can_user_export_to_library(self):
+    def test_can_user_export_to_library__respects_permissions(self):
         """Verify can_user_export_to_library respects deck owner, staff settings, and schema."""
 
         current_schema = "test"

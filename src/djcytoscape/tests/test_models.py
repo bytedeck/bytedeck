@@ -11,6 +11,7 @@ from model_bakery import baker
 
 # from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoElement, CytoScape, TempCampaign, TempCampaignNode, clean_JSON
+from prerequisites.models import Prereq
 from quest_manager.models import Quest, Category
 
 # from django_tenants.test.client import TenantClient
@@ -25,6 +26,19 @@ def generate_real_primary_map():
     """Generate a maps with the initial quests, campaigns, and badges installed via data migrations"""
     welcome_quest = Quest.objects.get(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1')
     return CytoScape.generate_map(welcome_quest, 'Main')
+
+
+def bake_scape(**kwargs):
+    """``baker.make`` a CytoScape pointed at a real Quest initial object.
+
+    CytoScape.initial_content_type is a non-nullable ForeignKey(ContentType) with a
+    uniqueness constraint on (initial_content_type, initial_object_id). Bare
+    ``baker.make(CytoScape)`` would give it a random, dangling initial object, so
+    these tests pin it to a freshly-created Quest instead.
+    """
+    kwargs.setdefault('initial_content_type', ContentType.objects.get_for_model(Quest))
+    kwargs.setdefault('initial_object_id', baker.make('quest_manager.Quest').id)
+    return baker.make(CytoScape, **kwargs)
 
 
 class JSONTestCaseMixin:
@@ -49,22 +63,28 @@ class JSONTestCaseMixin:
 class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
     """ All tests for the method: def clean_JSON(dirty_json_str): """
 
-    def test_clean_json_no_braces(self):
+    def test_clean_JSON__no_braces(self):
+        """A brace-less key/value string is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('"key": true'))
 
-    def test_clean_json_trailing_comma_no_braces(self):
+    def test_clean_JSON__trailing_comma_no_braces(self):
+        """A brace-less string with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('"key": true,'))
 
-    def test_clean_json_trailing_comma_with_braces(self):
+    def test_clean_JSON__trailing_comma_with_braces(self):
+        """A braced object with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('{"key": true,}'))
 
-    def test_clean_json_unquoted_key(self):
+    def test_clean_JSON__unquoted_key(self):
+        """An unquoted key is quoted so the result is valid JSON."""
         self.assertValidJSON(clean_JSON('key: true'))
 
-    def test_clean_json_single_quoted_key(self):
+    def test_clean_JSON__single_quoted_key(self):
+        """A single-quoted key is normalised to double quotes for valid JSON."""
         self.assertValidJSON(clean_JSON('\'key\': true'))
 
-    def test_clean_old_defaults_INIT_OPTIONS(self):
+    def test_clean_JSON__old_defaults_init_options(self):
+        """The legacy INIT_OPTIONS defaults block is cleaned into valid JSON."""
         json_str = """minZoom: 0.5,
             maxZoom: 1.5,
             wheelSensitivity: 0.1,
@@ -75,7 +95,8 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
             """
         self.assertValidJSON(clean_JSON(json_str))
 
-    def test_clean_old_defaults_NODE_STYLES(self):
+    def test_clean_JSON__old_defaults_node_styles(self):
+        """The legacy NODE_STYLES defaults block is cleaned into valid JSON."""
         json_str = """label: 'data(label)',
             'text-valign':   'center', 'text-halign': 'right',
             'text-margin-x': '-155',
@@ -94,7 +115,8 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
             """
         self.assertValidJSON(clean_JSON(json_str))
 
-    def test_clean_old_defaults_EDGE_STYLES(self):
+    def test_clean_JSON__old_defaults_edge_styles(self):
+        """The legacy EDGE_STYLES defaults block is cleaned into valid JSON."""
         json_str = """'width': 1,
             'curve-style':   'bezier',
             'line-color':    'black',
@@ -110,18 +132,21 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
 class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Generate the real primary map to populate CytoElement rows for the tests."""
         cls.map = generate_real_primary_map()
 
-    def test_object_creation(self):
+    def test_object_creation__is_cytoelement_instance(self):
+        """A baked object is a CytoElement instance."""
         self.element = baker.make(CytoElement)
         self.assertIsInstance(self.element, CytoElement)
 
-    def test_json(self):
-        """ Should be valid json string, check by deserializing """
+    def test_json__is_valid_json_string(self):
+        """Each element's json() returns a deserializable JSON string."""
         for element in CytoElement.objects.all():
             self.assertValidJSON(element.json())
 
-    def test_json_dict(self):
+    def test_json_dict__is_valid_dict_with_data(self):
+        """Each element's json_dict() is a serializable dict with a 'data' key (and 'classes' for nodes)."""
         for element in CytoElement.objects.all():
             json_dict = element.json_dict()
             self.assertIsInstance(json_dict, dict)
@@ -130,8 +155,8 @@ class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
             if element.is_node():  # Quests, Campaigns and Badges should have a class
                 self.assertIn('classes', json_dict)
 
-    def test_valid_urls(self):
-        """ tests if valid urls wont throw ValidationErrors """
+    def test_full_clean__valid_urls(self):
+        """Valid href URLs pass full_clean without raising ValidationError."""
         element = baker.make(CytoElement)
         valid_urls = [
             '/',
@@ -154,8 +179,8 @@ class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
             except ValidationError:
                 self.fail(f"{url} is not a valid URL")
 
-    def test_invalid_urls(self):
-        """ tests if invalid urls throw ValidationErrors """
+    def test_full_clean__invalid_urls(self):
+        """Invalid href URLs raise ValidationError during full_clean."""
         element = baker.make(CytoElement)
         invalid_urls = [
             ' ',  # space
@@ -172,9 +197,11 @@ class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
 class TempCampaignNodeTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Build a TempCampaignNode instance for the tests."""
         cls.temp_campaign_node = TempCampaignNode(id_=1)
 
-    def test_object_creation(self):
+    def test_object_creation__is_instance_and_str_is_id(self):
+        """A TempCampaignNode is created and its string form is its id."""
         self.assertIsInstance(self.temp_campaign_node, TempCampaignNode)
         # this doesn't matter, can be changed
         self.assertEqual(str(self.temp_campaign_node), str(self.temp_campaign_node.id))
@@ -183,24 +210,114 @@ class TempCampaignNodeTest(ByteDeckTenantTestCase):
 class TempCampaignTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Build a TempCampaign instance for the tests."""
         cls.temp_campaign = TempCampaign(parent_node_id=1)
 
-    def test_object_creation(self):
+    def test_object_creation__is_instance(self):
+        """A baked TempCampaign is a TempCampaign instance."""
         self.assertIsInstance(self.temp_campaign, TempCampaign)
+
+    def test_str__no_children(self):
+        """A campaign with no nodes reports that it has no children."""
+        self.assertIn("No children", str(TempCampaign(parent_node_id=1)))
+
+    def test_str__with_children(self):
+        """A campaign's string lists its parent id and each child node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        rendered = str(tc)
+        self.assertIn("Parent: 1", rendered)
+        self.assertIn("Child:10", rendered)
+        self.assertIn("Child:11", rendered)
+
+    def test_add_node__existing_id_appends_prereq(self):
+        """Re-adding an existing node id appends the new prereq instead of duplicating the node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=10, prereq_node_id=101)
+        self.assertEqual(len(tc.nodes), 1)
+        self.assertEqual(tc.get_node(10).prereq_node_ids, [100, 101])
+
+    def test_add_campaign_reliant__tracks_node_id(self):
+        """Nodes directly reliant on the campaign are tracked in campaign_reliant_node_ids."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_campaign_reliant(reliant_node_id=42)
+        self.assertEqual(tc.campaign_reliant_node_ids, [42])
+
+    def test_has_internal_reliant__true_only_for_internal_reliant(self):
+        """has_internal_reliant is True only when an internal node is a reliant of the given node."""
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # node 11 (internal) relies on node 10 -> internal reliant
+        tc.add_reliant(node_id=10, reliant_node_id=11)
+        self.assertTrue(tc.has_internal_reliant(tc.get_node(10)))
+        # node 11's reliant is an external id -> not internal
+        tc.add_reliant(node_id=11, reliant_node_id=999)
+        self.assertFalse(tc.has_internal_reliant(tc.get_node(11)))
+
+    def test_is_non_sequential__always_false_due_to_is_true_comparison(self):
+        """is_non_sequential runs over a campaign whose nodes share a common prereq.
+
+        Note: the method body compares a *list* with ``is True`` (``get_common_prereq_node_ids()
+        is True``), so it currently always returns False regardless of the campaign's shape.
+        This test pins that current behavior; it should be revisited if the comparison is fixed.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=100)
+        tc.add_node(node_id=11, prereq_node_id=100)
+        # Both nodes share prereq 100, so get_common_prereq_node_ids() is non-empty...
+        self.assertEqual(tc.get_common_prereq_node_ids(), [100])
+        # ...but `[...] is True` is False, so is_non_sequential() returns False today.
+        self.assertFalse(tc.is_non_sequential())
+
+
+class CytoManagerTests(ByteDeckTenantTestCase):
+    """Tests for the CytoElement/CytoScape manager helpers (random-node pickers and lookups)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Generate the real primary map to give the manager helpers nodes to work with."""
+        cls.map = generate_real_primary_map()
+
+    def test_get_random_node__returns_node_in_scape(self):
+        """get_random_node returns a NODE element belonging to the given scape."""
+        node = CytoElement.objects.get_random_node(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_random_node_triangular_distribution__returns_node_in_scape(self):
+        """The triangular-distribution picker also returns a node from the scape."""
+        node = CytoElement.objects.get_random_node_triangular_distribution(self.map)
+        self.assertEqual(node.scape_id, self.map.id)
+        self.assertEqual(node.group, CytoElement.NODES)
+
+    def test_get_map_for_init__missing_then_found(self):
+        """get_map_for_init returns None when no map initiates the object, else that map."""
+        quest = baker.make('quest_manager.Quest')
+        self.assertIsNone(CytoScape.objects.get_map_for_init(quest))
+
+        scape = CytoScape.generate_map(quest, "Quest Map")
+        found = CytoScape.objects.get_map_for_init(quest)
+        self.assertEqual(found, scape)
+        self.assertEqual(found.initial_object_id, quest.id)
 
 
 class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
+        """Generate the real primary map as a shared fixture for the scape tests."""
         # tests that regenerate/mutate the map only touch the DB, which is rolled
         # back per test, and self.map is a per-test deep copy — safe class-level fixture
         cls.map = generate_real_primary_map()
 
-    def test_object_creation(self):
+    def test_object_creation__is_instance_and_str_is_name(self):
+        """A generated map is a CytoScape whose string form is its name."""
         self.assertIsInstance(self.map, CytoScape)
         self.assertEqual(str(self.map), self.map.name)
 
-    def test_object_alphabetical_order(self):
+    def test_object_alphabetical_order__maps_ordered_by_name(self):
         """
         Map objects are ordered alphabetically at the model level to ensure
         proper sorting consistently sitewide.
@@ -218,10 +335,35 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         # A queryset created from all objects is ordered correctly by default
         self.assertQuerySetEqual(all_maps, all_maps.order_by('name'))
 
-    def test_generate_map(self):
+    def test_generate_map__creates_new_scape(self):
+        """generate_map creates a new CytoScape for the given initial object."""
         quest = baker.make('quest_manager.Quest')
         CytoScape.generate_map(quest, "test")
         self.assertEqual(CytoScape.objects.count(), 2)
+
+    def test_generate_map__transition_node_for_tilde_quest(self):
+        """A reliant quest whose label starts with '~' is turned into a transition
+        (child-map link) node: is_transition_node() detects it and
+        convert_to_transition_node() flags the node and restyles it."""
+        start = baker.make('quest_manager.Quest', name="Start Quest")
+        # A '~'-prefixed name marks a map break -> transition node (autobreak on by default).
+        transition = baker.make('quest_manager.Quest', name="~Continue in the next map")
+        transition.add_simple_prereqs([start])  # transition relies on start
+
+        scape = CytoScape.generate_map(start, "Transition Map")
+
+        node = CytoElement.objects.get(
+            scape=scape, selector_id=CytoElement.generate_selector_id(transition),
+        )
+        self.assertTrue(node.is_transition)
+        self.assertIn("child-map", node.classes)
+
+    def test_is_transition_node__autobreak_off_returns_false(self):
+        """With autobreak disabled, no node is treated as a transition node."""
+        scape = self.map
+        scape.autobreak = False
+        any_node = scape.cytoelement_set.filter(group=CytoElement.NODES).first()
+        self.assertFalse(scape.is_transition_node(any_node))
 
     def test_generate_map__long_name_xp(self):
         """
@@ -241,12 +383,14 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertEqual(CytoScape.objects.count(), 2)
 
     def test_save__sets_first_scape_as_primary(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        """The first-created map is primary; a second map saved afterwards is not."""
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
 
     def test_save__changes_primary_scape(self):
-        newmap = baker.make('djcytoscape.CytoScape')
+        """Flagging a second map primary and saving demotes the previous primary map."""
+        newmap = bake_scape()
         self.assertTrue(self.map.is_the_primary_scape)
         self.assertFalse(newmap.is_the_primary_scape)
         newmap.is_the_primary_scape = True
@@ -255,17 +399,20 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.map.refresh_from_db()
         self.assertFalse(self.map.is_the_primary_scape)
 
-    def test_elements_dict(self):
+    def test_elements_dict__has_nodes_and_edges(self):
+        """elements_dict returns a serializable dict containing 'nodes' and 'edges'."""
         eles_dict = self.map.elements_dict()
         self.assertIsInstance(eles_dict, dict)
         self.assertValidJSONDict(eles_dict)
         self.assertIn('nodes', eles_dict)
         self.assertIn('edges', eles_dict)
 
-    def test_generate_elements_json(self):
+    def test_generate_elements_json__is_valid_json(self):
+        """generate_elements_json returns a valid JSON string."""
         self.assertValidJSON(self.map.generate_elements_json())
 
-    def test_class_styles_list(self):
+    def test_class_styles_list__returns_selector_style_dicts(self):
+        """class_styles_list returns dicts each carrying a 'selector' and 'style'."""
         styles_list = self.map.class_styles_list()
         self.assertIsInstance(styles_list, list)
         style1 = styles_list[0]
@@ -274,11 +421,11 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertIn('selector', style1)
         self.assertIn('style', style1)
 
-    def test_regenerate(self):
+    def test_regenerate__no_error_on_good_map(self):
         """Can regenerate without error on a known good map object"""
         self.map.regenerate()
 
-    def test_cytoelement_ordering_is_a_total_order(self):
+    def test_cytoelement_ordering__is_a_total_order(self):
         """CytoElement.Meta.ordering must end with the unique `id` tiebreaker so element
         emission is deterministic. Without it, sibling elements (same group and data_parent —
         e.g. every top-level node, whose data_parent is NULL) come back in whatever order
@@ -288,7 +435,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         """
         self.assertEqual(CytoElement._meta.ordering[-1], 'id')
 
-    def test_elements_emitted_in_ascending_id_order_within_parent_groups(self):
+    def test_elements_dict__nodes_in_ascending_id_order_within_parent_groups(self):
         """The emitted map JSON must list nodes in a deterministic order: within each compound
         (campaign) parent — and among the top-level nodes — siblings come out in ascending id,
         i.e. creation order. A stable emission order in means a stable dagre layout out (#1977).
@@ -302,7 +449,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         for parent, ids in ids_by_parent.items():
             self.assertEqual(ids, sorted(ids), msg=f"nodes under parent {parent} are not id-ordered")
 
-    def test_regeneration_produces_stable_node_order(self):
+    def test_regenerate__produces_stable_node_order(self):
         """Regenerating a map must yield the same left-to-right node order every time so the
         rendered layout is deterministic (issue #1977). Node ids change on each regeneration but
         their labels don't, so we compare the ordered sequence of labels across two regenerations.
@@ -315,7 +462,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         after = ordered_labels()
         self.assertEqual(before, after)
 
-    def test_maps_dont_include_drafts(self):
+    def test_regenerate__excludes_draft_quests(self):
         """Draft unpublished quests should not appear in maps"""
 
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
@@ -330,7 +477,8 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         # should no longer be in the map
         self.assertNotIn("/quests/6/", self.map.elements_json)
 
-    def test_maps_dont_include_archived_quests(self):
+    def test_regenerate__excludes_archived_quests(self):
+        """Archived quests should not appear in maps after regeneration."""
         # default map json includes quest 6: {'data': {'id': 32, 'label': 'Send your teacher a Message (0)', 'href': '/quests/6/', 'Quest': 6}
         self.assertIn("/quests/6/", self.map.elements_json)
 
@@ -344,7 +492,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         # should no longer be in the map
         self.assertNotIn("/quests/6/", self.map.elements_json)
 
-    def test_regenerate_deleted_initial_object_throws_exception_and_deletes_map(self):
+    def test_regenerate__deleted_initial_object_throws_and_deletes_map(self):
         """when regenerating a map that has had its initial object deleted, remove it and raise error."""
         bad_map = CytoScape.objects.create(
             name="bad map",
@@ -358,7 +506,7 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         # should have been deleted at this point
         self.assertFalse(CytoScape.objects.filter(name="bad map").exists())
 
-    def test_get_related_maps(self):
+    def test_get_related_maps__counts_maps_per_quest(self):
         """ Check if CytoScape.objects.get_related_maps returns the correct maps per quest.
         """
 
@@ -401,10 +549,18 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertEqual(CytoScape.objects.get_related_maps(self.one_map).count(), 1)
         self.assertEqual(CytoScape.objects.get_related_maps(self.all_maps).count(), 3)
 
-    def test_get_maps_as_formatted_string(self):
+    def test_get_maps_as_formatted_string__formats_by_length(self):
         """ Checks if `get_maps_as_formatted_string` returns the appropriate formatting per length """
         names = [str(x) for x in range(4)]
-        scapes = baker.make(CytoScape, name=cycle(names), _quantity=4)
+        # Each scape needs a distinct real initial object: (initial_content_type,
+        # initial_object_id) is unique-constrained, so cycle 4 fresh Quest ids.
+        quest_ids = [baker.make('quest_manager.Quest').id for _ in range(4)]
+        scapes = baker.make(
+            CytoScape, name=cycle(names),
+            initial_content_type=ContentType.objects.get_for_model(Quest),
+            initial_object_id=cycle(quest_ids),
+            _quantity=4,
+        )
 
         # since baker returns a list with `_quantity` > 1
         # we have to convert it to a queryset
@@ -426,3 +582,92 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         for index, expected in enumerate(expected_results):
             result = scapes[0:index].get_maps_as_formatted_string()
             self.assertEqual(result, expected)
+
+
+class CampaignMapOrderTest(ByteDeckTenantTestCase):
+    """Campaigns are placed left-to-right on the quest map in Category.map_order (issue #1977,
+    the ordering half). dagre lays out same-rank nodes by their input order, so emitting a
+    campaign's node, its member quest, and the edge into that quest earlier moves the campaign
+    left. Two campaigns branch off a common Start quest so they render as siblings.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Two campaigns (A, B), each with one member quest that has the shared Start quest as a
+        prerequisite, so both campaigns render as siblings branching off Start.
+        """
+        cls.start = baker.make(Quest, name="Start")
+        # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id) —
+        # i.e. A is left of B by default, before any map_order is applied.
+        cls.camp_a = baker.make(Category, title="AAA Campaign")
+        cls.camp_b = baker.make(Category, title="BBB Campaign")
+        cls.qa = baker.make(Quest, name="A-quest", campaign=cls.camp_a)
+        cls.qb = baker.make(Quest, name="B-quest", campaign=cls.camp_b)
+        Prereq.add_simple_prereq(cls.qa, cls.start)
+        Prereq.add_simple_prereq(cls.qb, cls.start)
+
+    def _emit(self):
+        """Regenerate the map and return its elements dict."""
+        return CytoScape.generate_map(self.start, "order-test").elements_dict()
+
+    @staticmethod
+    def _index_by_category(nodes, category_id):
+        """Position of a campaign's compound node in the emitted node list."""
+        return next(i for i, n in enumerate(nodes) if n['data'].get('Category') == category_id)
+
+    @staticmethod
+    def _index_by_quest(nodes, quest_id):
+        """Position of a quest's node in the emitted node list."""
+        return next(i for i, n in enumerate(nodes) if n['data'].get('Quest') == quest_id)
+
+    def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
+        """The compound campaign node carries selector_id 'Category: <pk>' so the map can look up
+        the campaign's map_order — and json_dict surfaces it as a `Category` data attribute.
+        """
+        scape = CytoScape.generate_map(self.start, "order-test")
+        node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
+        self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
+
+    def test_elements_dict__default_map_order_keeps_creation_order(self):
+        """With map_order left at its default 0, campaigns keep their deterministic creation
+        order (A before B), so the feature is backwards compatible with existing maps.
+        """
+        nodes = self._emit()['nodes']
+        self.assertLess(
+            self._index_by_category(nodes, self.camp_a.id),
+            self._index_by_category(nodes, self.camp_b.id),
+        )
+
+    def test_elements_dict__map_order_reorders_campaigns_left_to_right(self):
+        """Giving B a lower map_order than A emits campaign B first — its compound node, its
+        member quest, and the edge feeding that quest all precede A's — which dagre renders to
+        the left. This flips the default A-before-B order.
+        """
+        self.camp_a.map_order = 2
+        self.camp_a.full_clean()
+        self.camp_a.save()
+        self.camp_b.map_order = 1
+        self.camp_b.full_clean()
+        self.camp_b.save()
+
+        elements = self._emit()
+        nodes = elements['nodes']
+
+        # campaign B's compound node now precedes campaign A's
+        self.assertLess(
+            self._index_by_category(nodes, self.camp_b.id),
+            self._index_by_category(nodes, self.camp_a.id),
+        )
+        # and B's member quest precedes A's
+        self.assertLess(
+            self._index_by_quest(nodes, self.qb.id),
+            self._index_by_quest(nodes, self.qa.id),
+        )
+
+        # the edge feeding B's quest is emitted before the edge feeding A's quest
+        node_id_by_quest = {n['data']['Quest']: n['data']['id'] for n in nodes if 'Quest' in n['data']}
+        edge_targets = [e['data']['target'] for e in elements['edges']]
+        self.assertLess(
+            edge_targets.index(node_id_by_quest[self.qb.id]),
+            edge_targets.index(node_id_by_quest[self.qa.id]),
+        )

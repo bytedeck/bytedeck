@@ -39,6 +39,7 @@ def view_accessible_by_non_public_only(request):
 
 class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
+        """Build a request factory and an empty request for calling the views directly."""
         self.factory = RequestFactory()
         # generate an empty request instance so we can call our views directly
         self.request = self.factory.get('/does/not/exist/')
@@ -110,13 +111,13 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Create client for the tenant
         self.client = TenantClient(self.public_tenant, host="testserver")
 
-    def test_anonymous_denied_without_verified_deck_request(self):
+    def test_get__anonymous_denied_without_verified_deck_request(self):
         """Anonymous users without a verified deck request are denied access."""
         response = self.client.get(reverse("tenant:new"))
         self.assertEqual(response.status_code, 403)
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
-    def test_create_deck_page_extends_public_base_and_keeps_progress_modal(self):
+    def test_get__create_deck_page_extends_public_base_and_keeps_progress_modal(self):
         """The Create New Deck page shares the public onboarding chrome: it renders
         through public/base.html (same navbar/branding as the Request a New Deck
         page) rather than as a standalone document, and still includes the
@@ -172,7 +173,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @patch("tenant.forms.ReCaptchaField.clean", return_value="PASSED")
     @patch.object(DeckRequestService, "send_verification_email")
-    def test_deck_request_throttled_per_email(self, mock_send_email, mock_captcha):
+    def test_deck_request__throttled_per_email(self, mock_send_email, mock_captcha):
         """The request endpoint sends at most one verification email per address
         within the cooldown, so it can't be used to flood an inbox."""
         form_data = {
@@ -244,7 +245,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotContains(response, "5 minutes")
 
     @patch("tenant.models.Tenant.full_clean")
-    def test_form_save_persists_tenant_without_touching_owner(self, mock_full_clean):
+    def test_form_save__persists_tenant_without_touching_owner(self, mock_full_clean):
         """TenantForm.save persists and returns the Tenant only. Owner setup is
         the view's job (done in the tenant's own schema), so the form must not
         touch the owner — it previously mutated SiteConfig.get().deck_owner in
@@ -266,7 +267,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     @patch("tenant.models.Tenant.full_clean")
     @patch("tenant.views.DeckRequestService.send_welcome_email")
     @patch("tenant.views.generate_default_owner_password", return_value="known-secret-123")
-    def test_owner_password_generated_once_and_emailed(self, mock_pw, mock_welcome, mock_full_clean):
+    def test_form_valid__owner_password_generated_once_and_emailed(self, mock_pw, mock_welcome, mock_full_clean):
         """The owner's password is generated once: the value set on the account
         is the same one handed to the welcome email (a random password would
         otherwise diverge between set and emailed values)."""
@@ -293,7 +294,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn("known-secret-123", mock_welcome.call_args.args)
 
     @patch("tenant.models.Tenant.full_clean")
-    def test_form_valid_creates_tenant_and_redirects(self, mock_full_clean):
+    def test_form_valid__creates_tenant_and_redirects(self, mock_full_clean):
         """TenantCreate.form_valid should save tenant, assign deck owner, redirect,
         and consume the single-use verification nonce."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
@@ -323,7 +324,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
 
     @patch("tenant.models.Tenant.full_clean")
-    def test_verification_nonce_is_single_use(self, mock_full_clean):
+    def test_form_valid__verification_nonce_is_single_use(self, mock_full_clean):
         """A verification nonce provisions at most one deck: a successful creation
         consumes it, and a second attempt with the same nonce is rejected
         (redirected back to the request form) before anything is saved."""
@@ -362,7 +363,7 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response2.url, reverse("decks:request_new_deck"))
 
     @patch("tenant.models.Tenant.full_clean")
-    def test_staff_can_create_deck_without_nonce(self, mock_full_clean):
+    def test_form_valid__staff_can_create_deck_without_nonce(self, mock_full_clean):
         """Staff reach TenantCreate without email verification (mixin bypass), so
         form_valid must not require or consume a nonce for them."""
         request = self.factory.post(reverse("tenant:new"), data=self.form_data)
@@ -399,7 +400,7 @@ class HumanizeSecondsTest(TestCase):
             with self.subTest(seconds=seconds):
                 self.assertEqual(_humanize_seconds(seconds), expected)
 
-    def test_verify_deck_request_valid_token_populates_session(self):
+    def test_verify_deck_request__valid_token_populates_session(self):
         """A valid nonce stores the verified request (including the nonce) in the
         session and redirects to the deck creation form."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
@@ -413,7 +414,7 @@ class HumanizeSecondsTest(TestCase):
         self.assertEqual(verified["nonce"], nonce)
         self.assertIn("verified_at", verified)
 
-    def test_verify_deck_request_invalid_token_denied(self):
+    def test_verify_deck_request__invalid_token_denied(self):
         """An invalid/expired nonce stores nothing and redirects back to the
         request form."""
         response = self.client.get(reverse("decks:verify_deck_request", args=["not-a-real-nonce"]))
@@ -429,7 +430,7 @@ class DeckRequestServiceTest(TestCase):
         """Isolate the nonce cache between tests."""
         cache.clear()
 
-    def test_create_and_peek_request_roundtrip(self):
+    def test_create_and_peek_request__roundtrip(self):
         """A freshly created nonce peeks back to the original requester data."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
         self.assertEqual(
@@ -437,29 +438,29 @@ class DeckRequestServiceTest(TestCase):
             {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"},
         )
 
-    def test_peek_unknown_nonce_returns_none(self):
+    def test_peek_request__unknown_nonce_returns_none(self):
         """An unknown/expired nonce (or None) peeks to None."""
         self.assertIsNone(DeckRequestService.peek_request("not-a-real-nonce"))
         self.assertIsNone(DeckRequestService.peek_request(None))
 
-    def test_peek_does_not_consume(self):
+    def test_peek_request__does_not_consume(self):
         """Peeking leaves the nonce usable; only creation consumes it."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
         self.assertIsNotNone(DeckRequestService.peek_request(nonce))
         self.assertIsNotNone(DeckRequestService.peek_request(nonce))
 
-    def test_consume_request_is_single_use(self):
+    def test_consume_request__is_single_use(self):
         """The first consume succeeds and removes the nonce; later ones fail."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
         self.assertTrue(DeckRequestService.consume_request(nonce))
         self.assertFalse(DeckRequestService.consume_request(nonce))
         self.assertIsNone(DeckRequestService.peek_request(nonce))
 
-    def test_consume_none_returns_false(self):
+    def test_consume_request__none_returns_false(self):
         """Consuming a missing nonce is a no-op that returns False."""
         self.assertFalse(DeckRequestService.consume_request(None))
 
-    def test_verification_link_contains_no_pii(self):
+    def test_verification_link__contains_no_pii(self):
         """The verification URL carries only the opaque nonce, never the
         requester's name or email (unlike a signed token, which would)."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
@@ -494,7 +495,7 @@ class EmailVerificationRequiredMixinTest(TestCase):
         self.view = DummyView.as_view()
 
     @patch("tenant.views.render")  # patch render to avoid template DB queries
-    def test_verified_at_allows_or_denies_access(self, mock_render):
+    def test_dispatch__verified_at_allows_or_denies_access(self, mock_render):
         """A recent verified_at timestamp grants access (200); a timestamp older
         than TOKEN_MAX_AGE is denied (403)."""
         # make render() just return a dummy response

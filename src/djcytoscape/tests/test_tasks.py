@@ -1,18 +1,57 @@
+from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
+
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
-from djcytoscape.tasks import regenerate_map
+from djcytoscape.tasks import regenerate_all_maps, regenerate_map
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from notifications.models import Notification
+
+User = get_user_model()
 
 
 class CytoScapeTaskTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a shared quest used as maps' initial object across the task tests."""
         cls.quest = baker.make('quest_manager.Quest')
 
-    def test_regenerate_map(self):
-        """ tests if regenerate map task runs successfully """
+    def _bad_map(self):
+        """A map whose initial object no longer exists (initial_object_id points at nothing)."""
+        quest_ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        return CytoScape.objects.create(
+            name="Bad Map", initial_content_type=quest_ct, initial_object_id=999999,
+        )
+
+    def test_regenerate_all_maps__regenerates_valid_deletes_broken_and_notifies(self):
+        """regenerate_all_maps regenerates valid maps, deletes maps whose initial
+        object is gone, and notifies the requesting user of the failure and of the
+        overall completion."""
+        requesting_user = baker.make(User, is_staff=True)
+        good_map = CytoScape.generate_map(self.quest, "Good Map")
+        bad_map = self._bad_map()
+
+        notes_before = Notification.objects.all_for_user(requesting_user).count()
+        regenerate_all_maps.apply(args=[requesting_user.id], queue='default').get()
+
+        # the valid map survives; the broken one is removed
+        self.assertTrue(CytoScape.objects.filter(id=good_map.id).exists())
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+
+        # one "failed to regenerate" notice for the bad map + one "completed" notice
+        notes_after = Notification.objects.all_for_user(requesting_user).count()
+        self.assertEqual(notes_after - notes_before, 2)
+
+    def test_regenerate_map__deleted_initial_object_is_swallowed(self):
+        """regenerate_map silently drops a map whose initial object no longer exists (no raise)."""
+        bad_map = self._bad_map()
+        regenerate_map.apply(args=[[bad_map.id]], queue='default').get()
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+
+    def test_regenerate_map__links_quest_to_related_maps(self):
+        """regenerate_map relinks a quest to every map that references it as a prereq."""
         map_origins = baker.make('quest_manager.Quest', _quantity=3)
 
         # create map for each origin (3 maps)

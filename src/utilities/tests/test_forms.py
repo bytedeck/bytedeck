@@ -10,7 +10,7 @@ User = get_user_model()
 
 class MenuItemFormTest(ByteDeckTenantTestCase):
 
-    def test_MenuItem_form_allow_relative_urls(self):
+    def test_MenuItemForm__allow_relative_urls(self):
         """ Form accepts a relative (path-only) url. """
         form_data = {
             'label': 'New Menu Item',
@@ -23,7 +23,7 @@ class MenuItemFormTest(ByteDeckTenantTestCase):
         form = MenuItemForm(data=form_data)
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_MenuItem_form_allow_absolute_urls(self):
+    def test_MenuItemForm__allow_absolute_urls(self):
         """ Form accepts an absolute url. """
         form_data = {
             'label': 'New Menu Item',
