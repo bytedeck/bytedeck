@@ -6,7 +6,7 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from bs4 import BeautifulSoup, NavigableString, Tag
+from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from tenant.utils import get_root_url
 
@@ -169,6 +169,10 @@ class Notification(models.Model):
             if remaining <= 0:
                 truncated = True
                 break
+            # Comment is a NavigableString subclass that survives unwrap(); skip it so a
+            # pasted HTML comment never leaks into the preview or eats into the limit.
+            if isinstance(node, Comment):
+                continue
             if isinstance(node, Tag) and node.name == "img":
                 if resize_image:
                     node["style"] = ""  # drop width/height styles that would overflow the dropdown
