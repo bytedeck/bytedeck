@@ -2,10 +2,10 @@
 Django settings for hackerspace_online project.
 
 For more information on this file, see
-https://docs.djangoproject.com/en/1.8/topics/settings/
+https://docs.djangoproject.com/en/5.2/topics/settings/
 
 For the full list of settings and their values, see
-https://docs.djangoproject.com/en/1.8/ref/settings/
+https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -189,7 +189,7 @@ INSTALLED_APPS = (
     'django.contrib.sites',  # for allauth
     'django.contrib.staticfiles',
 
-    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/1.10/ref/contrib/flatpages/
+    'django.contrib.flatpages',  # https://docs.djangoproject.com/en/5.2/ref/contrib/flatpages/
 
     # third party apps
 
@@ -262,7 +262,7 @@ TAGGIT_CASE_INSENSITIVE = True
 
 MIDDLEWARE = [
     'django_tenants.middleware.TenantMiddleware',
-    # caching: https://docs.djangoproject.com/en/1.10/topics/cache/
+    # caching: https://docs.djangoproject.com/en/5.2/topics/cache/
     # 'django.middleware.cache.UpdateCacheMiddleware',
     # 'django.middleware.cache.FetchFromCacheMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -477,7 +477,7 @@ DATABASES = {
         # died while idle (RDS failover, network blip, server-side timeout).
         # Without this, a dead pooled connection surfaces as an intermittent
         # InterfaceError/OperationalError on whatever request draws it.
-        # https://docs.djangoproject.com/en/4.2/ref/settings/#conn-health-checks
+        # https://docs.djangoproject.com/en/5.2/ref/settings/#conn-health-checks
         'CONN_HEALTH_CHECKS': True,
     }
 }
@@ -994,7 +994,7 @@ PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # (staging mirrors prod). These are intentionally NOT applied in local
 # development, where the site is served over plain http://localhost, nor
 # during tests. Django's `manage.py check --deploy` verifies these.
-# Docs: https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
+# Docs: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 if not DEBUG and not TESTING:
 
     # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
