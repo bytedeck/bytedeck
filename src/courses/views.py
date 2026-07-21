@@ -372,6 +372,13 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         else:
             return super().get(request, *args, **kwargs)
 
+    def post(self, request, *args, **kwargs):
+        # Also block the POST: without this a student could still submit a registration into the
+        # closed active semester by posting directly (the form's only semester choice) (#2060).
+        if self._no_open_semester():
+            return self._no_open_semester_response(request)
+        return super().post(request, *args, **kwargs)
+
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()
         # student registration kwarg is an argument passed to simple_registration in forms.py
