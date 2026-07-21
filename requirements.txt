@@ -12,3 +12,8 @@ freezegun>=1.5.5,<2.0
 mock>=5.2.0,<6.0
 model_bakery>=1.24.0,<2.0
 names>=0.3.0,<0.4
+# Headless-browser tests for the quest-map JS (djcytoscape/tests/test_map_render.py).
+# The Python package alone isn't enough to run them — a Chromium build must also be
+# present (`playwright install chromium`); the tests skip themselves when it isn't,
+# so this never breaks a run without the browser.
+playwright>=1.55.0,<2.0
