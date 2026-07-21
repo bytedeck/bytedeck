@@ -181,7 +181,11 @@ class Profile(models.Model):
     # Fields for caching data
     time_of_last_submission = models.DateTimeField(null=True, blank=True)
     xp_cached = models.IntegerField(default=0)
-    mark_cached = models.DecimalField(max_digits=4, decimal_places=1, default=None, null=True, blank=True)
+    # max_digits=6 (up to 99999.9) not 4 (999.9): when SiteConfig.cap_marks_at_100_percent
+    # is off, mark() returns an uncapped percentage that projects to thousands of percent
+    # early in a semester (calc_mark scales by 1/fraction_complete), which overflowed the
+    # old max_digits=4 column and crashed the XP-cache invalidation task. See #2035.
+    mark_cached = models.DecimalField(max_digits=6, decimal_places=1, default=None, null=True, blank=True)
 
     objects = ProfileManager()
 
