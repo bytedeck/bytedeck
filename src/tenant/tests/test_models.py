@@ -121,11 +121,14 @@ class CheckTenantNameTest(SimpleTestCase):
         check_tenant_name('t3nan4')
 
 
-# Today, as frozen for every billing-status test below.
+# Today, as frozen for every billing-status test below. The clock is frozen at
+# midday UTC so that timezone.localdate() (which the properties use, computed in
+# settings.TIME_ZONE = America/Vancouver) still falls on this same calendar date.
 FROZEN_TODAY = date(2026, 8, 15)
+FROZEN_NOW = "2026-08-15 20:00:00"
 
 
-@freeze_time(FROZEN_TODAY)
+@freeze_time(FROZEN_NOW)
 class TenantBillingStatusTest(SimpleTestCase):
     """Tests for the derived billing/lifecycle status properties on Tenant (epic #1729).
 
@@ -228,13 +231,24 @@ class TenantBillingStatusTest(SimpleTestCase):
         )
         self.assertIsNone(self.make_tenant().days_until_expiry)
 
+    def test_days_until_expiry__suspended_deck_uses_latest_lapsed_clock(self):
+        """A lapsed ex-subscriber that still carries its ancient (never-cleared) trial date
+        reports expiry relative to the more recent paid_until, not the trial date."""
+        tenant = self.make_tenant(
+            trial_end_date=FROZEN_TODAY - timedelta(days=400),
+            paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 5),
+        )
+        self.assertTrue(tenant.is_suspended)
+        self.assertEqual(tenant.days_until_expiry, -(GRACE_PERIOD_DAYS + 5))
 
-class TenantActiveUserCountTest(ByteDeckTenantTestCase):
-    """Tests for Tenant.get_active_user_count (epic #1729 PR 1).
 
-    Written against the fixed behavior: staff who are also enrolled in a course are
-    counted once, and test accounts never count. The first two tests fail without
-    the students_only=True fix.
+class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
+    """Tests for the Tenant counting fix and cached-field save behavior (epic #1729 PR 1).
+
+    Counting: staff who are also enrolled in a course are counted once, and enrolled
+    (non-staff) test accounts never count -- the first two tests fail without the
+    students_only=True fix. Caching: update_cached_fields must not clobber concurrent
+    edits to non-cached columns.
     """
 
     def test_get_active_user_count__staff_enrolled_in_course_counted_once(self):

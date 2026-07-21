@@ -244,7 +244,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 
 | PR | Scope | Closes |
 |---|---|---|
-| **1. Status groundwork** | Constants; the derived properties (§4); fix `get_active_user_count` staff double-count; `update_cached_fields(update_fields=...)`; a `--dry-run` report command showing per-deck before/after counts (the fix changes real numbers for every deck — see §10.2). Pure model layer + tests (freezegun). | foundation |
+| **1. Status groundwork** | Constants; the derived properties (§4); fix `get_active_user_count` staff double-count; `update_cached_fields(update_fields=...)`; a read-only `deck_status_report` command (dry-run by design) showing per-deck before/after counts (the fix changes real numbers for every deck — see §10.2). Pure model layer + tests (freezegun). | foundation |
 | **2. Nightly refresh task** | `daily-deck-status-check` beat entry + fan-out task (counts-refresh only); delete the `TenantAdmin.get_queryset` N+1 loop. | the `FIX` comment |
 | **3. Status banner** | `get_current_deck()` cached helper + invalidation; `deck_status` context processor; banner include (trial/expiring/over-limit/suspended variants); absolute-URL subscribe link. | #1730 banner ☑ |
 | **4. Active-user cap** | `can_add_active_user()` live check; guards in `CourseStudentCreate` (incl. simplified path) + `CourseAddStudent`; refusal UX; archive-students help page. | #1730 trial mode ☑, #1734 mechanics |
@@ -269,7 +269,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 
 ### 10.1 Sequencing note (the phasing trap)
 
-PR 1's count fix *lowers* `active_user_count` everywhere (staff no longer double-counted) while PR 4 *starts enforcing* a cap that never existed. Land PR 1 well before PR 4, review the dry-run report against production values, and pre-announce enforcement to deck owners using the existing admin mass-email action.
+PR 1's count fix *lowers* `active_user_count` everywhere (staff no longer double-counted) while PR 4 *starts enforcing* a cap that never existed. Land PR 1 well before PR 4, review the `deck_status_report` output against production values **before anyone opens the tenant admin changelist** (its refresh loop rewrites the cached counts with the new formula, flattening the deltas the report exists to show), and pre-announce enforcement to deck owners using the existing admin mass-email action.
 
 ### 10.2 Report-only first cycle
 

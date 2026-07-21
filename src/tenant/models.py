@@ -4,7 +4,7 @@ from datetime import date
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils.timezone import timedelta
+from django.utils.timezone import localdate, timedelta
 from django.contrib.auth import get_user_model
 
 from allauth.account.utils import user_email
@@ -156,14 +156,19 @@ class Tenant(TenantMixin):
     @property
     def subscription_active(self):
         """Whether the deck currently has paid access: `paid_until` is set and today
-        is on or before it plus the grace period."""
-        return self.paid_until is not None and date.today() <= self.paid_until + timedelta(days=GRACE_PERIOD_DAYS)
+        is on or before it plus the grace period.
+
+        "Today" is computed with timezone.localdate() (settings.TIME_ZONE), matching
+        the {% now %} date the admin changelist compares against -- date.today() would
+        use the container's OS clock (typically UTC) and flip state hours early.
+        """
+        return self.paid_until is not None and localdate() <= self.paid_until + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
     def in_grace_period(self):
         """Whether the deck is past `paid_until` but still within the grace period
         (access retained, expiry warnings due)."""
-        return self.subscription_active and date.today() > self.paid_until
+        return self.subscription_active and localdate() > self.paid_until
 
     @property
     def is_on_trial(self):
@@ -172,16 +177,18 @@ class Tenant(TenantMixin):
         return (
             not self.subscription_active
             and self.trial_end_date is not None
-            and date.today() <= self.trial_end_date
+            and localdate() <= self.trial_end_date
         )
 
     @property
     def is_suspended(self):
         """Whether every clock this deck was ever given (trial and/or paid) has lapsed.
 
-        A deck with BOTH dates blank is never suspended: that state is only reachable
-        by explicit admin edit, and is the mechanism for comped/legacy decks that are
-        managed outside the subscription lifecycle.
+        A deck with BOTH dates blank is never suspended: that is the escape hatch for
+        comped/legacy decks managed outside the subscription lifecycle. Note it can't
+        currently be reached through the admin form (trial_end_date is null=True but
+        not blank=True, so the form requires a value) -- clearing both dates takes a
+        shell edit until blank=True is added in a follow-up.
         """
         if self.subscription_active or self.is_on_trial:
             return False
@@ -199,21 +206,26 @@ class Tenant(TenantMixin):
     @property
     def days_until_expiry(self):
         """Days until the governing deadline: `paid_until` while a subscription is
-        active, otherwise `trial_end_date`, otherwise a lapsed `paid_until`.
+        active, `trial_end_date` while on trial, otherwise (suspended) the LATEST
+        lapsed clock.
 
-        Negative once the deadline has passed (the reminder cadence keeps firing
+        The latest-clock rule matters because trial_end_date is set at creation and
+        never cleared when a deck subscribes: a lapsed subscriber should read as
+        "expired N days ago" relative to its recent paid_until, not its ancient trial
+        date. Negative once the deadline has passed (the reminder cadence keeps firing
         through the grace window); None when the deck has no dates at all
         (comped/legacy decks).
         """
         if self.subscription_active:
             deadline = self.paid_until
-        elif self.trial_end_date is not None:
+        elif self.is_on_trial:
             deadline = self.trial_end_date
         else:
-            deadline = self.paid_until
+            lapsed_clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+            deadline = max(lapsed_clocks) if lapsed_clocks else None
         if deadline is None:
             return None
-        return (deadline - date.today()).days
+        return (deadline - localdate()).days
 
     # END BILLING / LIFECYCLE STATUS ##################################
 
@@ -288,7 +300,11 @@ class Tenant(TenantMixin):
 
         Enrolled users are counted with students_only=True so a staff member who is
         also enrolled in a course isn't counted twice (once as staff, once as
-        enrolled), and so test accounts never count toward a deck's active-user cap.
+        enrolled), and so enrolled (non-staff) test accounts don't count toward a
+        deck's active-user cap. Note the staff term is unconditional: staff flagged
+        as test accounts, deactivated staff, and the ByteDeck-owned deck admin all
+        still count -- whether they should is an open question for the enforcement
+        work (#1729).
         """
         staff_count = User.objects.filter(is_staff=True).count()
         CourseStudent = apps.get_model('courses', 'CourseStudent')
