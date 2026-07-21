@@ -28,5 +28,27 @@
       "mcp__github__search_issues",
       "mcp__github__issue_write"
     ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/reload-claude-md.sh\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/session-name-prompt.sh\""
+          }
+        ]
+      }
+    ]
   }
 }
