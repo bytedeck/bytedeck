@@ -8,6 +8,8 @@ This plan covers the remainder of epic #1729 and its sub-issues:
 * #1731 — Subscription via Stripe API (not started)
 * #1733 — In-app messages/notifications when limits are approached (not started)
 * #1734 — Deck suspended if not renewed (not started; contains an open design question)
+* #2043 — Link existing manually-subscribed decks to their Stripe subscriptions (legacy backfill; detailed in §10.3)
+* #2044 — Retire unpaid/unused decks: reminders, then removal or recoverable archival (post-suspension lifecycle; see §10.5)
 
 ---
 
@@ -273,7 +275,7 @@ PR 1's count fix *lowers* `active_user_count` everywhere (staff no longer double
 
 PR 5 ships with sends disabled (log-only) for at least one daily cycle in production; review which decks *would* be notified before flipping sends on. Same principle as Option B's `SUSPENSION_LOCKOUT_ENABLED` kill-switch.
 
-### 10.3 Legacy subscriber backfill
+### 10.3 Legacy subscriber backfill (#2043)
 
 Existing paying decks subscribed via the manual `/pages/subscribe/` checkout: Stripe has Customers, but nothing links them to Tenants. PR 7 includes a management command that lists active Stripe subscriptions and matches customer email → `owner_email_cached`, emitting a **human-review report** (never auto-linking on ambiguity); misses are hand-linked by pasting `stripe_customer_id` into the Tenant admin + "Sync from Stripe". An unlinked paying deck would otherwise drift toward suspension at its admin-set `paid_until` + grace. After PR 7, retire or redirect the legacy checkout flatpage so new payments always carry `client_reference_id`.
 
@@ -282,6 +284,10 @@ Existing paying decks subscribed via the manual `/pages/subscribe/` checkout: St
 * Add `STRIPE_*` keys to the production `.env` (per `production/SERVER-README.md` conventions).
 * Stripe dashboard: create tier Products/Prices with `metadata.max_active_users`; register the webhook endpoint (five event types) pointing at `https://bytedeck.com/decks/stripe/webhook/`; test with Stripe CLI event replay.
 * Remember the DatabaseScheduler wart: never rename `daily-deck-status-check` once created.
+
+### 10.5 Retiring dead decks (#2044)
+
+Suspension (this epic) is where a deck's lifecycle *pauses*; #2044 defines where it *ends*. Abandoned schemas are a compounding cost (every schema multiplies `migrate_schemas` time and backup size), and today even admin deletes keep the schema (`force_drop=False`), leaving orphans that block deck-name reuse. #2044 builds directly on this plan's machinery: "retirable" is defined in terms of the suspension state plus `last_staff_login`, and the pre-removal reminder series reuses the daily status-check task and `DeckNotice` ledger. Its open question — hard delete vs. `pg_dump`-to-S3 archive with a retention window vs. detach-only — is tracked on the issue. Sequencing: after PR 8, since it consumes the suspension state; the reminder machinery it needs exists from PR 5.
 
 ---
 
