@@ -193,6 +193,33 @@ class CytoElementModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
                 element.href = url
                 element.full_clean()
 
+    def test_str__node_shows_id_and_label(self):
+        """A NODE element stringifies as '<id>: <label>'."""
+        node = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES, label="Hello")
+        self.assertEqual(str(node), f"{node.id}: Hello")
+
+    def test_str__edge_shows_source_and_target(self):
+        """An EDGE element stringifies as '<id>: <source id>-><target id>'."""
+        src = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        tgt = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        edge = baker.make(CytoElement, scape=self.map, group=CytoElement.EDGES, data_source=src, data_target=tgt)
+        self.assertEqual(str(edge), f"{edge.id}: {src.id}->{tgt.id}")
+
+    def test_json_dict__edge_includes_min_len_when_above_default(self):
+        """An edge whose min_len differs from the default (1) exposes it as 'minLen' in its data."""
+        src = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        tgt = baker.make(CytoElement, scape=self.map, group=CytoElement.NODES)
+        edge = baker.make(
+            CytoElement, scape=self.map, group=CytoElement.EDGES,
+            data_source=src, data_target=tgt, min_len=3,
+        )
+        self.assertEqual(edge.json_dict()["data"]["minLen"], "3")
+
+    def test_get_selector_styles_json_dict__returns_none_without_styles(self):
+        """With no style string, the helper returns None (there's nothing to emit)."""
+        self.assertIsNone(CytoElement.get_selector_styles_json_dict("#1", ""))
+        self.assertIsNone(CytoElement.get_selector_styles_json_dict("#1", None))
+
 
 class TempCampaignNodeTest(ByteDeckTenantTestCase):
     @classmethod
@@ -303,6 +330,19 @@ class CytoManagerTests(ByteDeckTenantTestCase):
         self.assertEqual(found, scape)
         self.assertEqual(found.initial_object_id, quest.id)
 
+    def test_all_for_campaign__returns_only_nodes_parented_to_that_campaign(self):
+        """all_for_campaign returns the scape's nodes whose data_parent is the given campaign node."""
+        scape = bake_scape()
+        campaign_node = baker.make(CytoElement, scape=scape, group=CytoElement.NODES)
+        child = baker.make(CytoElement, scape=scape, group=CytoElement.NODES, data_parent=campaign_node)
+        unparented = baker.make(CytoElement, scape=scape, group=CytoElement.NODES)
+
+        result = CytoElement.objects.all_for_campaign(scape, campaign_node)
+
+        self.assertIn(child, result)
+        self.assertNotIn(unparented, result)
+        self.assertNotIn(campaign_node, result)
+
 
 class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
     @classmethod
@@ -398,6 +438,21 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         self.assertTrue(newmap.is_the_primary_scape)
         self.map.refresh_from_db()
         self.assertFalse(self.map.is_the_primary_scape)
+
+    def test_save__setting_primary_when_none_exists_is_handled(self):
+        """Saving a map as primary when no current primary exists doesn't error.
+
+        save() demotes the existing primary map, but guards the lookup with
+        CytoScape.DoesNotExist for the edge case where none is currently flagged.
+        """
+        bake_scape()  # a second map exists, so the count-based first-map branch is skipped
+        CytoScape.objects.update(is_the_primary_scape=False)
+        self.assertFalse(CytoScape.objects.filter(is_the_primary_scape=True).exists())
+
+        new_primary = bake_scape(is_the_primary_scape=True)
+
+        new_primary.refresh_from_db()
+        self.assertTrue(new_primary.is_the_primary_scape)
 
     def test_elements_dict__has_nodes_and_edges(self):
         """elements_dict returns a serializable dict containing 'nodes' and 'edges'."""
