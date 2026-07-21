@@ -1052,7 +1052,11 @@ PRODUCTION_SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
 # development, where the site is served over plain http://localhost, nor
 # during tests. Django's `manage.py check --deploy` verifies these.
 # Docs: https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
-if not DEBUG and not TESTING:
+# Coverage: this whole block only runs with DEBUG off (production/staging) and
+# never under the test harness, so its lines are intentionally excluded -- the
+# pragma on this `if` covers the entire block. Values that CAN be asserted
+# directly are tested separately (e.g. ReferrerPolicyTest).
+if not DEBUG and not TESTING:  # pragma: no cover
 
     # We run behind nginx, which terminates TLS and reverse-proxies to uwsgi.
     # Without this, request.is_secure() is always False behind the proxy,
@@ -1106,6 +1110,4 @@ if not DEBUG and not TESTING:
     X_FRAME_OPTIONS = "DENY"
     # Sends the origin (not the path) cross-origin so YouTube and other embeds
     # load again; see PRODUCTION_SECURE_REFERRER_POLICY above and issue #1896.
-    # Excluded from coverage because this block only runs outside the test
-    # harness; the policy value itself is covered directly by ReferrerPolicyTest.
-    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY  # pragma: no cover
+    SECURE_REFERRER_POLICY = PRODUCTION_SECURE_REFERRER_POLICY
