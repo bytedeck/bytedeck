@@ -177,6 +177,78 @@ layout.run()
 addedCampaignLayoutEdges.remove();
 
 /***************************************
+ * #1977: order the campaign columns left-to-right by Category.map_order.
+ *
+ * dagre decides the order of same-rank nodes with a crossing-minimization heuristic and ignores
+ * the order elements were fed in, so the campaign order can't be set before layout — it has to be
+ * imposed on the finished layout. Each campaign (a compound node + its member quests) and each
+ * connected clump of campaign-less quests is one connected "column"; we sort the columns by their
+ * campaign map_order (ties, and campaign-less columns, fall back to the smallest node id — the
+ * deterministic #2012 order) and repack them left-to-right, shifting each column horizontally as a
+ * rigid block so its internal shape and every node's vertical position are untouched.
+ ***************************************/
+(function orderCampaignColumns() {
+    // A node's "root" is its campaign compound parent, or itself when it isn't in a campaign.
+    function rootOf(node) { return node.isChild() ? node.parent() : node; }
+
+    // Union-find over roots, joined by every (real) edge between two different roots, so a campaign
+    // and any campaign-less quest-chain each collapse to a single column.
+    var parent = {};
+    function find(x) {
+        while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+        return x;
+    }
+    function union(a, b) { parent[find(a)] = find(b); }
+
+    cy.nodes().forEach(function (node) {
+        var r = rootOf(node).id();
+        if (parent[r] === undefined) { parent[r] = r; }
+    });
+    cy.edges().forEach(function (edge) {
+        var a = rootOf(edge.source()).id();
+        var b = rootOf(edge.target()).id();
+        if (parent[a] === undefined) { parent[a] = a; }
+        if (parent[b] === undefined) { parent[b] = b; }
+        if (a !== b) { union(a, b); }
+    });
+
+    // Bucket every node into its column, tracking each column's order key and smallest node id.
+    var columns = {};
+    cy.nodes().forEach(function (node) {
+        var key = find(rootOf(node).id());
+        var col = columns[key] || (columns[key] = { nodes: cy.collection(), order: Infinity, minId: Infinity });
+        col.nodes = col.nodes.union(node);
+        var order = node.data('campaignOrder');
+        if (order === undefined || order === null) { order = 0; }
+        if (order < col.order) { col.order = order; }
+        var idNum = parseInt(node.id(), 10);
+        if (!isNaN(idNum) && idNum < col.minId) { col.minId = idNum; }
+    });
+
+    var cols = Object.keys(columns).map(function (key) { return columns[key]; });
+    if (cols.length > 1) {
+        // Left-to-right by campaign map_order, then smallest node id (the deterministic #2012 order).
+        cols.sort(function (a, b) { return (a.order - b.order) || (a.minId - b.minId); });
+
+        var GAP = 45;  // horizontal gap between columns, matching dagre's nodeSep above
+        var cursorX = null;
+        cols.forEach(function (col) {
+            // Shift only the leaf nodes — moving a compound (campaign) parent in cytoscape drags its
+            // children too, so shifting the whole collection would move them twice. The parent's box
+            // re-wraps its children automatically once they move.
+            var leaves = col.nodes.filter(function (n) { return !n.isParent(); });
+            // Measure by node extents only (not labels) so columns pack as tightly as dagre spaced
+            // them — the node labels are drawn offset to the left and would otherwise inflate the gap.
+            var bb = leaves.boundingBox({ includeLabels: false });
+            if (cursorX === null) { cursorX = bb.x1; }  // anchor at the current leftmost column
+            var dx = cursorX - bb.x1;
+            if (dx !== 0) { leaves.shift({ x: dx, y: 0 }); }
+            cursorX += bb.w + GAP;
+        });
+    }
+})();
+
+/***************************************
  *
  * BEHAVIOUR/INTERACTIVE OPTIONS
  *

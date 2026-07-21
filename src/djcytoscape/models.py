@@ -594,12 +594,16 @@ class CytoScape(models.Model):
     def elements_dict(self):
         """Serialize this scape's nodes and edges into the dict cytoscape/dagre consumes.
 
-        Elements are ordered so the rendered layout is both deterministic (issue #1977) and
-        honours the user's campaign order: dagre places same-rank nodes by their input order, so
-        emitting campaign nodes, their member quests, and the edges into them in Category.map_order
-        nudges campaigns left-to-right into that order. Ties (including every campaign at the
-        default map_order 0) fall back to the node id — i.e. the deterministic node ordering from
-        issue #1977 — so maps where nobody has set an order are unchanged.
+        Every node carries a ``campaignOrder`` in its data — its campaign's ``Category.map_order``
+        (a quest inherits its parent campaign's; campaign-less nodes default to 0). The client
+        (``maps.js``) uses it to order the campaign columns left-to-right *after* dagre has run:
+        dagre decides same-rank order by crossing-minimization and ignores input order, so the
+        order can't be imposed here — it's applied by repositioning the laid-out columns. Ties
+        (and every campaign at the default map_order 0) fall back to the node id, preserving the
+        deterministic layout from issue #2012, so maps where nobody set an order are unchanged.
+
+        Nodes are still emitted parents-before-children because cytoscape requires a compound
+        parent to be defined before any child that references it.
         """
         nodes = list(self.elements().filter(group=CytoElement.NODES))
         edges = list(self.elements().filter(group=CytoElement.EDGES))
@@ -614,20 +618,18 @@ class CytoScape(models.Model):
                 return map_orders[node.id]
             return map_orders.get(node.data_parent_id, 0)
 
-        # Keep every top-level node (compound campaign parents included) before any child node —
-        # cytoscape requires a parent to be defined before the child that references it — then order
-        # by campaign map_order, then node id (the deterministic #1977 fallback).
-        nodes.sort(key=lambda n: (n.data_parent_id is not None, node_campaign_order(n), n.id))
+        # Parents (compound campaign nodes) before children, then deterministic node-id order (#2012).
+        nodes.sort(key=lambda n: (n.data_parent_id is not None, n.id))
+        edges.sort(key=lambda e: e.id)
 
-        nodes_by_id = {node.id: node for node in nodes}
-
-        # Order an edge by the campaign of the node it points at, so the edges feeding a campaign's
-        # quests arrive in the same left-to-right order as the campaigns themselves. Every edge
-        # targets a node in this scape, so the lookup always resolves.
-        edges.sort(key=lambda e: (node_campaign_order(nodes_by_id[e.data_target_id]), e.id))
+        node_dicts = []
+        for node in nodes:
+            node_dict = node.json_dict()
+            node_dict['data']['campaignOrder'] = node_campaign_order(node)
+            node_dicts.append(node_dict)
 
         return {
-            'nodes': [node.json_dict() for node in nodes],
+            'nodes': node_dicts,
             'edges': [edge.json_dict() for edge in edges],
         }
 

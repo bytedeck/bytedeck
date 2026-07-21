@@ -586,9 +586,12 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
 
 class CampaignMapOrderTest(ByteDeckTenantTestCase):
     """Campaigns are placed left-to-right on the quest map in Category.map_order (issue #1977,
-    the ordering half). dagre lays out same-rank nodes by their input order, so emitting a
-    campaign's node, its member quest, and the edge into that quest earlier moves the campaign
-    left. Two campaigns branch off a common Start quest so they render as siblings.
+    the ordering half). dagre orders same-rank nodes by crossing-minimization and ignores input
+    order, so the order can't be imposed in the emitted JSON — instead every node carries a
+    ``campaignOrder`` (its campaign's map_order) and maps.js repositions the campaign columns to
+    match after layout. These tests cover the server side of that contract: that the right
+    ``campaignOrder`` is emitted on every node. Two campaigns branch off a common Start quest so
+    they render as siblings.
     """
 
     @classmethod
@@ -616,9 +619,14 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         return next(i for i, n in enumerate(nodes) if n['data'].get('Category') == category_id)
 
     @staticmethod
-    def _index_by_quest(nodes, quest_id):
-        """Position of a quest's node in the emitted node list."""
-        return next(i for i, n in enumerate(nodes) if n['data'].get('Quest') == quest_id)
+    def _campaign_order(nodes, *, category_id=None, quest_id=None):
+        """The campaignOrder emitted on a campaign's compound node or on a quest's node."""
+        for n in nodes:
+            if category_id is not None and n['data'].get('Category') == category_id:
+                return n['data']['campaignOrder']
+            if quest_id is not None and n['data'].get('Quest') == quest_id:
+                return n['data']['campaignOrder']
+        raise AssertionError("node not found")
 
     def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
         """The compound campaign node carries selector_id 'Category: <pk>' so the map can look up
@@ -628,9 +636,10 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
-    def test_elements_dict__default_map_order_keeps_creation_order(self):
-        """With map_order left at its default 0, campaigns keep their deterministic creation
-        order (A before B), so the feature is backwards compatible with existing maps.
+    def test_elements_dict__default_map_order_keeps_deterministic_node_order(self):
+        """With map_order left at its default 0, nodes are emitted in ascending-id order (A's
+        campaign node before B's), preserving the deterministic layout from issue #2012 so maps
+        where nobody set an order are unchanged.
         """
         nodes = self._emit()['nodes']
         self.assertLess(
@@ -638,36 +647,26 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
             self._index_by_category(nodes, self.camp_b.id),
         )
 
-    def test_elements_dict__map_order_reorders_campaigns_left_to_right(self):
-        """Giving B a lower map_order than A emits campaign B first — its compound node, its
-        member quest, and the edge feeding that quest all precede A's — which dagre renders to
-        the left. This flips the default A-before-B order.
+    def test_elements_dict__emits_campaign_order_on_every_node(self):
+        """Every node carries `campaignOrder` = its campaign's map_order; member quests inherit
+        their campaign's, and campaign-less nodes (the shared Start quest) default to 0. This is
+        the value maps.js reads to order the campaign columns left-to-right — the array position
+        no longer encodes the order (dagre would ignore it), so the data attribute must.
         """
-        self.camp_a.map_order = 2
+        self.camp_a.map_order = 5
         self.camp_a.full_clean()
         self.camp_a.save()
         self.camp_b.map_order = 1
         self.camp_b.full_clean()
         self.camp_b.save()
 
-        elements = self._emit()
-        nodes = elements['nodes']
+        nodes = self._emit()['nodes']
 
-        # campaign B's compound node now precedes campaign A's
-        self.assertLess(
-            self._index_by_category(nodes, self.camp_b.id),
-            self._index_by_category(nodes, self.camp_a.id),
-        )
-        # and B's member quest precedes A's
-        self.assertLess(
-            self._index_by_quest(nodes, self.qb.id),
-            self._index_by_quest(nodes, self.qa.id),
-        )
-
-        # the edge feeding B's quest is emitted before the edge feeding A's quest
-        node_id_by_quest = {n['data']['Quest']: n['data']['id'] for n in nodes if 'Quest' in n['data']}
-        edge_targets = [e['data']['target'] for e in elements['edges']]
-        self.assertLess(
-            edge_targets.index(node_id_by_quest[self.qb.id]),
-            edge_targets.index(node_id_by_quest[self.qa.id]),
-        )
+        # campaign compound nodes carry their own map_order
+        self.assertEqual(self._campaign_order(nodes, category_id=self.camp_a.id), 5)
+        self.assertEqual(self._campaign_order(nodes, category_id=self.camp_b.id), 1)
+        # member quests inherit their campaign's map_order
+        self.assertEqual(self._campaign_order(nodes, quest_id=self.qa.id), 5)
+        self.assertEqual(self._campaign_order(nodes, quest_id=self.qb.id), 1)
+        # the campaign-less Start quest defaults to 0
+        self.assertEqual(self._campaign_order(nodes, quest_id=self.start.id), 0)
