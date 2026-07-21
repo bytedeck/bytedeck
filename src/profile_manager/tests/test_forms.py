@@ -100,6 +100,47 @@ class ProfileFormTest(ByteDeckTenantTestCase):
                     self.assertTrue(form.is_valid())
                     self.assertEqual(form.cleaned_data['email'], 'example@gmail.com')
 
+    def test_clean_email__deck_owner_cannot_remove(self):
+        """The deck owner may not clear their email — ByteDeck needs to contact them (#1502)."""
+        # Use a separate user as the deck owner: SiteConfig.deck_owner is a PROTECT FK, so
+        # making self.user the owner would break tearDown's self.user.delete().
+        owner = User.objects.create_user('deck_owner_user', is_staff=True)
+        config = SiteConfig.get()
+        config.deck_owner = owner
+        config.save()
+
+        form = ProfileForm(instance=owner.profile, data={'email': ''})
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "As the deck owner, you can't remove your email address — ByteDeck needs a way to "
+            "contact you. You can change it, but it can't be left blank.",
+            form.errors['email'],
+        )
+
+    def test_clean_email__deck_owner_can_change(self):
+        """The deck owner can still change their email to another valid address (#1502)."""
+        owner = User.objects.create_user('deck_owner_user', is_staff=True)
+        config = SiteConfig.get()
+        config.deck_owner = owner
+        config.save()
+
+        form = ProfileForm(instance=owner.profile, data={'email': 'owner@gmail.com'})
+        with patch('dns.resolver.resolve') as mock_resolve:
+            mock_resolve.return_value = MagicMock()  # no internet during tests
+            form.is_valid()
+        self.assertNotIn('email', form.errors)
+        self.assertEqual(form.cleaned_data['email'], 'owner@gmail.com')
+
+    def test_clean_email__non_owner_can_remove(self):
+        """A regular user (not the deck owner) may still clear their email (#1502)."""
+        # self.user is not the deck owner by default.
+        self.assertNotEqual(self.user.id, SiteConfig.get().deck_owner_id)
+
+        form = ProfileForm(instance=self.user.profile, data={'email': ''})
+        form.is_valid()
+        self.assertNotIn('email', form.errors)
+        self.assertEqual(form.cleaned_data['email'], '')
+
     def test_save__with_custom_profile_field(self):
         """ tests if user can create a profile with `custom_profile_field` when SiteConfig.custom_profile_field
         is filled/not filled

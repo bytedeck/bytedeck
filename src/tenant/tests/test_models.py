@@ -1,13 +1,16 @@
+from datetime import date, timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 
 from django_tenants.utils import get_public_schema_name, schema_context
+from freezegun import freeze_time
 from model_bakery import baker
 from hackerspace_online import settings
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
-from tenant.models import Tenant, check_tenant_name
+from tenant.models import Tenant, check_tenant_name, default_trial_end_date
 
 User = get_user_model()
 
@@ -115,3 +118,23 @@ class CheckTenantNameTest(SimpleTestCase):
     def test_check_tenant_name__mid_number_valid(self):
         """A name with numbers after the first character is accepted."""
         check_tenant_name('t3nan4')
+
+
+class DefaultTrialEndDateTest(SimpleTestCase):
+    """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
+
+    A new deck's trial runs for 60 days, so ``Tenant.trial_end_date`` defaults to
+    ``today + 60 days``. Time is frozen so "today" is deterministic.
+    """
+
+    @freeze_time("2024-02-29")  # a leap day, so the +60 arithmetic can't be faked with month math
+    def test_default_trial_end_date__is_60_days_from_today(self):
+        """The default_trial_end_date() helper returns exactly 60 days from today."""
+        self.assertEqual(default_trial_end_date(), date(2024, 2, 29) + timedelta(days=60))
+
+    @freeze_time("2024-02-29")
+    def test_new_tenant__trial_end_date_defaults_to_60_days_out(self):
+        """A newly built Tenant gets trial_end_date defaulted to today + 60 days."""
+        # Field defaults are applied at instantiation, so no save() (and no DB) is needed.
+        tenant = Tenant(schema_name="demo", name="demo")
+        self.assertEqual(tenant.trial_end_date, date(2024, 2, 29) + timedelta(days=60))
