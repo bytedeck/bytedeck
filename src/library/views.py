@@ -27,7 +27,7 @@ from .utils import get_library_schema_name, library_schema_context, get_library_
 User = get_user_model()
 
 
-def email_library_staff_of_push(content_type, content_name, exported_obj, sharer):
+def email_library_staff_of_push(content_type, content_name, exported_obj, sharer, source_deck_url):
     """Email active Library staff that freshly pushed content is awaiting review.
 
     Shared content lands in the Library unpublished and must be reviewed and
@@ -46,6 +46,10 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
         exported_obj (Quest | Category): the copy now in the library schema,
             used to build the review/publish link on the Library deck.
         sharer (User): the user who pushed the content, from the source deck.
+        source_deck_url (str): the root URL of the deck the content was shared
+            from, so reviewers can see (and visit) which deck it originated on.
+            Resolve it on the source deck (``request.tenant.get_root_url()``)
+            before entering the library schema context.
     """
     recipient_list = list(
         User.objects.filter(is_active=True, is_staff=True)
@@ -64,6 +68,7 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
         "content_type": content_type,
         "content_name": content_name,
         "review_url": review_url,
+        "source_deck_url": source_deck_url,
     })
     send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
 
@@ -411,6 +416,9 @@ class ExportQuestView(View, ExportPermissionMixin):
         quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
 
         source_schema = connection.schema_name
+        # Resolve the source deck's URL now, while its schema is active (the email
+        # is built later inside the library schema context) -- see #1949.
+        source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
             if Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists():
@@ -440,7 +448,7 @@ class ExportQuestView(View, ExportPermissionMixin):
             )
 
             # Email active Library staff so they know there's a quest to review/publish (#1949).
-            email_library_staff_of_push("quest", quest.name, exported_quest, request.user)
+            email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
 
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
@@ -520,6 +528,9 @@ class ExportCampaignView(View, ExportPermissionMixin):
 
         campaign = get_object_or_404(Category, import_id=campaign_import_id)
         source_schema = connection.schema_name
+        # Resolve the source deck's URL now, while its schema is active (the email
+        # is built later inside the library schema context) -- see #1949.
+        source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
             # Block if campaign already exists in library
@@ -549,7 +560,7 @@ class ExportCampaignView(View, ExportPermissionMixin):
             )
 
             # Email active Library staff so they know there's a campaign to review/publish (#1949).
-            email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user)
+            email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
 
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(

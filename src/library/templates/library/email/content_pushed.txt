@@ -1,4 +1,4 @@
-{{ sharer }} shared a {{ content_type }} to the ByteDeck Library:
+{{ sharer }} shared a {{ content_type }} from <a href="{{ source_deck_url }}">{{ source_deck_url }}</a> to the ByteDeck Library:
 
     {{ content_name }}
 

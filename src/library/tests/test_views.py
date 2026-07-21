@@ -437,6 +437,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assertIn(str(self.test_teacher), message)  # who shared it
         self.assertIn('Review and publish it here', message)  # where to review/publish
         self.assertIn('library.test.com', message)            # the review link points at the Library deck
+        # The email names the source deck the content came from and links back to it (#1949).
+        self.assertIn('<a href="https://tenant.test.com">https://tenant.test.com</a>', message)
 
         # The sharer is told the content is pending review before it appears.
         sharer_messages = [str(m) for m in get_messages(response.wsgi_request)]
@@ -958,6 +960,8 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertIn(str(self.test_teacher), message)  # who shared it
         self.assertIn('Review and publish it here', message)  # where to review/publish
         self.assertIn('library.test.com', message)            # the review link points at the Library deck
+        # The email names the source deck the content came from and links back to it (#1949).
+        self.assertIn('<a href="https://tenant.test.com">https://tenant.test.com</a>', message)
 
         # The sharer is told the content is pending review before it appears.
         sharer_messages = [str(m) for m in get_messages(response.wsgi_request)]
