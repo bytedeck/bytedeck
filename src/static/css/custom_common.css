@@ -1158,3 +1158,13 @@ table[data-toggle="table"].bt-reveal {
 .bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
     display: none;
 }
+
+
+/* #811: the quest "General Info" (Common Data) sidebar panel is a narrow column, but its
+   list content (rendered from Summernote HTML) inherits the browser's ~40px default list
+   indent, wasting horizontal space. Tighten it to 15px per level so the text has more room
+   while nested lists still read as nested. */
+#common-data .panel-body ul,
+#common-data .panel-body ol {
+    padding-left: 15px;
+}
