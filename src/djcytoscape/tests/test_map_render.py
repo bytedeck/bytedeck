@@ -17,6 +17,7 @@ To run it: ``pip install playwright`` and ensure a Chromium build is present
 
 import glob
 import json
+import math
 import os
 import unittest
 
@@ -69,6 +70,16 @@ def _harness_html(elements, style="[]"):
 
     It inlines the real cytoscape/dagre/cytoscape-dagre/maps.js and initialises
     ``cy`` with the same options as ``djcytoscape/templates/djcytoscape/quest_map.html``.
+
+    Args:
+        elements: the cytoscape ``elements`` fixture (a list of ``{"data": {...}}``
+            node/edge dicts), JSON-serialised into the ``cy`` init.
+        style: the cytoscape ``style`` value as a JSON string (a stylesheet array,
+            e.g. ``"[]"`` for none), inlined verbatim into the ``cy`` init.
+
+    Returns:
+        str: a complete HTML document that, when loaded in a browser, builds the
+        map and exposes the live cytoscape instance as ``window.cy``.
     """
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>
 <div id="cy" style="width:1200px;height:1200px;"></div>
@@ -98,11 +109,19 @@ class QuestMapRenderTest(SimpleTestCase):
     """Drives the real quest-map JS in headless Chromium and asserts on the layout."""
 
     def _render(self, elements, style="[]"):
-        """Render ``elements`` through maps.js headless; return (leaf node positions, JS errors).
+        """Render ``elements`` through maps.js headless and read the resulting layout back.
 
-        Positions are for childless (leaf/quest) nodes only — compound campaign
-        parents are excluded. Both uncaught page errors and console errors are
-        collected so a test can assert the map rendered cleanly.
+        Args:
+            elements: the cytoscape ``elements`` fixture (node/edge dicts) to lay out.
+            style: the cytoscape ``style`` JSON string, forwarded unchanged to
+                ``_harness_html`` (defaults to ``"[]"`` — no custom styling, since
+                these tests assert on geometry, not appearance).
+
+        Returns:
+            tuple[dict, list]: ``(positions, errors)`` where ``positions`` maps each
+            childless (leaf/quest) node id to ``{"id", "x", "y"}`` — compound campaign
+            parents are excluded — and ``errors`` is the list of any uncaught page
+            errors and console errors collected during the render (empty when clean).
         """
         from playwright.sync_api import sync_playwright
 
@@ -142,9 +161,15 @@ class QuestMapRenderTest(SimpleTestCase):
         self.assertEqual(errors, [], f"unexpected JS errors while rendering the map: {errors}")
         self.assertEqual(set(pos), {"a", "b", "c"})
         for node_id, p in pos.items():
-            self.assertTrue(all(isinstance(v, (int, float)) for v in (p["x"], p["y"])), f"{node_id} missing position")
-        # dagre ranks the chain top-to-bottom, so the three nodes sit at distinct heights.
+            self.assertTrue(
+                all(isinstance(v, (int, float)) and math.isfinite(v) for v in (p["x"], p["y"])),
+                f"{node_id} has a non-finite position",
+            )
+        # dagre ranks the chain top-to-bottom, so the three nodes sit at distinct heights...
         self.assertEqual(len({round(p["y"]) for p in pos.values()}), 3)
+        # ...and in the a->b->c edge direction (y grows downward), not reversed.
+        self.assertLess(pos["a"]["y"], pos["b"]["y"])
+        self.assertLess(pos["b"]["y"], pos["c"]["y"])
 
     def test_campaign_layout__in_campaign_successor_stays_vertically_stacked(self):
         """Regression guard for #1787/#2023: a campaign's quests stay vertically stacked
@@ -168,9 +193,12 @@ class QuestMapRenderTest(SimpleTestCase):
 
         self.assertEqual(errors, [], f"unexpected JS errors while rendering the map: {errors}")
 
-        # The in-campaign chain is vertically aligned (same x, within a small tolerance).
+        # The in-campaign chain is vertically aligned (same x, within a small tolerance)...
         self.assertAlmostEqual(pos["q1"]["x"], pos["q2"]["x"], delta=5)
         self.assertAlmostEqual(pos["q2"]["x"], pos["q3"]["x"], delta=5)
+        # ...and stacked top-to-bottom in q1->q2->q3 order (y grows downward).
+        self.assertLess(pos["q1"]["y"], pos["q2"]["y"])
+        self.assertLess(pos["q2"]["y"], pos["q3"]["y"])
         # q3 and the out-of-campaign branch share a rank (same y)...
         self.assertAlmostEqual(pos["q3"]["y"], pos["out"]["y"], delta=5)
         # ...but the branch is pushed clearly to the side instead of dragging q3 with it.
