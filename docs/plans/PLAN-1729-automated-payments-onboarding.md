@@ -187,7 +187,7 @@ Idempotence: `StripeEventLog.event_id` unique — duplicates return 200 before a
 
 ### 6.1 The choke points (the cap on *becoming* active)
 
-A user is "active" when they're staff or registered in a course in the active semester — so the cap belongs where registrations happen, not at login:
+A user is "active" when they're a **student** registered in a course in the active semester — staff and superusers never count (maintainer decision, PR #2047) — so the cap belongs where registrations happen, not at login:
 
 * `courses.views.CourseStudentCreate` — both the form path and the `simplified_course_registration` auto-create path (`courses/views.py:327`).
 * Staff-side `courses.views.CourseAddStudent`.

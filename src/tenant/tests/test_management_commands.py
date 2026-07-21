@@ -1,16 +1,21 @@
 from datetime import date, timedelta
 from io import StringIO
 
+from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import SimpleTestCase
 
 from django_tenants.utils import get_public_schema_name, schema_context
 from freezegun import freeze_time
+from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name
+from siteconfig.models import SiteConfig
 from tenant.management.commands.deck_status_report import Command
 from tenant.models import GRACE_PERIOD_DAYS, Tenant
+
+User = get_user_model()
 
 
 class DeckStatusReportTest(ByteDeckTenantTestCase):
@@ -34,6 +39,7 @@ class DeckStatusReportTest(ByteDeckTenantTestCase):
         with schema_context(get_public_schema_name()):
             tenant = Tenant(name=name, schema_name=name)
             tenant.auto_create_schema = False
+            tenant.full_clean()
             tenant.save()
         return tenant
 
@@ -57,7 +63,10 @@ class DeckStatusReportTest(ByteDeckTenantTestCase):
         Asserted on this deck's own line (not the summary total) because other test
         classes' tenants can coexist in a full-suite run.
         """
-        # the shared test schema seeds staff users, so a zeroed cache is guaranteed stale
+        # register a student so the fresh (students-only) count is non-zero, then
+        # zero the cache so it is guaranteed stale
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
         Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=0)
 
         output = self.run_report()

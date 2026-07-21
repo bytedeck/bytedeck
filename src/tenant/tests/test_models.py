@@ -251,12 +251,25 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
     edits to non-cached columns.
     """
 
-    def test_get_active_user_count__staff_enrolled_in_course_counted_once(self):
-        """A staff member registered in a course in the active semester counts once, not twice."""
+    def test_get_active_user_count__counts_enrolled_students_only(self):
+        """Only students registered in a course in the active semester count; an
+        unregistered student does not."""
+        baseline = self.tenant.get_active_user_count()
+        enrolled = baker.make(User)
+        baker.make('courses.CourseStudent', user=enrolled, semester=SiteConfig.get().active_semester)
+        baker.make(User)  # signed up but never registered in a course
+        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+
+    def test_get_active_user_count__staff_and_superusers_never_count(self):
+        """Staff and superusers don't consume seats, whether or not they're registered
+        in a course -- pricing is based on active students only."""
         baseline = self.tenant.get_active_user_count()
         staff = baker.make(User, is_staff=True)
         baker.make('courses.CourseStudent', user=staff, semester=SiteConfig.get().active_semester)
-        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+        superuser = baker.make(User, is_superuser=True, is_staff=False)
+        baker.make('courses.CourseStudent', user=superuser, semester=SiteConfig.get().active_semester)
+        baker.make(User, is_staff=True)  # unenrolled staff
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
 
     def test_get_active_user_count__test_accounts_excluded(self):
         """An enrolled test account does not count toward the active-user total."""
@@ -267,13 +280,16 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
         self.assertEqual(self.tenant.get_active_user_count(), baseline)
 
-    def test_get_active_user_count__enrolled_student_and_unenrolled_staff_each_count(self):
-        """A regular enrolled student and a non-enrolled staff member each add one to the count."""
+    def test_get_active_user_count__archived_students_excluded(self):
+        """An enrolled student who is archived (is_active=False) stops counting --
+        archiving users is the documented way to get back under the cap (#1733)."""
         baseline = self.tenant.get_active_user_count()
         student = baker.make(User)
         baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
-        baker.make(User, is_staff=True)
-        self.assertEqual(self.tenant.get_active_user_count(), baseline + 2)
+        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+        student.is_active = False
+        student.save()
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
 
     def test_update_cached_fields__does_not_clobber_concurrent_edits(self):
         """A stale instance running update_cached_fields must not overwrite a concurrent

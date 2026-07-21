@@ -114,8 +114,8 @@ class Tenant(TenantMixin):
 
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
-        help_text="This is a cached field: the number of staff users, plus the number student users currently \
-            registered in a course in an active semester."
+        help_text="This is a cached field: the number of student users currently registered in a course \
+            in the active semester. Staff and superusers don't count."
     )
 
     total_user_count = models.PositiveSmallIntegerField(
@@ -295,21 +295,19 @@ class Tenant(TenantMixin):
 
     def get_active_user_count(self):
         """
-        Returns the number of staff users, plus the number of student users currently
-        registered in a course in the active semester.
+        Returns the number of STUDENT users currently registered in a course in the
+        active semester.
 
-        Enrolled users are counted with students_only=True so a staff member who is
-        also enrolled in a course isn't counted twice (once as staff, once as
-        enrolled), and so enrolled (non-staff) test accounts don't count toward a
-        deck's active-user cap. Note the staff term is unconditional: staff flagged
-        as test accounts, deactivated staff, and the ByteDeck-owned deck admin all
-        still count -- whether they should is an open question for the enforcement
-        work (#1729).
+        Staff and superusers never count toward a deck's active-user total --
+        pricing tiers are based on active students only (maintainer decision,
+        PR #2047 / epic #1729). students_only=True already restricts the enrolled
+        set to non-staff, non-test-account users, and the queryset it returns is
+        limited to is_active=True (so archived students stop counting, #1733);
+        superusers are excluded explicitly since a superuser isn't necessarily
+        staff.
         """
-        staff_count = User.objects.filter(is_staff=True).count()
         CourseStudent = apps.get_model('courses', 'CourseStudent')
-        active_student_count = CourseStudent.objects.all_users_for_active_semester(students_only=True).count()
-        return staff_count + active_student_count
+        return CourseStudent.objects.all_users_for_active_semester(students_only=True).exclude(is_superuser=True).count()
 
     def get_quest_count(self):
         """
