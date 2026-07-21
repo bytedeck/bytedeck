@@ -10,10 +10,13 @@ repos:
         exclude: ^requirements/generated.txt
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v2.34.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
-        args: [ "--py36-plus", "--py37-plus", "--py38-plus" ]
+        # Target the project's actual runtime (Python 3.12). The old stacked
+        # --py36/37/38-plus args predated the 3.12 migration; --py312-plus was
+        # added in pyupgrade v3.15, hence the rev bump.
+        args: [ "--py312-plus" ]
         types: [python]
 
   # ruff replaces flake8 (+bugbear/comprehensions/mutable plugins) and
