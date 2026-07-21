@@ -511,6 +511,27 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
 
+    def test_CourseStudentCreate_view__active_registration_in_old_semester_does_not_block(self):
+        """A student with an active registration left over in an old (not-yet-closed) semester can
+        still reach the registration view for the new active semester — no 403 (#1893). Previously
+        any active registration blocked registration, so an unclosed old semester locked students
+        out of joining courses in the new one."""
+        self.client.force_login(self.test_student1)
+
+        # Active registration left over in the original (now-old) semester.
+        old_semester = SiteConfig.get().active_semester
+        baker.make('courses.coursestudent', user=self.test_student1, semester=old_semester, active=True)
+
+        # A new semester becomes active while the old one stays open (not closed).
+        new_semester = baker.make('courses.semester')
+        config = SiteConfig.get()
+        config.active_semester = new_semester
+        config.save()
+
+        # The stale active registration is in a different, still-open semester, so it must not 403.
+        response = self.client.get(reverse('courses:create'))
+        self.assertNotEqual(response.status_code, 403)
+
     def test_CourseStudentCreate__simple_registration_hidden_fields(self):
         """
         If simplified_course_registration is enabled in siteconfig, fields in student registration form with only one viable option should be

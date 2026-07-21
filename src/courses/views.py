@@ -299,9 +299,13 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
 # Student Course Registration View
 class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
 
-    # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
+    # Block the registration view only when the student is already actively registered for the
+    # CURRENT (active) semester. A registration left active in an old, not-yet-closed semester
+    # must not 403 them out of joining a course in the new semester (#1893).
     def test_func(self):
-        return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
+        return not CourseStudent.objects.filter(
+            user=self.request.user, active=True, semester=SiteConfig.get().active_semester
+        ).exists()
 
     model = CourseStudent
     form_class = CourseStudentForm
