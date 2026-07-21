@@ -13,9 +13,6 @@ repos:
     rev: v3.21.2
     hooks:
       - id: pyupgrade
-        # Target the project's actual runtime (Python 3.12). The old stacked
-        # --py36/37/38-plus args predated the 3.12 migration; --py312-plus was
-        # added in pyupgrade v3.15, hence the rev bump.
         args: [ "--py312-plus" ]
         types: [python]
 
