@@ -160,3 +160,45 @@ class Select2CacheTest(SimpleTestCase):
     def test_select2_cache__has_finite_ttl(self):
         """The select2 cache must have a finite TTL (default 24h), never None."""
         self.assertEqual(settings.CACHES["select2"]["TIMEOUT"], 60 * 60 * 24)
+
+
+class LoggingConfigTest(SimpleTestCase):
+    """Production/staging (DEBUG=False) previously shipped no LOGGING config, so
+    Django's default silenced the console handler and app logs fell back to the
+    WARNING-level last-resort stderr -- INFO and most app logs vanished. A base
+    LOGGING config must always be defined (not gated on DB_LOGS_ENABLED) sending
+    leveled logs to stdout while preserving the 5xx-emails-ADMINS path. That the
+    process started at all proves dictConfig accepted it; these lock in intent."""
+
+    def test_logging__always_defined(self):
+        """LOGGING must exist unconditionally, independent of DB_LOGS_ENABLED
+        (the query-tracer only augments it)."""
+        self.assertIsInstance(settings.LOGGING, dict)
+        self.assertEqual(settings.LOGGING["version"], 1)
+
+    def test_console_handler__writes_to_stdout(self):
+        """App/Django logs must reach container stdout (captured by Docker's
+        json-file driver) instead of being dropped."""
+        console = settings.LOGGING["handlers"]["console"]
+        self.assertEqual(console["class"], "logging.StreamHandler")
+        self.assertEqual(console["stream"], "ext://sys.stdout")
+
+    def test_root_logger__routes_to_console(self):
+        """App loggers (getLogger(__name__), no shared prefix) reach the console
+        handler by propagating to root."""
+        self.assertIn("console", settings.LOGGING["root"]["handlers"])
+
+    def test_unhandled_5xx__still_emails_admins(self):
+        """The AdminEmailHandler path (Django's default) must be preserved and
+        gated to real deployments via require_debug_false."""
+        mail_admins = settings.LOGGING["handlers"]["mail_admins"]
+        self.assertEqual(mail_admins["class"], "django.utils.log.AdminEmailHandler")
+        self.assertIn("require_debug_false", mail_admins["filters"])
+        self.assertIn("mail_admins", settings.LOGGING["loggers"]["django"]["handlers"])
+
+    def test_db_backends__not_flooded_by_default(self):
+        """With the query-tracer off, django.db.backends must stay above DEBUG so
+        DJANGO_LOG_LEVEL=DEBUG can't flood stdout with every SQL statement."""
+        # DB_LOGS_ENABLED is off under the test runner, so the base pin applies.
+        self.assertFalse(settings.DB_LOGS_ENABLED)
+        self.assertEqual(settings.LOGGING["loggers"]["django.db.backends"]["level"], "WARNING")
