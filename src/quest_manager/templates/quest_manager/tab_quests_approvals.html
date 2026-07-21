@@ -10,6 +10,7 @@
 {% load utility_tags %}
 
 {% if tab.submissions %}
+  {% include 'snippets/table_loading.html' %}
   <table id="accordion-available"
          class="accordian-table"
          data-classes="table table-hover"

@@ -75,6 +75,7 @@
   </table>
 
   {% if user_status_list %}
+    {% include 'snippets/table_loading.html' %}
     <table id="user-status-table"
           class="user-status-table"
           data-toggle="table"
