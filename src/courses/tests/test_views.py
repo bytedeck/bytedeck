@@ -526,6 +526,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         new_semester = baker.make('courses.semester')
         config = SiteConfig.get()
         config.active_semester = new_semester
+        config.full_clean()
         config.save()
 
         # The stale active registration is in a different, still-open semester, so it must not 403.
