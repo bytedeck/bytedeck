@@ -64,6 +64,21 @@ ENV PYTHONUNBUFFERED=1
 COPY ./requirements-production.txt requirements-production.txt
 COPY ./requirements.txt requirements.txt
 RUN python3 -m pip install -r requirements.txt
+
+# Chromium for the headless quest-map browser tests
+# (src/djcytoscape/tests/test_map_render.py). Gated behind a build arg and OFF
+# by default so PRODUCTION images stay lean -- the browser + its system libs
+# are ~400MB we don't want shipped to prod. Only the dev/CI compose
+# (docker-compose.override.yml) sets INSTALL_TEST_BROWSERS=true; the prod
+# compose (docker-compose.prod.aws.yml) does not, so prod never pulls Chromium.
+# Kept in its own layer right after the pip install (before the app COPY) so
+# the browser is baked into -- and layer-cached with -- the image, instead of
+# re-downloaded on every test run. Installed into /opt/pw-browsers, the fixed
+# path the test resolves the executable from.
+ARG INSTALL_TEST_BROWSERS=false
+RUN if [ "$INSTALL_TEST_BROWSERS" = "true" ]; then \
+        PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers playwright install --with-deps chromium; \
+    fi
 ######################################################
 
 # Enable below when uwsgi-nginx uses unix sock

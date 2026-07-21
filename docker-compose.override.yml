@@ -32,6 +32,14 @@ services:
     - 6379:6379  # Expose port so app can connect to redis when developing locally with `python src/manage.py [runserver|test src]
 
   web:
+    build:
+      # Bake Chromium into the dev/CI web image so the headless quest-map tests
+      # (djcytoscape/tests/test_map_render.py) actually run here. Merges with the
+      # base build config (context/dockerfile) in docker-compose.yml. Production
+      # uses docker-compose.prod.aws.yml instead of this file, so it never sets
+      # this arg and never installs the browser -- see the Dockerfile.
+      args:
+        INSTALL_TEST_BROWSERS: "true"
     stdin_open: true
     tty: true   # Enabled together with stdin_open so it won't raise an error when we are in pdb mode. Attach using `docker attach $(docker compose ps -q web)`
     environment:
