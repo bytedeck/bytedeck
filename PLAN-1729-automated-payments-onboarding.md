@@ -1,6 +1,6 @@
 # Implementation Plan — Automated Payments & Onboarding via Stripe (Epic #1729)
 
-Status: **proposal for review** · Branch: `claude/feature-1729-plan-tb1zqe` · Date: 2026-07-21
+Status: **proposal for review** · Branch: `claude/feature-1729-plan-tb1zqe` · Date: 2026-07-21 (facts re-verified against `develop` after the Django 5.2 / Python 3.12 upgrades, #2015/#2017)
 
 This plan covers the remainder of epic #1729 and its sub-issues:
 
@@ -43,7 +43,7 @@ Key decisions and rationale:
 
 | Decision | Choice | Why |
 |---|---|---|
-| Stripe library | Raw `stripe` SDK (`stripe>=15,<16`), not dj-stripe | No dj-stripe release supports this repo's Python 3.10 together with Django ≥5.2 (verified against PyPI 2026-07: 2.11.0 — the first release declaring Django 5.2 — requires Python ≥3.11; the only Python-3.10-compatible line, 2.9.x, declares Django ≤5.1), so the choice holds both before and after the planned Django 5.2 flip. Version coupling aside, dj-stripe lands ~30 public-schema tables through `migrate_schemas --shared` to obtain 4 scalars, and its recent minors (2.10, 2.11) each fully **reset their migrations**, forcing stepwise upgrades — an unwelcome property for a multi-tenant shared-schema deploy. The raw SDK (requires-python ≥3.9, zero Django dependency) has no such coupling. The epic body itself asks only that subscription info be "cached in Django or easily retrievable via Stripe API". |
+| Stripe library | Raw `stripe` SDK (`stripe>=15.3.1,<16`, per the repo's floor-at-current/cap-next-major pin policy), not dj-stripe | With the repo now on Python 3.12 / Django 5.2, dj-stripe 2.11.0 *is* installable — so this is a genuine architectural choice, not a compatibility necessity. The raw SDK still wins for this epic: dj-stripe lands ~30 public-schema tables through `migrate_schemas --shared` to obtain 4 scalars; its recent minors (2.10, 2.11) each fully **reset their migrations**, forcing stepwise upgrades — an unwelcome property for a multi-tenant shared-schema deploy; and its 2.10+ restructuring moved most mirrored data out of concrete columns into a `stripe_data` JSONField, shrinking the queryable-mirror value that was dj-stripe's main draw. The epic body itself asks only that subscription info be "cached in Django or easily retrievable via Stripe API". Revisit dj-stripe if in-app invoice history or broader billing UX ever lands on the roadmap. |
 | Billing state | **Derived properties**, no stored status enum | A stored `status` field duplicates state derivable from `trial_end_date`/`paid_until`, drifts when admins edit dates, and forces a risky production data migration classifying every live deck. Properties can't drift and need no backfill. |
 | Payment UX | Stripe-hosted Checkout + Customer Portal | No card handling, no plan-change UI, no PCI surface. Upgrades/downgrades/cancellation are Portal features. |
 | Tier configuration | Metadata on Stripe Prices (`metadata.max_active_users` = 40/80/120), mirrored nowhere | Adding/re-pricing tiers requires a dashboard edit, not a deploy. Resolves #1765's TODO. Fallback map in settings if metadata is absent. |
@@ -215,7 +215,7 @@ Recommendation: ship Option A's mechanics first (they're needed regardless), ask
 
 ### 7.1 Daily beat task
 
-**One** new beat entry in `hackerspace_online/celery.py`, named once and never renamed (removed/renamed entries keep firing from the DatabaseScheduler DB until manually deleted — `celery.py:23` warning): `daily-deck-status-check` → `tenant.tasks.daily_deck_status_check_for_all_tenants`, 06:00 (after the 05:00 digest). It follows the established dispatcher/fan-out pattern (`notifications/tasks.py:21-28`): iterate `get_tenant_model().objects.exclude(schema_name__in=[public, library])` (library via `library.utils.get_library_schema_name` — easy to forget, and emailing/suspending the shared library would be a bug), `apply_async` a per-schema `deck_status_check` under `tenant_context`.
+**One** new beat entry in `hackerspace_online/celery.py`, named once and never renamed (removed/renamed entries keep firing from the DatabaseScheduler DB until manually deleted — see the warning comment above `beat_schedule`): `daily-deck-status-check` → `tenant.tasks.daily_deck_status_check_for_all_tenants`, 06:00 (after the 05:00 digest; the schedule now has four daily entries, the newest being session cleanup at 02:00). It follows the established dispatcher/fan-out pattern — `tenant/tasks.py` itself now contains one to copy (`clear_expired_sessions_in_all_schemas`, added with the ops-reliability work in #2003), alongside `notifications/tasks.py:21-28`. A bonus from #2003: Celery task failures now email `ADMINS` (throttled), so a broken status task can no longer fail silently for weeks. The dispatcher iterates `get_tenant_model().objects.exclude(schema_name__in=[public, library])` (library via `library.utils.get_library_schema_name` — easy to forget, and emailing/suspending the shared library would be a bug) and `apply_async`s a per-schema `deck_status_check` under `tenant_context`.
 
 In its **first** shipped version (PR 2) the per-schema task only calls `tenant.update_cached_fields()` — replacing the `TenantAdmin.get_queryset` N+1 loop. Later PRs extend the same task body (never the beat entry name) with:
 
@@ -256,7 +256,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 
 ## 9. Testing strategy
 
-* All tests `TenantTestCase` + `TenantClient`; public-schema views (webhook, `SubscriptionView` 404-on-tenant behavior) use the established connection-patching pattern (`hackerspace_online/tests/test_views.py:50-60`) — a known source of order-dependent flakes, so keep those tests self-contained.
+* All tests `TenantTestCase` + `TenantClient`; public-schema views (webhook, `SubscriptionView` 404-on-tenant behavior) use the established connection-patching pattern (see the `@patch(..., schema_name=get_public_schema_name())` tests in `hackerspace_online/tests/test_views.py`) — a known source of order-dependent flakes, so keep those tests self-contained. New tests must also satisfy the naming/docstring convention guard added in `hackerspace_online/tests/test_conventions.py` (#2025).
 * Date logic (properties, cadence, grace) with `freezegun` (already a dependency); cadence tests assert `DeckNotice` rows and `len(mail.outbox)` across simulated day sequences, including renewal-re-arm and beat-outage catch-up.
 * Stripe fully mocked (`unittest.mock` on the `stripe` module); webhook tests cover signature failure (400, no DB writes), duplicate `event_id` (200, no double-processing), out-of-order events (monotonic `paid_until`), and unknown events (200).
 * Per repo convention: bug-fix PRs (double-count, N+1) are test-driven; 100 % branch coverage on new code; migrations always present (`makemigrations --check` runs in CI).
