@@ -565,32 +565,36 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'No semesters are currently open')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
-    def test_no_open_semester_banner__shown_to_staff_when_closed(self):
-        """Staff see a warning banner (linking to the semesters page) when the active semester is
-        closed, so they know students can't join a course (issue #2060)."""
+    def test_no_open_semester__staff_gets_dismissable_message_on_home(self):
+        """When the deck has no open semester, staff landing on home get a dismissable message
+        (linking to the semesters page) so they know students can't join a course (issue #2060)."""
         self.client.force_login(self.test_teacher)
         self._close_active_semester()
 
-        response = self.client.get(reverse('courses:semester_list'))
+        response = self.client.get(reverse('home'), follow=True)
 
         self.assertContains(response, 'Create and activate a semester')
 
-    def test_no_open_semester_banner__hidden_when_semester_open(self):
-        """No warning banner when a semester is open (the default state)."""
+    def test_no_open_semester__no_message_on_home_when_semester_open(self):
+        """No warning message on home when a semester is open (the default state)."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('courses:semester_list'))
+        response = self.client.get(reverse('home'), follow=True)
 
         self.assertNotContains(response, 'Create and activate a semester')
 
-    def test_no_open_semester_banner__not_shown_to_students(self):
-        """Students don't see the staff-only no-open-semester banner even when it applies."""
-        self.client.force_login(self.test_student1)
+    def test_no_open_semester__student_join_button_replaced_by_message(self):
+        """A student with no course sees a 'no semester open' note instead of the Join a Course
+        button when the deck has no open semester (issue #2060)."""
+        student = User.objects.create_user('no_course_student')  # no CourseStudent registration
         self._close_active_semester()
+        self.client.force_login(student)
 
-        response = self.client.get(reverse('courses:create'))
+        response = self.client.get(reverse('quests:quests'))
 
-        self.assertNotContains(response, 'Create and activate a semester')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, 'Join a Course')
 
     def test_CourseStudentCreate__simple_registration_hidden_fields(self):
         """

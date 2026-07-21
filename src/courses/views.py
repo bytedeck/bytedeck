@@ -324,14 +324,8 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
 
     @staticmethod
     def _no_open_semester():
-        """Whether there is no semester open for a student to join a course into.
-
-        Closing a semester (``Semester.complete_active_semester``) sets ``closed=True`` but leaves
-        it as ``SiteConfig.active_semester``, so without this guard a student could still register
-        into a closed semester (issue #2060). A missing active semester counts as "not open" too.
-        """
-        active_semester = SiteConfig.get().active_semester
-        return active_semester is None or active_semester.closed
+        """Whether there is no semester open for a student to join a course into (issue #2060)."""
+        return SiteConfig.get().has_no_open_semester()
 
     def _no_open_semester_response(self, request):
         """Render the join page with a message explaining that no semester is open, instead of the
