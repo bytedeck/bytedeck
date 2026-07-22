@@ -313,12 +313,6 @@ class PrereqModelTest(ByteDeckTenantTestCase):
         "returns the alternate prereq requirement"
         self.assertIsNone(self.prereq.get_or_prereq())
 
-    # Todo: need some massive mocking for this one
-    # @patch('prereq_object.condition_met_as_prerequisite', return_value=True)
-    # def test_conditions_met(self, condition_met_as_prerequisite):
-    #     print("Call count: ", condition_met_as_prerequisite.call_count)
-    #     self.assertTrue(self.prereq.condition_met(self.student))
-
     def test_add_simple_prereq__creates_reliance(self):
         """add_simple_prereq makes the parent reliant on the given prereq object."""
         quest3 = baker.make('quest_manager.Quest')

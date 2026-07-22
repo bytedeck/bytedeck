@@ -458,13 +458,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Now try adding them a second time, should not validate:
         response = self.client.post(add_course_url, data=self.valid_form_data)
 
-        # invalid form
         # GRADE field is depercated and no longer used within unique_together
-        # form = response.context['form']
-        # self.assertFalse(form.is_valid())
-        # self.assertEqual(response.status_code, 200)
-        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the grade, still fails cus same block in same semester
         self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
