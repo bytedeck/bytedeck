@@ -110,6 +110,28 @@ back to its original look.
         {% endif %}
       {% endif %}
       {% include 'quest_manager/tab_quests_available.html' %}
+
+      {% comment %} Repeatable quests you've completed that are waiting out their cooldown (#57) {% endcomment %}
+      {% if cooldown_quests %}
+        <div class="panel panel-default" style="margin-top: 1em;">
+          <div class="panel-heading">
+            <i class="fa fa-fw fa-history"></i> Available again soon
+            <small class="text-muted">&mdash; repeatable quests you've done, back after a cooldown</small>
+          </div>
+          <ul class="list-group">
+            {% for q in cooldown_quests %}
+              <li class="list-group-item">
+                <img class="img-rounded" src="{{ q.get_icon_url }}" alt="icon"
+                     style="width:1.6em; height:1.6em; vertical-align:middle; margin-right:0.4em;">
+                <a href="{% url 'quests:quest_detail' q.id %}">{{ q.name }}</a>
+                <span class="pull-right text-muted">
+                  <i class="fa fa-fw fa-clock-o"></i> Available in {{ q.cooldown_available_at|timeuntil }}
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
     </div>
     <div role="tabpanel"
          class="tab-pane fade {% if view_type == VIEW_TYPES.IN_PROGRESS %}in active{% endif %}" id="inprogress">
