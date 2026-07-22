@@ -1,6 +1,8 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
@@ -434,3 +436,91 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     #     for announcement in announcements:
     #         announcement.refresh_from_db()
     #         self.assertTrue(announcement.archived)
+
+
+class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Covers the Create/Update CBV form_valid + success-message branches and EmptyPage paging."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff author and one existing published announcement to edit."""
+        cls.teacher = User.objects.create_user('cu_teacher', is_staff=True)
+        cls.announcement = baker.make(Announcement, draft=False)
+
+    def setUp(self):
+        """Set up a tenant test client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def _form_data(self, **overrides):
+        """Return valid AnnouncementForm POST data (title/content/release), with overrides applied."""
+        data = {
+            'title': 'Test Announcement',
+            'content': 'Some content',
+            'datetime_released': timezone.now().strftime('%Y-%m-%d %H:%M'),
+            'auto_publish': False,
+            'draft': False,
+            'sticky': False,
+            'archived': False,
+        }
+        data.update(overrides)
+        return data
+
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_create__published_saves_sets_author_and_broadcasts(self, mock_send):
+        """Creating a non-draft announcement saves it, sets the author, and queues notifications."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('announcements:create'), self._form_data(draft=False))
+
+        new = Announcement.objects.get(title='Test Announcement')
+        self.assertRedirects(response, new.get_absolute_url())
+        self.assertEqual(new.author, self.teacher)
+        self.assertFalse(new.draft)
+        mock_send.assert_called_once()
+        # Non-draft create shows the "published and broadcast" success message.
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('published and broadcast' in str(m) for m in messages))
+
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_create__draft_does_not_broadcast(self, mock_send):
+        """Creating a draft announcement saves it but does not queue notifications."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(reverse('announcements:create'), self._form_data(draft=True))
+
+        new = Announcement.objects.get(title='Test Announcement')
+        self.assertRedirects(response, new.get_absolute_url())
+        self.assertTrue(new.draft)
+        mock_send.assert_not_called()
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Draft' in str(m) and 'created' in str(m) for m in messages))
+
+    def test_update__published_shows_not_rebroadcast_message(self):
+        """Editing a published announcement shows the 'updated but NOT (re-)broadcasted' message."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse('announcements:update', args=[self.announcement.pk]),
+            self._form_data(draft=False, title='Edited Title'),
+        )
+
+        self.announcement.refresh_from_db()
+        self.assertRedirects(response, self.announcement.get_absolute_url())
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('NOT (re-)broadcasted' in str(m) for m in messages))
+
+    def test_update__draft_shows_draft_updated_message(self):
+        """Editing an announcement as a draft shows the 'Draft ... updated' message."""
+        self.client.force_login(self.teacher)
+        response = self.client.post(
+            reverse('announcements:update', args=[self.announcement.pk]),
+            self._form_data(draft=True, title='Edited Draft'),
+        )
+
+        self.announcement.refresh_from_db()
+        self.assertRedirects(response, self.announcement.get_absolute_url())
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(any('Draft' in str(m) and 'updated' in str(m) for m in messages))
+
+    def test_list__out_of_range_page_returns_last_page(self):
+        """Requesting a page past the end delivers the last page instead of erroring (EmptyPage)."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('announcements:list'), {'page': 9999})
+        self.assertEqual(response.status_code, 200)
