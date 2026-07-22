@@ -216,7 +216,8 @@ class QuestionSubmissionForm(forms.ModelForm):
         if self.question.type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
             if self.question.required and not response_text:
                 raise ValidationError('You must provide a text response for this type of question.')
-        elif self.question.type == QuestionType.FILE_UPLOAD:
+        else:
+            # only FILE_UPLOAD can reach here: __init__ raises NotImplementedError for any other type
             if self.question.required and not response_file:
                 raise ValidationError('You must upload a file for this type of question.')
 
