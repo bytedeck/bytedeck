@@ -1,0 +1,9 @@
+<p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
+
+<p>Your deck <strong>{{ deck.name }}</strong> has been <strong>suspended</strong>: its trial and/or
+  subscription period has ended, so it has reverted to trial limits
+  (max {{ cap }} current student{{ cap|pluralize }}). Existing students keep their access and nothing has
+  been deleted, but no new students can register in a course beyond the trial limit.</p>
+
+<p><a href="{{ subscribe_url }}">Subscribe here</a> to restore full access, or
+  <a href="{{ archive_help_url }}">free up seats</a> if you're winding the deck down.</p>

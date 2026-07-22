@@ -87,9 +87,16 @@ def deck_status_check():
     was an acknowledged N+1 across all decks). Later phases of epic #1729 extend
     this task with the expiry-reminder cadence and limit warnings (#1733).
 
+    After the refresh, runs the deck reminder engine (#1733): expiry cadence,
+    current-student limit warnings, and the suspension notice -- report-only
+    until settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
+
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
+    from tenant.notices import process_deck_notices
+
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
-    return f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'"
+    notices_summary = process_deck_notices(tenant)
+    return f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; notices: {notices_summary}"

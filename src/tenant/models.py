@@ -396,5 +396,50 @@ class Tenant(TenantMixin):
         return Tenant.objects.get(schema_name=connection.schema_name)
 
 
+class DeckNotice(models.Model):
+    """Idempotence/audit ledger for deck status notices (epic #1729 PR 5): one row
+    per notice actually sent.
+
+    The unique constraint makes every send exactly-once and the cadence
+    self-re-arming: `period_key` carries the deadline (or month) the notice was
+    about, so when a renewal advances `paid_until` (or a new month starts, for
+    limit warnings) the same threshold becomes sendable again with no bespoke
+    reset logic. Date-based predicates plus this ledger also make multi-day beat
+    outages catch-up-safe: late, never duplicated.
+    """
+    KIND_EXPIRY = 'expiry'
+    KIND_LIMIT = 'limit'
+    KIND_SUSPENDED = 'suspended'
+    KIND_PAYMENT_FAILED = 'payment_failed'  # reserved for the Stripe webhook phase (plan PR 7)
+    KIND_CHOICES = [
+        (KIND_EXPIRY, 'Trial/subscription expiry reminder'),
+        (KIND_LIMIT, 'Current-student limit warning'),
+        (KIND_SUSPENDED, 'Deck suspended'),
+        (KIND_PAYMENT_FAILED, 'Payment failed'),
+    ]
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='notices')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    threshold = models.CharField(
+        max_length=20,
+        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7', 'daily-YYYY-MM-DD', 'pct80'/'pct100', or 'suspended'."
+    )
+    period_key = models.CharField(
+        max_length=32,
+        help_text="The deadline (expiry/suspension) or month (limit warnings) this notice was about; \
+            a new value re-arms the threshold."
+    )
+    sent_on = models.DateField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['tenant', 'kind', 'threshold', 'period_key'], name='unique_deck_notice'),
+        ]
+
+    def __str__(self):
+        """Audit identifier: the deck's schema name, kind/threshold, and period key."""
+        return f'{self.tenant.schema_name}: {self.kind}/{self.threshold} for {self.period_key}'
+
+
 class TenantDomain(DomainMixin):
     pass

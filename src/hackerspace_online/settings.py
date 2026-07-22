@@ -673,6 +673,13 @@ SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 
 # RECAPTCHA #######################################################
 
+# Deck status notices (epic #1729, #1733): when False (the default), the nightly
+# deck-status task runs the reminder engine in REPORT-ONLY mode -- it logs which
+# expiry/limit/suspension notices it *would* send, but sends nothing and records
+# nothing. Flip to True in production once a report-only cycle has been reviewed
+# (see docs/plans/PLAN-1729-automated-payments-onboarding.md §10.2).
+DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
+
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
 if recaptcha_keys_available:
     RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
