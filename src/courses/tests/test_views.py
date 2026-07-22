@@ -12,6 +12,8 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from quest_manager.models import Quest, QuestSubmission
+from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
@@ -1233,6 +1235,95 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         self.assertEqual(total_students, len(active_sem_students))
 
 
+class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the Ajax_TagChart view (courses:ajax_tag_progress_chart), which returns
+    per-tag quest/badge XP datasets for chart.js."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create the target user whose tag chart is requested, and cache the active semester."""
+        cls.user = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+
+    def setUp(self):
+        """Set up a tenant client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
+        """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.
+
+        xp_requested is pinned to 0 so each submission's earned xp is deterministically the
+        quest's xp (Greatest(quest.xp, xp_requested)).
+        """
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        quest.tags.add(tag)
+        baker.make(
+            QuestSubmission, quest=quest, user=self.user,
+            is_completed=True, is_approved=True, do_not_grant_xp=False,
+            xp_requested=0, semester=self.semester, _quantity=quantity,
+        )
+        return quest
+
+    def _tagged_badge_with_assertions(self, tag, xp, quantity):
+        """Make a tagged badge and `quantity` active-semester assertions for self.user."""
+        badge = baker.make(Badge, xp=xp)
+        badge.tags.add(tag)
+        baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            do_not_grant_xp=False, semester=self.semester, _quantity=quantity,
+        )
+        return badge
+
+    def test_non_ajax_status_code__forbidden(self):
+        """A non-ajax request to the tag chart is forbidden (403)."""
+        self.assert403('courses:ajax_tag_progress_chart', args=[self.user.pk])
+
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the tag chart is redirected to login (302)."""
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_ajax__no_tag_data_returns_empty_datasets(self):
+        """With no tagged quests/badges, the chart returns 200 with empty quest/badge datasets."""
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)['data']
+        self.assertEqual(data['quest_dataset'], [])
+        self.assertEqual(data['badge_dataset'], [])
+
+    def test_ajax__builds_quest_and_badge_datasets(self):
+        """The chart builds per-tag datasets from the user's tagged quest submissions and badge assertions.
+
+        The capped quest (max_xp set) with two submissions exercises the max-xp cutoff loop and the
+        ordinal-in-name path; the uncapped quest (max_xp = -1) exercises the keep-everything branch;
+        the badge with two assertions exercises the badge loop and its ordinal-in-name path.
+        """
+        self._tagged_quest_with_submissions('alpha', xp=50, max_xp=60, quantity=2)
+        self._tagged_quest_with_submissions('beta', xp=20, max_xp=-1, quantity=1)
+        self._tagged_badge_with_assertions('alpha', xp=30, quantity=2)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertIn('alpha', payload['labels'])
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # the two-submission quest and two-assertion badge get an ordinal appended to their name
+        self.assertTrue(any('(' in name for name in quest_names), quest_names)
+        self.assertTrue(any('(' in name for name in badge_names), badge_names)
+
+
 class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
@@ -1319,6 +1410,12 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # get
         response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 404)
+
+    def test_ajax_status_code__user_id_zero_uses_request_user(self):
+        """user_id=0 resolves to the logged-in user (request.user), so a student's own POST succeeds (200)."""
+        self.client.force_login(self.student)
+        response = self.client.post(reverse('courses:ajax_progress_chart', args=[0]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
