@@ -214,6 +214,31 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             del actions["delete_selected"]
         return actions
 
+    def changelist_view(self, request, extra_context=None):
+        """Attach a data-freshness notice to the deck list.
+
+        The cached deck stats (user counts, owner info, quest counts) refresh via the
+        nightly deck-status task, not on page load, so tell the admin how old the
+        numbers they're looking at are.
+        """
+        from django.db.models import Max
+        from django.utils.timesince import timesince
+
+        latest = self.model.objects.aggregate(latest=Max('cached_fields_updated_on'))['latest']
+        if latest:
+            messages.info(
+                request,
+                f"Deck stats (user counts, owner info, quest counts) were last refreshed {timesince(latest)} ago. "
+                "They refresh nightly; for an on-demand view run the deck_status_report management command."
+            )
+        else:
+            messages.info(
+                request,
+                "Deck stats (user counts, owner info, quest counts) have not been refreshed yet. "
+                "They refresh nightly via the deck status check task."
+            )
+        return super().changelist_view(request, extra_context)
+
     def delete_model(self, request, obj):
         # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
         obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema

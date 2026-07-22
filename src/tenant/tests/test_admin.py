@@ -145,6 +145,25 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         self.client = TenantClient(self.public_tenant)
 
+    def test_changelist_view__shows_when_deck_stats_were_last_refreshed(self):
+        """The deck list shows a freshness message with the age of the cached stats,
+        since they refresh nightly rather than on page load (#1729 PR 2)."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # setUpTestData refreshed the cached fields, so a timestamped message shows
+        self.assertContains(response, "were last refreshed")
+
+    def test_changelist_view__notes_when_deck_stats_never_refreshed(self):
+        """If no deck has ever had its cached stats refreshed, the freshness message says so."""
+        Tenant.objects.update(cached_fields_updated_on=None)
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "have not been refreshed yet")
+
     def test_get_queryset__does_not_refresh_cached_fields(self):
         """Loading the changelist must NOT refresh each deck's cached fields anymore --
         that per-row refresh was an N+1 across every tenant schema on every page load;

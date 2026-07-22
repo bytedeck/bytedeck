@@ -4,7 +4,7 @@ from datetime import date
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.utils.timezone import localdate, timedelta
+from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
 from allauth.account.utils import user_email
@@ -138,6 +138,11 @@ class Tenant(TenantMixin):
         default=False,
         help_text="This is a cached field: Whether Google signon has been enabled for this deck."
     )
+
+    cached_fields_updated_on = models.DateTimeField(
+        blank=True, null=True, editable=False,
+        help_text="When the cached fields above were last refreshed (nightly via the deck status check task)."
+    )
     # END CALCULATED / CACHED FIELDS ##################################
 
     def __str__(self):
@@ -243,6 +248,7 @@ class Tenant(TenantMixin):
         self.quest_count = self.get_quest_count()
         self.last_staff_login = self.get_last_staff_login()
         self.google_signon_enabled = self.get_google_signon_enabled()
+        self.cached_fields_updated_on = now()
         self.save(update_fields=[
             'owner_full_name_cached',
             'owner_email_cached',
@@ -251,6 +257,7 @@ class Tenant(TenantMixin):
             'quest_count',
             'last_staff_login',
             'google_signon_enabled',
+            'cached_fields_updated_on',
         ])
 
     def get_owner_full_name_cached(self):
