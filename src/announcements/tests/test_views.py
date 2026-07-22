@@ -520,7 +520,15 @@ class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCa
         self.assertTrue(any('Draft' in str(m) and 'updated' in str(m) for m in messages))
 
     def test_list__out_of_range_page_returns_last_page(self):
-        """Requesting a page past the end delivers the last page instead of erroring (EmptyPage)."""
+        """Requesting a page past the end delivers the LAST page, not page 1 (EmptyPage fallback)."""
+        # The list paginates at 20/page; make enough active announcements for at least 2 pages
+        # (setUpTestData already created one), so serving page 1 vs the last page is distinguishable.
+        baker.make(Announcement, draft=False, datetime_released=timezone.now() - timedelta(days=1), _quantity=25)
         self.client.force_login(self.teacher)
+
         response = self.client.get(reverse('announcements:list'), {'page': 9999})
+
         self.assertEqual(response.status_code, 200)
+        page = response.context['object_list']
+        self.assertGreater(page.paginator.num_pages, 1)
+        self.assertEqual(page.number, page.paginator.num_pages)
