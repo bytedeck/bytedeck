@@ -1,0 +1,41 @@
+{% load comment_tags %}
+{# A published comment's question answers. Expects `answers` (QuestionSubmission qs). #}
+{# Staff additionally see each question's solution and marker notes for easy comparison. #}
+<hr class="tighter">
+<p><strong>Question Answers:</strong></p>
+<table class="table table-condensed">
+  <tbody>
+  {% for answer in answers %}
+    <tr>
+      <td class="col-sm-5">
+        {% if answer.question %}
+          {{ answer.question.instructions|safe }}
+          {% if request.user.is_staff %}
+            {% if answer.question.solution_text %}
+              <p class="text-muted"><small><b>Solution:</b> {{ answer.question.solution_text|linebreaksbr }}</small></p>
+            {% endif %}
+            {% if answer.question.solution_file %}
+              <p class="text-muted"><small><b>Solution file:</b>
+                <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename }}</a></small></p>
+            {% endif %}
+            {% if answer.question.marker_notes %}
+              <p class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|safe }}</small></p>
+            {% endif %}
+          {% endif %}
+        {% else %}
+          <em>(question was deleted)</em>
+        {% endif %}
+      </td>
+      <td class="col-sm-7">
+        {% if answer.response_file %}
+          <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename }}</a>
+        {% elif answer.response_text %}
+          {{ answer.response_text|safe }}
+        {% else %}
+          <em>(no answer)</em>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

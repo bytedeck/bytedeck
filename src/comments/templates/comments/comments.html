@@ -62,6 +62,11 @@
           {% endfor %}
         </ul>
         {% endif %}{% endwith %}
+        {% if config.enable_submission_questions %}
+          {% with comment.question_submissions.all as answers %}{% if answers %}
+            {% include "questions/snippets/comment_answers.html" %}
+          {% endif %}{% endwith %}
+        {% endif %}
       </li>
     {% endif %}
   {% endfor %}

@@ -132,6 +132,9 @@ class QuestionSubmissionForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.disable_csrf = True
+        # the formset machinery adds a hidden 'id' (pk) field to each form; it must be
+        # rendered so a POST can match each answer back to its row
+        self.helper.render_hidden_fields = True
 
         if self.question is None:
             # Degraded stub (question deleted or instance missing): no response fields,

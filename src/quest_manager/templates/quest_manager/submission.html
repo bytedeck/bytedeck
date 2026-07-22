@@ -3,6 +3,7 @@
 
 {% block head %}
     {{ submission_form.media }}
+    {% if question_formset %}{{ question_formset.media }}{% endif %}
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
 {% endblock %}
 
@@ -78,7 +79,24 @@
       {% endif %}
 
         {% csrf_token %}
-        {{ submission_form | crispy }}
+        {% if question_formset %}
+          {{ question_formset.management_form }}
+          {% if question_formset.non_form_errors %}
+            <div class="alert alert-danger">{{ question_formset.non_form_errors }}</div>
+          {% endif %}
+          {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
+          {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
+          {% for form in question_formset %}
+            <div class="well well-sm question-submission-form">
+              <p><strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}</strong></p>
+              {% crispy form %}
+            </div>
+          {% endfor %}
+          <hr>
+        {% endif %}
+        <div id="main-comment-form">
+          {{ submission_form | crispy }}
+        </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}
@@ -122,9 +140,10 @@
             {% endif %}
 
             // Copied from quest_approvals.html
+            // scoped to the main comment form: question answers add their own editors
             $('[id^=btn_quick_text]').on('click', function () {
                 var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('div.note-editable');
+                var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)
                 else
@@ -144,9 +163,27 @@
         });
 
         function save_draft() {
-            $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
+            // scoped to the main comment form: question answers add their own summernote editors
+            $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
             xpRequested = $('#id_xp_requested').val()
+
+            // Collect draft answers to the quest's questions (text answers only; files
+            // upload on submit). Pairs each row's hidden id with its response text.
+            var answers = {};
+            $('.question-submission-form [name^="question_submissions-"]').each(function() {
+                var name = $(this).attr('name');
+                if (/-id$/.test(name)) {
+                    answers[name] = $(this).val();
+                } else if (/-response_text$/.test(name)) {
+                    // summernote-backed textareas need the API to get current content
+                    if ($(this).next('.note-editor').length) {
+                        answers[name] = $(this).summernote('code');
+                    } else {
+                        answers[name] = $(this).val();
+                    }
+                }
+            });
 
             $draftSaveBtn = $('#save-draft-btn')
             old_text = $draftSaveBtn.html()
@@ -171,7 +208,8 @@
                       csrfmiddlewaretoken: "{{ csrf_token }}",
                       comment: draftComment,
                       submission_id: {{ submission.id }},
-                      xp_requested: xpRequested
+                      xp_requested: xpRequested,
+                      answers: JSON.stringify(answers)
                     }, // data sent with the post request
 
                     // handle a successful response
