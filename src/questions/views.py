@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from hackerspace_online.decorators import StaffMemberRequiredMixin
+from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin
 from quest_manager.models import Quest
 
@@ -11,7 +12,23 @@ from .forms import QuestionForm
 from .models import Question, QuestionType
 
 
-class QuestionListView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, ListView):
+class SubmissionQuestionsEnabledMixin:
+    """404 unless the deck has opted into submission questions via
+    SiteConfig.enable_submission_questions (a deck-level feature flag, default off).
+
+    Sits after NonPublicOnlyViewMixin (SiteConfig is a tenant-schema singleton, so the
+    tenant check must run first) and before StaffMemberRequiredMixin, so on a deck with
+    the feature off these URLs don't exist for anyone — no login redirect breadcrumbs.
+    """
+
+    def dispatch(self, request, *args, **kwargs):
+        """404 the request when the feature flag is off."""
+        if not SiteConfig.get().enable_submission_questions:
+            raise Http404("Submission questions are not enabled on this deck.")
+        return super().dispatch(request, *args, **kwargs)
+
+
+class QuestionListView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, ListView):
     """Staff-only list of a quest's questions, with buttons to create each question type."""
 
     model = Question
@@ -48,7 +65,7 @@ class QuestionFormViewMixin:
         return kwargs
 
 
-class QuestionCreateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionFormViewMixin, CreateView):
+class QuestionCreateView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, QuestionFormViewMixin, CreateView):
     """Staff-only creation of a question of the type named in the URL."""
 
     model = Question
@@ -89,7 +106,10 @@ class QuestionQuestScopedMixin:
         return Question.objects.filter(quest_id=self.kwargs['quest_id'])
 
 
-class QuestionUpdateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, QuestionFormViewMixin, UpdateView):
+class QuestionUpdateView(
+    NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin,
+    QuestionQuestScopedMixin, QuestionFormViewMixin, UpdateView,
+):
     """Staff-only editing of an existing question (its type is fixed at creation)."""
 
     model = Question
@@ -112,7 +132,7 @@ class QuestionUpdateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, Quest
         return self.object.get_list_url()
 
 
-class QuestionDeleteView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, DeleteView):
+class QuestionDeleteView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, DeleteView):
     """Staff-only deletion of a question, with confirmation page.
 
     Students' existing answers survive (QuestionSubmission.question is SET_NULL) so markers

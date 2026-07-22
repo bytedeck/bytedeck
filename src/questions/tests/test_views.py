@@ -8,16 +8,23 @@ from model_bakery import baker
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from quest_manager.models import Quest
 from questions.models import Question
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
 class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    """Tests for the staff-only question CRUD views (list/create/update/delete)."""
+    """Tests for the staff-only question CRUD views (list/create/update/delete), on a deck
+    that has opted into the feature via SiteConfig.enable_submission_questions."""
 
     @classmethod
     def setUpTestData(cls):
-        """A teacher, a student, and a quest with one question of each type."""
+        """Enable submission questions for the deck, plus a teacher, a student, and a quest
+        with one question of each type."""
+        config = SiteConfig.get()
+        config.enable_submission_questions = True
+        config.save()
+
         cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
         cls.test_student = User.objects.create_user("test_student", password="password")
 
@@ -235,3 +242,41 @@ class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             "questions:delete",
             kwargs={"quest_id": self.other_quest.id, "pk": self.question1.id})
         self.assertTrue(Question.objects.filter(id=self.question1.id).exists())
+
+
+class QuestionViewsFeatureDisabledTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """With SiteConfig.enable_submission_questions left at its default (False), the question
+    URLs must not exist for anyone — the deck has not opted into the feature."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a quest with one question; the feature flag stays at its default (off)."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.quest = baker.make(Quest)
+        cls.question = baker.make(Question, quest=cls.quest, ordinal=1)
+
+    def setUp(self):
+        """Set up a tenant test client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def test_flag_default__disabled(self):
+        """The feature flag defaults to off so existing decks are unaffected by the upgrade."""
+        self.assertFalse(SiteConfig.get().enable_submission_questions)
+
+    def test_all_question_pages__404_for_staff_when_disabled(self):
+        """Even staff get a 404 from every question view while the deck hasn't enabled the feature."""
+        self.client.force_login(self.test_teacher)
+        self.assert404("questions:list", kwargs={"quest_id": self.quest.id})
+        self.assert404(
+            "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+        self.assert404(
+            "questions:update", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
+        self.assert404(
+            "questions:delete", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
+
+    def test_all_question_pages__404_for_anonymous_when_disabled(self):
+        """Anonymous users get a 404 (not a login redirect) while the feature is off — the
+        URLs shouldn't reveal their existence on a deck that hasn't opted in."""
+        self.assert404("questions:list", kwargs={"quest_id": self.quest.id})
+        self.assert404(
+            "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
