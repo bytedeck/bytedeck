@@ -1778,3 +1778,97 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # check if it was marked as read
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)
+
+
+class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Enforcement of the deck's active-student cap at the registration choke points
+    (#1729 PR 4; closes the 'trial mode (max 5 users)' checkbox of #1730)."""
+
+    def setUp(self):
+        """Give the deck a subscribed cap of 1, fill that seat, and log nobody in yet.
+
+        The deck cache is cleared because the cache backend outlives each test's
+        transaction.
+        """
+        from django.core.cache import cache
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.tenant.paid_until = timezone.localdate() + datetime.timedelta(days=30)
+        self.tenant.max_active_users = 1
+        self.tenant.save()
+
+        self.client = TenantClient(self.tenant)
+        self.occupant = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.occupant, active=True, semester=SiteConfig.get().active_semester)
+        self.newcomer = baker.make(User)
+        self.staff = baker.make(User, is_staff=True)
+
+    def test_student_registration__refused_at_cap(self):
+        """A student hitting the join page on a full deck sees the student-facing
+        refusal instead of the form, on both GET and POST, and no registration happens."""
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its active-student limit')
+
+        response = self.client.post(reverse('courses:create'), data={})
+        self.assertContains(response, 'reached its active-student limit')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_student_registration__allowed_below_cap(self):
+        """With a free seat, the join page renders the normal registration form."""
+        self.tenant.max_active_users = 2
+        self.tenant.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'reached its active-student limit')
+
+    def test_student_registration__simplified_auto_create_blocked_at_cap(self):
+        """The simplified-registration auto-create shortcut cannot bypass the cap: the
+        guard runs before it, so the student sees the refusal and no row is created."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its active-student limit')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__refused_at_cap_with_helpful_links(self):
+        """Staff adding a student to a full deck see the staff-facing refusal with the
+        archive-help and subscribe links, on both GET and POST."""
+        self.client.force_login(self.staff)
+        url = reverse('courses:join', args=[self.newcomer.id])
+
+        response = self.client.get(url)
+        self.assertContains(response, 'Active-student limit reached')
+        self.assertContains(response, reverse('courses:archive_students_help'))
+        self.assertContains(response, '/pages/subscribe/')
+
+        response = self.client.post(url, data={})
+        self.assertContains(response, 'Active-student limit reached')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__staff_target_allowed_at_cap(self):
+        """Adding a STAFF member to a course is always allowed -- staff never consume seats."""
+        other_staff = baker.make(User, is_staff=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse('courses:join', args=[other_staff.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Active-student limit reached')
+
+    def test_archive_students_help__staff_only(self):
+        """The archive-students help page renders for staff and is blocked for students."""
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('courses:archive_students_help'))
+        self.assertContains(response, 'Archiving past students')
+
+        self.client.force_login(self.newcomer)
+        response = self.client.get(reverse('courses:archive_students_help'))
+        self.assertEqual(response.status_code, 403)
