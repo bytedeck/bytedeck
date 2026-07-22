@@ -275,6 +275,34 @@ class AnswerAutosaveTest(QuestionSubmissionFlowTestBase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_autosave__irrelevant_and_incomplete_answer_keys_ignored(self):
+        """Answer keys that don't match the formset naming, and rows sent without an id or
+        without their text, are skipped without saving anything."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        response = self.autosave({
+            "unrelated-key": "ignored",
+            "question_submissions-0-id": str(row.id),  # id without response_text
+            "question_submissions-1-response_text": "text without id",
+        })
+        self.assertEqual(response.status_code, 200)
+        row.refresh_from_db()
+        self.assertEqual(row.response_text, "")
+
+    def test_autosave__unchanged_answer_not_resaved(self):
+        """An answer identical to what's stored isn't rewritten (no needless save)."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        row.response_text = "already saved"
+        row.save()
+        row.refresh_from_db()
+        last_edit = row.datetime_last_edit
+
+        self.autosave({
+            "question_submissions-0-id": str(row.id),
+            "question_submissions-0-response_text": "already saved",
+        })
+        row.refresh_from_db()
+        self.assertEqual(row.datetime_last_edit, last_edit)
+
 
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
     """Published answers display with their comment for students and markers."""
