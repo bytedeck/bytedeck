@@ -575,8 +575,11 @@ class Prereq(IsAPrereqMixin, models.Model):
         if not isinstance(prereq_object, IsAPrereqMixin):
             raise TypeError("prereq_object does not implement IsAPrereqMixin")
 
-        # prereq_object can be sent empty for convenience
-        if not parent_object or not prereq_object:
+        # prereq_object can be sent empty for convenience.
+        # Unreachable in practice: the isinstance() guards above already reject None/invalid
+        # objects with a TypeError, and any model instance that passes them is truthy, so this
+        # falsy-guard never fires. Kept as defensive code; excluded from coverage.
+        if not parent_object or not prereq_object:  # pragma: no cover
             return None
 
         new_prereq = cls(
@@ -627,7 +630,11 @@ class PrereqAllConditionsMet(models.Model):
     def get_ids(self):
         if self.ids:
             return json.loads(self.ids)
-        return PrereqAllConditionsMet.ids.default
+        # Empty/blank ``ids`` -> an empty list (matches the field default '[]' and the
+        # list return type of the branch above). The previous ``PrereqAllConditionsMet.ids.default``
+        # raised AttributeError (a class-level field access yields a DeferredAttribute, which has
+        # no ``.default``); it never fired only because ``ids`` defaults to '[]' and is thus truthy.
+        return []
 
     def set_ids(self, id_list=None):
         if id_list is None:
