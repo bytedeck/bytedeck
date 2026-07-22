@@ -3,16 +3,23 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db.utils import OperationalError
 from django.test import override_settings
 
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
+from tenant_schemas_celery.task import TenantTask
 
 from badges.models import Badge, BadgeAssertion
 from courses.models import CourseStudent
 from notifications.models import Notification
-from prerequisites.models import Prereq
-from prerequisites.tasks import grant_badge_assertions_for_badge
+from prerequisites.models import Prereq, PrereqAllConditionsMet
+from prerequisites.tasks import (
+    grant_badge_assertions_for_badge,
+    update_conditions_for_quest,
+    update_quest_conditions_all_users,
+    update_quest_conditions_for_user,
+)
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
@@ -192,3 +199,118 @@ class GrantBadgeAssertionsForBadgeTest(ByteDeckTenantTestCase):
             self.run_task()
 
         self.assertEqual(recursive_call.call_count, 1)
+
+
+class UpdateConditionsForQuestTaskTest(ByteDeckTenantTestCase):
+    """Tests for update_conditions_for_quest, which refreshes each relevant user's
+    available-quest cache (PrereqAllConditionsMet) for a single quest, in bunches."""
+
+    def setUp(self):
+        """A student enrolled in the active semester's course."""
+        self.student = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.student, semester=SiteConfig.get().active_semester)
+
+    def test_update_conditions_for_quest__missing_quest_returns_message(self):
+        """A quest deleted while the task is queued short-circuits with a message."""
+        result = update_conditions_for_quest(quest_id=999999, start_from_user_id=1)
+        self.assertIn("no longer exists", result)
+
+    def test_update_conditions_for_quest__already_started_is_skipped(self):
+        """A fresh run (user 1) is skipped while the short debounce cache key is set."""
+        quest = baker.make(Quest)
+        cache_key = f'update_conditions_for_quest_{quest.id}_wait'
+        cache.set(cache_key, True, 10)
+        try:
+            result = update_conditions_for_quest(quest_id=quest.id, start_from_user_id=1)
+        finally:
+            cache.delete(cache_key)
+        self.assertIn("already started", result)
+
+    def test_update_conditions_for_quest__course_scoped_quest_removes_unmet_from_cache(self):
+        """For a course-scoped quest whose prereq the student hasn't met, the quest is
+        left out of the student's available-quest cache (the not-available branch)."""
+        quest = baker.make(Quest, available_outside_course=False)
+        unmet_prereq = baker.make(Quest)
+        Prereq.add_simple_prereq(quest, unmet_prereq)  # student has not completed unmet_prereq
+
+        with patch.object(update_conditions_for_quest, 'apply_async'):  # don't recurse for real
+            result = update_conditions_for_quest(quest_id=quest.id, start_from_user_id=1)
+
+        self.assertEqual(result, quest.name)
+        cache_obj = PrereqAllConditionsMet.objects.get(user=self.student, model_name=Quest.get_model_name())
+        self.assertNotIn(quest.id, cache_obj.get_ids())
+
+    @override_settings(CELERY_TASKS_BUNCH_SIZE=1)
+    def test_update_conditions_for_quest__requeues_for_the_next_bunch(self):
+        """With more users than the bunch size, the task re-queues itself for the next user."""
+        baker.make(User)  # ensure a second user exists beyond the first bunch of 1
+        quest = baker.make(Quest, available_outside_course=True)  # -> every user
+        with patch.object(update_conditions_for_quest, 'apply_async') as recursive_call:
+            update_conditions_for_quest(quest_id=quest.id, start_from_user_id=1)
+        self.assertEqual(recursive_call.call_count, 1)
+        self.assertEqual(recursive_call.call_args.kwargs['kwargs']['quest_id'], quest.id)
+
+
+class UpdateQuestConditionsForUserTaskTest(ByteDeckTenantTestCase):
+    """Tests for update_quest_conditions_for_user, which recomputes one user's whole
+    available-quest cache."""
+
+    def test_update_quest_conditions_for_user__missing_user_returns_none(self):
+        """A user deleted while the task is queued short-circuits and returns None."""
+        self.assertIsNone(update_quest_conditions_for_user(user_id=999999))
+
+
+class UpdateQuestConditionsAllUsersTaskTest(ByteDeckTenantTestCase):
+    """Tests for update_quest_conditions_all_users, which fans out per-user cache
+    recomputation across the active semester's students, in bunches."""
+
+    def setUp(self):
+        """Two students enrolled in the active semester's course."""
+        sem = SiteConfig.get().active_semester
+        self.student_a = baker.make(User)
+        self.student_b = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.student_a, semester=sem)
+        baker.make('courses.CourseStudent', user=self.student_b, semester=sem)
+        cache.delete('update_conditions_all_task_waiting')
+
+    def test_update_quest_conditions_all_users__already_running_is_skipped(self):
+        """A fresh run (user 1) is skipped while the debounce cache key is set."""
+        cache.set('update_conditions_all_task_waiting', True, 60)
+        try:
+            result = update_quest_conditions_all_users(start_from_user_id=1)
+        finally:
+            cache.delete('update_conditions_all_task_waiting')
+        self.assertEqual(result, "Skipping task, already running.")
+
+    @override_settings(CELERY_TASKS_BUNCH_SIZE=1)
+    def test_update_quest_conditions_all_users__dispatches_per_user_and_requeues(self):
+        """Each user in the bunch gets a per-user recompute dispatched, and the task
+        re-queues itself for the next bunch when more users remain."""
+        with patch.object(update_quest_conditions_for_user, 'apply_async') as per_user_call, \
+             patch.object(update_quest_conditions_all_users, 'apply_async') as recursive_call:
+            update_quest_conditions_all_users(start_from_user_id=1)
+        self.assertEqual(per_user_call.call_count, 1)   # one user in the bunch of 1
+        self.assertEqual(recursive_call.call_count, 1)  # more users remain -> recurse
+
+
+class TransactionAwareTaskTest(ByteDeckTenantTestCase):
+    """Tests for TransactionAwareTask.apply_async, which defers queuing until the
+    surrounding DB transaction commits and handles connection errors."""
+
+    def test_apply_async__operational_error_retries_with_doubled_countdown(self):
+        """An OperationalError while scheduling the on-commit hook retries immediately
+        with the countdown doubled."""
+        with patch('prerequisites.tasks.transaction.on_commit', side_effect=OperationalError), \
+             patch.object(TenantTask, 'apply_async', return_value='queued') as super_call:
+            result = update_quest_conditions_for_user.apply_async(kwargs={'user_id': 1}, countdown=60)
+        super_call.assert_called_once()
+        self.assertEqual(super_call.call_args.kwargs['countdown'], 120)
+        self.assertEqual(result, 'queued')
+
+    def test_apply_async__unexpected_error_is_logged_and_swallowed(self):
+        """Any other error scheduling the on-commit hook is logged and swallowed (returns None)."""
+        with patch('prerequisites.tasks.transaction.on_commit', side_effect=ValueError), \
+             patch.object(TenantTask, 'apply_async') as super_call:
+            result = update_quest_conditions_for_user.apply_async(kwargs={'user_id': 1})
+        super_call.assert_not_called()
+        self.assertIsNone(result)

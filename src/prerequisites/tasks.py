@@ -75,7 +75,12 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
                 user=user,
                 model_name=Quest.get_model_name(),
             )
-        except PrereqAllConditionsMet.MultipleObjectsReturned:
+        # Defensive: PrereqAllConditionsMet has a unique constraint on
+        # (user, model_name) (see the model's Meta.constraints), so get_or_create
+        # can no longer return multiple rows. Kept in case that constraint is ever
+        # relaxed; unreachable under the current schema, so excluded from coverage
+        # rather than tested with a contrived duplicate.
+        except PrereqAllConditionsMet.MultipleObjectsReturned:  # pragma: no cover
             # why are there multiple?  Delete cache and regenerate new for this user
             caches = PrereqAllConditionsMet.objects.filter(user=user, model_name=Quest.get_model_name())
             caches.delete()
