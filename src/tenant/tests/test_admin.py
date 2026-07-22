@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
-from django_tenants.utils import tenant_context, schema_exists
+from django_tenants.utils import get_public_schema_name, tenant_context, schema_exists
 from django_tenants.test.client import TenantClient
 
 from hackerspace_online.celery import app
@@ -163,6 +163,37 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "have not been refreshed yet")
+
+    def test_refresh_cached_fields_action__refreshes_selected_decks(self):
+        """The "Refresh deck stats" changelist action refreshes the selected decks'
+        cached stats on demand -- the admin-UI alternative to the management command."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            owner_full_name_cached=None, cached_fields_updated_on=None)
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        action_data = {"action": "refresh_cached_fields", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "Refreshed deck stats for 1 deck(s).")
+        refreshed = Tenant.objects.get(pk=self.tenant.pk)
+        self.assertIsNotNone(refreshed.cached_fields_updated_on)
+        self.assertEqual(refreshed.owner_full_name_cached, "Jane Doe")
+
+    def test_refresh_cached_fields_action__skips_public_schema(self):
+        """Selecting the public schema row alongside a deck refreshes the deck but
+        skips public with a warning (public has no deck data to refresh)."""
+        public_pk = Tenant.objects.get(schema_name=get_public_schema_name()).pk
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        action_data = {"action": "refresh_cached_fields", ACTION_CHECKBOX_NAME: [self.tenant.pk, public_pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "Refreshed deck stats for 1 deck(s).")
+        self.assertContains(response, "Skipped the public schema")
 
     def test_get_queryset__does_not_refresh_cached_fields(self):
         """Loading the changelist must NOT refresh each deck's cached fields anymore --
