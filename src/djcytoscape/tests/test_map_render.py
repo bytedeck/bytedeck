@@ -9,10 +9,13 @@ one piece of front-end logic unit/view tests structurally can't reach — the
 map's client-side layout — while staying hermetic (no network, no Django live
 server, no tenant routing).
 
-The test is skipped unless Playwright *and* a pre-installed Chromium are
-available, so it never breaks a suite run (or CI job) that lacks the browser.
-To run it: ``pip install playwright`` and ensure a Chromium build is present
-(``playwright install chromium`` locally, or the browser image in CI).
+Locally the test is skipped unless Playwright *and* a pre-installed Chromium are
+available, so it never breaks a dev suite run that lacks the browser. In CI --
+where the browser is provisioned into the image on purpose -- the test step sets
+``REQUIRE_BROWSER_TESTS=1`` so a missing browser fails loudly (at collection)
+instead of silently skipping this coverage. To run it: ``pip install playwright``
+and ensure a Chromium build is present (``playwright install chromium`` locally,
+or the browser image in CI).
 """
 
 import glob
@@ -30,10 +33,13 @@ _JS_DIR = os.path.join(os.path.dirname(__file__), "..", "static", "djcytoscape",
 # ``cy`` already exists. jQuery isn't the code under test, so instead of vendoring
 # it we stub the handful of calls maps.js makes. ``ready`` must DEFER (like real
 # jQuery) so the ``var updateBounds`` defined lower in maps.js exists before the
-# document-ready callback runs.
+# document-ready callback runs. After that callback finishes (it runs the dagre
+# layout), the shim flips ``window.__mapsReady`` so the test can wait on a real
+# signal instead of a fixed sleep. maps.js makes a single ``$(document).ready``
+# call, so the flag is set exactly once, after layout.
 _JQUERY_SHIM = (
     "window.$=window.jQuery=function(){return{"
-    "ready:function(f){if(f)setTimeout(f,0);return this;},"
+    "ready:function(f){if(f)setTimeout(function(){f();window.__mapsReady=true;},0);return this;},"
     "resize:function(){return this;},click:function(){return this;},"
     "css:function(){return this;},toggleClass:function(){return this;}};};"
 )
@@ -57,6 +63,27 @@ def _playwright_available():
     except ImportError:
         return False
     return _chromium_executable() is not None
+
+
+def _require_browser():
+    """True when the environment demands these tests actually run (i.e. CI).
+
+    CI bakes Chromium into the web image on purpose (INSTALL_TEST_BROWSERS), so a
+    missing browser there is a provisioning regression we want to fail loudly on
+    rather than silently skip past. The CI test step sets REQUIRE_BROWSER_TESTS=1.
+    """
+    return os.environ.get("REQUIRE_BROWSER_TESTS") == "1"
+
+
+# Guard against silently losing this coverage: if CI demands the browser but it
+# isn't available, fail at collection instead of skipping. Locally (flag unset)
+# the tests still skip cleanly when no browser is present.
+if _require_browser() and not _playwright_available():
+    raise RuntimeError(
+        "REQUIRE_BROWSER_TESTS=1 but Playwright/Chromium is unavailable, so the quest-map "
+        "browser tests would silently skip. Check the image's Chromium provisioning "
+        "(INSTALL_TEST_BROWSERS in the Dockerfile / docker-compose.override.yml)."
+    )
 
 
 def _read_js(name):
@@ -89,6 +116,7 @@ def _harness_html(elements, style="[]"):
 <script>{_read_js('cytoscape-dagre.js')}</script>
 <script>
 window.__errors = [];
+window.__mapsReady = false;
 window.addEventListener('error', function (e) {{ window.__errors.push(String(e.message || e)); }});
 var mapContainer = document.getElementById('cy');
 var cy = cytoscape({{
@@ -136,7 +164,10 @@ class QuestMapRenderTest(SimpleTestCase):
                 page.set_content(_harness_html(elements, style), wait_until="load")
                 # dagre runs synchronously in maps.js, but wait for cy to exist first.
                 page.wait_for_function("() => window.cy && cy.nodes().length > 0")
-                page.wait_for_timeout(100)  # let the deferred document-ready callback settle
+                # Wait for the deferred jQuery-ready callback (which runs the dagre
+                # layout) to finish, rather than sleeping a fixed interval -- the shim
+                # sets window.__mapsReady once it completes.
+                page.wait_for_function("() => window.__mapsReady === true")
 
                 positions = page.evaluate(
                     "() => cy.nodes(':childless').map(n => "

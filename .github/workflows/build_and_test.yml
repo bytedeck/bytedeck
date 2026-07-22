@@ -61,8 +61,13 @@ jobs:
       - name: Check for missing migrations
         run: docker compose run --rm --no-deps web python src/manage.py makemigrations --check --dry-run
       - name: Run test suite
+        # REQUIRE_BROWSER_TESTS=1 makes the headless quest-map tests
+        # (djcytoscape/tests/test_map_render.py) fail loudly here if Chromium
+        # isn't in the image, instead of silently skipping -- CI bakes the
+        # browser in on purpose (INSTALL_TEST_BROWSERS), so a missing browser is
+        # a regression, not an expected skip.
         run: |
-          docker compose exec -T web coverage run --parallel-mode src/manage.py test src
+          docker compose exec -T -e REQUIRE_BROWSER_TESTS=1 web coverage run --parallel-mode src/manage.py test src
           docker compose exec -T web coverage combine
           docker compose exec -T web coverage xml
       - name: Upload coverage reports to Codecov
