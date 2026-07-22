@@ -994,7 +994,10 @@ class QuestSubmissionManager(models.Manager):
             self.all_not_completed(user=user).get(quest=quest)
             # if no exception is thrown it means that an inprogress submission was found
             return False
-        except MultipleObjectsReturned:
+        # Unreachable: all_not_completed(user=...) is scoped to the active semester, and the partial
+        # unique constraint on (user, quest, semester) for in-progress submissions (migration 0049)
+        # allows at most one match -- so .get() never returns multiple. Excluded from coverage.
+        except MultipleObjectsReturned:  # pragma: no cover
             return False  # multiple found
         except ObjectDoesNotExist:
             pass  # nothing found, continue
@@ -1167,7 +1170,10 @@ class QuestSubmission(models.Model):
 
         if self.quest:
             name = self.quest.name
-        else:
+        # Defensive: quest is a non-nullable CASCADE FK, so a submission always has a quest
+        # (deleting a quest deletes its submissions). This fallback is unreachable, so it's
+        # excluded from coverage rather than tested with an impossible state.
+        else:  # pragma: no cover
             name = "[DELETED QUEST]"
         name += ordinal_str
         return name
@@ -1175,7 +1181,8 @@ class QuestSubmission(models.Model):
     def quest_name(self):
         if self.quest:
             return self.quest.name
-        else:
+        # Unreachable for the same reason as __str__ above (non-nullable CASCADE quest FK).
+        else:  # pragma: no cover
             return "[DELETED QUEST]"
 
     def get_absolute_url(self):

@@ -161,6 +161,17 @@ class QuestTestModel(ByteDeckTenantTestCase):
         """The quest's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.quest.get_absolute_url(), follow=True).status_code, 200)
 
+    def test_get_icon_url__returns_quest_icon_when_set(self):
+        """get_icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.get_icon_url(), self.quest.icon.url)
+
+    def test_get_icon_url__falls_back_to_campaign_icon(self):
+        """With no quest icon but a campaign icon set, get_icon_url returns the campaign's icon url."""
+        self.quest.icon = ''
+        self.quest.campaign = baker.make('quest_manager.Category', icon='icons/campaign.png')
+        self.assertEqual(self.quest.get_icon_url(), self.quest.campaign.icon.url)
+
     def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """
         The active method of the Quest model's parent "XPItem" should return the correct values based on a quest object's settings.
@@ -467,6 +478,65 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
             ordered=False
         )
 
+    def test_all_returned__no_user_returns_returned_submissions(self):
+        """all_returned() with no user returns every returned submission (has a completion date
+        while is_completed is False), and excludes still-in-progress ones."""
+        returned = baker.make(
+            QuestSubmission, is_completed=False, time_completed=timezone.now(), semester=self.active_semester,
+        )
+        in_progress = baker.make(
+            QuestSubmission, is_completed=False, time_completed=None, semester=self.active_semester,
+        )
+        all_returned = QuestSubmission.objects.all_returned()
+        self.assertIn(returned, all_returned)
+        self.assertNotIn(in_progress, all_returned)
+
+    def test_remove_in_progress__deletes_not_completed_submissions(self):
+        """remove_in_progress() deletes every not-completed submission across semesters."""
+        baker.make(QuestSubmission, is_completed=False, semester=self.active_semester, _quantity=2)
+
+        QuestSubmission.objects.remove_in_progress()
+
+        remaining = QuestSubmission.objects.get_queryset(active_semester_only=False).not_completed()
+        self.assertFalse(remaining.exists())
+
+    def test_queryset_completed__oldest_first_branch(self):
+        """The completed(oldest_first=True) queryset returns completed submissions."""
+        completed = baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=False).completed(oldest_first=True)
+        self.assertIn(completed, qs)
+
+    def test_queryset_has_completion_date__filters_by_time_completed(self):
+        """has_completion_date() keeps only submissions that have a time_completed."""
+        with_date = baker.make(QuestSubmission, time_completed=timezone.now(), semester=self.active_semester)
+        without_date = baker.make(QuestSubmission, time_completed=None, semester=self.active_semester)
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=False).has_completion_date()
+        self.assertIn(with_date, qs)
+        self.assertNotIn(without_date, qs)
+
+    def test_all_returned__with_user_returns_that_users_returned_submissions(self):
+        """all_returned(user) returns the given user's returned submissions."""
+        user = baker.make(User)
+        returned = baker.make(
+            QuestSubmission, user=user, is_completed=False, time_completed=timezone.now(), semester=self.active_semester,
+        )
+        self.assertIn(returned, QuestSubmission.objects.all_returned(user=user))
+
+    def test_not_submitted_or_inprogress__false_while_in_progress(self):
+        """not_submitted_or_inprogress() is False while an in-progress submission exists."""
+        user = baker.make(User)
+        quest = baker.make(Quest)
+        baker.make(QuestSubmission, user=user, quest=quest, is_completed=False, semester=self.active_semester)
+        self.assertFalse(QuestSubmission.objects.not_submitted_or_inprogress(user, quest))
+
+    def test_not_submitted_or_inprogress__defers_to_repeat_availability_when_completed(self):
+        """With a completed (not in-progress) submission, the result defers to the quest's repeat availability;
+        a non-repeatable quest is not available again."""
+        user = baker.make(User)
+        quest = baker.make(Quest, max_repeats=0)  # not repeatable
+        baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, semester=self.active_semester)
+        self.assertFalse(QuestSubmission.objects.not_submitted_or_inprogress(user, quest))
+
 
 class SubmissionTestModel(ByteDeckTenantTestCase):
 
@@ -486,6 +556,11 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
         self.assertIsInstance(self.submission, QuestSubmission)
         self.assertEqual("Test", self.submission.quest.name)
+
+    def test_str__appends_ordinal_for_repeat_submissions(self):
+        """__str__ appends the ordinal in parentheses for a repeat submission (ordinal > 1)."""
+        sub = baker.make(QuestSubmission, quest__name="Repeatable", ordinal=2)
+        self.assertEqual(str(sub), "Repeatable (2)")
 
     def test_get_absolute_url__submission_page_loads(self):
         """The submission's absolute URL is reachable and returns 200."""
