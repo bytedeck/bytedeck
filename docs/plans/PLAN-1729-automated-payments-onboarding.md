@@ -187,7 +187,7 @@ Idempotence: `StripeEventLog.event_id` unique — duplicates return 200 before a
 
 ### 6.1 The choke points (the cap on *becoming* active)
 
-A user is "active" when they're a **student** registered in a course in the active semester — staff and superusers never count (maintainer decision, PR #2047) — so the cap belongs where registrations happen, not at login:
+Deck student-state vocabulary (maintainer definitions, post-#2077): **current** = registered in a course in the active semester — *only current students count toward deck limits*; **active** = every other non-archived student (can sign in, doesn't count); **inactive/archived** = `is_active=False`, can't sign in, listed in their own tab. Staff and superusers never count (maintainer decision, PR #2047). The model fields (`max_active_users`, `active_user_count`) keep their legacy "active" naming but meter **current** students. The cap belongs where a student *becomes current* — course registration — not at login:
 
 * `courses.views.CourseStudentCreate` — both the form path and the `simplified_course_registration` auto-create path (`courses/views.py:327`).
 * Staff-side `courses.views.CourseAddStudent`.

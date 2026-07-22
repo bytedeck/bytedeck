@@ -586,7 +586,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.set_deck(active_user_count=99)
 
         response = self.get_quests_page(self.staff)
-        self.assertContains(response, 'Active-student limit exceeded')
+        self.assertContains(response, 'Current-student limit exceeded')
 
     def test_banner__expiring_soon_warns_staff(self):
         """Staff see the expiring-soon warning inside the two-week window, for both

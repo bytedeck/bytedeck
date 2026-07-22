@@ -9,7 +9,7 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
         <div class="alert alert-danger" id="deck-status-banner">
             {% if request.user.is_staff %}
                 <strong>This deck is suspended</strong> &mdash; its trial or subscription has ended, and it has
-                reverted to trial limits (max {{ current_deck.effective_max_active_users }} active students).
+                reverted to trial limits (max {{ current_deck.effective_max_active_users }} current students).
                 <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> to restore full access.
             {% else %}
                 <strong>This deck is suspended.</strong> Please let your teacher know.
@@ -18,9 +18,10 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
     {% elif request.user.is_staff %}
         {% if current_deck.is_over_user_limit %}
             <div class="alert alert-warning" id="deck-status-banner">
-                <strong>Active-student limit exceeded:</strong> this deck has {{ current_deck.active_user_count }}
-                active students of {{ current_deck.effective_max_active_users }} allowed.
-                Archive past students, or <a href="{{ deck_subscribe_url }}" class="alert-link">upgrade your subscription</a>.
+                <strong>Current-student limit exceeded:</strong> this deck has {{ current_deck.active_user_count }}
+                current students of {{ current_deck.effective_max_active_users }} allowed.
+                <a href="{% url 'courses:archive_students_help' %}" class="alert-link">Archive past students</a>,
+                or <a href="{{ deck_subscribe_url }}" class="alert-link">upgrade your subscription</a>.
             </div>
         {% elif current_deck.is_expiring_soon %}
             <div class="alert alert-warning" id="deck-status-banner">
@@ -39,7 +40,7 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
         {% elif current_deck.is_on_trial %}
             <div class="alert alert-info" id="deck-status-banner">
                 <strong>Trial Mode:</strong> this deck is on a free trial until {{ current_deck.trial_end_date }}
-                (max {{ current_deck.effective_max_active_users }} active students).
+                (max {{ current_deck.effective_max_active_users }} current students).
                 <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> for more.
             </div>
         {% endif %}

@@ -88,7 +88,8 @@ class Tenant(TenantMixin):
     )
     max_active_users = models.SmallIntegerField(
         default=5,
-        help_text="The maximum number of users that can be active on this deck; -1 = unlimited."
+        help_text="The maximum number of CURRENT students (registered in a course in the active semester) \
+            on this deck; -1 = unlimited. Staff and merely-active (unregistered) students don't count."
     )
     max_quests = models.SmallIntegerField(
         default=100,
@@ -119,8 +120,8 @@ class Tenant(TenantMixin):
 
     active_user_count = models.PositiveSmallIntegerField(
         default=0,
-        help_text="This is a cached field: the number of student users currently registered in a course \
-            in the active semester. Staff and superusers don't count."
+        help_text="This is a cached field: the number of CURRENT students (registered in a course in the \
+            active semester). Staff and superusers don't count."
     )
 
     total_user_count = models.PositiveSmallIntegerField(
@@ -237,7 +238,7 @@ class Tenant(TenantMixin):
 
     @property
     def is_over_user_limit(self):
-        """Whether the deck's cached active-student count exceeds its effective cap.
+        """Whether the deck's cached current-student count exceeds its effective cap.
 
         Advisory (banner/notification) check against the nightly-refreshed cached
         count -- enforcement at the registration choke points recounts live.
@@ -331,14 +332,16 @@ class Tenant(TenantMixin):
 
     def get_active_user_count(self):
         """
-        Returns the number of STUDENT users currently registered in a course in the
-        active semester.
+        Returns the number of CURRENT students: those registered in a course in the
+        active semester. (The method name keeps the legacy field naming; "current"
+        is the deck vocabulary -- merely-active students who aren't registered this
+        semester don't count.)
 
-        Staff and superusers never count toward a deck's active-user total --
-        pricing tiers are based on active students only (maintainer decision,
-        PR #2047 / epic #1729). students_only=True already restricts the enrolled
-        set to non-staff, non-test-account users, and the queryset it returns is
-        limited to is_active=True (so archived students stop counting, #1733);
+        Staff and superusers never count -- pricing tiers are based on current
+        students only (maintainer decision, PR #2047 / epic #1729).
+        students_only=True already restricts the enrolled set to non-staff,
+        non-test-account users, and the queryset it returns is limited to
+        is_active=True (so archived/inactive students stop counting, #1733);
         superusers are excluded explicitly since a superuser isn't necessarily
         staff.
         """

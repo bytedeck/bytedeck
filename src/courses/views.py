@@ -255,7 +255,7 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
 @method_decorator(staff_member_required, name='dispatch')
 class ArchiveStudentsHelp(NonPublicOnlyViewMixin, TemplateView):
     """Staff help page explaining how to archive students so they stop counting toward
-    the deck's active-student cap (#1729 PR 4 / #1733's archiving instructions).
+    the deck's current-student cap (#1729 PR 4 / #1733's archiving instructions).
 
     Linked from the at-capacity refusal page; the reminder emails (plan PR 5) will
     link here too.
@@ -277,11 +277,11 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         return kwargs
 
     def _deck_at_capacity_for_target(self):
-        """Whether the deck's active-student cap blocks the TARGET student from being added --
+        """Whether the deck's current-student cap blocks the TARGET student from being added --
         the staff-side counterpart of CourseStudentCreate's guard (#1729 PR 4)."""
-        from tenant.limits import can_add_active_user
+        from tenant.limits import can_add_current_student
         target = get_object_or_404(User, pk=self.kwargs.get('user_id'))
-        return not can_add_active_user(target)
+        return not can_add_current_student(target)
 
     def _deck_at_capacity_response(self, request):
         """Render the add page with the at-capacity explanation (with staff-facing links to the
@@ -368,9 +368,9 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
 
     def _deck_at_capacity(self):
-        """Whether the deck's active-student cap blocks this user from registering (#1729 PR 4)."""
-        from tenant.limits import can_add_active_user
-        return not can_add_active_user(self.request.user)
+        """Whether the deck's current-student cap blocks this user from registering (#1729 PR 4)."""
+        from tenant.limits import can_add_current_student
+        return not can_add_current_student(self.request.user)
 
     def _deck_at_capacity_response(self, request):
         """Render the join page with the at-capacity explanation instead of the registration form.

@@ -237,7 +237,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     def changelist_view(self, request, extra_context=None):
         """Attach a data-freshness notice to the deck list.
 
-        The cached deck stats (user counts, owner info, quest counts) refresh via the
+        The cached deck stats (current-student counts, owner info, quest counts) refresh via the
         nightly deck-status task, not on page load, so tell the admin how old the
         numbers they're looking at are.
         """
@@ -248,13 +248,13 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         if latest:
             messages.info(
                 request,
-                f"Deck stats (user counts, owner info, quest counts) were last refreshed {timesince(latest)} ago. "
+                f"Deck stats (current-student counts, owner info, quest counts) were last refreshed {timesince(latest)} ago. "
                 "They refresh nightly; to refresh now, select decks below and run the \"Refresh deck stats\" action."
             )
         else:
             messages.info(
                 request,
-                "Deck stats (user counts, owner info, quest counts) have not been refreshed yet. "
+                "Deck stats (current-student counts, owner info, quest counts) have not been refreshed yet. "
                 "They refresh nightly; to refresh now, select decks below and run the \"Refresh deck stats\" action."
             )
         return super().changelist_view(request, extra_context)
