@@ -133,12 +133,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     """
 
     def run_engine_with_inline_email(self):
-        """Run process_deck_notices with the email task executing synchronously.
-
-        The email dispatch is deferred with transaction.on_commit (so a rolled-back
-        ledger row never leaks an email), so this also executes the captured
-        on-commit callbacks, which a TestCase transaction would otherwise swallow.
-        """
+        """Run process_deck_notices with the email task executing synchronously."""
         from unittest.mock import patch
 
         from tenant import tasks
@@ -147,9 +142,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             tasks.send_email_message, 'apply_async',
             side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
         ):
-            with self.captureOnCommitCallbacks(execute=True):
-                summary = process_deck_notices(self.tenant)
-            return summary
+            return process_deck_notices(self.tenant)
 
     def setUp(self):
         """Put this deck at its 100% limit so exactly one notice is due, give the deck
@@ -169,6 +162,16 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             email_address.save()
         # a secondary (non-primary) address, so owner-email resolution has to skip past it
         EmailAddress.objects.get_or_create(user=owner, email='owner-alt@example.com')
+
+        # Give the deck a dedicated AI user, as properly-configured decks have. The
+        # seeded tenant defaults deck_ai to the first staff user (= the owner), and
+        # the notifications app skips self-notifications (recipient == sender), which
+        # would silently drop the owner's in-app notice.
+        from django.contrib.auth import get_user_model
+        config = SiteConfig.get()
+        if config.deck_ai == config.deck_owner:
+            config.deck_ai = get_user_model().objects.create(username='deck_ai_bot', is_staff=True)
+            config.save()
 
     def test_process__report_only_by_default_sends_and_records_nothing(self):
         """With DECK_NOTICES_ENABLED off (the default), the engine only reports."""
@@ -197,7 +200,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # in-app notification exists for the deck owner
         from siteconfig.models import SiteConfig
         owner = SiteConfig.get().deck_owner
-        self.assertTrue(Notification.objects.filter(recipient=owner).exists())
+        self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
@@ -226,20 +229,44 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__failed_delivery_rolls_back_ledger_so_next_run_retries(self):
         """If delivery raises after the ledger write, the row rolls back (and no email
-        is queued), so the notice isn't recorded-but-never-sent: the next run retries."""
+        is queued -- the enqueue is sequenced after the in-app notification), so the
+        notice isn't recorded-but-never-sent: the next run retries."""
         from unittest.mock import patch
 
         with patch('tenant.notices.notify.send', side_effect=RuntimeError('notification backend down')):
             with self.assertRaises(RuntimeError):
-                with self.captureOnCommitCallbacks(execute=True):
-                    process_deck_notices(self.tenant)
+                process_deck_notices(self.tenant)
         self.assertFalse(DeckNotice.objects.exists())  # rolled back, eligible for retry
-        self.assertEqual(len(mail.outbox), 0)  # the on-commit email never fired
+        self.assertEqual(len(mail.outbox), 0)  # enqueue never reached
 
         # the next (healthy) run delivers normally
         self.run_engine_with_inline_email()
         self.assertEqual(DeckNotice.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__broker_failure_rolls_back_ledger_and_notification(self):
+        """If the email enqueue itself fails (broker down), the ledger row AND the
+        in-app notification roll back together, so the next run retries the whole
+        notice instead of leaving it recorded with the email never handed off."""
+        from unittest.mock import patch
+
+        from siteconfig.models import SiteConfig
+        from tenant import tasks
+
+        owner = SiteConfig.get().deck_owner
+        with patch.object(tasks.send_email_message, 'apply_async', side_effect=RuntimeError('broker down')):
+            with self.assertRaises(RuntimeError):
+                process_deck_notices(self.tenant)
+        self.assertFalse(DeckNotice.objects.exists())  # rolled back, eligible for retry
+        notice_notifications = Notification.objects.filter(recipient=owner, verb__contains='limit warning')
+        self.assertFalse(notice_notifications.exists())  # rolled back too
+
+        # the next (healthy) run delivers both channels
+        self.run_engine_with_inline_email()
+        self.assertEqual(DeckNotice.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertTrue(notice_notifications.exists())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__owner_without_email_still_gets_in_app_notification(self):
@@ -255,4 +282,4 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         summary = self.run_engine_with_inline_email()
         self.assertIn('sent 1 notice(s)', summary)
         self.assertEqual(len(mail.outbox), 0)
-        self.assertTrue(Notification.objects.filter(recipient=owner).exists())
+        self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())

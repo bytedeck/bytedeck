@@ -114,8 +114,8 @@ def process_deck_notices(deck):
     for kind, threshold, period_key in due:
         # record + deliver atomically: if delivery raises, the ledger row rolls back
         # so the next nightly run retries instead of the notice being recorded but
-        # never sent (the email itself is only queued on commit, so a rollback
-        # can't leak a sent email either)
+        # never sent (_deliver orders its side effects so the non-rollbackable
+        # email enqueue happens last)
         with transaction.atomic():
             _, created = DeckNotice.objects.get_or_create(
                 tenant=deck, kind=kind, threshold=threshold, period_key=period_key
@@ -150,15 +150,11 @@ def _deliver(deck, kind):
     subject = f"{config.site_name_short}: {verb}"
     message = render_to_string(f'tenant/email/{template_name}.html', context)
 
-    owner_email = deck.get_owner_email_cached()
-    if owner_email:
-        # queued on commit so a rolled-back ledger row never leaks an email
-        transaction.on_commit(lambda: send_email_message.apply_async(
-            kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
-            queue='default',
-        ))
-
-    # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify
+    # In-app notification first (DB-only, rolls back cleanly with the ledger row);
+    # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify.
+    # Edge: if deck_ai IS the owner (the seeded default on decks that never set a
+    # dedicated AI user), the notifications app skips the self-notification -- such
+    # owners are still covered by the email and the status banner.
     from django.contrib.auth import get_user_model
     staff = get_user_model().objects.filter(is_staff=True, is_active=True)
     notify.send(
@@ -168,3 +164,15 @@ def _deliver(deck, kind):
         verb=f'sent a {verb} for this deck:',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
     )
+
+    # Email enqueue last: it can't be rolled back, so it only runs once everything
+    # else succeeded. A broker failure here raises and rolls the whole notice back
+    # for a clean retry on the next nightly run; the worst case is a duplicate
+    # email if the commit itself then fails -- preferable to a committed notice
+    # whose email was never handed off.
+    owner_email = deck.get_owner_email_cached()
+    if owner_email:
+        send_email_message.apply_async(
+            kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
+            queue='default',
+        )
