@@ -146,13 +146,16 @@ A cached accessor `tenant.utils.get_current_deck()` returns the `Tenant` row for
 
 ### 5.1 Checkout & Portal (tenant-side, staff-only)
 
-New view `tenant.views.SubscriptionView` (`NonPublicOnlyViewMixin` + staff required, URL name `decks:subscribe`, mounted in `tenant/urls.py`):
+*(As built in PR 6: view `tenant.views.SubscriptionDetail` at URL name `decks:subscription` — the maintainer asked for this page to double as a "Subscription details" page in the admin menu, visible to all staff.)*
 
-* GET: shows current status (trial/subscribed/grace/suspended, usage vs cap, expiry date) and the tier list.
-* POST (no `stripe_customer_id` yet): creates `stripe.checkout.Session(mode='subscription', client_reference_id=tenant.schema_name, customer_email=tenant.owner_email_cached, metadata={'schema_name': ...}, success_url=..., cancel_url=...)` with an idempotency key, then 303-redirects.
+New view (`NonPublicOnlyViewMixin` + staff required, mounted in `tenant/urls.py`):
+
+* GET — the **Subscription details** page (maintainer request, 2026-07-22): billing status (trial/subscribed/grace/suspended/managed-manually), trial/paid dates with days remaining, seat usage (**live** current-student count vs cap, "Unlimited" for -1), at-limit warning, archive-help link, and the upgrade/renew action. Linked from the admin dropdown ("ByteDeck" section) for all staff.
+* POST (no `stripe_customer_id` yet): creates `stripe.checkout.Session(mode='subscription', client_reference_id=tenant.schema_name, customer_email=owner email, metadata={'schema_name': ...}, success_url=..., cancel_url=...)` with an idempotency key, then redirects.
 * POST (already a customer): creates a `stripe.billing_portal.Session` instead — upgrades, downgrades, card changes, and cancellation are all Portal-hosted; we build no plan-change UI.
-* Success page shows "Activating your subscription…" and **polls** deck status rather than assuming the webhook already landed (closes the redirect-beats-webhook race).
-* Degrades to a "billing not configured" notice when Stripe keys are absent, so dev boots clean.
+* Success page shows "Activating your subscription…" and **polls** a status endpoint rather than assuming the webhook already landed (closes the redirect-beats-webhook race). In PR 6 the poll target itself reconciles the checkout session against Stripe (linking ids + advancing `paid_until`), so checkout works before the webhook exists.
+* Degrades to a "billing not configured" notice when Stripe keys are absent (the action then falls back to the public subscribe flatpage), so dev boots clean.
+* **All subscribe links point here** (maintainer request): the status banner, the at-capacity refusal page, and every reminder email now link to `decks:subscription` instead of the public flatpage — `get_public_subscribe_url` survives only as this page's own not-configured fallback.
 
 ### 5.2 Webhook (public-only)
 
@@ -179,7 +182,7 @@ Idempotence: `StripeEventLog.event_id` unique — duplicates return 200 before a
 
 ### 5.4 Configuration
 
-`STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` via `env(..., default=None)` following the RECAPTCHA presence-check pattern (`settings.py:609-627`); placeholders in `.env.example` and `.env.example.aws`. Extend `_validate_deployment_settings` to require the webhook secret in production once billing is enabled. Stripe dashboard ops (documented in the PR): create Products/Prices for the 40/80/120 tiers (monthly + annual) with `lookup_key`s and `metadata.max_active_users`; register the webhook endpoint for the five event types.
+`STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` / `STRIPE_PRICE_ID` (the recurring Price checkout subscribes decks to; the tier list can replace it later) via `env(..., default=None)` following the RECAPTCHA presence-check pattern (`settings.py:609-627`); placeholders in `.env.example` and `.env.example.aws`. Extend `_validate_deployment_settings` to require the webhook secret in production once billing is enabled. Stripe dashboard ops (documented in the PR): create Products/Prices for the 40/80/120 tiers (monthly + annual) with `lookup_key`s and `metadata.max_active_users`; register the webhook endpoint for the five event types.
 
 ---
 
@@ -249,7 +252,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 | **3. Status banner** | `get_current_deck()` cached helper + invalidation; `deck_status` context processor; banner include (trial/expiring/over-limit/suspended variants); absolute-URL subscribe link. | #1730 banner ☑ |
 | **4. Active-user cap** | `can_add_active_user()` live check; guards in `CourseStudentCreate` (incl. simplified path) + `CourseAddStudent`; refusal UX; archive-students help page. | #1730 trial mode ☑, #1734 mechanics |
 | **5. Reminder engine** | `DeckNotice` model; extend the daily task with cadence + limit warnings + suspension notice; email templates; deck-AI in-app notices. Report-only mode for the first cycle (§10.2). | #1733 |
-| **6. Stripe checkout** | `stripe` dep; `STRIPE_*` env plumbing; `stripe_customer_id`/`stripe_subscription_id` migration; `SubscriptionView` (Checkout/Portal) + polling success page; banner link switches to `decks:subscribe`. | #1731 (half) |
+| **6. Stripe checkout** | `stripe` dep; `STRIPE_*` env plumbing; `stripe_customer_id`/`stripe_subscription_id` migration; **Subscription details page** (`decks:subscription`, admin-menu entry for all staff) with Checkout/Portal actions + polling success page that reconciles against Stripe; ALL subscribe links (banner, refusal page, reminder emails) switch to it. | #1731 (half) |
 | **7. Webhook + sync** | `stripe_webhook` (csrf_exempt, public-only, signature-verified); `StripeEventLog`; `sync_from_stripe_subscription`; admin "Sync from Stripe" action; nightly reconcile step; legacy-subscriber backfill command + report (§10.3). | #1731 |
 | **8. Suspension finish** | Whichever #1734 option is chosen: Option A = copy/notice polish only; Option B = `DeckStatusMiddleware` + suspended page behind a kill-switch. Record the decision on #1734. | #1734 |
 | **9. Optional guards** | `max_quests` gate in `QuestCreate`/`QuestCopy`; `is_open_for_signup` block for at-cap simplified-registration decks; retire the admin change-list jQuery colorizer in favor of status-driven rendering. | polish |

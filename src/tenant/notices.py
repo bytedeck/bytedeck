@@ -30,7 +30,6 @@ from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
 from tenant.models import TRIAL_MAX_ACTIVE_USERS, DeckNotice
-from tenant.utils import get_public_subscribe_url
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -141,7 +140,10 @@ def _deliver(deck, kind):
         # cap is still the paid cap, so the grace email can't derive this from `cap`
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
-        'subscribe_url': get_public_subscribe_url(),
+        # the deck's own staff-facing subscription page (PR 6) -- emails go to the
+        # deck owner, who is staff; the page falls back to the public subscribe
+        # flatpage when Stripe isn't configured
+        'subscribe_url': deck.get_root_url() + reverse('decks:subscription'),
         'archive_help_url': deck.get_root_url() + reverse('courses:archive_students_help'),
     }
     templates = {

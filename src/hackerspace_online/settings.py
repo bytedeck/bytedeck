@@ -680,6 +680,20 @@ SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 # (see docs/plans/PLAN-1729-automated-payments-onboarding.md §10.2).
 DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
 
+# STRIPE ##########################################################
+
+# Automated deck subscriptions (epic #1729). All default to None: when the keys
+# are absent the billing UI degrades gracefully (the subscription page shows
+# "billing not configured" and falls back to the public subscribe page), so dev
+# and self-hosted environments boot clean without a Stripe account.
+STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # used by the webhook endpoint (plan PR 7)
+STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
+
+
+# RECAPTCHA #######################################################
+
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
 if recaptcha_keys_available:
     RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
