@@ -150,6 +150,7 @@ def _deliver(deck, kind):
         DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'trial/subscription expiry reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
         DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended'),
+        DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'subscription payment failed'),
     }
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"
@@ -181,3 +182,33 @@ def _deliver(deck, kind):
             kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
             queue='default',
         )
+
+
+def record_and_deliver_payment_failure(deck, invoice_id):
+    """Record and deliver a payment-failure notice (Stripe webhook, plan §5.2 PR 7).
+
+    Keyed by the failing invoice, so Stripe's own retries of the same invoice
+    produce ONE notice, while next month's failing invoice produces a fresh one.
+    No billing state changes -- the grace period already covers a failed renewal;
+    this is purely the owner heads-up. Respects the same DECK_NOTICES_ENABLED
+    report-only gate as the reminder engine. Must run inside the deck's tenant
+    context (delivery resolves the owner and staff from the schema).
+
+    Args:
+        deck (Tenant): The deck whose renewal payment failed.
+        invoice_id (str): The Stripe invoice id (in_...) that failed.
+
+    Returns:
+        str: A short summary string for the webhook log.
+    """
+    period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
+    if not settings.DECK_NOTICES_ENABLED:
+        return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"
+    with transaction.atomic():
+        _, created = DeckNotice.objects.get_or_create(
+            tenant=deck, kind=DeckNotice.KIND_PAYMENT_FAILED, threshold='invoice', period_key=period_key,
+        )
+        if not created:  # a Stripe retry of the same invoice; already notified
+            return 'payment-failure notice already sent for this invoice'
+        _deliver(deck, DeckNotice.KIND_PAYMENT_FAILED)
+    return 'sent payment-failure notice'

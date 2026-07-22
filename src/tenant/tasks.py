@@ -94,9 +94,25 @@ def deck_status_check():
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
+    import stripe as stripe_lib
+
     from tenant.notices import process_deck_notices
 
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
+
+    # Nightly Stripe reconcile (plan §5.3, PR 7): webhooks are an optimization,
+    # not the source of truth -- re-fetching every linked deck's subscription
+    # means a webhook outage shorter than the 30-day grace can never suspend a
+    # paying deck. Stripe errors are reported, not raised: the notices below
+    # must still run.
+    stripe_summary = 'not linked'
+    if tenant.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
+        from tenant.billing import _sync_deck_from_subscription_id
+        try:
+            stripe_summary = _sync_deck_from_subscription_id(tenant, tenant.stripe_subscription_id)
+        except stripe_lib.StripeError as e:
+            stripe_summary = f'stripe error: {e}'
+
     notices_summary = process_deck_notices(tenant)
-    return f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; notices: {notices_summary}"
+    return f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; stripe: {stripe_summary}; notices: {notices_summary}"

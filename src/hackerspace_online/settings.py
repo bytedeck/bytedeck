@@ -688,8 +688,37 @@ DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
 # and self-hosted environments boot clean without a Stripe account.
 STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
 STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
-STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # used by the webhook endpoint (plan PR 7)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # verifies every webhook delivery (plan §5.2)
 STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
+
+# Fallback tier map (price_id -> current-student cap) for Prices whose
+# metadata.max_active_users was never set in the Stripe dashboard (plan §2).
+# JSON in the env, e.g. STRIPE_PRICE_TIER_MAP={"price_abc": 40, "price_def": 80}
+STRIPE_PRICE_TIER_MAP = env.json('STRIPE_PRICE_TIER_MAP', default={})
+
+
+def _validate_stripe_settings(root_domain, stripe_secret_key, stripe_webhook_secret):
+    """Refuse to boot a real deployment that enables Stripe checkout without the
+    webhook secret: without webhooks, renewals never sync and every Stripe-billed
+    deck drifts toward suspension at its stale ``paid_until``. Local development
+    (``localhost``) is never blocked. Raises ``ImproperlyConfigured``.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if stripe_secret_key and not stripe_webhook_secret:
+        raise ImproperlyConfigured(
+            "STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not. Register the webhook "
+            "endpoint in the Stripe dashboard and set its signing secret, or unset the Stripe "
+            "keys entirely -- checkout without webhooks leaves renewals unsynced."
+        )
+
+
+# Same bootstrap pattern as _validate_deployment_settings above: skipped during
+# tests (where settings are exercised directly by tests instead).
+if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is covered by StripeSettingsGuardTest
+    _validate_stripe_settings(ROOT_DOMAIN, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
 
 
 # RECAPTCHA #######################################################

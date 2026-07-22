@@ -133,3 +133,52 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.assertTrue(task_result.successful())
         self.assertEqual(mock_apply_async.call_count, billable_count)
         self.assertIn(f"for {billable_count} deck(s)", task_result.result)
+
+
+class DeckStatusCheckStripeReconcileTests(ByteDeckTenantTestCase):
+    """Tests for the nightly Stripe reconcile inside deck_status_check
+    (epic #1729 PR 7, plan §5.3: webhooks are an optimization, not truth)."""
+
+    def test_deck_status_check__reconciles_linked_deck(self):
+        """A Stripe-linked deck re-syncs from a fresh subscription retrieval."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from unittest.mock import patch
+
+        from django.test import override_settings
+        from django.utils.timezone import localdate
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task', paid_until=None)
+        period_end = int((datetime.now(tz=dt_timezone.utc) + timedelta(days=90)).timestamp())
+        subscription = {'id': 'sub_task', 'status': 'active',
+                        'items': {'data': [{'current_period_end': period_end, 'price': {'id': 'p', 'metadata': {}}}]}}
+
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', return_value=subscription):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('paid_until', result.result)
+        self.assertGreater(Tenant.objects.get(pk=self.tenant.pk).paid_until, localdate() + timedelta(days=60))
+
+    def test_deck_status_check__stripe_error_does_not_break_notices(self):
+        """A Stripe outage during reconcile is reported in the summary while the
+        cached-field refresh and the notices engine still run."""
+        from unittest.mock import patch
+
+        import stripe as stripe_lib
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task')
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('down')):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('stripe error', result.result)
+        self.assertIn('notices:', result.result)
+
+    def test_deck_status_check__skips_unlinked_or_unconfigured(self):
+        """Decks with no subscription id (or servers without Stripe) skip the reconcile."""
+        result = tasks.deck_status_check.apply()
+        self.assertIn('stripe: not linked', result.result)

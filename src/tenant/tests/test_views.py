@@ -929,3 +929,82 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.json(), {'active': False})
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, '')
+
+
+class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the Stripe webhook endpoint (epic #1729 PR 7, plan §5.2).
+
+    The endpoint is public-schema-only, so these tests build the public tenant
+    (as TenantCreateViewTest does) and POST against it. Signature verification is
+    mocked at the SDK seam -- its real crypto is Stripe's to test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Build the public schema on the 'testserver' domain."""
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
+            cls.public_tenant.domains.create(domain="testserver", is_primary=True)
+
+    def setUp(self):
+        """Keep the default tenant client (super) and add a public-host client."""
+        super().setUp()
+        self.public_client = TenantClient(self.public_tenant, host="testserver")
+
+    def post_webhook(self, **kwargs):
+        """POST an (empty) payload to the webhook with a dummy signature header."""
+        return self.public_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json',
+            headers={'stripe-signature': 't=1,v1=dummy'}, **kwargs,
+        )
+
+    def test_webhook__503_when_secret_not_configured(self):
+        """Without STRIPE_WEBHOOK_SECRET the endpoint refuses (nothing to verify with)."""
+        self.assertEqual(self.post_webhook().status_code, 503)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__400_on_bad_signature_before_any_db_work(self):
+        """An unverifiable payload fails fast with 400 -- unknown-host probes reach
+        this endpoint (SHOW_PUBLIC_IF_NO_TENANT_FOUND), so no DB work happens first."""
+        import stripe as stripe_lib
+
+        from tenant.models import StripeEventLog
+
+        with patch('stripe.Webhook.construct_event',
+                   side_effect=stripe_lib.SignatureVerificationError('bad', 'sig')):
+            response = self.post_webhook()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(StripeEventLog.objects.exists())
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__dispatches_verified_event_and_logs_it(self):
+        """A verified event is logged (with its resolved deck) and dispatched once;
+        a duplicate delivery is acknowledged without re-running the handler."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_hook', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_hook', 'status': 'active', 'customer': 'cus_hook',
+                                     'metadata': {'schema_name': self.tenant.schema_name}}}}
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            response = self.post_webhook()
+            self.assertEqual(response.status_code, 200)
+            log = StripeEventLog.objects.get(event_id='evt_hook')
+            self.assertEqual(log.event_type, 'customer.subscription.updated')
+            self.assertEqual(log.schema_name, self.tenant.schema_name)
+
+            with patch('tenant.billing.handle_webhook_event') as mock_handler:
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'duplicate', response.content)
+        mock_handler.assert_not_called()
+        self.assertEqual(StripeEventLog.objects.count(), 1)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__404_on_tenant_schemas(self):
+        """The endpoint only exists on the public schema (public_only_view)."""
+        tenant_client = TenantClient(self.tenant)  # requests on the deck's own domain
+        response = tenant_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json')
+        self.assertEqual(response.status_code, 404)

@@ -217,12 +217,21 @@ class Tenant(TenantMixin):
 
     @property
     def effective_max_active_users(self):
-        """The active-user cap that should be enforced right now: `max_active_users`
-        while a subscription is active, otherwise the trial cap ("back to trial mode",
-        #1734). -1 (unlimited, admin-set) is passed through unchanged."""
+        """The current-student cap that should be enforced right now.
+
+        -1 (unlimited, admin-set) passes through unchanged. A SUSPENDED deck
+        reverts to the trial cap ("back to trial mode", #1734). Every other deck
+        -- subscribed, on trial, or managed manually (no dates) -- uses its
+        admin-set ``max_active_users``: new decks are created with the trial
+        default (5), so the trial cap is the default, not an override, and an
+        admin who deliberately raises a trial or comped deck's cap is honored.
+        (Production bug find, PR 7 review: the old subscription_active-based rule
+        capped comped/managed-manually decks at 5, contradicting their admin-set
+        cap on the banner and subscription page.)
+        """
         if self.max_active_users == -1:
             return -1
-        return self.max_active_users if self.subscription_active else TRIAL_MAX_ACTIVE_USERS
+        return TRIAL_MAX_ACTIVE_USERS if self.is_suspended else self.max_active_users
 
     @property
     def days_until_expiry(self):
@@ -273,6 +282,71 @@ class Tenant(TenantMixin):
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
+
+    def sync_from_stripe_subscription(self, subscription):
+        """The SINGLE write path from a Stripe Subscription object to this deck (plan §5.2).
+
+        Every webhook handler, the admin "Sync from Stripe" action, and the
+        nightly reconcile funnel through here -- handlers never write billing
+        fields directly. Applies, with ``update_fields`` and cache invalidation:
+
+        * ``paid_until`` = the subscription's current period end -- **monotonic**
+          (a re-delivered or out-of-order older event can never LOWER it) and
+          **only while the subscription is active/trialing**: an incomplete
+          first payment or a past_due renewal never extends access (Stripe rolls
+          the period forward at renewal even while payment is failing; the grace
+          period covers that window). A canceled subscription keeps its
+          paid_until (the deck is paid through the period end).
+        * ``max_active_users`` from the Price's ``metadata.max_active_users``
+          (dashboard-editable tiers), falling back to
+          ``settings.STRIPE_PRICE_TIER_MAP[price_id]`` -- likewise only while
+          active/trialing; untouched when neither source is set.
+        * ``stripe_subscription_id`` linked while the subscription lives, and
+          cleared when it is canceled/expired (the customer link is kept for
+          the billing portal and future checkouts).
+
+        Args:
+            subscription (dict): A Stripe Subscription object (or test double).
+
+        Returns:
+            str: A short human-readable summary of what changed, for logs.
+        """
+        from tenant.billing import subscription_max_active_users, subscription_period_end_date
+        from tenant.utils import invalidate_current_deck_cache
+
+        status = subscription.get('status')
+        # Only a PAID subscription grants anything: an 'incomplete' first payment
+        # (failed 3DS) must not grant a paid period, and a 'past_due' renewal must
+        # not either -- Stripe rolls current_period_end forward at renewal even
+        # while the payment is still failing, and the grace period exists exactly
+        # to cover that window. paid_until therefore only advances on
+        # active/trialing (i.e. on payment), matching the checkout reconciler.
+        grants_access = status in ('active', 'trialing')
+
+        updates = {}
+        if grants_access:
+            period_end = subscription_period_end_date(subscription)
+            if period_end is not None and (self.paid_until is None or period_end > self.paid_until):
+                updates['paid_until'] = period_end
+
+            cap = subscription_max_active_users(subscription)
+            if cap is not None and cap != self.max_active_users:
+                updates['max_active_users'] = cap
+
+        sub_id = subscription.get('id') or ''
+        if status in ('canceled', 'incomplete_expired'):
+            if self.stripe_subscription_id:
+                updates['stripe_subscription_id'] = ''
+        elif sub_id and sub_id != self.stripe_subscription_id:
+            updates['stripe_subscription_id'] = sub_id
+
+        if updates:
+            Tenant.objects.filter(pk=self.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(self, field, value)
+            invalidate_current_deck_cache(self.schema_name)
+            return 'updated ' + ', '.join(f'{field}={value}' for field, value in updates.items())
+        return 'no changes'
 
     # END BILLING / LIFECYCLE STATUS ##################################
 
@@ -455,3 +529,24 @@ class DeckNotice(models.Model):
 
 class TenantDomain(DomainMixin):
     pass
+
+
+class StripeEventLog(models.Model):
+    """Idempotence and audit log for received Stripe webhook events (plan §5.2).
+
+    ``event_id`` is unique, so a duplicate webhook delivery fails get_or_create
+    and returns 200 before any handler runs. Rows double as an audit trail for
+    the repo's only csrf_exempt endpoint. Lives in the public schema (tenant
+    app), like the Tenant registry itself.
+    """
+    event_id = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=100)
+    schema_name = models.CharField(
+        max_length=63, blank=True, default='',
+        help_text="The deck this event was resolved to, when it could be resolved."
+    )
+    received_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Audit identifier: the Stripe event id, its type, and the resolved deck."""
+        return f'{self.event_id} ({self.event_type}) -> {self.schema_name or "unresolved"}'

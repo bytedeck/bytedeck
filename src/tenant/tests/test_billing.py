@@ -5,8 +5,12 @@ from django.test import SimpleTestCase, override_settings
 
 from freezegun import freeze_time
 
+from django.contrib.auth import get_user_model
+
+from django_tenants.utils import schema_context
+
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from tenant.billing import _subscription_period_end_date, billing_configured, reconcile_checkout_session
+from tenant.billing import billing_configured, reconcile_checkout_session, subscription_period_end_date
 from tenant.models import Tenant
 
 
@@ -39,19 +43,19 @@ class SubscriptionPeriodEndDateTest(SimpleTestCase):
     def test_period_end__top_level_field(self):
         """Older API shape: current_period_end directly on the subscription."""
         self.assertEqual(
-            _subscription_period_end_date({'current_period_end': self.PERIOD_END_TS}),
+            subscription_period_end_date({'current_period_end': self.PERIOD_END_TS}),
             date(2026, 9, 14),
         )
 
     def test_period_end__items_fallback(self):
         """Newer API shape: current_period_end lives on the subscription's items."""
         subscription = {'items': {'data': [{'current_period_end': self.PERIOD_END_TS}]}}
-        self.assertEqual(_subscription_period_end_date(subscription), date(2026, 9, 14))
+        self.assertEqual(subscription_period_end_date(subscription), date(2026, 9, 14))
 
     def test_period_end__missing_returns_none(self):
         """No period end in either shape (or no items at all) -> None."""
-        self.assertIsNone(_subscription_period_end_date({}))
-        self.assertIsNone(_subscription_period_end_date({'items': {'data': []}}))
+        self.assertIsNone(subscription_period_end_date({}))
+        self.assertIsNone(subscription_period_end_date({'items': {'data': []}}))
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
@@ -80,3 +84,234 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_9')
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_9')
         self.assertEqual(self.tenant.paid_until, original_paid_until)
+
+
+class SubscriptionMaxActiveUsersTest(SimpleTestCase):
+    """Tests for reading the tier cap off a Stripe subscription (epic #1729 PR 7)."""
+
+    def make_subscription(self, metadata=None, price_id='price_x'):
+        """A subscription double whose Price carries the given metadata."""
+        return {'items': {'data': [{'price': {'id': price_id, 'metadata': metadata or {}}}]}}
+
+    def test_cap__from_price_metadata(self):
+        """metadata.max_active_users on the Price wins (dashboard-editable tiers)."""
+        from tenant.billing import subscription_max_active_users
+
+        self.assertEqual(subscription_max_active_users(self.make_subscription({'max_active_users': '40'})), 40)
+
+    @override_settings(STRIPE_PRICE_TIER_MAP={'price_x': 80})
+    def test_cap__falls_back_to_settings_tier_map(self):
+        """Without Price metadata, the settings tier map resolves the cap by price id."""
+        from tenant.billing import subscription_max_active_users
+
+        self.assertEqual(subscription_max_active_users(self.make_subscription()), 80)
+
+    def test_cap__none_when_unknown_or_malformed(self):
+        """No metadata + no map entry -> None (leave the deck's cap alone); a
+        malformed value is treated the same rather than crashing the sync."""
+        from tenant.billing import subscription_max_active_users
+
+        self.assertIsNone(subscription_max_active_users(self.make_subscription()))
+        self.assertIsNone(subscription_max_active_users({'items': {'data': []}}))
+        self.assertIsNone(subscription_max_active_users(self.make_subscription({'max_active_users': 'lots'})))
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class HandleWebhookEventTest(ByteDeckTenantTestCase):
+    """Tests for the webhook event dispatcher (epic #1729 PR 7, plan §5.2).
+
+    Events are plain dict doubles; anything that would call Stripe's API
+    (subscription retrieval) is mocked at the tenant.billing.stripe seam.
+    """
+
+    PERIOD_END_TS = 1800014400  # 2027-01-15 12:00 UTC -> 2027-01-15 local
+    PERIOD_END = date(2027, 1, 15)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def make_event(self, event_type, obj):
+        """A Stripe Event double."""
+        return {'id': 'evt_x', 'type': event_type, 'data': {'object': obj}}
+
+    def stripe_subscription(self, **overrides):
+        """A subscription API-retrieval double."""
+        subscription = {
+            'id': 'sub_wh', 'status': 'active', 'customer': 'cus_wh',
+            'items': {'data': [{'current_period_end': self.PERIOD_END_TS, 'price': {'id': 'price_x', 'metadata': {}}}]},
+        }
+        subscription.update(overrides)
+        return subscription
+
+    def test_checkout_completed__links_customer_and_syncs_subscription(self):
+        """checkout.session.completed resolves the deck by its schema binding, links
+        the customer, and syncs the subscription (retrieved from Stripe)."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(paid_until=None, stripe_customer_id='', stripe_subscription_id='')
+        event = self.make_event('checkout.session.completed', {
+            'client_reference_id': self.tenant.schema_name, 'customer': 'cus_wh', 'subscription': 'sub_wh',
+        })
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
+            summary = handle_webhook_event(event)
+        self.assertIn(self.tenant.schema_name, summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_wh')
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+
+    def test_subscription_events__sync_through_the_single_write_path(self):
+        """customer.subscription.* events resolve the deck (metadata stamped by our
+        checkout, or stored ids) and sync directly from the event payload."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(paid_until=None, stripe_subscription_id='sub_wh')
+        event = self.make_event('customer.subscription.updated', self.stripe_subscription())
+        summary = handle_webhook_event(event)
+        self.assertIn('paid_until', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+
+        # metadata-based resolution works even when nothing is linked yet
+        self.set_deck(paid_until=None, stripe_subscription_id='', stripe_customer_id='')
+        event = self.make_event(
+            'customer.subscription.created',
+            self.stripe_subscription(metadata={'schema_name': self.tenant.schema_name}),
+        )
+        summary = handle_webhook_event(event)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
+
+    def test_invoice_paid__retrieves_subscription_and_syncs(self):
+        """invoice.paid resolves the deck by its stored ids and re-syncs from a fresh
+        subscription retrieval (the invoice payload doesn't carry the period end)."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(paid_until=None, stripe_customer_id='cus_wh', stripe_subscription_id='sub_wh')
+        event = self.make_event('invoice.paid', {'id': 'in_1', 'customer': 'cus_wh', 'subscription': 'sub_wh'})
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
+            summary = handle_webhook_event(event)
+        self.assertIn('paid_until', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_invoice_payment_failed__delivers_owner_notice_once_per_invoice(self):
+        """invoice.payment_failed sends the owner a heads-up through the notices
+        machinery, exactly once per failing invoice (Stripe retries re-deliver)."""
+        from allauth.account.models import EmailAddress
+        from django.core import mail
+        from siteconfig.models import SiteConfig
+
+        from tenant.billing import handle_webhook_event
+        from tenant.models import DeckNotice
+
+        # give the owner an email and a distinct AI sender, as the delivery tests do
+        with schema_context(self.tenant.schema_name):
+            config = SiteConfig.get()
+            owner = config.deck_owner
+            if not owner.email:
+                email_address = EmailAddress.objects.add_email(request=None, user=owner, email='owner@example.com')
+                email_address.set_as_primary()
+                email_address.save()
+            if config.deck_ai == config.deck_owner:
+                config.deck_ai = get_user_model().objects.create(username='deck_ai_bot2', is_staff=True)
+                config.save()
+
+        self.set_deck(stripe_customer_id='cus_wh', stripe_subscription_id='sub_wh')
+        event = self.make_event('invoice.payment_failed', {'id': 'in_fail', 'customer': 'cus_wh', 'subscription': 'sub_wh'})
+
+        from unittest.mock import patch as mock_patch
+
+        from tenant import tasks
+        with mock_patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            summary = handle_webhook_event(event)
+            self.assertIn('sent payment-failure notice', summary)
+            summary = handle_webhook_event(event)  # Stripe retry of the same invoice
+            self.assertIn('already sent', summary)
+
+        self.assertEqual(DeckNotice.objects.filter(kind=DeckNotice.KIND_PAYMENT_FAILED).count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn('payment failed', mail.outbox[0].subject)
+
+    def test_invoice_payment_failed__report_only_when_notices_disabled(self):
+        """With DECK_NOTICES_ENABLED off (the default), the payment-failure notice is
+        logged but nothing is recorded or sent -- same rollout gate as the engine."""
+        from django.core import mail
+
+        from tenant.billing import handle_webhook_event
+        from tenant.models import DeckNotice
+
+        self.set_deck(stripe_customer_id='cus_wh')
+        event = self.make_event('invoice.payment_failed', {'id': 'in_fail', 'customer': 'cus_wh'})
+        summary = handle_webhook_event(event)
+        self.assertIn('REPORT-ONLY', summary)
+        self.assertFalse(DeckNotice.objects.filter(kind=DeckNotice.KIND_PAYMENT_FAILED).exists())
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_handle_webhook_event__unresolved_and_ignored(self):
+        """Events that resolve to no deck, and unhandled event types, are acknowledged
+        with a log summary and change nothing."""
+        from tenant.billing import handle_webhook_event
+
+        summary = handle_webhook_event(self.make_event('invoice.paid', {'customer': 'cus_nobody'}))
+        self.assertEqual(summary, 'no deck resolved')
+        summary = handle_webhook_event(self.make_event('charge.refunded', {}))
+        self.assertIn('ignored event type', summary)
+
+    def test_invoice_paid__without_subscription_is_ignored(self):
+        """A one-off (non-subscription) invoice resolves the deck but syncs nothing."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(stripe_customer_id='cus_wh')
+        summary = handle_webhook_event(self.make_event('invoice.paid', {'id': 'in_2', 'customer': 'cus_wh'}))
+        self.assertIn('invoice without subscription', summary)
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class ResolveDeckTest(ByteDeckTenantTestCase):
+    """Tests for the webhook deck resolver's fallback chain (plan §5.2)."""
+
+    def test_resolve__falls_through_schema_then_subscription_then_customer(self):
+        """An unknown schema binding falls back to the stored subscription id, then
+        the customer id; with nothing to go on it resolves to None."""
+        from tenant.billing import _resolve_deck
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            stripe_customer_id='cus_r', stripe_subscription_id='sub_r')
+
+        deck = _resolve_deck(schema_name='no_such_schema', subscription_id='sub_r')
+        self.assertEqual(deck.pk, self.tenant.pk)
+        deck = _resolve_deck(subscription_id='sub_gone', customer_id='cus_r')
+        self.assertEqual(deck.pk, self.tenant.pk)
+        self.assertIsNone(_resolve_deck())
+
+    def test_handlers__acknowledge_unresolvable_events(self):
+        """Each handler type acknowledges an event it can't map to a deck, and a
+        checkout-completed without a subscription only links the customer."""
+        from tenant.billing import handle_webhook_event
+        from tenant.models import Tenant
+
+        for event_type, obj in (
+            ('checkout.session.completed', {'client_reference_id': 'no_such_schema'}),
+            ('customer.subscription.updated', {'id': 'sub_gone', 'customer': 'cus_gone'}),
+            ('invoice.payment_failed', {'id': 'in_x', 'customer': 'cus_gone'}),
+        ):
+            summary = handle_webhook_event({'id': 'evt_r', 'type': event_type, 'data': {'object': obj}})
+            self.assertEqual(summary, 'no deck resolved', event_type)
+
+        # setup-mode checkout (no subscription on the session): customer link only
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_customer_id='', stripe_subscription_id='')
+        summary = handle_webhook_event({'id': 'evt_r2', 'type': 'checkout.session.completed',
+                                        'data': {'object': {'client_reference_id': self.tenant.schema_name,
+                                                            'customer': 'cus_only'}}})
+        self.assertIn('linked customer', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_only')
+        self.assertEqual(self.tenant.stripe_subscription_id, '')

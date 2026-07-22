@@ -130,3 +130,85 @@ class BillingStatusLabelTest(SimpleTestCase):
             'suspended',
         )
         self.assertEqual(Command.billing_status(Tenant(trial_end_date=None, paid_until=None)), 'unmanaged')
+
+
+class StripeBackfillReportTest(ByteDeckTenantTestCase):
+    """Tests for the read-only #2043 legacy backfill report (plan §10.3)."""
+
+    def call(self):
+        """Run the command and return its stdout."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command('stripe_backfill_report', stdout=out)
+        return out.getvalue()
+
+    def test_report__not_configured(self):
+        """Without a secret key the command explains and exits without calling Stripe."""
+        output = self.call()
+        self.assertIn('not configured', output)
+
+    def test_report__matches_ambiguous_unmatched_and_skips_linked(self):
+        """Subscriptions are bucketed by owner-email match; already-linked ones are
+        skipped; nothing is ever written."""
+        from unittest.mock import MagicMock, patch
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
+
+        def sub(sub_id, email, customer_id='cus_x'):
+            return {'id': sub_id, 'customer': {'id': customer_id, 'email': email}}
+
+        listing = MagicMock()
+        # two extra schema-less decks sharing an owner email make an ambiguous bucket
+        # (tenant rows can only be created from the public schema)
+        from django_tenants.utils import get_public_schema_name, schema_context
+        with schema_context(get_public_schema_name()):
+            for name in ('twin', 'twin2'):
+                twin = Tenant(schema_name=name, name=name, owner_email_cached='shared@example.com')
+                twin.auto_create_schema = False
+                twin.save()
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
+
+        listing.auto_paging_iter.return_value = [
+            sub('sub_match', 'owner@example.com'),          # exactly one deck
+            sub('sub_shared', 'shared@example.com'),        # two decks -> ambiguous
+            sub('sub_none', 'stranger@example.com'),        # no deck
+            sub('sub_noemail', None),                       # customer without email
+        ]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+
+        self.assertIn("sub_match", output)
+        self.assertIn(f"deck '{self.tenant.schema_name}'", output)
+        self.assertIn('MULTIPLE decks', output)
+        self.assertIn('sub_none', output)
+        self.assertIn('no deck with this owner email', output)
+        self.assertIn('sub_noemail', output)
+        self.assertIn('nothing was changed', output)
+        # read-only: the matched deck was NOT linked
+        self.assertEqual(Tenant.objects.get(pk=self.tenant.pk).stripe_subscription_id, '')
+
+    def test_report__skips_already_linked_subscriptions(self):
+        """A subscription some deck already carries doesn't reappear in the report."""
+        from unittest.mock import MagicMock, patch
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_done')
+        listing = MagicMock()
+        listing.auto_paging_iter.return_value = [
+            {'id': 'sub_done', 'customer': {'id': 'cus_x', 'email': 'x@example.com'}},
+        ]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+        self.assertNotIn('sub_done', output)

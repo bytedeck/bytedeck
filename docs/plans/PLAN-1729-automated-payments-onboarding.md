@@ -168,10 +168,10 @@ Events handled — each handler is a thin translator that resolves the `Tenant` 
 | `checkout.session.completed` | Link `stripe_customer_id`/`stripe_subscription_id`; then sync |
 | `customer.subscription.created` / `updated` / `deleted` | `tenant.sync_from_stripe_subscription(sub)` |
 | `invoice.paid` | Same sync (extends `paid_until`) |
-| `invoice.payment_failed` | Owner email + in-app notice (no state change; grace covers it) |
+| `invoice.payment_failed` | Owner email + in-app notice via the notices machinery, once per failing invoice; respects the `DECK_NOTICES_ENABLED` report-only gate (no state change; grace covers it) |
 | anything else | Log + 200 |
 
-`Tenant.sync_from_stripe_subscription(sub)` is the **single write path**: sets `paid_until = current_period_end.date()`, `max_active_users = int(price.metadata['max_active_users'])` (fallback `STRIPE_PRICE_TIER_MAP` in settings), saves with `update_fields=[...]`, and invalidates the deck's cache entry. It never *lowers* `paid_until` from an event older than the last-processed one (monotonic guard using `StripeEventLog`).
+`Tenant.sync_from_stripe_subscription(sub)` is the **single write path**: sets `paid_until = current_period_end.date()`, `max_active_users = int(price.metadata['max_active_users'])` (fallback `STRIPE_PRICE_TIER_MAP` in settings), applies with targeted updates + cache invalidation, and links/unlinks `stripe_subscription_id` (a canceled subscription unlinks but keeps `paid_until` -- the deck is paid through its period end). *(As built in PR 7: the monotonic guard is simpler than event ordering -- `paid_until` only ever advances, never lowers, since payments are the only thing that moves it; `StripeEventLog` handles duplicate deliveries.)* Checkout also stamps `subscription_data.metadata.schema_name`, so every subscription event self-identifies without a lookup.
 
 Idempotence: `StripeEventLog.event_id` unique — duplicates return 200 before any handler runs.
 
