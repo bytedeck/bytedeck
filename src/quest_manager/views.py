@@ -2189,10 +2189,11 @@ def redo_request_create(request, submission_id):
     if not teachers:  # no course/teacher yet: fall back to all staff so the request isn't lost
         teachers = list(get_user_model().objects.filter(is_staff=True, is_active=True))
 
+    # a deck always has at least one staff member (the deck owner), so `teachers` is non-empty
     notify.send(
         request.user,
         target=quest,
-        recipient=teachers[0] if teachers else request.user,
+        recipient=teachers[0],
         affected_users=teachers,
         verb="has requested to redo",
         icon="<i class='fa fa-lg fa-fw fa-repeat text-info'></i>",

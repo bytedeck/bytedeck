@@ -6,7 +6,7 @@ from django.urls import reverse
 from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from courses.models import Semester
+from courses.models import Block, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from notifications.models import Notification
 from quest_manager.models import Quest, QuestSubmission, RedoRequest
@@ -70,6 +70,11 @@ class RedoRequestModelTests(RedoRequestTestMixin, ByteDeckTenantTestCase):
         self.assertIn(pending, pending_qs)
         self.assertNotIn(approved, pending_qs)
 
+    def test_str__names_student_and_quest(self):
+        """The string representation identifies the requesting student and the quest."""
+        rr = RedoRequest.objects.create(user=self.test_student, quest=self.quest, semester=self.current_semester)
+        self.assertEqual(str(rr), f"Redo request from {self.test_student} for {self.quest}")
+
 
 class RedoRequestCreateViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
@@ -122,6 +127,54 @@ class RedoRequestCreateViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, ByteD
         self.assertRedirects(response, reverse('quests:past'))
         self.assertFalse(RedoRequest.objects.filter(user=self.test_student).exists())
 
+    def test_redo_request__blocked_when_quest_already_in_progress_this_semester(self):
+        """No request is created if the student already has the quest going this semester."""
+        # a current-semester submission for the same quest already exists
+        QuestSubmission.objects.create_submission(self.test_student, self.quest)
+        self.client.force_login(self.test_student)
+        response = self.client.post(reverse('quests:redo_request', args=[self.past_submission.id]))
+        self.assertRedirects(response, reverse('quests:past'))
+        self.assertFalse(RedoRequest.objects.filter(user=self.test_student, quest=self.quest).exists())
+
+    def test_redo_request__notifies_students_current_teacher(self):
+        """When the student is in a course, their block's teacher (not all staff) is notified."""
+        block = baker.make(Block, current_teacher=self.test_teacher)
+        baker.make(CourseStudent, user=self.test_student, block=block, semester=self.current_semester)
+        self.client.force_login(self.test_student)
+        teacher_notifications_before = Notification.objects.all_for_user(self.test_teacher).count()
+
+        response = self.client.post(reverse('quests:redo_request', args=[self.past_submission.id]))
+
+        self.assertRedirects(response, reverse('quests:past'))
+        self.assertTrue(RedoRequest.objects.has_pending(self.test_student, self.quest))
+        self.assertEqual(
+            Notification.objects.all_for_user(self.test_teacher).count(),
+            teacher_notifications_before + 1,
+        )
+
+
+class RedoRequestButtonRenderTests(RedoRequestTestMixin, ViewTestUtilsMixin, ByteDeckTenantTestCase):
+
+    def _past_preview_html(self):
+        """POST the past-submission AJAX preview and return its rendered HTML fragment."""
+        response = self.client.post(
+            reverse('quests:ajax_info_past', args=[self.past_submission.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        return response.json()['quest_info_html']
+
+    def test_past_preview__shows_request_redo_button(self):
+        """A past completion with no pending request shows the Request Redo button."""
+        self.client.force_login(self.test_student)
+        self.assertIn('Request Redo', self._past_preview_html())
+
+    def test_past_preview__hides_button_when_request_pending(self):
+        """The Request Redo button is hidden once a request is already pending for the quest."""
+        RedoRequest.objects.create(user=self.test_student, quest=self.quest, semester=self.current_semester)
+        self.client.force_login(self.test_student)
+        self.assertNotIn('Request Redo', self._past_preview_html())
+
 
 class RedoRequestRespondViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
@@ -148,10 +201,12 @@ class RedoRequestRespondViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, Byte
             self.client.post(reverse('quests:redo_request_deny', args=[self.redo_request.id])).status_code, 403)
 
     def test_redo_request_respond__requires_post(self):
-        """A GET to an approve/deny endpoint is 404 (POST only)."""
+        """A GET to either approve or deny endpoint is 404 (POST only)."""
         self.client.force_login(self.test_teacher)
         self.assertEqual(
             self.client.get(reverse('quests:redo_request_approve', args=[self.redo_request.id])).status_code, 404)
+        self.assertEqual(
+            self.client.get(reverse('quests:redo_request_deny', args=[self.redo_request.id])).status_code, 404)
 
     def test_redo_request_approve__creates_inprogress_submission_and_notifies_student(self):
         """Approving marks the request approved, creates a current-semester in-progress submission, notifies the student."""
