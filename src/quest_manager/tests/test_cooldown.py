@@ -86,6 +86,14 @@ class NextRepeatAvailableModelTests(CooldownTestMixin, ByteDeckTenantTestCase):
         self._complete(per_sem)  # one completion this semester == the per-semester cap
         self.assertIsNone(per_sem.next_repeat_available(self.test_student))
 
+    def test_next_repeat_available__future_for_per_semester_quest_under_cap(self):
+        """A per-semester quest still under its per-semester cap returns a future next-repeat time."""
+        per_sem = baker.make(Quest, max_repeats=2, repeat_per_semester=True, hours_between_repeats=24)
+        self._complete(per_sem)  # 1 completion, still under the per-semester allowance
+        next_at = per_sem.next_repeat_available(self.test_student)
+        self.assertIsNotNone(next_at)
+        self.assertGreater(next_at, timezone.now())
+
     def test_next_repeat_available__none_when_latest_attempt_in_progress(self):
         """With only an in-progress (never-completed) attempt, there's no next-repeat time."""
         QuestSubmission.objects.create_submission(self.test_student, self.quest)  # started, not completed
