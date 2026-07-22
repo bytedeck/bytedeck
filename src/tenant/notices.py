@@ -66,16 +66,13 @@ def evaluate_deck_notices(deck):
         if days is not None and days <= EXPIRY_THRESHOLDS[-1][1]:
             deadline = deck.paid_until if deck.subscription_active else deck.trial_end_date
             period_key = str(deadline)
-            fired_milestone = False
-            for threshold, threshold_days in EXPIRY_THRESHOLDS:
-                if days <= threshold_days:
-                    # first (most specific) milestone whose window we're inside governs:
-                    # fire it if new, and either way stop -- broader milestones are
-                    # superseded, never fired late
-                    if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
-                        due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
-                        fired_milestone = True
-                    break
+            # the first (most specific) milestone whose window we're inside governs --
+            # broader milestones are superseded, never fired late. The guard above
+            # guarantees at least the broadest window matches.
+            threshold = [t for t, t_days in EXPIRY_THRESHOLDS if days <= t_days][0]
+            fired_milestone = _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key)
+            if fired_milestone:
+                due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
             # daily through the final week and the grace window (days goes negative),
             # but never two expiry notices on the same day
             if not fired_milestone and days <= EXPIRY_THRESHOLDS[0][1]:
@@ -147,7 +144,6 @@ def _deliver(deck, kind):
     subject = f"{config.site_name_short}: {verb}"
     message = render_to_string(f'tenant/email/{template_name}.html', context)
 
-    owner = config.deck_owner
     owner_email = deck.get_owner_email_cached()
     if owner_email:
         send_email_message.apply_async(
@@ -155,13 +151,13 @@ def _deliver(deck, kind):
             queue='default',
         )
 
-    if owner:
-        from django.contrib.auth import get_user_model
-        staff = get_user_model().objects.filter(is_staff=True, is_active=True)
-        notify.send(
-            config.deck_ai,
-            recipient=owner,
-            affected_users=staff,
-            verb=f'sent a {verb} for this deck:',
-            icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
-        )
+    # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify
+    from django.contrib.auth import get_user_model
+    staff = get_user_model().objects.filter(is_staff=True, is_active=True)
+    notify.send(
+        config.deck_ai,
+        recipient=config.deck_owner,
+        affected_users=staff,
+        verb=f'sent a {verb} for this deck:',
+        icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
+    )

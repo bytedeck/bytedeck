@@ -160,6 +160,8 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             email_address = EmailAddress.objects.add_email(request=None, user=owner, email='owner@example.com')
             email_address.set_as_primary()
             email_address.save()
+        # a secondary (non-primary) address, so owner-email resolution has to skip past it
+        EmailAddress.objects.get_or_create(user=owner, email='owner-alt@example.com')
 
     def test_process__report_only_by_default_sends_and_records_nothing(self):
         """With DECK_NOTICES_ENABLED off (the default), the engine only reports."""
@@ -198,3 +200,34 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(summary, 'no notices due')
         self.assertEqual(DeckNotice.objects.count(), 1)
         self.assertEqual(len(mail.outbox), 1)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__concurrent_run_race_skips_delivery(self):
+        """If another run records the ledger row between evaluation and get_or_create
+        (a lost race), this run skips delivery instead of double-sending."""
+        from unittest.mock import patch
+
+        notice = (DeckNotice.KIND_LIMIT, 'pct100', '2026-08')
+        DeckNotice.objects.create(tenant=self.tenant, kind=notice[0], threshold=notice[1], period_key=notice[2])
+        # evaluation normally filters out recorded notices; force it to return the
+        # already-recorded one, as if a concurrent run recorded it a moment after
+        with patch('tenant.notices.evaluate_deck_notices', return_value=[notice]):
+            summary = self.run_engine_with_inline_email()
+        self.assertIn('sent 0 notice(s)', summary)
+        self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__owner_without_email_still_gets_in_app_notification(self):
+        """A deck whose owner has no known email skips the email channel but still
+        records the notice and creates the in-app notification."""
+        from allauth.account.models import EmailAddress
+        from siteconfig.models import SiteConfig
+
+        owner = SiteConfig.get().deck_owner
+        EmailAddress.objects.filter(user=owner).delete()
+        self.assertIsNone(self.tenant.get_owner_email_cached())
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('sent 1 notice(s)', summary)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertTrue(Notification.objects.filter(recipient=owner).exists())
