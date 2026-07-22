@@ -1,0 +1,17 @@
+<p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
+
+{% if days >= 0 %}
+<p>Your deck <strong>{{ deck.name }}</strong>'s
+  {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
+  in <strong>{{ days }} day{{ days|pluralize }}</strong>
+  ({% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}).</p>
+{% else %}
+<p>Your deck <strong>{{ deck.name }}</strong>'s subscription has expired and is in its grace period.
+  When the grace period ends, the deck will revert to trial limits
+  (max {{ cap }} current student{{ cap|pluralize }}).</p>
+{% endif %}
+
+<p><a href="{{ subscribe_url }}">Subscribe or renew here</a> to keep full access.
+  Questions about which students count? Only <em>current</em> students &mdash; those registered in a course
+  this semester &mdash; count toward your limit; see
+  <a href="{{ archive_help_url }}">freeing up student seats</a>.</p>
