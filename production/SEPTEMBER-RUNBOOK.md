@@ -60,7 +60,11 @@ These apply year-round; no action needed at spike time beyond the scale-up in §
 ## 3. Two weeks before Labour Day — prep checklist
 
 - [ ] Confirm swap is present (`free -h`) and disk has headroom (`df -h /`);
-      if tight, `docker image prune -af && docker builder prune -af`.
+      if tight, `docker image prune -af && docker builder prune -af`. (Safe for
+      rollback: bytedeck rolls back by checking out an earlier git SHA and
+      re-running `server-update.sh`, which **rebuilds** the image from source —
+      it does not depend on a retained old image, so pruning old images can't
+      break a rollback.)
 - [ ] Confirm the RDS instance class in the AWS console (RDS → Databases). If
       it's a `*.small` burstable, plan the §4 RDS bump and watch
       `CPUCreditBalance`.
@@ -91,11 +95,16 @@ no CPU-credit cliff.
 5. SSH in; the app auto-starts via the `bytedeck.com.service` systemd unit
    (`docker compose ... up -d`). Verify: `docker compose ps`, then load the site.
 6. Raise the worker ceiling for the bigger box: in `~/bytedeck/.env` set
-   ```
-   UWSGI_EXTRA_ARGS=--processes 12
+   ```dotenv
+   # Size to the instance -- these are NOT generic values. On c5a.xlarge (8 GiB)
+   # ~8 workers leaves headroom for celery, redis (1gb below), the OS, and the
+   # ~1.6 GiB single-request tail (see #2081) that still exists until it's fixed.
+   # Rule: processes * peak-worker-RSS must leave that headroom. Raise only if
+   # `free -h` under load shows room.
+   UWSGI_EXTRA_ARGS=--processes 8
    REDIS_MAXMEMORY=1gb
    ```
-   then `sudo systemctl restart bytedeck.com` and confirm 12 uwsgi workers
+   then `sudo systemctl restart bytedeck.com` and confirm the worker count
    under load (`docker compose exec web ps aux | grep uwsgi`).
 
 **RDS (if burstable / small):** RDS → the DB → **Modify** → larger class (e.g.
@@ -129,9 +138,12 @@ Run on the host during peak:
 ```bash
 C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 watch -n5 'free -h; echo; docker stats --no-stream'
-# Redis: cap pressure + rejected writes (must stay 0)
-$C exec -T redis redis-cli info memory  | grep -E 'used_memory_human|maxmemory_human'
-$C exec -T redis redis-cli info stats   | grep -E 'rejected_connections|evicted_keys'
+# Redis: memory-cap pressure (used vs max -- with noeviction, reaching the cap
+# refuses writes and breaks the broker). rejected_connections/evicted_keys do
+# NOT track that (they're connection-limit / eviction, both 0 here), so watch
+# the used/max ratio and the OOM error counter instead:
+$C exec -T redis redis-cli info memory      | grep -E 'used_memory:|used_memory_human|maxmemory:|maxmemory_human'
+$C exec -T redis redis-cli info errorstats  | grep -i oom   # errorstat_OOM appears once a write is refused (want: no output)
 $C exec -T redis redis-cli -n 0 llen default   # broker backlog; a growing number = celery can't keep up
 # Postgres live connections vs the 185 ceiling
 $C exec -T web python src/manage.py shell <<'PY'
@@ -146,14 +158,15 @@ Signals and responses:
 - **Swap climbing + OOM lines** → a worker is ballooning; find the request
   (nginx access log around the time), lower `UWSGI_EXTRA_ARGS` processes if
   needed, and prioritize the request-code fix.
-- **Redis `rejected_connections` > 0 or used ≈ max** → raise `REDIS_MAXMEMORY`
-  (and give the box RAM) and restart.
+- **Redis `used_memory` approaching `maxmemory`, or any `errorstat_OOM`** →
+  writes are about to be (or are being) refused; raise `REDIS_MAXMEMORY` (and
+  give the box RAM) and restart.
 - **Broker `llen default` growing** → celery is behind; raise worker concurrency
   (`-c` in `docker-compose.yml`) if RAM allows, or add a second worker.
 - **RDS CPU pegged / credits draining** → bump the RDS class (§4).
 
 Record the real peak numbers here for next year:
-```
+```text
 Year ____  peak: RAM used ____  swap ____  RDS conns ____/185  RDS CPU ____%  redis used ____/____
 ```
 
@@ -161,8 +174,10 @@ Year ____  peak: RAM used ____  swap ____  RDS conns ____/185  RDS CPU ____%  re
 
 ## 7. Scale-down (≈2 weeks after Labour Day, once load settles)
 
-1. In `.env`, revert `UWSGI_EXTRA_ARGS` and `REDIS_MAXMEMORY` (or leave the
-   redis bump if RAM allows).
+1. In `.env`, revert `UWSGI_EXTRA_ARGS` (back to the in-file default) and
+   restore `REDIS_MAXMEMORY=512mb` **before** downsizing — a 1 GB redis cap on
+   the 3.8 GiB `c5a.large` starves uWSGI/celery and recreates the OOM. Restart
+   and confirm redis honors the lower cap (`redis-cli info memory | grep maxmemory`).
 2. `sudo systemctl restart bytedeck.com` and confirm the site is healthy.
 3. EC2 → Stop → Change instance type back to `c5a.large` → Start (off-hours).
 4. RDS → Modify back to the smaller class if you bumped it.
@@ -171,8 +186,12 @@ Year ____  peak: RAM used ____  swap ____  RDS conns ____/185  RDS CPU ____%  re
 ## Rollback
 
 Every step above is reversible. If a scale-up misbehaves, reverse §4 (change the
-instance type back and `systemctl restart bytedeck.com`). The swap, worker, and
-redis-cap settings are safe to keep on the small box year-round.
+instance type back and `systemctl restart bytedeck.com`). The swap and the
+in-file worker/redis **defaults** (`processes 6`, `REDIS_MAXMEMORY=512mb`) are
+safe to keep on the small box year-round — but the **spike overrides**
+(`UWSGI_EXTRA_ARGS`, `REDIS_MAXMEMORY=1gb`) must be reverted before/at downsizing
+(§7), or they'll starve the 3.8 GiB box. Image pruning doesn't affect rollback:
+rollback re-checks-out a git SHA and rebuilds (§3).
 
 ---
 
