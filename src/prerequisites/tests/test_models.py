@@ -485,3 +485,135 @@ class PrereqPrefetchTest(ByteDeckTenantTestCase):
         badge = baker.make('badges.Badge')
         with self.assertRaises(ValueError):
             Prereq.objects.prefetch_for_parents([self.parent1, badge])
+
+
+class PrereqStrAndConditionMetTest(ByteDeckTenantTestCase):
+    """Covers Prereq.__str__ formatting and the branches of Prereq.condition_met."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a parent quest plus a main and an alternate (OR) prereq quest, and a user."""
+        cls.parent = baker.make('quest_manager.Quest', name="parent")
+        cls.main = baker.make('quest_manager.Quest', name="main")
+        cls.alt = baker.make('quest_manager.Quest', name="alt")
+        cls.user = baker.make(User)
+
+    def test_str__renders_not_or_and_repeat_counts(self):
+        """__str__ shows NOT (invert), OR (alternate) and xN (counts > 1) for a full prereq."""
+        prereq = Prereq.objects.create(
+            parent_object=self.parent,
+            prereq_object=self.main,
+            or_prereq_object=self.alt,
+            prereq_invert=True,
+            or_prereq_invert=True,
+            prereq_count=2,
+            or_prereq_count=3,
+        )
+        rendered = str(prereq)
+        self.assertIn("NOT", rendered)
+        self.assertIn("OR", rendered)
+        self.assertIn("x2", rendered)
+        self.assertIn("x3", rendered)
+
+    def test_str__renders_plain_or_without_not_or_counts(self):
+        """A non-inverted OR prereq with single counts renders no NOT/xN, just the OR."""
+        prereq = Prereq.objects.create(
+            parent_object=self.parent,
+            prereq_object=self.main,
+            or_prereq_object=self.alt,
+        )
+        rendered = str(prereq)
+        self.assertNotIn("NOT", rendered)
+        self.assertIn("OR", rendered)
+        self.assertNotIn("x", rendered)
+
+    def test_condition_met__non_inverted_or_alternate_not_met_returns_false(self):
+        """A plain (non-inverted) OR alternate the user hasn't met leaves the condition unmet."""
+        prereq = Prereq.objects.create(
+            parent_object=self.parent,
+            prereq_object=self.main,
+            or_prereq_object=self.alt,
+        )
+        # Neither main nor OR alternate completed, neither inverted -> not met.
+        self.assertFalse(prereq.condition_met(self.user))
+
+    def test_condition_met__inverted_main_is_true_when_user_lacks_it(self):
+        """An inverted (NOT) main requirement is met when the user has NOT completed it."""
+        prereq = Prereq.objects.create(parent_object=self.parent, prereq_object=self.main, prereq_invert=True)
+        # The user has no approved submissions, so the main condition is False; inverted -> True.
+        self.assertTrue(prereq.condition_met(self.user))
+
+    def test_condition_met__missing_main_prereq_object_returns_false(self):
+        """If the main prereq object no longer exists, the condition is not met."""
+        prereq = Prereq.objects.create(parent_object=self.parent, prereq_object=self.main)
+        # Point the GFK at a non-existent id via update() (bypasses the delete-cascade signal
+        # that would otherwise remove the Prereq row), then reload a fresh instance so the GFK
+        # re-resolves to None.
+        Prereq.objects.filter(pk=prereq.pk).update(prereq_object_id=99999999)
+        prereq = Prereq.objects.get(pk=prereq.pk)
+        self.assertFalse(prereq.condition_met(self.user))
+
+    def test_condition_met__or_requirement_met_via_invert(self):
+        """When the main is unmet but the inverted OR alternate is met, the condition passes."""
+        prereq = Prereq.objects.create(
+            parent_object=self.parent,
+            prereq_object=self.main,
+            or_prereq_object=self.alt,
+            or_prereq_invert=True,
+        )
+        # main (self.main) not completed -> False; OR alternate inverted and not completed -> True.
+        self.assertTrue(prereq.condition_met(self.user))
+
+    def test_condition_met__missing_or_prereq_object_returns_false(self):
+        """A dangling OR alternate (object deleted) makes the condition not met."""
+        prereq = Prereq.objects.create(
+            parent_object=self.parent,
+            prereq_object=self.main,
+            or_prereq_object=self.alt,
+        )
+        # Dangle the OR alternate at a non-existent id (see the main-prereq test for why update()).
+        Prereq.objects.filter(pk=prereq.pk).update(or_prereq_object_id=99999999)
+        prereq = Prereq.objects.get(pk=prereq.pk)
+        self.assertFalse(prereq.condition_met(self.user))
+
+
+class PrereqManagerIsPrerequisiteTest(ByteDeckTenantTestCase):
+    """Covers PrereqManager.is_prerequisite for the OR-prereq branch."""
+
+    def test_is_prerequisite__true_for_object_used_only_as_or_prereq(self):
+        """An object used solely as an OR alternate is still recognised as a prerequisite."""
+        parent = baker.make('quest_manager.Quest')
+        main = baker.make('quest_manager.Quest')
+        or_only = baker.make('quest_manager.Quest')
+        Prereq.objects.create(parent_object=parent, prereq_object=main, or_prereq_object=or_only)
+
+        # or_only is not a main prereq anywhere, so the first lookup misses and the OR lookup matches.
+        self.assertTrue(Prereq.objects.is_prerequisite(or_only))
+
+
+class PrereqAllConditionsMetIdsTest(ByteDeckTenantTestCase):
+    """Covers PrereqAllConditionsMet.get_ids / set_ids, including the empty-ids branch (a former bug)."""
+
+    def setUp(self):
+        """Create a PrereqAllConditionsMet cache row for a fresh user and the Quest model."""
+        self.cache = PrereqAllConditionsMet.objects.create(
+            user=baker.make(User),
+            model_name='quest_manager.Quest',
+        )
+
+    def test_get_ids__blank_ids_returns_empty_list(self):
+        """Blank ``ids`` returns an empty list (previously raised AttributeError)."""
+        self.cache.ids = ''
+        self.assertEqual(self.cache.get_ids(), [])
+
+    def test_set_ids__none_defaults_to_empty_list(self):
+        """Calling set_ids() with no argument stores an empty list."""
+        self.cache.set_ids(None)
+        self.cache.refresh_from_db()
+        self.assertEqual(self.cache.get_ids(), [])
+
+    def test_get_ids__parses_stored_list(self):
+        """A populated ``ids`` string is parsed back into a list of ids."""
+        self.cache.set_ids([25, 34, 55])
+        self.cache.refresh_from_db()
+        self.assertEqual(self.cache.get_ids(), [25, 34, 55])
