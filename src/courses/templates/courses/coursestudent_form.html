@@ -12,13 +12,13 @@
 {% elif deck_at_capacity %}
   <div class="alert alert-warning">
     {% if request.user.is_staff %}
-      <p><strong>Active-student limit reached:</strong> this deck is at its cap of
-        {{ current_deck.effective_max_active_users }} active student{{ current_deck.effective_max_active_users|pluralize }},
-        so no more students can be added.</p>
-      <p><a href="{% url 'courses:archive_students_help' %}">Archive past students</a> so they stop counting,
-        or <a href="{{ deck_subscribe_url }}">upgrade your subscription</a> for a higher limit.</p>
+      <p><strong>Current-student limit reached:</strong> this deck is at its cap of
+        {{ current_deck.effective_max_active_users }} current student{{ current_deck.effective_max_active_users|pluralize }}
+        (students registered in a course this semester), so no more students can be registered.</p>
+      <p><a href="{% url 'courses:archive_students_help' %}">Free up seats</a> by ending the semester or archiving
+        past students, or <a href="{{ deck_subscribe_url }}">upgrade your subscription</a> for a higher limit.</p>
     {% else %}
-      <p>This deck has reached its active-student limit, so you can't join a course right now &mdash;
+      <p>This deck has reached its limit of current students, so you can't join a course right now &mdash;
         please let your teacher know.</p>
     {% endif %}
   </div>

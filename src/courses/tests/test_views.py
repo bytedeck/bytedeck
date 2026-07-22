@@ -1781,7 +1781,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 
 class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    """Enforcement of the deck's active-student cap at the registration choke points
+    """Enforcement of the deck's current-student cap at the registration choke points
     (#1729 PR 4; closes the 'trial mode (max 5 users)' checkbox of #1730)."""
 
     def setUp(self):
@@ -1811,10 +1811,10 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.newcomer)
 
         response = self.client.get(reverse('courses:create'))
-        self.assertContains(response, 'reached its active-student limit')
+        self.assertContains(response, 'reached its limit of current students')
 
         response = self.client.post(reverse('courses:create'), data={})
-        self.assertContains(response, 'reached its active-student limit')
+        self.assertContains(response, 'reached its limit of current students')
         self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
 
     def test_student_registration__allowed_below_cap(self):
@@ -1825,7 +1825,7 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:create'))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'reached its active-student limit')
+        self.assertNotContains(response, 'reached its limit of current students')
 
     def test_student_registration__simplified_auto_create_blocked_at_cap(self):
         """The simplified-registration auto-create shortcut cannot bypass the cap: the
@@ -1836,7 +1836,7 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.newcomer)
 
         response = self.client.get(reverse('courses:create'))
-        self.assertContains(response, 'reached its active-student limit')
+        self.assertContains(response, 'reached its limit of current students')
         self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
 
     def test_staff_add_student__refused_at_cap_with_helpful_links(self):
@@ -1846,12 +1846,12 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         url = reverse('courses:join', args=[self.newcomer.id])
 
         response = self.client.get(url)
-        self.assertContains(response, 'Active-student limit reached')
+        self.assertContains(response, 'Current-student limit reached')
         self.assertContains(response, reverse('courses:archive_students_help'))
         self.assertContains(response, '/pages/subscribe/')
 
         response = self.client.post(url, data={})
-        self.assertContains(response, 'Active-student limit reached')
+        self.assertContains(response, 'Current-student limit reached')
         self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
 
     def test_staff_add_student__staff_target_allowed_at_cap(self):
@@ -1861,13 +1861,13 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:join', args=[other_staff.id]))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, 'Active-student limit reached')
+        self.assertNotContains(response, 'Current-student limit reached')
 
     def test_archive_students_help__staff_only(self):
         """The archive-students help page renders for staff and is blocked for students."""
         self.client.force_login(self.staff)
         response = self.client.get(reverse('courses:archive_students_help'))
-        self.assertContains(response, 'Archiving past students')
+        self.assertContains(response, 'Freeing up student seats')
 
         self.client.force_login(self.newcomer)
         response = self.client.get(reverse('courses:archive_students_help'))
