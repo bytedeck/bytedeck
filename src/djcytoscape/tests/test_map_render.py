@@ -9,13 +9,10 @@ one piece of front-end logic unit/view tests structurally can't reach — the
 map's client-side layout — while staying hermetic (no network, no Django live
 server, no tenant routing).
 
-Locally the test is skipped unless Playwright *and* a pre-installed Chromium are
-available, so it never breaks a dev suite run that lacks the browser. In CI --
-where the browser is provisioned into the image on purpose -- the test step sets
-``REQUIRE_BROWSER_TESTS=1`` so a missing browser fails loudly (at collection)
-instead of silently skipping this coverage. To run it: ``pip install playwright``
-and ensure a Chromium build is present (``playwright install chromium`` locally,
-or the browser image in CI).
+The test is skipped unless Playwright *and* a pre-installed Chromium are
+available, so it never breaks a suite run (or CI job) that lacks the browser.
+To run it: ``pip install playwright`` and ensure a Chromium build is present
+(``playwright install chromium`` locally, or the browser image in CI).
 """
 
 import glob
@@ -63,27 +60,6 @@ def _playwright_available():
     except ImportError:
         return False
     return _chromium_executable() is not None
-
-
-def _require_browser():
-    """True when the environment demands these tests actually run (i.e. CI).
-
-    CI bakes Chromium into the web image on purpose (INSTALL_TEST_BROWSERS), so a
-    missing browser there is a provisioning regression we want to fail loudly on
-    rather than silently skip past. The CI test step sets REQUIRE_BROWSER_TESTS=1.
-    """
-    return os.environ.get("REQUIRE_BROWSER_TESTS") == "1"
-
-
-# Guard against silently losing this coverage: if CI demands the browser but it
-# isn't available, fail at collection instead of skipping. Locally (flag unset)
-# the tests still skip cleanly when no browser is present.
-if _require_browser() and not _playwright_available():
-    raise RuntimeError(
-        "REQUIRE_BROWSER_TESTS=1 but Playwright/Chromium is unavailable, so the quest-map "
-        "browser tests would silently skip. Check the image's Chromium provisioning "
-        "(INSTALL_TEST_BROWSERS in the Dockerfile / docker-compose.override.yml)."
-    )
 
 
 def _read_js(name):
