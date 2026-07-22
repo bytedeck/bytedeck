@@ -137,7 +137,9 @@ def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
         return f"Skipping task for badge {badge_id}, already started."
     cache.set(cache_key, True, 1)
 
-    users = CourseStudent.objects.all_users_for_active_semester()
+    # students_only=True to match the grant-check preview (Badge.students_who_qualify_ungranted):
+    # the grant is for students, so staff/test accounts enrolled in a course are excluded (#2061).
+    users = CourseStudent.objects.all_users_for_active_semester(students_only=True)
     users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
 
     user = None

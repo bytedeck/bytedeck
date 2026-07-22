@@ -142,6 +142,41 @@ class GrantBadgeAssertionsForBadgeTest(ByteDeckTenantTestCase):
             BadgeAssertion.objects.all_for_user_badge(self.student, self.badge, False).exists()
         )
 
+    def test_grant_badge_assertions_for_badge__excludes_students_not_enrolled_this_semester(self):
+        """Only students enrolled in a course this semester are granted: a user who meets the
+        prereqs but isn't enrolled is skipped, while the enrolled student is granted (issue #2061).
+        """
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        # A user who completed the same quest (so meets the prereq) but has no course enrolment.
+        unenrolled = baker.make(User)
+        baker.make(QuestSubmission, user=unenrolled, quest=self.quest,
+                   is_completed=True, is_approved=True, semester=SiteConfig.get().active_semester)
+
+        self.run_task()
+
+        self.assertTrue(
+            BadgeAssertion.objects.all_for_user_badge(self.student, self.badge, False).exists()
+        )
+        self.assertFalse(
+            BadgeAssertion.objects.all_for_user_badge(unenrolled, self.badge, False).exists()
+        )
+
+    def test_grant_badge_assertions_for_badge__excludes_enrolled_staff(self):
+        """The grant is for students only: a staff member enrolled as a CourseStudent who meets the
+        prereqs is not granted the badge (issue #2061).
+        """
+        Prereq.add_simple_prereq(self.badge, self.quest)
+        staff = baker.make(User, is_staff=True)
+        baker.make('courses.CourseStudent', user=staff, semester=SiteConfig.get().active_semester)
+        baker.make(QuestSubmission, user=staff, quest=self.quest,
+                   is_completed=True, is_approved=True, semester=SiteConfig.get().active_semester)
+
+        self.run_task()
+
+        self.assertFalse(
+            BadgeAssertion.objects.all_for_user_badge(staff, self.badge, False).exists()
+        )
+
     @override_settings(CELERY_TASKS_BUNCH_SIZE=1)
     def test_grant_badge_assertions_for_badge__processes_users_in_bunches(self):
         """When there are more users than the bunch size, the task re-queues itself to
