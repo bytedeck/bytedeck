@@ -193,7 +193,8 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.add_error("auto_publish", forms.ValidationError('An Announcement that is archived cannot be auto published.'))
 
     def test_comment_on_announcement__by_student(self):
-        """A student's comment post requires the comment_button, returning 404 without it."""
+        """A student's comment post 404s without the comment_button, and succeeds
+        (redirect + comment saved) with it."""
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -203,22 +204,15 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(reverse('announcements:comment', args=[self.test_announcement.id]), form_data)
         self.assertEqual(response.status_code, 404)  # invalid submit button
 
-        # make sure it was submitted with the 'comment_button'
+        # With the comment_button present the post succeeds: it redirects back to the
+        # announcement and the comment is saved.
         form_data['comment_button'] = True
         response = self.client.post(
             reverse('announcements:comment', args=[self.test_announcement.id]),
             data=form_data
         )
-
-        # Empty comment strings should be replaced with blank string or we get an error
-        # WHY? THIS SEEMS SILLY! THE FORM SHOULDN'T VALIDATE IF THERE IS NO COMMENT!
-        # Old code not relevant any more?
-        # form_data['comment_text'] = None
-        # response = self.client.post(
-        #     reverse('announcements:comment', args=[self.test_announcement.id]),
-        #     data=form_data
-        # )
-        # self.assertRedirects(response, self.test_announcement.get_absolute_url())
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+        self.assertTrue(Comment.objects.all_with_target_object(self.test_announcement).exists())
 
     def test_comment_on_announcement__escapes_html(self):
         """HTML entered in the announcement comment form is completely escaped when
