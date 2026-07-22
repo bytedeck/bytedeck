@@ -10,7 +10,7 @@ from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.template.loader import render_to_string
 from django.http import JsonResponse
@@ -253,6 +253,17 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class ArchiveStudentsHelp(NonPublicOnlyViewMixin, TemplateView):
+    """Staff help page explaining how to archive students so they stop counting toward
+    the deck's active-student cap (#1729 PR 4 / #1733's archiving instructions).
+
+    Linked from the at-capacity refusal page; the reminder emails (plan PR 5) will
+    link here too.
+    """
+    template_name = 'courses/archive_students_help.html'
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
@@ -264,6 +275,29 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         kwargs['student_registration'] = False
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
+
+    def _deck_at_capacity_for_target(self):
+        """Whether the deck's active-student cap blocks the TARGET student from being added --
+        the staff-side counterpart of CourseStudentCreate's guard (#1729 PR 4)."""
+        from tenant.limits import can_add_active_user
+        target = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        return not can_add_active_user(target)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the add page with the at-capacity explanation (with staff-facing links to the
+        archive-students help page and the subscribe page) instead of the form."""
+        return render(request, self.template_name, {'heading': 'Add student to course', 'deck_at_capacity': True})
+
+    def get(self, request, *args, **kwargs):
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # block the direct POST too, or the cap could be bypassed by submitting the form URL
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
@@ -333,9 +367,25 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         """
         return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
 
+    def _deck_at_capacity(self):
+        """Whether the deck's active-student cap blocks this user from registering (#1729 PR 4)."""
+        from tenant.limits import can_add_active_user
+        return not can_add_active_user(self.request.user)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the join page with the at-capacity explanation instead of the registration form.
+
+        Placed before the simplified-registration auto-create path in get(), so a deck at its
+        cap can't gain active students through the auto-create shortcut either.
+        """
+        return render(request, self.template_name, {'heading': 'Join a course', 'deck_at_capacity': True})
+
     def get(self, request, *args, **kwargs):
         if self._no_open_semester():
             return self._no_open_semester_response(request)
+
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
 
         # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
         # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
@@ -371,6 +421,9 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         # closed active semester by posting directly (the form's only semester choice) (#2060).
         if self._no_open_semester():
             return self._no_open_semester_response(request)
+        # ...and the same for the capacity cap: the GET-side guard alone wouldn't stop a direct POST
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
         return super().post(request, *args, **kwargs)
 
     def get_form_kwargs(self):
