@@ -399,6 +399,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
 
                 'hackerspace_online.context_processors.config',
+                'hackerspace_online.context_processors.deck_status',
             ],
             # 'string_if_invalid': 'DEBUG WARNING: undefined template variable [%s] not found',
         },

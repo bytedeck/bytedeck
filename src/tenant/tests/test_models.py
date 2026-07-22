@@ -11,7 +11,9 @@ from hackerspace_online import settings
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
-from tenant.models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name, default_trial_end_date
+from tenant.models import (
+    EXPIRY_WARNING_DAYS, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name, default_trial_end_date,
+)
 
 User = get_user_model()
 
@@ -317,3 +319,44 @@ class DefaultTrialEndDateTest(SimpleTestCase):
         # Field defaults are applied at instantiation, so no save() (and no DB) is needed.
         tenant = Tenant(schema_name="demo", name="demo")
         self.assertEqual(tenant.trial_end_date, date(2024, 2, 29) + timedelta(days=60))
+
+
+@freeze_time(FROZEN_NOW)
+class TenantBannerStatusTest(SimpleTestCase):
+    """Tests for the banner-support properties is_over_user_limit and is_expiring_soon
+    (epic #1729 PR 3), on unsaved in-memory instances with today frozen at FROZEN_TODAY."""
+
+    def make_tenant(self, trial_end_date=None, paid_until=None, max_active_users=5, active_user_count=0):
+        """Build an unsaved Tenant with the given billing dates and cached count."""
+        return Tenant(
+            name='bannertest', trial_end_date=trial_end_date, paid_until=paid_until,
+            max_active_users=max_active_users, active_user_count=active_user_count,
+        )
+
+    def test_is_over_user_limit__compares_cached_count_to_effective_cap(self):
+        """Over-limit only when the cached count exceeds the effective cap; unlimited (-1) is never over."""
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=6).is_over_user_limit)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=5).is_over_user_limit)
+        # subscribed deck uses its own (tier) cap, not the trial cap
+        self.assertFalse(
+            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=39).is_over_user_limit
+        )
+        self.assertTrue(
+            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=41).is_over_user_limit
+        )
+        self.assertFalse(self.make_tenant(max_active_users=-1, active_user_count=999).is_over_user_limit)
+
+    def test_is_expiring_soon__within_warning_window_or_grace(self):
+        """Warns within EXPIRY_WARNING_DAYS of the governing deadline, and through the
+        paid grace window (negative days); quiet before the window."""
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=EXPIRY_WARNING_DAYS)).is_expiring_soon)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=EXPIRY_WARNING_DAYS + 1)).is_expiring_soon)
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=3)).is_expiring_soon)
+        # in the paid grace window: expired but still subscription_active
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=5)).is_expiring_soon)
+
+    def test_is_expiring_soon__false_for_suspended_and_unmanaged_decks(self):
+        """Suspended decks get the suspension banner instead, and dateless (comped)
+        decks have no deadline to warn about."""
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_expiring_soon)
+        self.assertFalse(self.make_tenant().is_expiring_soon)
