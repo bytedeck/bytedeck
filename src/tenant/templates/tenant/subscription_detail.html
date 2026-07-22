@@ -1,0 +1,87 @@
+{% extends "base_sidebar.html" %}
+
+{% block head_title %}Subscription | {% endblock %}
+
+{% block heading %}<i class="fa fa-credit-card pull-right"></i>Subscription details{% endblock %}
+
+{% block content %}
+
+<h3>Status</h3>
+{% if deck.is_suspended %}
+  <p><span class="label label-danger">Suspended</span>
+    This deck's trial and/or subscription period has ended, so it has reverted to trial limits
+    (max {{ trial_cap }} current student{{ trial_cap|pluralize }}). Existing students keep their access and
+    nothing has been deleted, but no new students can register in a course beyond the trial limit.</p>
+{% elif deck.subscription_active %}
+  <p><span class="label label-success">Subscribed</span>
+    {% if deck.days_until_expiry >= 0 %}
+      Paid through <strong>{{ deck.paid_until }}</strong>
+      ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).
+    {% else %}
+      The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
+      {{ grace_days }}-day grace period &mdash; renew to keep full access; otherwise it will revert to
+      trial limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).
+    {% endif %}</p>
+{% elif deck.is_on_trial %}
+  <p><span class="label label-info">Free trial</span>
+    Ends <strong>{{ deck.trial_end_date }}</strong>
+    ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).</p>
+{% else %}
+  <p><span class="label label-default">Managed manually</span>
+    This deck has no trial or subscription end date, so it never expires on its own. Contact ByteDeck
+    if this doesn't look right.</p>
+{% endif %}
+
+<h3>Dates</h3>
+<table class="table" style="max-width: 30em;">
+  <tr><th>Trial ends</th><td>{{ deck.trial_end_date|default:"&mdash;" }}</td></tr>
+  <tr><th>Paid until</th><td>{{ deck.paid_until|default:"&mdash;" }}</td></tr>
+  <tr><th>Grace period</th><td>{{ grace_days }} days after <em>paid until</em></td></tr>
+</table>
+
+<h3>Student seats</h3>
+<table class="table" style="max-width: 30em;">
+  <tr>
+    <th>Current students</th>
+    <td>{{ current_student_count }}</td>
+  </tr>
+  <tr>
+    <th>Maximum allowed</th>
+    <td>{% if cap == -1 %}Unlimited{% else %}{{ cap }}{% endif %}</td>
+  </tr>
+</table>
+{% if cap != -1 and current_student_count >= cap %}
+  <p class="text-danger"><i class="fa fa-exclamation-triangle"></i>
+    The limit has been reached &mdash; no more students can register in a course.</p>
+{% endif %}
+<p>
+  Only <em>current</em> students &mdash; those registered in a course in the active semester &mdash; count
+  toward the limit; staff and archived students never do. See
+  <a href="{% url 'courses:archive_students_help' %}">freeing up student seats</a>.
+</p>
+
+<h3>Upgrade or renew</h3>
+{% if stripe_configured %}
+  <form method="post" action="{% url 'decks:subscription' %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary">
+      <i class="fa fa-credit-card"></i>&nbsp;
+      {% if deck.stripe_customer_id %}Manage subscription{% else %}Subscribe now{% endif %}
+    </button>
+  </form>
+  <p class="help-block" style="margin-top: 0.5em;">
+    {% if deck.stripe_customer_id %}
+      Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
+    {% else %}
+      Opens Stripe's secure checkout to start a subscription for this deck.
+    {% endif %}
+  </p>
+{% else %}
+  <p>Online billing isn't configured on this server &mdash;
+    <a href="{{ public_subscribe_url }}" class="btn btn-primary">
+      <i class="fa fa-credit-card"></i>&nbsp;Subscribe, renew, or upgrade
+    </a>
+  </p>
+{% endif %}
+
+{% endblock %}

@@ -196,6 +196,10 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('current-student limit warning', mail.outbox[0].subject)
         self.assertIn(self.tenant.get_owner_email_cached(), mail.outbox[0].bcc)
         self.assertIn('current', mail.outbox[0].body)  # vocabulary: current students
+        # the subscribe link points at the deck's own subscription page (PR 6),
+        # not the public flatpage
+        from django.urls import reverse
+        self.assertIn(self.tenant.get_root_url() + reverse('decks:subscription'), mail.outbox[0].body)
 
         # in-app notification exists for the deck owner
         from siteconfig.models import SiteConfig

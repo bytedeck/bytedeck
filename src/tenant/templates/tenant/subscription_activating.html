@@ -1,0 +1,50 @@
+{% extends "base_sidebar.html" %}
+
+{% block head_title %}Activating subscription | {% endblock %}
+
+{% block heading %}<i class="fa fa-credit-card pull-right"></i>Activating your subscription&hellip;{% endblock %}
+
+{% block content %}
+<p id="activating-message">
+  <i class="fa fa-spinner fa-spin"></i>&nbsp;
+  Thanks! Your payment went through and we're confirming your subscription with Stripe.
+  This page will update automatically &mdash; it usually takes just a few seconds.
+</p>
+<p id="activated-message" style="display: none;" class="text-success">
+  <i class="fa fa-check-circle"></i>&nbsp;
+  <strong>Your subscription is active!</strong>
+  Taking you back to <a href="{% url 'decks:subscription' %}">subscription details</a>&hellip;
+</p>
+<p class="help-block">
+  Taking longer than a minute? Your payment is safe &mdash; the subscription can take a little while to
+  register. Check <a href="{% url 'decks:subscription' %}">subscription details</a> later, and contact
+  ByteDeck if it still hasn't appeared.
+</p>
+{% endblock %}
+
+{% block js %}
+<script>
+  // Poll the status endpoint (which reconciles with Stripe server-side) until the
+  // subscription reports active, then bounce back to the details page.
+  (function () {
+    var params = new URLSearchParams(window.location.search);
+    var statusUrl = "{% url 'decks:subscription_status' %}" +
+      (params.get('session_id') ? '?session_id=' + encodeURIComponent(params.get('session_id')) : '');
+    var poll = setInterval(function () {
+      fetch(statusUrl, {credentials: 'same-origin'})
+        .then(function (response) { return response.json(); })
+        .then(function (data) {
+          if (data.active) {
+            clearInterval(poll);
+            document.getElementById('activating-message').style.display = 'none';
+            document.getElementById('activated-message').style.display = '';
+            setTimeout(function () {
+              window.location = "{% url 'decks:subscription' %}";
+            }, 2000);
+          }
+        })
+        .catch(function () { /* transient; keep polling */ });
+    }, 3000);
+  })();
+</script>
+{% endblock %}

@@ -106,6 +106,18 @@ class Tenant(TenantMixin):
         help_text="If the deck is not in trial mode, then the deck will become inaccessable to students after this date."
     )
 
+    # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
+    # manually; set automatically by checkout reconciliation, or by hand in the admin
+    # when backfilling legacy subscribers (#2043).
+    stripe_customer_id = models.CharField(
+        max_length=255, blank=True, default='', db_index=True,
+        help_text="The Stripe Customer id (cus_...) this deck bills to. Blank = not linked to Stripe."
+    )
+    stripe_subscription_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
+    )
+
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys
     # instead they have to be found within the tenant's context / schema

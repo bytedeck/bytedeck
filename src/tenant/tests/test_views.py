@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.shortcuts import reverse
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from django_tenants.test.client import TenantClient
@@ -555,11 +555,11 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         return response
 
     def test_banner__trial_mode_shown_to_staff_with_subscribe_link(self):
-        """Staff on a trial deck see the Trial Mode banner with an absolute subscribe
-        link to the public host."""
+        """Staff on a trial deck see the Trial Mode banner linking to the deck's own
+        subscription page (PR 6; previously the public subscribe flatpage)."""
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Trial Mode')
-        self.assertContains(response, '/pages/subscribe/')
+        self.assertContains(response, reverse('decks:subscription'))
 
     def test_banner__not_shown_to_students_on_trial_deck(self):
         """Students never see the trial banner (it's staff-facing nagware)."""
@@ -579,7 +579,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
 
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, '/pages/subscribe/')
+        self.assertContains(response, reverse('decks:subscription'))
 
     def test_banner__over_limit_warns_staff(self):
         """Staff see the over-limit warning when the cached count exceeds the cap."""
@@ -602,3 +602,253 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=3))
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Subscription expiring')
+
+
+class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Access and rendering tests for the staff-facing Subscription details page
+    (epic #1729 PR 6; maintainer-requested admin-menu page)."""
+
+    def setUp(self):
+        """Log in a staff user, clear the cached deck row, and put the deck in a
+        known subscribed state (paid 100 days out, cap 30)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.client.force_login(self.staff)
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100), max_active_users=30)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def get_page(self):
+        """GET the subscription page, asserting 200."""
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_page__staff_only(self):
+        """Anonymous users are redirected to login; students get 403; staff get 200."""
+        self.client.logout()
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('login', response.url)
+
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.get(reverse('decks:subscription')).status_code, 403)
+
+        self.client.force_login(self.staff)
+        self.get_page()
+
+    def test_page__shows_dates_seats_and_status(self):
+        """A subscribed deck shows its status, both dates, days remaining, and seat usage."""
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        self.assertContains(response, '100 days remaining')
+        self.assertContains(response, 'Paid until')
+        self.assertContains(response, 'Trial ends')
+        self.assertContains(response, 'Current students')
+        self.assertContains(response, 'Maximum allowed')
+        self.assertContains(response, '30')
+
+    def test_page__grace_period_states_trial_cap(self):
+        """A deck in its paid grace window explains the grace period and the trial
+        cap it will revert to (5), not its current paid cap."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(paid_until=localdate() - timedelta(days=5))
+        response = self.get_page()
+        self.assertContains(response, 'grace period')
+        self.assertContains(response, 'max 5 current students')
+
+    def test_page__trial_suspended_and_manual_states(self):
+        """The status section adapts to trial, suspended, and never-expires decks."""
+        from datetime import date, timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=10), paid_until=None)
+        self.assertContains(self.get_page(), 'Free trial')
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
+        self.assertContains(self.get_page(), 'Suspended')
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        self.assertContains(self.get_page(), 'Managed manually')
+
+    def test_page__unlimited_cap_shown_as_unlimited(self):
+        """The -1 unlimited sentinel renders as "Unlimited" rather than -1."""
+        self.set_deck(max_active_users=-1)
+        self.assertContains(self.get_page(), 'Unlimited')
+
+    def test_page__not_configured_falls_back_to_public_subscribe_page(self):
+        """Without Stripe keys the page says billing isn't configured and links the
+        public subscribe page instead of rendering the checkout form."""
+        from tenant.utils import get_public_subscribe_url
+
+        response = self.get_page()
+        self.assertContains(response, "billing isn't configured")
+        self.assertContains(response, get_public_subscribe_url())
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_page__configured_shows_checkout_or_portal_button(self):
+        """With Stripe configured, an unlinked deck gets "Subscribe now" and a linked
+        deck gets "Manage subscription" (billing portal)."""
+        self.assertContains(self.get_page(), 'Subscribe now')
+        self.set_deck(stripe_customer_id='cus_123')
+        self.assertContains(self.get_page(), 'Manage subscription')
+
+    def test_menu__admin_dropdown_links_subscription_page_for_staff(self):
+        """The navbar admin menu contains the Subscription entry for staff."""
+        response = self.client.get(reverse('quests:quests'))
+        self.assertContains(response, reverse('decks:subscription'))
+        self.assertContains(response, 'Subscription')
+
+
+class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Stripe checkout/portal flow tests for the subscription page (epic #1729 PR 6).
+
+    Stripe is never called for real: the SDK entry points used by tenant.billing
+    are mocked at that seam.
+    """
+
+    def setUp(self):
+        """Log in staff on an unlinked deck with billing configured via override in
+        each test (the deck's owner email resolution is exercised as-is)."""
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.client.force_login(self.staff)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def test_post__not_configured_shows_error(self):
+        """POST without Stripe keys redirects back with an error message and calls
+        nothing."""
+        response = self.client.post(reverse('decks:subscription'), follow=True)
+        self.assertContains(response, "billing isn't configured")
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__unlinked_deck_redirects_to_checkout(self):
+        """POST on an unlinked deck creates a subscription Checkout Session carrying
+        the deck's identity and redirects to Stripe's URL."""
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   return_value=Mock(url='https://checkout.stripe.test/cs_123')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_123')
+        kwargs = mock_create.call_args.kwargs
+        self.assertEqual(kwargs['mode'], 'subscription')
+        self.assertEqual(kwargs['client_reference_id'], self.tenant.schema_name)
+        self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+        self.assertEqual(kwargs['line_items'], [{'price': 'price_123', 'quantity': 1}])
+        self.assertIn('session_id={CHECKOUT_SESSION_ID}', kwargs['success_url'])
+        self.assertIn(reverse('decks:subscription_activating'), kwargs['success_url'])
+        self.assertIn(reverse('decks:subscription'), kwargs['cancel_url'])
+        self.assertIn(self.tenant.schema_name, kwargs['idempotency_key'])
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__linked_deck_redirects_to_billing_portal(self):
+        """POST on a Stripe-linked deck opens the billing portal for that customer."""
+        self.set_deck(stripe_customer_id='cus_123')
+        with patch('tenant.billing.stripe.billing_portal.Session.create',
+                   return_value=Mock(url='https://portal.stripe.test/ps_123')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'https://portal.stripe.test/ps_123')
+        self.assertEqual(mock_create.call_args.kwargs['customer'], 'cus_123')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__stripe_error_redirects_back_with_message(self):
+        """A Stripe API failure lands back on the page with a friendly error, not a 500."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   side_effect=stripe_lib.StripeError('boom')):
+            response = self.client.post(reverse('decks:subscription'), follow=True)
+        self.assertContains(response, "couldn't be reached")
+
+    def test_activating_page__renders_for_staff_with_polling_script(self):
+        """The post-checkout page renders the activating message and polls the
+        status endpoint."""
+        response = self.client.get(reverse('decks:subscription_activating'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Activating your subscription')
+        self.assertContains(response, reverse('decks:subscription_status'))
+
+    def test_status__reports_current_subscription_state_without_session(self):
+        """Without a session_id the endpoint just reports the deck's derived status."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        response = self.client.get(reverse('decks:subscription_status'))
+        self.assertEqual(response.json(), {'active': False})
+
+        self.set_deck(paid_until=localdate() + timedelta(days=100))
+        response = self.client.get(reverse('decks:subscription_status'))
+        self.assertEqual(response.json(), {'active': True})
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__reconciles_completed_checkout_session(self):
+        """With a session_id and a completed checkout, the poll links the deck
+        (customer + subscription ids), advances paid_until to the subscription's
+        period end, and reports active."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        period_end = datetime.now(tz=dt_timezone.utc) + timedelta(days=365)
+        session = {
+            'status': 'complete',
+            'customer': 'cus_123',
+            'subscription': {'id': 'sub_123', 'current_period_end': int(period_end.timestamp())},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session) as mock_retrieve:
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': True})
+        self.assertEqual(mock_retrieve.call_args.args[0], 'cs_123')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_123')
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_123')
+        self.assertGreater(self.tenant.paid_until, localdate() + timedelta(days=300))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__incomplete_session_and_stripe_errors_stay_inactive(self):
+        """An open (unpaid) session, or a Stripe hiccup, leaves the deck untouched
+        and reports active=False so the page just keeps polling."""
+        import stripe as stripe_lib
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        with patch('tenant.billing.stripe.checkout.Session.retrieve',
+                   return_value={'status': 'open', 'subscription': None}):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve',
+                   side_effect=stripe_lib.StripeError('down')):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')

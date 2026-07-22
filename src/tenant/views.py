@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.utils import timezone
@@ -20,6 +20,7 @@ from django_tenants.utils import tenant_context
 from allauth.account.utils import user_username
 from allauth.account.models import EmailAddress
 
+from hackerspace_online.decorators import staff_member_required
 from siteconfig.models import SiteConfig
 
 from .forms import TenantForm, DeckRequestForm
@@ -380,3 +381,116 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)
         context["resend_cooldown"] = _humanize_seconds(DeckRequestService.REQUEST_COOLDOWN)
         return context
+
+
+class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
+    """Staff-facing "Subscription details" page for the current deck (epic #1729 PR 6).
+
+    GET shows the deck's billing status, expiry dates, student-seat usage (live
+    count), and the upgrade/renew action. POST starts the Stripe flow: Checkout
+    for an unlinked deck, the Billing Portal for a linked one. When Stripe isn't
+    configured the page says so and the action falls back to the public
+    subscribe page. Linked from the admin menu for all staff.
+    """
+    template_name = 'tenant/subscription_detail.html'
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        """Require staff (non-staff get 403, anonymous get the login redirect)."""
+        return super().dispatch(*args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """Assemble the deck's billing facts for the template.
+
+        Returns:
+            dict: The template context with the current deck, a LIVE
+            current-student count (the nightly cached one can be a day old), the
+            effective cap, the billing constants the copy references, whether
+            Stripe billing is configured, and the public-subscribe fallback URL.
+        """
+        from .billing import billing_configured
+        from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
+        from .utils import get_public_subscribe_url
+
+        context = super().get_context_data(**kwargs)
+        deck = self.request.tenant
+        context.update({
+            'deck': deck,
+            'current_student_count': deck.get_active_user_count(),  # live, not cached
+            'cap': deck.effective_max_active_users,
+            'trial_cap': TRIAL_MAX_ACTIVE_USERS,
+            'grace_days': GRACE_PERIOD_DAYS,
+            'stripe_configured': billing_configured(),
+            'public_subscribe_url': get_public_subscribe_url(),
+        })
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Start the Stripe flow: Checkout (unlinked deck) or Billing Portal (linked).
+
+        Returns:
+            HttpResponse: A redirect to the Stripe-hosted page, or back to this
+            page with an error message when Stripe isn't configured or errors out.
+        """
+        import stripe as stripe_lib
+
+        from .billing import billing_configured, create_checkout_session, create_portal_session
+
+        deck = request.tenant
+        if not billing_configured():
+            messages.error(request, "Online billing isn't configured on this server.")
+            return redirect('decks:subscription')
+        try:
+            if deck.stripe_customer_id:
+                url = create_portal_session(deck)
+            else:
+                url = create_checkout_session(deck)
+        except stripe_lib.StripeError:
+            messages.error(request, "Sorry, Stripe couldn't be reached. Please try again in a few minutes.")
+            return redirect('decks:subscription')
+        return HttpResponseRedirect(url)
+
+
+class SubscriptionActivating(NonPublicOnlyViewMixin, TemplateView):
+    """The Checkout success page: "activating your subscription..." (epic #1729 PR 6).
+
+    Stripe redirects here with ?session_id=; the page polls the status endpoint
+    below, which reconciles against Stripe and reports when the deck is active,
+    then this page forwards back to the subscription details. Never assumes a
+    webhook landed (plan §5.4) -- the polling reconciliation IS the activation
+    path in this PR; webhooks (PR 7) take over renewals later.
+    """
+    template_name = 'tenant/subscription_activating.html'
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        """Require staff, like the subscription page it forwards back to."""
+        return super().dispatch(*args, **kwargs)
+
+
+@non_public_only_view
+@staff_member_required
+def subscription_status(request):
+    """JSON poll target for the activating page: is this deck's subscription live yet?
+
+    When a ``session_id`` is supplied and the deck isn't linked yet, reconciles
+    the checkout session against Stripe first (linking the deck and advancing
+    paid_until if the session completed). Stripe/API hiccups return active=False
+    rather than erroring -- the page just polls again.
+
+    Returns:
+        JsonResponse: {"active": bool} for the polling script.
+    """
+    import stripe as stripe_lib
+
+    from .billing import billing_configured, reconcile_checkout_session
+
+    deck = request.tenant
+    session_id = request.GET.get('session_id')
+    if session_id and billing_configured() and not deck.stripe_subscription_id:
+        try:
+            reconcile_checkout_session(deck, session_id)
+        except stripe_lib.StripeError:
+            pass  # transient; the page polls again in a few seconds
+        deck.refresh_from_db()
+    return JsonResponse({'active': deck.subscription_active})

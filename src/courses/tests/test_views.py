@@ -1841,14 +1841,15 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_staff_add_student__refused_at_cap_with_helpful_links(self):
         """Staff adding a student to a full deck see the staff-facing refusal with the
-        archive-help and subscribe links, on both GET and POST."""
+        archive-help and subscription-page links, on both GET and POST."""
         self.client.force_login(self.staff)
         url = reverse('courses:join', args=[self.newcomer.id])
 
         response = self.client.get(url)
         self.assertContains(response, 'Current-student limit reached')
         self.assertContains(response, reverse('courses:archive_students_help'))
-        self.assertContains(response, '/pages/subscribe/')
+        # PR 6: the upgrade link now goes to the deck's own subscription page
+        self.assertContains(response, reverse('decks:subscription'))
 
         response = self.client.post(url, data={})
         self.assertContains(response, 'Current-student limit reached')
