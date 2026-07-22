@@ -79,3 +79,57 @@ class ClearExpiredSessionsTaskTest(ByteDeckTenantTestCase):
         with schema_context("public"):
             self.assertFalse(Session.objects.filter(session_key="public-expired").exists())
             self.assertTrue(Session.objects.filter(session_key="public-valid").exists())
+
+
+class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
+    """The nightly deck-status fan-out is the canonical refresher for the Tenant
+    cached fields now that the admin changelist no longer refreshes them on page
+    load (the old N+1). Dispatcher excludes the public and shared-library schemas."""
+
+    def test_deck_status_check__refreshes_cached_fields(self):
+        """Running the per-schema task updates the deck's stale cached counts."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from siteconfig.models import SiteConfig
+        from tenant.models import Tenant
+
+        User = get_user_model()
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(active_user_count=0)
+
+        task_result = tasks.deck_status_check.apply()
+        self.assertTrue(task_result.successful())
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.active_user_count, self.tenant.get_active_user_count())
+        self.assertGreater(self.tenant.active_user_count, 0)
+
+    def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
+        """The dispatcher schedules one per-schema check per deck, skipping the
+        public schema and the shared-library tenant."""
+        from unittest.mock import patch
+
+        from django_tenants.utils import get_public_schema_name, schema_context
+        from library.utils import get_library_schema_name
+        from tenant.models import Tenant
+
+        billable_count = Tenant.objects.exclude(
+            schema_name__in=[get_public_schema_name(), get_library_schema_name()]
+        ).count()
+
+        # a library tenant row (schema-less: fast, and the dispatcher must skip
+        # it before ever entering its context) must not add a dispatch
+        if not Tenant.objects.filter(schema_name=get_library_schema_name()).exists():
+            with schema_context(get_public_schema_name()):
+                library_tenant = Tenant(name=get_library_schema_name(), schema_name=get_library_schema_name())
+                library_tenant.auto_create_schema = False
+                library_tenant.full_clean()
+                library_tenant.save()
+
+        with patch.object(tasks.deck_status_check, 'apply_async') as mock_apply_async:
+            task_result = tasks.daily_deck_status_check_for_all_tenants.apply()
+
+        self.assertTrue(task_result.successful())
+        self.assertEqual(mock_apply_async.call_count, billable_count)
+        self.assertIn(f"for {billable_count} deck(s)", task_result.result)

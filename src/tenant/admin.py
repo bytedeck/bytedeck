@@ -139,7 +139,27 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = ['message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
+    actions = ['refresh_cached_fields', 'message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
+
+    @admin.action(description="Refresh deck stats for selected deck(s)")
+    def refresh_cached_fields(self, request, queryset):
+        """Refresh the selected decks' cached stats immediately, from the admin.
+
+        The stats otherwise refresh nightly via the deck-status task; this action is
+        the on-demand path (no SSH or management command needed). It runs
+        synchronously so the numbers are fresh on the very next page load -- and it
+        still works when celery is down, which is exactly when an admin might be
+        investigating stale stats. The public schema row is skipped (not a deck).
+        """
+        skipped_public = queryset.filter(schema_name=get_public_schema_name()).exists()
+        refreshed = 0
+        for tenant in queryset.exclude(schema_name=get_public_schema_name()):
+            with tenant_context(tenant):
+                tenant.update_cached_fields()
+            refreshed += 1
+        self.message_user(request, f"Refreshed deck stats for {refreshed} deck(s).", messages.SUCCESS)
+        if skipped_public:
+            self.message_user(request, "Skipped the public schema (it isn't a deck).", messages.WARNING)
 
     @admin.display(description="owner full name")
     def owner_full_name_text(self, obj):
@@ -214,16 +234,30 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             del actions["delete_selected"]
         return actions
 
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        # Update cached fields
-        #
-        # FIX: reduce number of SQL queries by triggering this only when Tenant (and/or related) objects are changed
-        for tenant in qs:
-            if tenant.name != get_public_schema_name():
-                with tenant_context(tenant):
-                    tenant.update_cached_fields()
-        return qs
+    def changelist_view(self, request, extra_context=None):
+        """Attach a data-freshness notice to the deck list.
+
+        The cached deck stats (user counts, owner info, quest counts) refresh via the
+        nightly deck-status task, not on page load, so tell the admin how old the
+        numbers they're looking at are.
+        """
+        from django.db.models import Max
+        from django.utils.timesince import timesince
+
+        latest = self.model.objects.aggregate(latest=Max('cached_fields_updated_on'))['latest']
+        if latest:
+            messages.info(
+                request,
+                f"Deck stats (user counts, owner info, quest counts) were last refreshed {timesince(latest)} ago. "
+                "They refresh nightly; to refresh now, select decks below and run the \"Refresh deck stats\" action."
+            )
+        else:
+            messages.info(
+                request,
+                "Deck stats (user counts, owner info, quest counts) have not been refreshed yet. "
+                "They refresh nightly; to refresh now, select decks below and run the \"Refresh deck stats\" action."
+            )
+        return super().changelist_view(request, extra_context)
 
     def delete_model(self, request, obj):
         # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant

@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
-from django_tenants.utils import tenant_context, schema_exists
+from django_tenants.utils import get_public_schema_name, tenant_context, schema_exists
 from django_tenants.test.client import TenantClient
 
 from hackerspace_online.celery import app
@@ -118,6 +118,10 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
                     request=None, user=config.deck_owner, email="jane@doe.com")
                 email_address.set_as_primary()
                 email_address.save()
+            # the changelist displays CACHED owner fields; refresh them explicitly, as the
+            # nightly deck_status_check task does in production (the changelist no longer
+            # refreshes on page load -- #1729 PR 2)
+            cls.tenant.update_cached_fields()
 
         # update "owner" and add missing email address
         with tenant_context(cls.extra_tenant):
@@ -133,11 +137,77 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
                 email_address.set_as_primary()
                 email_address.verified = True
                 email_address.save()
+            # see the matching comment above: cached fields refresh explicitly now
+            cls.extra_tenant.update_cached_fields()
 
     def setUp(self):
         """Build a TenantAdmin instance and a public-tenant client for each test."""
         self.tenant_model_admin = TenantAdmin(model=Tenant, admin_site=AdminSite())
         self.client = TenantClient(self.public_tenant)
+
+    def test_changelist_view__shows_when_deck_stats_were_last_refreshed(self):
+        """The deck list shows a freshness message with the age of the cached stats,
+        since they refresh nightly rather than on page load (#1729 PR 2)."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        # setUpTestData refreshed the cached fields, so a timestamped message shows
+        self.assertContains(response, "were last refreshed")
+
+    def test_changelist_view__notes_when_deck_stats_never_refreshed(self):
+        """If no deck has ever had its cached stats refreshed, the freshness message says so."""
+        Tenant.objects.update(cached_fields_updated_on=None)
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "have not been refreshed yet")
+
+    def test_refresh_cached_fields_action__refreshes_selected_decks(self):
+        """The "Refresh deck stats" changelist action refreshes the selected decks'
+        cached stats on demand -- the admin-UI alternative to the management command."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            owner_full_name_cached=None, cached_fields_updated_on=None)
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        action_data = {"action": "refresh_cached_fields", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "Refreshed deck stats for 1 deck(s).")
+        refreshed = Tenant.objects.get(pk=self.tenant.pk)
+        self.assertIsNotNone(refreshed.cached_fields_updated_on)
+        self.assertEqual(refreshed.owner_full_name_cached, "Jane Doe")
+
+    def test_refresh_cached_fields_action__skips_public_schema(self):
+        """Selecting the public schema row alongside a deck refreshes the deck but
+        skips public with a warning (public has no deck data to refresh)."""
+        public_pk = Tenant.objects.get(schema_name=get_public_schema_name()).pk
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        action_data = {"action": "refresh_cached_fields", ACTION_CHECKBOX_NAME: [self.tenant.pk, public_pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "Refreshed deck stats for 1 deck(s).")
+        self.assertContains(response, "Skipped the public schema")
+
+    def test_get_queryset__does_not_refresh_cached_fields(self):
+        """Loading the changelist must NOT refresh each deck's cached fields anymore --
+        that per-row refresh was an N+1 across every tenant schema on every page load;
+        the nightly deck_status_check task is the canonical refresher now (#1729 PR 2)."""
+        # anonymous request first: it moves the client's connection to the public
+        # schema so force_login stores its session there (same dance as the
+        # changelist-display tests in this class)
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.client.force_login(self.superuser)
+        with patch("tenant.models.Tenant.update_cached_fields") as mock_update:
+            response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        mock_update.assert_not_called()
 
     def test_owner_full_name_text__shown_in_changelist(self):
         """

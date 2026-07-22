@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+from celery.schedules import crontab
 from django.core import mail
 from django.core.cache import cache
 from django.test import SimpleTestCase
@@ -90,3 +91,12 @@ class BeatScheduleTest(SimpleTestCase):
         """The beat schedule includes the daily clearsessions fan-out task."""
         entry = app.conf.beat_schedule["Clear expired sessions in all schemas daily task"]
         self.assertEqual(entry["task"], "tenant.tasks.clear_expired_sessions_in_all_schemas")
+
+    def test_beat_schedule__includes_daily_deck_status_check(self):
+        """The beat schedule includes the daily deck-status fan-out task -- the
+        canonical refresher for the Tenant cached fields (#1729 PR 2) -- at its
+        intended time (06:00, after the 05:00 notification digest) and queue."""
+        entry = app.conf.beat_schedule["Daily deck status check for all schemas"]
+        self.assertEqual(entry["task"], "tenant.tasks.daily_deck_status_check_for_all_tenants")
+        self.assertEqual(entry["schedule"], crontab(minute=0, hour=6))
+        self.assertEqual(entry["options"]["queue"], "default")
