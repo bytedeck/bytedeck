@@ -133,7 +133,12 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     """
 
     def run_engine_with_inline_email(self):
-        """Run process_deck_notices with the email task executing synchronously."""
+        """Run process_deck_notices with the email task executing synchronously.
+
+        The email dispatch is deferred with transaction.on_commit (so a rolled-back
+        ledger row never leaks an email), so this also executes the captured
+        on-commit callbacks, which a TestCase transaction would otherwise swallow.
+        """
         from unittest.mock import patch
 
         from tenant import tasks
@@ -142,7 +147,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             tasks.send_email_message, 'apply_async',
             side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
         ):
-            return process_deck_notices(self.tenant)
+            with self.captureOnCommitCallbacks(execute=True):
+                summary = process_deck_notices(self.tenant)
+            return summary
 
     def setUp(self):
         """Put this deck at its 100% limit so exactly one notice is due, give the deck
@@ -215,6 +222,24 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             summary = self.run_engine_with_inline_email()
         self.assertIn('sent 0 notice(s)', summary)
         self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__failed_delivery_rolls_back_ledger_so_next_run_retries(self):
+        """If delivery raises after the ledger write, the row rolls back (and no email
+        is queued), so the notice isn't recorded-but-never-sent: the next run retries."""
+        from unittest.mock import patch
+
+        with patch('tenant.notices.notify.send', side_effect=RuntimeError('notification backend down')):
+            with self.assertRaises(RuntimeError):
+                with self.captureOnCommitCallbacks(execute=True):
+                    process_deck_notices(self.tenant)
+        self.assertFalse(DeckNotice.objects.exists())  # rolled back, eligible for retry
+        self.assertEqual(len(mail.outbox), 0)  # the on-commit email never fired
+
+        # the next (healthy) run delivers normally
+        self.run_engine_with_inline_email()
+        self.assertEqual(DeckNotice.objects.count(), 1)
+        self.assertEqual(len(mail.outbox), 1)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__owner_without_email_still_gets_in_app_notification(self):

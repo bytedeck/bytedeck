@@ -21,6 +21,7 @@ send (visible in the worker log / task result) but writes no ledger rows and
 sends nothing, so a production cycle can be reviewed before enabling.
 """
 from django.conf import settings
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils.timezone import localdate
@@ -111,12 +112,17 @@ def process_deck_notices(deck):
 
     sent = 0
     for kind, threshold, period_key in due:
-        _, created = DeckNotice.objects.get_or_create(
-            tenant=deck, kind=kind, threshold=threshold, period_key=period_key
-        )
-        if not created:  # lost a race with a concurrent run; that run delivered it
-            continue
-        _deliver(deck, kind)
+        # record + deliver atomically: if delivery raises, the ledger row rolls back
+        # so the next nightly run retries instead of the notice being recorded but
+        # never sent (the email itself is only queued on commit, so a rollback
+        # can't leak a sent email either)
+        with transaction.atomic():
+            _, created = DeckNotice.objects.get_or_create(
+                tenant=deck, kind=kind, threshold=threshold, period_key=period_key
+            )
+            if not created:  # lost a race with a concurrent run; that run delivered it
+                continue
+            _deliver(deck, kind)
         sent += 1
     return f"sent {sent} notice(s): [{labels}]"
 
@@ -146,10 +152,11 @@ def _deliver(deck, kind):
 
     owner_email = deck.get_owner_email_cached()
     if owner_email:
-        send_email_message.apply_async(
+        # queued on commit so a rolled-back ledger row never leaks an email
+        transaction.on_commit(lambda: send_email_message.apply_async(
             kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
             queue='default',
-        )
+        ))
 
     # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify
     from django.contrib.auth import get_user_model

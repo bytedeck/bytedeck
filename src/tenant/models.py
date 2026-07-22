@@ -437,6 +437,7 @@ class DeckNotice(models.Model):
         ]
 
     def __str__(self):
+        """Audit identifier: the deck's schema name, kind/threshold, and period key."""
         return f'{self.tenant.schema_name}: {self.kind}/{self.threshold} for {self.period_key}'
 
 
