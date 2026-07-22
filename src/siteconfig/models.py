@@ -212,6 +212,12 @@ class SiteConfig(models.Model):
             See the <a href=\"https://github.com/bytedeck/bytedeck/wiki/Library#sharing-to-the-library\" target=\"blank\">help page</a> for details."
     )
 
+    enable_submission_questions = models.BooleanField(
+        verbose_name="Enable Submission Questions", default=False,
+        help_text="If enabled, staff can add questions (short answer, long answer, or file upload) to a quest, \
+            which students answer as part of submitting that quest."
+    )
+
     # Field to select custom name to change all instances of "announcement" to site-wide
     # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
     custom_name_for_announcement = models.CharField(
