@@ -215,7 +215,10 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """Reading one's own notification marks it read (unread=False, time_read set) and
         redirects to the list when no ?next is given."""
         self.client.force_login(self.test_student1)
-        note = baker.make(Notification, recipient=self.test_student1, unread=True, time_read=None)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True, time_read=None,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
 
         response = self.client.get(reverse('notifications:read', args=[note.id]))
 
@@ -227,7 +230,10 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_read__redirects_to_next_when_provided(self):
         """Reading one's own notification with ?next= redirects to that url."""
         self.client.force_login(self.test_student1)
-        note = baker.make(Notification, recipient=self.test_student1, unread=True)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
 
         response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': '/quests/available/'})
 
@@ -236,7 +242,10 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_read__other_users_notification_raises_404(self):
         """Reading a notification that belongs to another user is a 404 (not readable)."""
         self.client.force_login(self.test_student1)
-        note = baker.make(Notification, recipient=self.test_student2, unread=True)
+        note = baker.make(
+            Notification, recipient=self.test_student2, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
 
         response = self.client.get(reverse('notifications:read', args=[note.id]))
 
