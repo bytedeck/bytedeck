@@ -551,6 +551,28 @@ class QuestManager(models.Manager):
         qs = self.get_active().get_conditions_met(user).available_without_course()
         return qs.not_in_progress_completed_or_cooldown(user)
 
+    def get_in_cooldown(self, user):
+        """Repeatable quests the user completed this semester that are still within cooldown (issue #57).
+
+        These would be available to repeat except that their per-quest cooldown
+        (``hours_between_repeats``) hasn't elapsed since the last completion, so the Available tab
+        shows them as "available again soon" (with a countdown) instead of letting them be started.
+        Quests already at their repeat cap are excluded — they won't come back. Uses the same active /
+        prerequisite / not-in-progress / not-hidden filters as ``get_available`` so the two lists are
+        consistent and disjoint (``get_available`` excludes exactly these via its cooldown condition).
+        """
+        now = timezone.now()
+        qs = self.get_active().select_related('campaign').get_conditions_met(user).not_in_progress(user)
+        completed_quest_ids = QuestSubmission.objects.all_completed(user=user).values_list('quest_id', flat=True)
+        qs = qs.filter(pk__in=completed_quest_ids).exclude_hidden(user)
+
+        cooldown_ids = []
+        for quest in qs:
+            next_available = quest.next_repeat_available(user)
+            if next_available is not None and next_available > now:
+                cooldown_ids.append(quest.pk)
+        return qs.filter(pk__in=cooldown_ids)
+
     def all_drafts(self, user):
         """
         Return a queryset of draft quests (not published)
@@ -708,6 +730,36 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
             return True
         else:
             return False
+
+    def next_repeat_available(self, user):
+        """When this repeatable quest will next be available to `user` to repeat, or None (issue #57).
+
+        Returns a datetime — the last completion time plus ``hours_between_repeats`` — when the user
+        has completed this repeatable quest but has not yet reached its repeat cap. Returns None when
+        the quest is not repeatable, has never been completed by the user, or has already reached its
+        repeat cap (so it will not become available again). The datetime may be in the past if the
+        cooldown has already elapsed (i.e. the quest is available to repeat right now). Mirrors the
+        cap/timing logic of ``is_repeat_available``.
+        """
+        if self.max_repeats == 0 and not self.repeat_per_semester:
+            return None  # not repeatable
+
+        submissions = QuestSubmission.objects.all_for_user_quest(user, self, False)
+        if not submissions.exists():
+            return None
+
+        latest_sub = submissions.latest('first_time_completed')
+        if not latest_sub.first_time_completed:
+            return None  # the latest attempt is still in progress, not completed
+
+        # already at the repeat cap → it won't come back
+        if self.repeat_per_semester:
+            if QuestSubmission.objects.all_completed(user=user).filter(quest=self).count() > self.max_repeats:
+                return None
+        elif self.max_repeats != -1 and latest_sub.ordinal > self.max_repeats:
+            return None
+
+        return latest_sub.first_time_completed + timezone.timedelta(hours=self.hours_between_repeats)
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """
