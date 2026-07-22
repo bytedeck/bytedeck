@@ -11,8 +11,12 @@ from django.conf import settings
 from freezegun import freeze_time
 from model_bakery import baker
 
+from unittest.mock import patch
+
+from redis import exceptions as redis_exceptions
+
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from siteconfig.models import SiteConfig, get_default_deck_owner
+from siteconfig.models import SiteConfig, get_default_deck_owner, invalidate_siteconfig_cache_signal
 
 from library.utils import get_library_schema_name
 
@@ -65,6 +69,56 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
     def test_get_banner_image_dark_url__returns_default(self):
         """Returns the default dark banner image when none is set."""
         self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner.png'))
+
+    def test_str__returns_site_name(self):
+        """__str__ returns the configured site name."""
+        self.config.site_name = 'My Deck'
+        self.assertEqual(str(self.config), 'My Deck')
+
+    def test_get_site_logo_url__returns_uploaded_logo(self):
+        """When a site logo is uploaded, its url is returned instead of the default."""
+        self.config.site_logo = 'logos/mylogo.png'
+        self.assertEqual(self.config.get_site_logo_url(), self.config.site_logo.url)
+
+    def test_get_default_icon_url__returns_uploaded_icon(self):
+        """When a default icon is uploaded, its url is returned instead of the site logo."""
+        self.config.default_icon = 'icons/myicon.png'
+        self.assertEqual(self.config.get_default_icon_url(), self.config.default_icon.url)
+
+    def test_get_favicon_url__returns_uploaded_favicon(self):
+        """When a favicon is uploaded, its url is returned."""
+        self.config.favicon = 'icons/myfav.ico'
+        self.assertEqual(self.config.get_favicon_url(), self.config.favicon.url)
+
+    def test_get_favicon_url__falls_back_to_site_logo(self):
+        """With no favicon but a site logo set, the favicon url falls back to the site logo."""
+        self.config.favicon = ''
+        self.config.site_logo = 'logos/mylogo.png'
+        self.assertEqual(self.config.get_favicon_url(), self.config.site_logo.url)
+
+    def test_get_banner_image_url__returns_uploaded_banner(self):
+        """When a banner image is uploaded, its url is returned instead of the default."""
+        self.config.banner_image = 'banners/mybanner.png'
+        self.assertEqual(self.config.get_banner_image_url(), self.config.banner_image.url)
+
+    def test_get_banner_image_dark_url__returns_uploaded_dark_banner(self):
+        """When a dark banner is uploaded, its url is returned."""
+        self.config.banner_image_dark = 'banners/mydark.png'
+        self.assertEqual(self.config.get_banner_image_dark_url(), self.config.banner_image_dark.url)
+
+    def test_get_banner_image_dark_url__falls_back_to_light_banner(self):
+        """With no dark banner but a light banner set, the dark url falls back to the light banner."""
+        self.config.banner_image_dark = ''
+        self.config.banner_image = 'banners/mybanner.png'
+        self.assertEqual(self.config.get_banner_image_dark_url(), self.config.banner_image.url)
+
+    @patch('siteconfig.models.cache.get', side_effect=redis_exceptions.ConnectionError)
+    def test_invalidate_cache_signal__swallows_redis_connection_error(self, mock_cache_get):
+        """If redis is unavailable when the cache-invalidation signal fires (e.g. redis down during
+        initdb), it treats the cache as empty and returns instead of raising."""
+        # Call the receiver directly to isolate the redis-down path from other save() side effects.
+        invalidate_siteconfig_cache_signal(sender=SiteConfig, instance=self.config)
+        mock_cache_get.assert_called_once()
 
     def test_set_active_semester__updates_active_semester(self):
         """set_active_semester() switches the config's active semester to the given one."""
