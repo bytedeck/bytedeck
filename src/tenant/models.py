@@ -49,6 +49,10 @@ TRIAL_MAX_ACTIVE_USERS = 5
 # for recently expired decks (#1494).
 GRACE_PERIOD_DAYS = 30
 
+# The status banner starts warning staff when the governing deadline (trial end or
+# paid_until) is this many days away or closer (#1733's "2 week notice").
+EXPIRY_WARNING_DAYS = 14
+
 
 class Tenant(TenantMixin):
     # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
@@ -230,6 +234,32 @@ class Tenant(TenantMixin):
         if deadline is None:
             return None
         return (deadline - localdate()).days
+
+    @property
+    def is_over_user_limit(self):
+        """Whether the deck's cached active-student count exceeds its effective cap.
+
+        Advisory (banner/notification) check against the nightly-refreshed cached
+        count -- enforcement at the registration choke points recounts live.
+        Always False for unlimited (-1) decks.
+        """
+        if self.effective_max_active_users == -1:
+            return False
+        return self.active_user_count > self.effective_max_active_users
+
+    @property
+    def is_expiring_soon(self):
+        """Whether the governing deadline is within EXPIRY_WARNING_DAYS (or already
+        past, while still in the paid grace window) -- i.e. the status banner should
+        escalate from "info" to "warning".
+
+        False for suspended decks (they get the suspension banner instead) and for
+        unmanaged/comped decks (no deadline at all).
+        """
+        if self.is_suspended:
+            return False
+        days = self.days_until_expiry
+        return days is not None and days <= EXPIRY_WARNING_DAYS
 
     # END BILLING / LIFECYCLE STATUS ##################################
 

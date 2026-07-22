@@ -522,3 +522,83 @@ class EmailVerificationRequiredMixinTest(TestCase):
         request = make_request(stale_ts)
         response = self.view(request)
         self.assertEqual(response.status_code, 403)
+
+
+class DeckStatusBannerTest(ByteDeckTenantTestCase):
+    """Rendering tests for the deck status banner in base.html (epic #1729 PR 3;
+    closes the Trial Mode banner checkbox of #1730)."""
+
+    def setUp(self):
+        """Log in per-role users and clear the cached deck row (the cache backend
+        outlives each test's transaction)."""
+        from django.core.cache import cache
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck via save() so the cache invalidates."""
+        for name, value in fields.items():
+            setattr(self.tenant, name, value)
+        self.tenant.save()
+
+    def get_quests_page(self, user):
+        """Return the quest-list page (which extends base.html) as the given user."""
+        self.client.force_login(user)
+        response = self.client.get(reverse('quests:quests'))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_banner__trial_mode_shown_to_staff_with_subscribe_link(self):
+        """Staff on a trial deck see the Trial Mode banner with an absolute subscribe
+        link to the public host."""
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial Mode')
+        self.assertContains(response, '/pages/subscribe/')
+
+    def test_banner__not_shown_to_students_on_trial_deck(self):
+        """Students never see the trial banner (it's staff-facing nagware)."""
+        response = self.get_quests_page(self.student)
+        self.assertNotContains(response, 'deck-status-banner')
+
+    def test_banner__suspended_deck_warns_everyone(self):
+        """On a suspended deck, staff get the subscribe call-to-action and students
+        get the 'let your teacher know' variant."""
+        from datetime import date
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
+
+        response = self.get_quests_page(self.student)
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'let your teacher know')
+
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, '/pages/subscribe/')
+
+    def test_banner__over_limit_warns_staff(self):
+        """Staff see the over-limit warning when the cached count exceeds the cap."""
+        self.set_deck(active_user_count=99)
+
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Active-student limit exceeded')
+
+    def test_banner__expiring_soon_warns_staff(self):
+        """Staff see the expiring-soon warning inside the two-week window, for both
+        trial and subscribed decks."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=3))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial ending soon')
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=3))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Subscription expiring')
