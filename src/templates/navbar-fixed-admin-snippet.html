@@ -26,6 +26,8 @@
         {% endif %}
         <li role="separator" class="divider"></li>
         <li class="dropdown-header">ByteDeck</li>
+        {% if config %}{# config is None on the public schema, where decks:subscription 404s (NonPublicOnly) #}
         <li><a href="{% url 'decks:subscription' %}"><i class="fa fa-fw fa-credit-card"></i>&nbsp;Subscription</a></li>
+        {% endif %}
         <li><a title="Ask a question, report a bug, or request a feature!" href="https://github.com/bytedeck/bytedeck/discussions"><i class="fa fa-fw fa-comments-o"></i>&nbsp;ByteDeck Forum</a></li>
         <li><a href="https://github.com/bytedeck/bytedeck/blob/develop/CHANGELOG.md"><i class="fa fa-fw fa-history"></i>&nbsp;Changelog</a></li>

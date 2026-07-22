@@ -69,7 +69,10 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
             paid_until=original_paid_until, stripe_customer_id='', stripe_subscription_id='')
 
-        session = {'status': 'complete', 'customer': 'cus_9', 'subscription': {'id': 'sub_9'}}
+        session = {
+            'status': 'complete', 'client_reference_id': self.tenant.schema_name,
+            'customer': 'cus_9', 'subscription': {'id': 'sub_9', 'status': 'active'},
+        }
         with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session):
             self.assertTrue(reconcile_checkout_session(self.tenant, 'cs_9'))
 

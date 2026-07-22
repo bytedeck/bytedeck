@@ -125,10 +125,21 @@ def reconcile_checkout_session(deck, session_id):
     session = stripe.checkout.Session.retrieve(
         session_id, api_key=settings.STRIPE_SECRET_KEY, expand=['subscription'],
     )
+    # The session id arrives via the success-URL query string, so never trust it
+    # blindly: the session must be one THIS deck's checkout created (bound via
+    # client_reference_id/metadata), or a session id from some other deck's
+    # checkout could write foreign Stripe ids onto this tenant.
+    metadata = session.get('metadata') or {}
+    if deck.schema_name not in (session.get('client_reference_id'), metadata.get('schema_name')):
+        return False
     if session.get('status') != 'complete' or not session.get('subscription'):
         return False
 
+    # A complete session only means checkout finished -- the subscription can
+    # still be 'incomplete' (e.g. failed 3DS). Only active/trialing gets access.
     subscription = session['subscription']
+    if subscription.get('status') not in ('active', 'trialing'):
+        return False
     updates = {
         'stripe_customer_id': session.get('customer') or '',
         'stripe_subscription_id': subscription.get('id') or '',

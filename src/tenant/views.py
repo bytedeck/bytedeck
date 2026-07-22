@@ -421,6 +421,11 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             'trial_cap': TRIAL_MAX_ACTIVE_USERS,
             'grace_days': GRACE_PERIOD_DAYS,
             'stripe_configured': billing_configured(),
+            # inside its paid period with no Stripe link: the subscription is managed
+            # manually, and a checkout would double-bill (grace counts as renewable)
+            'manually_subscribed': bool(
+                deck.subscription_active and not deck.in_grace_period and not deck.stripe_customer_id
+            ),
             'public_subscribe_url': get_public_subscribe_url(),
         })
         return context
@@ -439,6 +444,17 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         deck = request.tenant
         if not billing_configured():
             messages.error(request, "Online billing isn't configured on this server.")
+            return redirect('decks:subscription')
+        # An unlinked deck that is still inside its PAID period has a manually
+        # managed subscription -- starting a Stripe checkout would double-bill it.
+        # (Grace-period decks are past paid_until, so renewing via checkout is
+        # exactly what they should do.)
+        if not deck.stripe_customer_id and deck.subscription_active and not deck.in_grace_period:
+            messages.error(
+                request,
+                "This deck's subscription is managed manually -- starting a new online "
+                "subscription would double-bill you. Contact ByteDeck to switch to online billing."
+            )
             return redirect('decks:subscription')
         try:
             if deck.stripe_customer_id:

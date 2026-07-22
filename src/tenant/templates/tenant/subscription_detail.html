@@ -62,6 +62,11 @@
 
 <h3>Upgrade or renew</h3>
 {% if stripe_configured %}
+  {% if manually_subscribed %}
+    <p>This deck's subscription is <strong>managed manually</strong> &mdash; starting a new online
+      subscription here would double-bill you. Contact ByteDeck to renew, upgrade, or switch this
+      deck to online billing.</p>
+  {% else %}
   <form method="post" action="{% url 'decks:subscription' %}">
     {% csrf_token %}
     <button type="submit" class="btn btn-primary">
@@ -76,6 +81,7 @@
       Opens Stripe's secure checkout to start a subscription for this deck.
     {% endif %}
   </p>
+  {% endif %}
 {% else %}
   <p>Online billing isn't configured on this server &mdash;
     <a href="{{ public_subscribe_url }}" class="btn btn-primary">

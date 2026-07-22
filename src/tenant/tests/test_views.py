@@ -703,12 +703,25 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, get_public_subscribe_url())
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__configured_shows_checkout_or_portal_button(self):
-        """With Stripe configured, an unlinked deck gets "Subscribe now" and a linked
-        deck gets "Manage subscription" (billing portal)."""
+    def test_page__configured_shows_checkout_portal_or_manual_note(self):
+        """With Stripe configured: an unlinked trial deck gets "Subscribe now", a
+        linked deck gets "Manage subscription" (billing portal), and an unlinked
+        deck still inside its paid period gets the managed-manually note instead
+        of a button (checkout would double-bill it)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=30), paid_until=None)
         self.assertContains(self.get_page(), 'Subscribe now')
-        self.set_deck(stripe_customer_id='cus_123')
+
+        self.set_deck(stripe_customer_id='cus_123', paid_until=localdate() + timedelta(days=100))
         self.assertContains(self.get_page(), 'Manage subscription')
+
+        self.set_deck(stripe_customer_id='')  # actively paid, unlinked: manual
+        response = self.get_page()
+        self.assertContains(response, 'managed manually')
+        self.assertNotContains(response, 'Subscribe now')
 
     def test_menu__admin_dropdown_links_subscription_page_for_staff(self):
         """The navbar admin menu contains the Subscription entry for staff."""
@@ -778,6 +791,30 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(mock_create.call_args.kwargs['customer'], 'cus_123')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__manually_subscribed_deck_refused_to_prevent_double_billing(self):
+        """An unlinked deck still inside its PAID period has a manually managed
+        subscription: checkout is refused (it would create a second, parallel
+        subscription), while a lapsed deck in its grace window may renew."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100))
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            response = self.client.post(reverse('decks:subscription'), follow=True)
+        mock_create.assert_not_called()
+        self.assertContains(response, 'double-bill')
+        # the page itself shows the manual-subscription note instead of the button
+        self.assertContains(self.client.get(reverse('decks:subscription')), 'managed manually')
+
+        # in grace (paid period over): renewal via checkout is allowed
+        self.set_deck(paid_until=localdate() - timedelta(days=5))
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   return_value=Mock(url='https://checkout.stripe.test/cs_g')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_g')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
     def test_post__stripe_error_redirects_back_with_message(self):
         """A Stripe API failure lands back on the page with a friendly error, not a 500."""
         import stripe as stripe_lib
@@ -794,6 +831,9 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Activating your subscription')
         self.assertContains(response, reverse('decks:subscription_status'))
+        # polling is capped so an abandoned checkout can't hammer Stripe forever
+        self.assertContains(response, 'MAX_ATTEMPTS')
+        self.assertContains(response, 'poll-timeout-message')
 
     def test_status__reports_current_subscription_state_without_session(self):
         """Without a session_id the endpoint just reports the deck's derived status."""
@@ -822,8 +862,9 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         period_end = datetime.now(tz=dt_timezone.utc) + timedelta(days=365)
         session = {
             'status': 'complete',
+            'client_reference_id': self.tenant.schema_name,
             'customer': 'cus_123',
-            'subscription': {'id': 'sub_123', 'current_period_end': int(period_end.timestamp())},
+            'subscription': {'id': 'sub_123', 'status': 'active', 'current_period_end': int(period_end.timestamp())},
         }
         with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session) as mock_retrieve:
             response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
@@ -842,12 +883,48 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.set_deck(trial_end_date=None, paid_until=None)
         with patch('tenant.billing.stripe.checkout.Session.retrieve',
-                   return_value={'status': 'open', 'subscription': None}):
+                   return_value={'status': 'open', 'client_reference_id': self.tenant.schema_name, 'subscription': None}):
             response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
         self.assertEqual(response.json(), {'active': False})
 
         with patch('tenant.billing.stripe.checkout.Session.retrieve',
                    side_effect=stripe_lib.StripeError('down')):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__foreign_deck_session_never_links(self):
+        """A completed session belonging to a DIFFERENT deck (the session id is
+        user-controlled query input) must not write its Stripe ids onto this tenant."""
+        self.set_deck(trial_end_date=None, paid_until=None)
+        session = {
+            'status': 'complete',
+            'client_reference_id': 'some_other_deck',
+            'metadata': {'schema_name': 'some_other_deck'},
+            'customer': 'cus_foreign',
+            'subscription': {'id': 'sub_foreign', 'status': 'active'},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_foreign')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')
+        self.assertEqual(self.tenant.stripe_subscription_id, '')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__incomplete_subscription_not_activated(self):
+        """A complete session whose subscription is still 'incomplete' (e.g. failed
+        3DS on the first payment) must not grant access."""
+        self.set_deck(trial_end_date=None, paid_until=None)
+        session = {
+            'status': 'complete',
+            'client_reference_id': self.tenant.schema_name,
+            'customer': 'cus_123',
+            'subscription': {'id': 'sub_123', 'status': 'incomplete'},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session):
             response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
         self.assertEqual(response.json(), {'active': False})
         self.tenant.refresh_from_db()
