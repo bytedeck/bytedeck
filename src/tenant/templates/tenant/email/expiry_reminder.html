@@ -8,7 +8,7 @@
 {% else %}
 <p>Your deck <strong>{{ deck.name }}</strong>'s subscription has expired and is in its grace period.
   When the grace period ends, the deck will revert to trial limits
-  (max {{ cap }} current student{{ cap|pluralize }}).</p>
+  (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).</p>
 {% endif %}
 
 <p><a href="{{ subscribe_url }}">Subscribe or renew here</a> to keep full access.

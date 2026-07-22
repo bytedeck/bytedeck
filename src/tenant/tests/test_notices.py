@@ -283,3 +283,21 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('sent 1 notice(s)', summary)
         self.assertEqual(len(mail.outbox), 0)
         self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__grace_period_email_states_the_trial_cap(self):
+        """The grace-period expiry email tells the owner what the deck will revert to:
+        the TRIAL cap (5), not the deck's current (still-paid) cap -- during grace the
+        effective cap is the paid one, so the template can't derive this from `cap`."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
+            max_active_users=30, active_user_count=0,  # paid cap 30; no limit notice due
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('expiry', summary)
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
+        self.assertIn('grace period', body)
+        self.assertIn('max 5 current students', body)

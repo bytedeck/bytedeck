@@ -29,7 +29,7 @@ from django.utils.timezone import localdate
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import DeckNotice
+from tenant.models import TRIAL_MAX_ACTIVE_USERS, DeckNotice
 from tenant.utils import get_public_subscribe_url
 
 
@@ -137,6 +137,9 @@ def _deliver(deck, kind):
         'config': config,
         'days': deck.days_until_expiry,
         'cap': deck.effective_max_active_users,
+        # what a lapsed deck reverts to -- during the paid grace period the effective
+        # cap is still the paid cap, so the grace email can't derive this from `cap`
+        'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
         'subscribe_url': get_public_subscribe_url(),
         'archive_help_url': deck.get_root_url() + reverse('courses:archive_students_help'),
