@@ -175,6 +175,19 @@ class RedoRequestButtonRenderTests(RedoRequestTestMixin, ViewTestUtilsMixin, Byt
         self.client.force_login(self.test_student)
         self.assertNotIn('Request Redo', self._past_preview_html())
 
+    def test_past_preview__hides_button_when_no_open_semester(self):
+        """The Request Redo button is hidden when the active semester is closed."""
+        self.current_semester.closed = True
+        self.current_semester.save()
+        self.client.force_login(self.test_student)
+        self.assertNotIn('Request Redo', self._past_preview_html())
+
+    def test_past_preview__hides_button_when_quest_in_progress_this_semester(self):
+        """The Request Redo button is hidden when the quest is already on the go this semester."""
+        QuestSubmission.objects.create_submission(self.test_student, self.quest)
+        self.client.force_login(self.test_student)
+        self.assertNotIn('Request Redo', self._past_preview_html())
+
 
 class RedoRequestRespondViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
@@ -243,10 +256,18 @@ class RedoRequestRespondViewTests(RedoRequestTestMixin, ViewTestUtilsMixin, Byte
         self.assertFalse(
             QuestSubmission.objects.all_not_completed(user=self.test_student).filter(quest=self.quest).exists())
 
-    def test_redo_request_respond__already_answered_is_404(self):
-        """Responding to an already-answered request is 404 (it's no longer pending)."""
+    def test_redo_request_deny__already_answered_is_404(self):
+        """Denying an already-answered request is 404 (it's no longer pending)."""
         self.redo_request.is_approved = True
         self.redo_request.save()
         self.client.force_login(self.test_teacher)
         self.assertEqual(
             self.client.post(reverse('quests:redo_request_deny', args=[self.redo_request.id])).status_code, 404)
+
+    def test_redo_request_approve__already_answered_is_404(self):
+        """Approving an already-answered request is 404 (it's no longer pending)."""
+        self.redo_request.is_denied = True
+        self.redo_request.save()
+        self.client.force_login(self.test_teacher)
+        self.assertEqual(
+            self.client.post(reverse('quests:redo_request_approve', args=[self.redo_request.id])).status_code, 404)

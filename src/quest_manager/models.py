@@ -1216,9 +1216,11 @@ class RedoRequestQuerySet(models.QuerySet):
 
 class RedoRequestManager(models.Manager):
     def get_queryset(self):
+        """Return a RedoRequestQuerySet so the custom queryset methods are available."""
         return RedoRequestQuerySet(self.model, using=self._db)
 
     def pending(self):
+        """Requests that a teacher has neither approved nor denied yet."""
         return self.get_queryset().pending()
 
     def has_pending(self, user, quest):
@@ -1249,10 +1251,22 @@ class RedoRequest(models.Model):
 
     class Meta:
         ordering = ['-datetime_created']
+        constraints = [
+            # A student can only have one *unanswered* request per quest at a time; this closes
+            # the race where two concurrent POSTs both pass the has_pending() check and insert
+            # duplicate pending rows. Answered (approved/denied) requests are unconstrained, so a
+            # student can request again after a previous request is resolved.
+            models.UniqueConstraint(
+                fields=['user', 'quest'],
+                condition=Q(is_approved=False, is_denied=False),
+                name='unique_pending_redo_request_per_user_quest',
+            ),
+        ]
 
     def __str__(self):
         return f"Redo request from {self.user} for {self.quest}"
 
     @property
     def is_pending(self):
+        """True while the request is unanswered (neither approved nor denied)."""
         return not self.is_approved and not self.is_denied

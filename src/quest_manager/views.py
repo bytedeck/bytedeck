@@ -957,10 +957,8 @@ def ajax_submission_info(request, submission_id=None):
         # the student already has a pending request or the quest is already on the go / no open semester.
         can_request_redo = False
         if past:
-            active_semester = SiteConfig.get().active_semester
             can_request_redo = (
-                active_semester is not None
-                and not active_semester.closed
+                not SiteConfig.get().has_no_open_semester()
                 and not RedoRequest.objects.has_pending(request.user, sub.quest)
                 and not QuestSubmission.objects.all_for_user_quest(
                     request.user, sub.quest, active_semester_only=True).exists()
@@ -2162,8 +2160,8 @@ def redo_request_create(request, submission_id):
         QuestSubmission.objects.all_completed_past(request.user), pk=submission_id)
     quest = submission.quest
 
-    active_semester = SiteConfig.get().active_semester
-    if active_semester is None or active_semester.closed:
+    config = SiteConfig.get()
+    if config.has_no_open_semester():
         messages.warning(
             request,
             "There is no open semester right now, so you can't request a quest redo. "
@@ -2183,7 +2181,9 @@ def redo_request_create(request, submission_id):
         )
         return redirect("quests:past")
 
-    RedoRequest.objects.create(user=request.user, quest=quest, semester=active_semester)
+    redo_request = RedoRequest(user=request.user, quest=quest, semester=config.active_semester)
+    redo_request.full_clean()
+    redo_request.save()
 
     teachers = list(request.user.profile.current_teachers())
     if not teachers:  # no course/teacher yet: fall back to all staff so the request isn't lost
@@ -2210,7 +2210,7 @@ def redo_request_create(request, submission_id):
 @staff_member_required
 def redo_requests_list(request):
     """Staff page listing pending student redo requests, each with approve/deny actions."""
-    redo_requests = RedoRequest.objects.pending().select_related("user", "quest")
+    redo_requests = RedoRequest.objects.pending().select_related("user", "user__profile", "quest")
     return render(request, "quest_manager/redo_requests.html", {"redo_requests": redo_requests})
 
 
@@ -2228,6 +2228,7 @@ def redo_request_approve(request, pk):
     redo_request.is_approved = True
     redo_request.responded_by = request.user
     redo_request.datetime_responded = timezone.now()
+    redo_request.full_clean()
     redo_request.save()
 
     notify.send(
@@ -2259,6 +2260,7 @@ def redo_request_deny(request, pk):
     redo_request.is_denied = True
     redo_request.responded_by = request.user
     redo_request.datetime_responded = timezone.now()
+    redo_request.full_clean()
     redo_request.save()
 
     notify.send(
