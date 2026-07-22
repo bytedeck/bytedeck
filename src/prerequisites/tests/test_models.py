@@ -14,7 +14,12 @@ from psycopg2.errors import UndefinedTable
 User = get_user_model()
 
 
-class HasPrereqsMixinTest(ByteDeckTenantTestCase):
+class PrereqMixinTestData:
+    """Shared fixtures for the prereq mixin tests: a parent quest with an OR prereq and a plain prereq.
+
+    A plain mixin (not a TestCase) so the test runner doesn't collect it as an empty test class.
+    """
+
     @classmethod
     def setUpTestData(cls):
         """Create a parent quest with an OR prereq and a plain prereq."""
@@ -35,6 +40,8 @@ class HasPrereqsMixinTest(ByteDeckTenantTestCase):
             prereq_object=cls.quest_prereq2,
         )
 
+
+class HasPrereqsMixinTest(PrereqMixinTestData, ByteDeckTenantTestCase):
     def test_prereqs__returns_all_prereqs(self):
         """Returns the 2 prereqs created in setup"""
         prereqs = self.quest_parent.prereqs()
@@ -110,26 +117,7 @@ class HasPrereqsMixinTest(ByteDeckTenantTestCase):
         self.assertTrue(self.quest_parent.has_inverted_prereq())
 
 
-class IsAPrereqMixinTest(ByteDeckTenantTestCase):
-    @classmethod
-    def setUpTestData(cls):
-        """Create a parent quest with an OR prereq and a plain prereq."""
-        cls.quest_parent = baker.make('quest_manager.Quest', name="parent")
-        cls.quest_prereq = baker.make('quest_manager.Quest', name="prereq")
-        cls.quest_or_prereq = baker.make('quest_manager.Quest', name="or_prereq")
-
-        cls.prereq_with_or = Prereq.objects.create(
-            parent_object=cls.quest_parent,
-            prereq_object=cls.quest_prereq,
-            or_prereq_object=cls.quest_or_prereq
-        )
-
-        cls.quest_prereq2 = baker.make('quest_manager.Quest', name="prereq2")
-
-        cls.prereq_without_or = Prereq.objects.create(
-            parent_object=cls.quest_parent,
-            prereq_object=cls.quest_prereq2,
-        )
+class IsAPrereqMixinTest(PrereqMixinTestData, ByteDeckTenantTestCase):
 
     def test_is_used_prereq__true_when_used(self):
         """is_used_prereq is True for an object used as a prereq, False otherwise."""

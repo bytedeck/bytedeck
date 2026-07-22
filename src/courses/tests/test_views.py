@@ -154,7 +154,12 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn(scape.name, str(messages[0]))
 
 
-class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CourseViewTestData:
+    """Shared fixtures for the Course / CourseStudent view tests: a teacher, a student, the active
+    semester plus a block/course/grade, and valid registration form data.
+
+    A plain mixin (not a TestCase) so the test runner doesn't collect it as an empty test class.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -179,6 +184,9 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
+
+
+class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -388,31 +396,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, dt_well_ptag)
 
 
-class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-
-    @classmethod
-    def setUpTestData(cls):
-        """Create a teacher, student, block, course and grade plus valid registration form data."""
-        # need a teacher and a student so tests can log in as each with force_login()
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
-        cls.test_student1 = User.objects.create_user('test_student')
-
-        cls.sem = SiteConfig.get().active_semester
-        cls.block = baker.make('courses.block')
-        cls.course = baker.make('courses.course')
-        cls.grade = baker.make('courses.grade')
-
-        cls.valid_form_data = {
-            'semester': cls.sem.pk,
-            'block': cls.block.pk,
-            'course': cls.course.pk,
-        }
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
+class CourseStudentViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_CourseStudentUpdate_view__staff_can_update(self):
         """ Staff can update a student's course """
