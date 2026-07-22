@@ -42,6 +42,8 @@ urlpatterns += [
     # quest_manager
     re_path(r'^library/', include('library.urls', namespace='library')),
     re_path(r'^quests/', include('quest_manager.urls', namespace='quests')),
+    # questions (additional per-quest submission fields)
+    re_path(r'^questions/', include('questions.urls', namespace='questions')),
     # profile_manager
     re_path(r'^profiles/', include('profile_manager.urls', namespace='profiles')),
     re_path(r'^announcements/', include('announcements.urls', namespace='announcements')),

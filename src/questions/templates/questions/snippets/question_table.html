@@ -1,0 +1,72 @@
+{% load comment_tags %}
+
+{% if questions %}
+<table class="table table-striped">
+  <thead>
+    <tr>
+      <th class="col-sm-1 col-xs-2 col-icon">Type</th>
+      <th class="col-sm-2 col-xs-4">Instructions</th>
+      <th class="col-sm-1 col-xs-2 col-icon">Required</th>
+      <th class="col-sm-2 col-xs-4">Solution</th>
+      <th class="col-sm-1 col-xs-2 col-icon">Marker Notes</th>
+      <th class="col-sm-1 col-xs-2 col-icon">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for question in questions %}
+    <tr>
+      <td>{{ question.get_type_display }}</td>
+      <td>
+          {# instructions/marker notes are summernote HTML, so strip tags before tooltip/cell text #}
+          <i data-toggle="tooltip"
+             data-trigger="hover"
+             data-placement="auto"
+             title="{{ question.instructions|striptags|truncatechars:150 }}">{{ question.instructions|striptags|truncatechars:20 }}</i>
+      </td>
+      <td>
+        <i class="fa fa-fw {{ question.required|yesno:"fa-check,fa-close" }}"></i>
+      </td>
+      {% if question.type == 'file_upload' %}
+          <td>
+          {% if question.solution_file %}
+              <a href='{{ question.solution_file.url }}'>{{ question.solution_file|filename|default:"Unnamed File"|truncatechars:20 }}</a>
+          {% else %}
+              -
+          {% endif %}
+          </td>
+      {% else %}
+          <td>
+            <i data-toggle="tooltip"
+              data-trigger="hover"
+              data-placement="auto"
+              title="{{ question.solution_text|truncatechars:150 }}">{{ question.solution_text|truncatechars:20|default:"-" }}</i>
+          </td>
+      {% endif %}
+      <td>
+        {% if question.marker_notes %}
+        <a data-toggle="popover"
+           data-trigger="hover"
+           data-placement="auto"
+           title="Marker Notes"
+           data-content="{{ question.marker_notes|striptags|truncatechars:300 }}">
+          <i class="fa fa-fw fa-lg fa-info-circle"></i>
+        </a>
+        {% else %}
+          -
+        {% endif %}
+      </td>
+      <td>
+        <a class="btn btn-warning" href="{{ question.get_absolute_url }}" title="Edit">
+          <i class="fa fa-edit"></i>
+        </a>
+        <a class="btn btn-danger" href="{% url 'questions:delete' quest.id question.id %}" title="Delete">
+          <i class="fa fa-trash-o"></i>
+        </a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No questions to display.</p>
+{% endif %}
