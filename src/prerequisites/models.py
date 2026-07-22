@@ -628,6 +628,7 @@ class PrereqAllConditionsMet(models.Model):
             self.set_ids(ids)
 
     def get_ids(self):
+        """Parse the stored ``ids`` text into a list of ids, or an empty list if blank."""
         if self.ids:
             return json.loads(self.ids)
         # Empty/blank ``ids`` -> an empty list (matches the field default '[]' and the

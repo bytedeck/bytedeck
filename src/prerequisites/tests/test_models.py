@@ -492,6 +492,7 @@ class PrereqStrAndConditionMetTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
+        """Create a parent quest plus a main and an alternate (OR) prereq quest, and a user."""
         cls.parent = baker.make('quest_manager.Quest', name="parent")
         cls.main = baker.make('quest_manager.Quest', name="main")
         cls.alt = baker.make('quest_manager.Quest', name="alt")
@@ -594,6 +595,7 @@ class PrereqAllConditionsMetIdsTest(ByteDeckTenantTestCase):
     """Covers PrereqAllConditionsMet.get_ids / set_ids, including the empty-ids branch (a former bug)."""
 
     def setUp(self):
+        """Create a PrereqAllConditionsMet cache row for a fresh user and the Quest model."""
         self.cache = PrereqAllConditionsMet.objects.create(
             user=baker.make(User),
             model_name='quest_manager.Quest',
