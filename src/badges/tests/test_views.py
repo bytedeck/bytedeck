@@ -278,6 +278,9 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(self.test_student1, response.context['qualifying_students'])
         self.assertContains(response, 'Grant to qualifying students')
+        # heading and the XP that granting will award are both shown (issue #2061)
+        self.assertContains(response, 'Students who qualify for this')
+        self.assertContains(response, f'{self.test_badge.xp} XP')
 
     @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
     def test_badge_grant_qualifying__POST_queues_task_and_redirects(self, task):
