@@ -33,10 +33,21 @@ class GetCurrentDeckTest(ByteDeckTenantTestCase):
         with patch('library.utils.get_library_schema_name', return_value=self.tenant.schema_name):
             self.assertIsNone(get_current_deck())
 
+    def test_get_current_deck__none_when_schema_has_no_tenant_row(self):
+        """A schema with no matching Tenant row (e.g. an orphaned schema left by a
+        deleted deck) yields None, and nothing gets cached for it."""
+        with schema_context('orphanschema'):
+            self.assertIsNone(get_current_deck())
+        self.assertIsNone(cache.get(deck_cache_key('orphanschema')))
+
     def test_get_current_deck__caches_and_invalidates_on_save(self):
         """The row is served from cache until a Tenant save invalidates it."""
         get_current_deck()  # prime the cache
         self.assertIsNotNone(cache.get(deck_cache_key(self.tenant.schema_name)))
+
+        # a warm cache serves the row without touching the database
+        with self.assertNumQueries(0):
+            self.assertEqual(get_current_deck().schema_name, self.tenant.schema_name)
 
         # a change persisted via save() (signal fires) becomes visible immediately
         self.tenant.max_active_users = 42
