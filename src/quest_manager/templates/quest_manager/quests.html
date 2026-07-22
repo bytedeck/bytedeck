@@ -109,11 +109,11 @@ back to its original look.
           <p>There are currently no new quest available to you!</p>
         {% endif %}
       {% endif %}
-      {% include 'quest_manager/tab_quests_available.html' %}
 
-      {% comment %} Repeatable quests you've completed that are waiting out their cooldown (#57) {% endcomment %}
+      {% comment %} Repeatable quests you've completed that are waiting out their cooldown (#57).
+         Shown above the available-quests list so it's the first thing a student sees. {% endcomment %}
       {% if cooldown_quests %}
-        <div class="panel panel-default" style="margin-top: 1em;">
+        <div class="panel panel-default" style="margin-bottom: 1em;">
           <div class="panel-heading">
             <i class="fa fa-fw fa-history"></i> Available again soon
             <small class="text-muted">&mdash; repeatable quests you've done, back after a cooldown</small>
@@ -132,6 +132,8 @@ back to its original look.
           </ul>
         </div>
       {% endif %}
+
+      {% include 'quest_manager/tab_quests_available.html' %}
     </div>
     <div role="tabpanel"
          class="tab-pane fade {% if view_type == VIEW_TYPES.IN_PROGRESS %}in active{% endif %}" id="inprogress">

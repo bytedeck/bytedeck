@@ -108,8 +108,16 @@ class GetInCooldownManagerTests(CooldownTestMixin, ByteDeckTenantTestCase):
         self.assertIn(self.quest, Quest.objects.get_available(self.test_student))
 
     def test_get_in_cooldown__excludes_in_progress_quest(self):
-        """A quest with an in-progress (uncompleted) attempt is not shown as in cooldown."""
+        """A quest with an in-progress (uncompleted / just-started) attempt is not shown as in cooldown."""
         QuestSubmission.objects.create_submission(self.test_student, self.quest)  # started, not completed
+        self.assertNotIn(self.quest, Quest.objects.get_in_cooldown(self.test_student))
+
+    def test_get_in_cooldown__excludes_quest_with_returned_attempt(self):
+        """A quest whose latest attempt was returned (still in progress) is not shown as in cooldown."""
+        self._complete()  # attempt 1 completed → would otherwise be in cooldown
+        returned = QuestSubmission.objects.create_submission(self.test_student, self.quest)  # attempt 2
+        returned.mark_completed()
+        returned.mark_returned()  # teacher returns it → is_completed=False (an active, in-progress submission)
         self.assertNotIn(self.quest, Quest.objects.get_in_cooldown(self.test_student))
 
     def test_get_in_cooldown__excludes_non_repeatable_quest(self):
