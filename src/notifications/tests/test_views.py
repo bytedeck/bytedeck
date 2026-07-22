@@ -115,6 +115,10 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+        # the notification is actually marked read, not just a 200 response
+        notification.refresh_from_db()
+        self.assertFalse(notification.unread)
+
     def test_ajax__returns_200_for_logged_in_student(self):
         """A logged-in student's ajax POST to the notifications endpoint returns 200."""
         # log in student1
@@ -180,3 +184,60 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(Notification.objects.all_unread(self.test_student1).count(), 0)
         for note in Notification.objects.filter(recipient=self.test_student1):
             self.assertIsNotNone(note.time_read)
+
+    def test_list__non_integer_page_returns_first_page(self):
+        """A non-integer ?page= falls back to the first page (PageNotAnInteger)."""
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('notifications:list'), {'page': 'notanumber'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['notifications'].number, 1)
+
+    def test_list__out_of_range_page_returns_last_page(self):
+        """An out-of-range ?page= falls back to the last page (EmptyPage)."""
+        # The list paginates at 15/page; send >15 notifications with a real target
+        # (so the list template can render them) to produce a distinguishable 2nd page.
+        target = baker.make('quest_manager.Quest')
+        for _ in range(16):
+            notify.send(
+                self.test_teacher, target=target, recipient=self.test_student1,
+                affected_users=[self.test_student1], verb="did",
+            )
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('notifications:list'), {'page': 9999})
+
+        self.assertEqual(response.status_code, 200)
+        page = response.context['notifications']
+        self.assertGreater(page.paginator.num_pages, 1)
+        self.assertEqual(page.number, page.paginator.num_pages)
+
+    def test_read__marks_own_notification_read_and_redirects_to_list(self):
+        """Reading one's own notification marks it read (unread=False, time_read set) and
+        redirects to the list when no ?next is given."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(Notification, recipient=self.test_student1, unread=True, time_read=None)
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]))
+
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
+        note.refresh_from_db()
+        self.assertFalse(note.unread)
+        self.assertIsNotNone(note.time_read)
+
+    def test_read__redirects_to_next_when_provided(self):
+        """Reading one's own notification with ?next= redirects to that url."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(Notification, recipient=self.test_student1, unread=True)
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': '/quests/available/'})
+
+        self.assertRedirects(response, '/quests/available/', fetch_redirect_response=False)
+
+    def test_read__other_users_notification_raises_404(self):
+        """Reading a notification that belongs to another user is a 404 (not readable)."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(Notification, recipient=self.test_student2, unread=True)
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]))
+
+        self.assertEqual(response.status_code, 404)
