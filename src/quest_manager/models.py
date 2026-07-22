@@ -1206,3 +1206,53 @@ class QuestSubmission(models.Model):
 
         minutes = (self.first_time_completed - self.timestamp).total_seconds() / 60
         return minutes
+
+
+class RedoRequestQuerySet(models.QuerySet):
+    def pending(self):
+        """Requests that a teacher has neither approved nor denied yet."""
+        return self.filter(is_approved=False, is_denied=False)
+
+
+class RedoRequestManager(models.Manager):
+    def get_queryset(self):
+        return RedoRequestQuerySet(self.model, using=self._db)
+
+    def pending(self):
+        return self.get_queryset().pending()
+
+    def has_pending(self, user, quest):
+        """Whether this student already has an unanswered redo request for this quest."""
+        return self.get_queryset().pending().filter(user=user, quest=quest).exists()
+
+
+class RedoRequest(models.Model):
+    """A student's request to redo a quest they completed in a past semester (issue #56).
+
+    Normally a quest a student has completed is gone for good (the availability engine
+    excludes it forever unless it is a `repeat_per_semester` quest).  This lets a student
+    ask their teacher to let them redo such a quest.  When a teacher approves the request,
+    a fresh in-progress submission is created for the student in the current semester, which
+    they then complete and submit through the usual flow.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='redo_requests')
+    quest = models.ForeignKey(Quest, on_delete=models.CASCADE)
+    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True, blank=True)
+    is_approved = models.BooleanField(default=False)
+    is_denied = models.BooleanField(default=False)
+    datetime_created = models.DateTimeField(auto_now_add=True)
+    datetime_responded = models.DateTimeField(null=True, blank=True)
+    responded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='+')
+
+    objects = RedoRequestManager()
+
+    class Meta:
+        ordering = ['-datetime_created']
+
+    def __str__(self):
+        return f"Redo request from {self.user} for {self.quest}"
+
+    @property
+    def is_pending(self):
+        return not self.is_approved and not self.is_denied

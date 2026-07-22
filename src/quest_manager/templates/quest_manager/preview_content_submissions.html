@@ -31,6 +31,15 @@
         <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
       {% endif %}
     {% else %}
+      {% if can_request_redo %}
+        <form class="d-inline" style="display:inline-block" method="post"
+              action="{% url 'quests:redo_request' s.id %}">{% csrf_token %}
+          <button type="submit" class="btn btn-default"
+                  title="Request redo: ask your teacher to let you do this quest again this semester.">
+            <i class="fa fa-fw fa-repeat"></i><span class="visible-lg-inline-block icon-text">Request Redo</span>
+          </button>
+        </form>
+      {% endif %}
       <a title="View Details: view the content of this quest or add to the submission."
          class="btn btn-info" href="{% url 'quests:submission' s.id %}" role="button">
           <i class="fa fa-fw fa-info-circle"></i><span class="visible-lg-inline-block icon-text">View Details</span>

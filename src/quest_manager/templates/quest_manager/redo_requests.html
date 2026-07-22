@@ -1,0 +1,50 @@
+{% extends "quest_manager/base.html" %}
+
+{% block heading_inner %}Redo Requests{% endblock %}
+
+{% block content %}
+  <p class="text-muted">
+    Students can request to redo a quest they completed in a past semester. Approving a request
+    lets that student do the quest again this semester (it appears in their In Progress tab).
+  </p>
+
+  {% if redo_requests %}
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          <th>Student</th>
+          <th>Quest</th>
+          <th>Requested</th>
+          <th class="text-right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for redo in redo_requests %}
+          <tr>
+            <td><a href="{% url 'profiles:profile_detail' redo.user.profile.id %}">{{ redo.user.profile }}</a></td>
+            <td><a href="{% url 'quests:quest_detail' redo.quest.id %}">{{ redo.quest.name }}</a></td>
+            <td><small>{{ redo.datetime_created }}</small></td>
+            <td class="text-right">
+              <form style="display:inline-block" method="post"
+                    action="{% url 'quests:redo_request_approve' redo.id %}">{% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-success" title="Approve this redo request">
+                  <i class="fa fa-fw fa-check"></i> Approve
+                </button>
+              </form>
+              <form style="display:inline-block" method="post"
+                    action="{% url 'quests:redo_request_deny' redo.id %}">{% csrf_token %}
+                <button type="submit" class="btn btn-sm btn-default" title="Decline this redo request">
+                  <i class="fa fa-fw fa-times"></i> Decline
+                </button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>There are no pending redo requests.</p>
+  {% endif %}
+{% endblock %}
+
+{% block js %}{% endblock %}

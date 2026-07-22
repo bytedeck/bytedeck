@@ -46,7 +46,7 @@ from .forms import (
     TAQuestForm,
     CommonDataForm,
 )
-from .models import Quest, QuestSubmission, Category, CommonData
+from .models import Quest, QuestSubmission, Category, CommonData, RedoRequest
 from djcytoscape.models import CytoScape
 
 User = get_user_model()
@@ -953,10 +953,24 @@ def ajax_submission_info(request, submission_id=None):
 
         sub = get_object_or_404(qs, pk=submission_id)
 
+        # For a past-semester completion, offer a "Request redo" action (issue #56) unless
+        # the student already has a pending request or the quest is already on the go / no open semester.
+        can_request_redo = False
+        if past:
+            active_semester = SiteConfig.get().active_semester
+            can_request_redo = (
+                active_semester is not None
+                and not active_semester.closed
+                and not RedoRequest.objects.has_pending(request.user, sub.quest)
+                and not QuestSubmission.objects.all_for_user_quest(
+                    request.user, sub.quest, active_semester_only=True).exists()
+            )
+
         context = {
             "s": sub,
             "completed": completed,
             "past": past,
+            "can_request_redo": can_request_redo,
         }
         template = "quest_manager/preview_content_submissions.html"
         quest_info_html = render_to_string(template, context, request=request)
@@ -2124,3 +2138,140 @@ def unflag(request, submission_id):
     )
 
     return redirect("quests:approvals")
+
+
+#######################################
+#
+#  REDO REQUEST VIEWS (issue #56)
+#
+# #################################
+
+@non_public_only_view
+@login_required
+def redo_request_create(request, submission_id):
+    """A student asks to redo a quest they completed in a past semester.
+
+    Creates a pending RedoRequest and notifies the student's teacher(s).  The actual
+    redo (a fresh submission) is only created once a teacher approves the request.
+    """
+    if request.method != "POST":
+        raise Http404
+
+    # Must be one of the requesting student's own past-semester completions.
+    submission = get_object_or_404(
+        QuestSubmission.objects.all_completed_past(request.user), pk=submission_id)
+    quest = submission.quest
+
+    active_semester = SiteConfig.get().active_semester
+    if active_semester is None or active_semester.closed:
+        messages.warning(
+            request,
+            "There is no open semester right now, so you can't request a quest redo. "
+            "Ask your teacher to open one.",
+        )
+        return redirect("quests:past")
+
+    # Don't allow a second pending request, or a request for a quest already on the go this semester.
+    if RedoRequest.objects.has_pending(request.user, quest):
+        messages.info(request, f"You already have a pending redo request for <strong>{quest.name}</strong>.")
+        return redirect("quests:past")
+
+    if QuestSubmission.objects.all_for_user_quest(request.user, quest, active_semester_only=True).exists():
+        messages.info(
+            request,
+            f"You already have <strong>{quest.name}</strong> this semester, so there's nothing to redo.",
+        )
+        return redirect("quests:past")
+
+    RedoRequest.objects.create(user=request.user, quest=quest, semester=active_semester)
+
+    teachers = list(request.user.profile.current_teachers())
+    if not teachers:  # no course/teacher yet: fall back to all staff so the request isn't lost
+        teachers = list(get_user_model().objects.filter(is_staff=True, is_active=True))
+
+    notify.send(
+        request.user,
+        target=quest,
+        recipient=teachers[0] if teachers else request.user,
+        affected_users=teachers,
+        verb="has requested to redo",
+        icon="<i class='fa fa-lg fa-fw fa-repeat text-info'></i>",
+    )
+
+    messages.success(
+        request,
+        f"Your request to redo <strong>{quest.name}</strong> has been sent to your teacher for review.",
+    )
+    return redirect("quests:past")
+
+
+@non_public_only_view
+@staff_member_required
+def redo_requests_list(request):
+    """Staff page listing pending student redo requests, each with approve/deny actions."""
+    redo_requests = RedoRequest.objects.pending().select_related("user", "quest")
+    return render(request, "quest_manager/redo_requests.html", {"redo_requests": redo_requests})
+
+
+@non_public_only_view
+@staff_member_required
+def redo_request_approve(request, pk):
+    """Teacher approves a redo request: create a fresh in-progress submission for the student."""
+    if request.method != "POST":
+        raise Http404
+
+    redo_request = get_object_or_404(RedoRequest.objects.pending(), pk=pk)
+
+    QuestSubmission.objects.create_submission(redo_request.user, redo_request.quest)
+
+    redo_request.is_approved = True
+    redo_request.responded_by = request.user
+    redo_request.datetime_responded = timezone.now()
+    redo_request.save()
+
+    notify.send(
+        request.user,
+        target=redo_request.quest,
+        recipient=redo_request.user,
+        affected_users=[redo_request.user],
+        verb="approved your request to redo",
+        icon="<i class='fa fa-lg fa-fw fa-repeat text-success'></i>",
+    )
+
+    messages.success(
+        request,
+        f"Approved. <strong>{redo_request.user}</strong> can now redo "
+        f"<strong>{redo_request.quest.name}</strong> from their In Progress tab.",
+    )
+    return redirect("quests:redo_requests")
+
+
+@non_public_only_view
+@staff_member_required
+def redo_request_deny(request, pk):
+    """Teacher denies a redo request."""
+    if request.method != "POST":
+        raise Http404
+
+    redo_request = get_object_or_404(RedoRequest.objects.pending(), pk=pk)
+
+    redo_request.is_denied = True
+    redo_request.responded_by = request.user
+    redo_request.datetime_responded = timezone.now()
+    redo_request.save()
+
+    notify.send(
+        request.user,
+        target=redo_request.quest,
+        recipient=redo_request.user,
+        affected_users=[redo_request.user],
+        verb="declined your request to redo",
+        icon="<i class='fa fa-lg fa-fw fa-repeat text-muted'></i>",
+    )
+
+    messages.success(
+        request,
+        f"Declined the redo request for <strong>{redo_request.quest.name}</strong> "
+        f"from <strong>{redo_request.user}</strong>.",
+    )
+    return redirect("quests:redo_requests")

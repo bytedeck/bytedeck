@@ -91,6 +91,12 @@ urlpatterns = [
     re_path(r'^submission/(?P<submission_id>[0-9]+)/flag/$', views.flag, name='flag'),
     re_path(r'^submission/(?P<submission_id>[0-9]+)/unflag/$', views.unflag, name='unflag'),
 
+    # Redo requests (issue #56)
+    path('submission/<int:submission_id>/redo-request/', views.redo_request_create, name='redo_request'),
+    path('redo-requests/', views.redo_requests_list, name='redo_requests'),
+    path('redo-requests/<int:pk>/approve/', views.redo_request_approve, name='redo_request_approve'),
+    path('redo-requests/<int:pk>/deny/', views.redo_request_deny, name='redo_request_deny'),
+
     # Campaigns / Categories
     path('campaigns/', views.CategoryList.as_view(), name='categories'),
     path('campaigns/available/', views.CategoryList.as_view(), name='categories_available'),
