@@ -390,6 +390,15 @@ class SiteConfig(models.Model):
 
         return self.allow_staff_export and user.is_staff
 
+    def has_no_open_semester(self):
+        """Whether there is no semester open for students to join a course into (issue #2060).
+
+        Closing a semester (``Semester.complete_active_semester``) sets ``closed=True`` but leaves
+        it as the active semester, so "no open semester" means the active semester is missing or
+        flagged closed. Used to block student registration and to warn staff.
+        """
+        return self.active_semester is None or self.active_semester.closed
+
     @classmethod
     def cache_key(cls):
         return f'{connection.schema_name}-siteconfig'

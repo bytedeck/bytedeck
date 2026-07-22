@@ -533,6 +533,69 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('courses:create'))
         self.assertNotEqual(response.status_code, 403)
 
+    def _close_active_semester(self):
+        """Close the deck's active semester (leaving it as the active semester), reproducing the
+        'no semester is open' state from issue #2060. Saving fires the SiteConfig cache invalidation.
+        """
+        active = SiteConfig.get().active_semester
+        active.closed = True
+        active.save()
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__get(self):
+        """When the active semester is closed, the join page shows a 'no semesters open' message
+        instead of the registration form (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertNotContains(response, 'id="coursestudentform"')
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__post(self):
+        """A student can't register when the active semester is closed: POSTing valid data creates
+        no CourseStudent and shows the 'no semesters open' message (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    def test_no_open_semester__staff_gets_dismissable_message_on_home(self):
+        """When the deck has no open semester, staff landing on home get a dismissable message
+        (linking to the semesters page) so they know students can't join a course (issue #2060)."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('home'), follow=True)
+
+        self.assertContains(response, 'Create and activate a semester')
+
+    def test_no_open_semester__no_message_on_home_when_semester_open(self):
+        """No warning message on home when a semester is open (the default state)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('home'), follow=True)
+
+        self.assertNotContains(response, 'Create and activate a semester')
+
+    def test_no_open_semester__student_join_button_replaced_by_message(self):
+        """A student with no course sees a 'no semester open' note instead of the Join a Course
+        button when the deck has no open semester (issue #2060)."""
+        student = User.objects.create_user('no_course_student')  # no CourseStudent registration
+        self._close_active_semester()
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, 'Join a Course')
+
     def test_CourseStudentCreate__simple_registration_hidden_fields(self):
         """
         If simplified_course_registration is enabled in siteconfig, fields in student registration form with only one viable option should be

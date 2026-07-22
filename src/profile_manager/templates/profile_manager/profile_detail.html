@@ -88,7 +88,11 @@
               {% endfor %}
             {% else %}
               You have not joined a course yet this semester.
-              <a href="{% url 'courses:create' %}">Join a Course</a>
+              {% if config.has_no_open_semester %}
+                <br><em>No semester is open yet, so you can’t join a course — ask your teacher to open one.</em>
+              {% else %}
+                <a href="{% url 'courses:create' %}">Join a Course</a>
+              {% endif %}
             {% endif %}
 
           </div>
@@ -146,7 +150,11 @@
               {% endfor %}
           {% else %}
             <li class="list-group-item">You have not joined a course yet for this semester.
-              <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
+              {% if config.has_no_open_semester %}
+                <br><em>No semester is open yet, so you can’t join a course — ask your teacher to open one.</em>
+              {% else %}
+                <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
+              {% endif %}
             </li>
           {%endif%}
         {% else %}
