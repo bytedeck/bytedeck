@@ -9,12 +9,10 @@ from django.test import SimpleTestCase
 
 from model_bakery import baker
 
-# from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoElement, CytoScape, TempCampaign, TempCampaignNode, clean_JSON
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, Category
 
-# from django_tenants.test.client import TenantClient
 from hackerspace_online.shell_utils import generate_quests
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
