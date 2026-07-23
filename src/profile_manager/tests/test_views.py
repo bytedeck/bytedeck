@@ -123,7 +123,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
     def test_recalculate_current_xp__invalidates_active_semester_profiles(self):
-        """recalculate_current_xp iterates the active-semester profiles and invalidates their XP cache."""
+        """recalculate_current_xp invalidates the XP cache of each active-semester profile."""
         # a student registered in the active semester so all_for_active_semester() is non-empty
         # and the loop body actually runs
         baker.make(
@@ -133,8 +133,12 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(Profile.objects.all_for_active_semester().exists())
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('profiles:recalculate_xp_current'))
+        with patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+            response = self.client.get(reverse('profiles:recalculate_xp_current'))
+
         self.assertEqual(response.status_code, 302)
+        # the view actually invalidated the XP cache (would still pass on a bare redirect otherwise)
+        self.assertTrue(mock_invalidate.called)
 
     def test_tour_complete__marks_completed_and_redirects_to_quests(self):
         """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
@@ -153,8 +157,9 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('profiles:profile_edit_own'))
 
         # A 200 means get_object() resolved the user's own profile and the update form rendered.
+        # ProfileUpdate exposes its forms as context['forms'] (the profile form is first).
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['form'].instance, self.test_student1.profile)
+        self.assertEqual(response.context['forms'][0].instance, self.test_student1.profile)
 
     def test_profile_detail__courses_correct_displayed_text(self):
         """
