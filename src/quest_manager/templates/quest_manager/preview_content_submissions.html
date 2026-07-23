@@ -36,6 +36,16 @@
           <i class="fa fa-fw fa-info-circle"></i><span class="visible-lg-inline-block icon-text">View Details</span>
       </a>
     {% endif %}
+
+    {% comment %} TAs can copy the quest a submission is for, even after it's been started (#141).
+       The copy view (quests:quest_copy) already allows TAs; this exposes it from the submission tabs,
+       where a started quest lives once it leaves the Available list. {% endcomment %}
+    {% if request.user.profile.is_TA %}
+      <a title="Copy Quest &mdash; available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
+         class="btn btn-default" role="button" href="{% url 'quests:quest_copy' s.quest.id %}">
+        <i class="fa fa-fw fa-copy"></i>
+      </a>
+    {% endif %}
   </div>
   <div class="user-content">{{s.quest.submission_details|safe}}</div>
 </li>
