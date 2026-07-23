@@ -24,8 +24,17 @@ trap 'exit 0' EXIT   # fail open: never disrupt session startup
 payload="$(cat 2>/dev/null || true)"          # SessionStart hook receives JSON on stdin
 proj="${CLAUDE_PROJECT_DIR:-$PWD}"
 
+# Normalize a candidate name to a bounded, single-line, control-char-free value:
+# strip ASCII control chars (NUL, tab, CR, LF, ...), trim surrounding whitespace,
+# and cap the length. A whitespace-only or garbage value therefore collapses to
+# empty so the fallback prompt still fires, instead of injecting an unusable
+# sign-off like "- Claude Code (   )".
+normalize_name() {
+    printf '%s' "$1" | tr -d '\000-\037\177' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | head -c 200
+}
+
 # --- 1. explicit env var ------------------------------------------------------
-name="${CLAUDE_SESSION_NAME:-}"
+name="$(normalize_name "${CLAUDE_SESSION_NAME:-}")"
 
 # --- resolve session_id (needed for the cache path and the persist hint) ------
 sid=""
@@ -43,7 +52,7 @@ cache=""
 if [ -n "$sid" ]; then
     cache="$proj/.claude/.cache/session_name.$sid"
     if [ -z "$name" ] && [ -f "$cache" ]; then
-        name="$(head -c 200 "$cache" 2>/dev/null | tr -d '\r\n' || true)"
+        name="$(normalize_name "$(head -c 200 "$cache" 2>/dev/null || true)")"
     fi
 fi
 

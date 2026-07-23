@@ -60,7 +60,10 @@
     ],
     "deny": [
       "Bash(git push origin --delete:*)",
-      "Bash(git push --delete:*)"
+      "Bash(git push --delete:*)",
+      "Bash(git push origin -d:*)",
+      "Bash(git push -d:*)",
+      "Bash(git push origin :*)"
     ]
   },
   "hooks": {
