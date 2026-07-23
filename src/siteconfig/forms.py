@@ -78,6 +78,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_profile_field",
                 "show_all_tags_on_profiles",
                 "map_auto_update",
+                "enable_submission_questions",
                 Accordion(
                     AccordionGroup(
                         "Advanced",

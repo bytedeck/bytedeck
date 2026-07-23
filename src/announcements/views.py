@@ -39,7 +39,9 @@ def comment(request, ann_id):
 
         if form.is_valid():
             comment_text = form.cleaned_data.get('comment_text')
-            if not comment_text:
+            # Defensive: CommentForm.comment_text is a required CharField, so a valid form
+            # always has non-empty text here; this fallback never fires. Excluded from coverage.
+            if not comment_text:  # pragma: no cover
                 comment_text = ""
             comment_new = Comment.objects.create_comment(
                 user=request.user,

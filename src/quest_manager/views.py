@@ -810,6 +810,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         else:
             available_quests = Quest.objects.get_available_without_course(request.user)
 
+    # Repeatable quests the student completed that are still within their cooldown window: shown in
+    # the Available tab as "available again soon" with a countdown, rather than being hidden (#57).
+    cooldown_quests = []
+    if not request.user.is_staff:
+        cooldown_quests = list(Quest.objects.get_in_cooldown(request.user))
+        for quest in cooldown_quests:
+            quest.cooldown_available_at = quest.next_repeat_available(request.user)
+
     in_progress_submissions = QuestSubmission.objects.all_not_completed(
         request.user, blocking=True
     )
@@ -870,6 +878,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "past_submissions": past_submissions,
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
+        "cooldown_quests": cooldown_quests,
         "active_q_id": active_quest_id,
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
@@ -1852,8 +1861,13 @@ def start(request, quest_id):
             # could happen if they manually enter a different quest.id in the start url
             raise Http404
         else:
-            # We found an in-progress/not completed submission for the quest,
-            # so send them to it instead of starting a new one
+            # We found an in-progress/not completed submission for the quest, so send them to it
+            # instead of starting a new one, and let them know why (issue #57).
+            messages.info(
+                request,
+                f"You already have <strong>{quest.name}</strong> in progress — "
+                "finish this one before starting it again.",
+            )
             return redirect(sub)
     else:
         new_sub = QuestSubmission.objects.create_submission(request.user, quest)

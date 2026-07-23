@@ -154,32 +154,36 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         # TODO fully test this with multiple blocks
 
     def test_teachers__empty_until_registered(self):
-        """teachers() is empty until the student has a course registration."""
+        """teachers() is empty before registration, yields a single None while the current
+        course's block has no teacher, and yields the teacher once one is assigned."""
         self.assertEqual(list(self.profile.teachers()), [])
         course_registration = self.create_active_course_registration()
-        # Still no teachers since no teacher assign to this course's block yet
-        # why is this a list of None instead of just empty? SQLite thing?
+        # Registered, but the course's block has no teacher yet, so teachers() -- which reads
+        # block__current_teacher -- yields a single None (one current course, no teacher).
         self.assertEqual(list(self.profile.teachers()), [None])
-
         self.assertTrue(self.profile.has_current_course)
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
 
-        # TODO should have teachers now... why not working? Should not be None...
-        # self.assertEqual(list(self.profile.teachers()), [None])
+        # Assign AND persist a block with a teacher (the DB query only sees a saved block);
+        # teachers() now lists that teacher.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertEqual(list(self.profile.teachers()), [self.teacher.id])
 
     def test_current_teachers__empty_until_teacher_assigned(self):
-        """current_teachers() stays empty until a teacher is assigned to the student's block."""
+        """current_teachers() stays empty until a teacher is assigned to the student's block,
+        then includes that teacher."""
         self.assertFalse(self.profile.current_teachers().exists())
 
         course_registration = self.create_active_course_registration()
 
-        # Still no teachers since no teacher assign to this course's block yet
+        # Still no teachers since no teacher is assigned to this course's block yet.
         self.assertFalse(self.profile.current_teachers().exists())
 
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
-
-        # print(course_registration)
-        # print(self.profile.current_teachers()) # why is this empty?!?!
+        # Assign AND persist a block with a teacher (an in-memory assignment isn't visible to the
+        # DB query behind current_teachers()); the teacher now shows up.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertIn(self.teacher, self.profile.current_teachers())
 
     def test_rank__default_for_new_user(self):
         """ By default a new user has a rank"""
@@ -237,6 +241,7 @@ class ProfileTestModel(ByteDeckTenantTestCase):
 
 
 class SmartListTests(SimpleTestCase):
+    """Covers the module-level smart_list value parser."""
 
     def test_smart_list__empty_inputs(self):
         """smart_list() returns an empty list for empty/None-like inputs."""
@@ -268,6 +273,24 @@ class SmartListTests(SimpleTestCase):
     def test_smart_list__single_int(self):
         """smart_list() wraps a single int in a list."""
         self.assertEqual(smart_list(1), [1])
+
+    def test_smart_list__parses_bracketed_delimited_string(self):
+        """A bracketed, comma-separated string is split and mapped by func."""
+        self.assertEqual(smart_list("[1, 2, 3]", func=int), [1, 2, 3])
+
+    def test_smart_list__empty_after_stripping_returns_empty_list(self):
+        """A bracket/whitespace-only string that strips to empty returns an empty list."""
+        self.assertEqual(smart_list("[   ]"), [])
+
+    def test_smart_list__raises_valueerror_for_unparseable_type(self):
+        """An unsupported value type raises ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list(3.14)
+
+    def test_smart_list__raises_valueerror_when_func_fails_on_an_element(self):
+        """A per-element func that raises is re-raised as a ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list("x,y", func=int)
 
 
 class UserDeletionTest(ByteDeckTenantTestCase):
@@ -417,27 +440,3 @@ class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
         self.assertFalse(self.profile.chillax())
 
 
-class SmartListTest(SimpleTestCase):
-    """Covers the module-level smart_list value parser."""
-
-    def test_smart_list__parses_bracketed_delimited_string(self):
-        """A bracketed, comma-separated string is split and mapped by func."""
-        self.assertEqual(smart_list("[1, 2, 3]", func=int), [1, 2, 3])
-
-    def test_smart_list__empty_after_stripping_returns_empty_list(self):
-        """A bracket/whitespace-only string that strips to empty returns an empty list."""
-        self.assertEqual(smart_list("[   ]"), [])
-
-    def test_smart_list__wraps_a_bare_int_in_a_list(self):
-        """A bare int is wrapped in a single-element list."""
-        self.assertEqual(smart_list(7), [7])
-
-    def test_smart_list__raises_valueerror_for_unparseable_type(self):
-        """An unsupported value type raises ValueError."""
-        with self.assertRaises(ValueError):
-            smart_list(3.14)
-
-    def test_smart_list__raises_valueerror_when_func_fails_on_an_element(self):
-        """A per-element func that raises is re-raised as a ValueError."""
-        with self.assertRaises(ValueError):
-            smart_list("x,y", func=int)
