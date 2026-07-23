@@ -4,14 +4,6 @@
 {% block heading_inner %}Completion Statuses{% endblock %}
 
 {% block content %}
-  <style>
-    /* Lay the bootstrap-table toolbar out with flexbox so the search box stays rightmost (matching
-       every other table) and the status filter sits just to its left, with a gap between them
-       (#2115). The toolbar's DOM order is [filter (.bs-bars)] then [.search], so justify-content:
-       flex-end right-aligns them as filter | search; flex neutralizes bootstrap-table's floats. */
-    .fixed-table-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 15px; }
-    #status-filter-toolbar label { margin-right: 4px; font-weight: normal; }
-  </style>
   <h3>Quest: {{ q.name }}</h3>
 
   {% include "quest_manager/buttons.html" %}
@@ -106,8 +98,8 @@
   </div>
 
   {% if user_status_list %}
-    {# Filter lives in the bootstrap-table toolbar so it sits on the right next to the search box (#2115). #}
-    <div id="status-filter-toolbar" class="form-inline">
+    {# Filter sits in the bootstrap-table toolbar; .bt-toolbar-filter drives the shared layout in custom_common.css (#2115). #}
+    <div id="status-filter-toolbar" class="form-inline bt-toolbar-filter">
       <label for="status-filter">Filter by status:</label>
       <select id="status-filter" class="form-control input-sm">
         <option value="">All</option>
