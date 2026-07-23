@@ -1444,10 +1444,10 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(statuses[self.student2.username], 'Returned')
         self.assertEqual(statuses[self.student3.username], 'Awaiting Approval')
 
-        # Verify the status breakdown (all three students are active and enrolled, none in a block
-        # this teacher teaches, so the counts land in the enrolled/active columns).
+        # Verify the status breakdown (all three students are active and current, none in a block
+        # this teacher teaches, so the counts land in the current/active columns).
         breakdown = {row['status']: row for row in response.context['status_breakdown']}
-        for group in ('enrolled', 'active'):
+        for group in ('current', 'active'):
             self.assertEqual(breakdown['Approved'][group]['count'], 1)
             self.assertEqual(breakdown['Returned'][group]['count'], 1)
             self.assertEqual(breakdown['Awaiting Approval'][group]['count'], 1)
@@ -1526,7 +1526,7 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_quest_user_status__completed_date_and_breakdown_groups(self):
         """Approved submissions expose a completion date, and the breakdown counts each of the three
-        student groups (my blocks / enrolled / active) — issue #1973."""
+        student groups (my blocks / current / active) — issue #1973."""
         approved_time = timezone.now()
         QuestSubmission.objects.create(
             quest=self.quest, user=self.student1, is_approved=True, is_completed=True,
@@ -1542,10 +1542,30 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(entries[self.student2.username]['completed'])
 
         breakdown = {row['status']: row for row in response.context['status_breakdown']}
-        self.assertEqual(breakdown['Approved']['enrolled']['count'], 1)
+        self.assertEqual(breakdown['Approved']['current']['count'], 1)
         self.assertEqual(breakdown['Approved']['active']['count'], 1)
         # the teacher teaches no blocks in this test, so the my_blocks column is empty
         self.assertEqual(breakdown['Approved']['my_blocks']['count'], 0)
+
+    def test_quest_user_status__headings_and_current_scope_labels(self):
+        """The page shows the 'Status Summary Stats' and 'Status by Student' headings, and uses the
+        'current' scope label instead of 'enrolled' (#2115)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertContains(response, 'Status Summary Stats')
+        self.assertContains(response, 'Status by Student')
+        # The scope button/column reads "Current", not the old "enrolled" wording.
+        self.assertContains(response, '?scope=current')
+        self.assertNotContains(response, '?scope=enrolled')
+
+    def test_quest_user_status__scope_current_lists_students_in_a_course(self):
+        """scope=current lists students registered in a course this active semester (#2115)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=current')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['scope'], 'current')
+        usernames = [entry['user'].username for entry in response.context['user_status_list']]
+        self.assertIn(self.student1.username, usernames)
 
     def test_quest_user_status__started_but_not_submitted_shows_in_progress(self):
         """A submission that has been started but not completed/returned/approved shows In Progress."""
