@@ -791,10 +791,10 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments[0].text, f'<p>{comment}</p>')
 
-    def test_complete_quick_reply_form__escapes_html(self):
-        """HTML entered in the quick reply form is completely escaped when the comment
-        is saved, so scripts can't execute when the comment is rendered. Regression
-        test for issue #1343.
+    def test_complete_quick_reply_form__sanitizes_html(self):
+        """HTML entered in the quick reply form is sanitized when the comment is saved:
+        scripts and event handlers are stripped so nothing executes when the comment is
+        rendered. Regression test for issue #1343.
         """
         payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
         response = self.post_complete(submission_comment=payload)
@@ -803,8 +803,23 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         comments = self.sub.get_comments()
         self.assertEqual(comments.count(), 1)
         self.assertNotIn('<script', comments[0].text)
-        self.assertNotIn('<img', comments[0].text)
         self.assertIn('&lt;script&gt;', comments[0].text)
+        self.assertNotIn('onerror', comments[0].text)
+
+    def test_complete_quick_reply_form__preserves_formatting(self):
+        """Legitimate formatting HTML from the submission editor is preserved (not
+        escaped) when the comment is saved, so it renders instead of showing its literal
+        tags. Regression test for issue #2113.
+        """
+        response = self.post_complete(submission_comment='<p>giggity <b>bold</b></p>')
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+
+        comments = self.sub.get_comments()
+        self.assertEqual(comments.count(), 1)
+        # the formatting tags survive as real HTML, not escaped literal text
+        self.assertIn('<b>bold</b>', comments[0].text)
+        self.assertNotIn('&lt;b&gt;', comments[0].text)
+        self.assertNotIn('&lt;p&gt;', comments[0].text)
 
     def test_complete__no_verification(self):
         """ Checks if a student completing a submission that causes their XP to go over
