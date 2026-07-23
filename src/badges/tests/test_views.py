@@ -114,6 +114,12 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('badges:badge_prereqs_update', args=[b_pk])
         self.assert200('badges:grant_qualifying', args=[b_pk])
 
+    def test_badge_detail__action_button_comment_not_rendered(self):
+        """The explanatory comment above the action buttons must not render as visible text (#2116)."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
+        self.assertNotContains(response, 'One btn-group keeps every action button')
+
     def test_badge_create__creates_badge(self):
         """Posting valid data to the create view creates a new badge and redirects to the list."""
         # log in a teacher

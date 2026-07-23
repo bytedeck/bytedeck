@@ -464,14 +464,22 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
         self.assertContains(response, "Reminder: attach a screenshot of your working code.")
 
-    def test_submission_view__no_quest_quick_reply_button_when_unset(self):
-        """A quest without quick_reply text shows no quest-specific quick-reply button (#161)."""
+    def test_submission_view__quest_quick_reply_button_shown_even_when_unset(self):
+        """The quest-specific quick-reply button always shows; when unset its tooltip explains how to set it (#2114)."""
         self.quest1.quick_reply = ""
         self.quest1.save()
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
-        self.assertNotContains(response, f'btn_quest_quick_text{self.sub1.id}')
+        self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
+        self.assertContains(response, "Add quest-specific quick-reply text by changing")
+
+    def test_submission_view__site_wide_quick_reply_tooltip_mentions_config(self):
+        """The site-wide quick-reply button tooltip notes the text is customizable in Site Configuration (#2114)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, "This text can be customized in your Site Configuration.")
 
     def test_submission_view__ta_sees_copy_quest_button(self):
         """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
@@ -1589,6 +1597,14 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
+
+    def test_quest_form__quick_reply_field_below_tags(self):
+        """The Quick Reply Text field renders below the Tags field on the quest form (#2114)."""
+        self.client.force_login(self.test_teacher)
+        content = self.client.get(reverse('quests:quest_create')).content.decode()
+        self.assertIn('id_quick_reply', content)
+        self.assertIn('id_tags', content)
+        self.assertGreater(content.index('id_quick_reply'), content.index('id_tags'))
 
     def test_quest_create__teacher_can_create_and_delete(self):
         """Teachers can create quests and delete both live and archived quests."""
