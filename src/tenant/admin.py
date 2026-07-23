@@ -196,13 +196,13 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             synced += 1
             self.message_user(request, f"{tenant.schema_name}: {summary}", messages.SUCCESS)
         if skipped:
+            # the admin framework never dispatches an action with an empty selection,
+            # so skipped/synced/failed always accounts for every selected row
             self.message_user(
                 request,
                 f"Skipped {skipped} deck(s) with no stripe_subscription_id (link them first, or use checkout).",
                 messages.WARNING,
             )
-        if not synced and not failed and not skipped:
-            self.message_user(request, "No decks selected.", messages.WARNING)
 
     @admin.display(description="owner full name")
     def owner_full_name_text(self, obj):
