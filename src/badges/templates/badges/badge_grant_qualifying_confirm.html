@@ -11,31 +11,41 @@
       {{ badge.short_description|safe }}
     </div>
   </div>
-  <p></p>
+
+  <hr>
+
+  <h3>Students who qualify for this {{ config.custom_name_for_badge|lower }}</h3>
 
   {% if qualifying_students %}
-    <div class="well">
-      <p>
-        <strong>{{ qualifying_students|length }}</strong>
-        student{{ qualifying_students|length|pluralize }} currently
-        {{ qualifying_students|length|pluralize:"meets,meet" }} this
-        {{ config.custom_name_for_badge|lower }}'s prerequisites but
-        {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet:
-      </p>
-      <ul>
-        {% for student in qualifying_students %}
-          <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
-        {% endfor %}
-      </ul>
-    </div>
+    <p>
+      <strong>{{ qualifying_students|length }}</strong>
+      currently-enrolled student{{ qualifying_students|length|pluralize }}
+      {{ qualifying_students|length|pluralize:"meets,meet" }} this
+      {{ config.custom_name_for_badge|lower }}'s prerequisites but
+      {{ qualifying_students|length|pluralize:"has,have" }} not been granted it yet.
+      Granting it will award <strong>{{ badge.xp }} XP</strong> to each of them, and their
+      teachers will be notified.
+    </p>
+
     <form action="" method="post">{% csrf_token %}
       <p>
-        Grant this {{ config.custom_name_for_badge|lower }} to the
-        {{ qualifying_students|length }} student{{ qualifying_students|length|pluralize }} above?
-        Their teachers will be notified.
+        <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
       </p>
-      <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Cancel</a>
-      <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
+
+      <div class="well">
+        <ul class="list-unstyled">
+          {% for student in qualifying_students %}
+            <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+
+      {# Repeat the buttons below the list so they stay reachable after scrolling a long list. #}
+      <p>
+        <a href="{{ badge.get_absolute_url }}" role="button" class="btn btn-info">Cancel</a>
+        <input type="submit" value="Grant to qualifying students" class="btn btn-success" />
+      </p>
     </form>
   {% else %}
     <div class="well">

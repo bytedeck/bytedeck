@@ -1,12 +1,15 @@
 import re
 from unittest.mock import patch
-from allauth.account.models import EmailConfirmationHMAC
+from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+from allauth.socialaccount.models import SocialAccount, SocialApp, SocialLogin
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
 from django_tenants.test.client import TenantClient
+from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
 from courses.models import Block, CourseStudent
@@ -121,6 +124,45 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+
+    def test_recalculate_current_xp__invalidates_active_semester_profiles(self):
+        """recalculate_current_xp invalidates the XP cache of each active-semester profile."""
+        # a student registered in the active semester so all_for_active_semester() is non-empty
+        # and the loop body actually runs
+        baker.make(
+            'courses.CourseStudent', user=self.test_student1,
+            semester=self.active_sem, course=baker.make('courses.Course'),
+        )
+        self.assertTrue(Profile.objects.all_for_active_semester().exists())
+        self.client.force_login(self.test_teacher)
+
+        with patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+            response = self.client.get(reverse('profiles:recalculate_xp_current'))
+
+        self.assertEqual(response.status_code, 302)
+        # the view actually invalidated the XP cache (would still pass on a bare redirect otherwise)
+        self.assertTrue(mock_invalidate.called)
+
+    def test_tour_complete__marks_completed_and_redirects_to_quests(self):
+        """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:tour_complete'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        self.test_student1.profile.refresh_from_db()
+        self.assertTrue(self.test_student1.profile.intro_tour_completed)
+
+    def test_profile_edit_own__resolves_to_logged_in_users_own_profile(self):
+        """profile_edit_own (ProfileUpdateOwn.get_object) loads the logged-in user's own profile form."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:profile_edit_own'))
+
+        # A 200 means get_object() resolved the user's own profile and the update form rendered.
+        # ProfileUpdate exposes its forms as context['forms'] (the profile form is first).
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['forms'][0].instance, self.test_student1.profile)
 
     def test_profile_detail__courses_correct_displayed_text(self):
         """
@@ -733,4 +775,109 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         non_existent_url = reverse("profiles:profile_delete", kwargs={"pk": 99999})
         response = self.client.post(non_existent_url)
 
+        self.assertEqual(response.status_code, 404)
+
+
+class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
+    """Dedicated, isolated tests for the ``oauth_merge_account`` view.
+
+    The view lets a user whose Google-login email matches an existing (but unverified)
+    local account decide whether to link the Google account to that local account
+    (``submit=yes``) or decline and sign up separately (``submit=no``). The full Google
+    callback flow that lands a user here is covered end-to-end in
+    ``hackerspace_online.tests.test_forms``; these tests instead drive the view directly
+    by seeding the session the OAuth adapter would have populated
+    (``merge_with_user_id`` + a serialized ``socialaccount_sociallogin``), so the view has
+    intentional coverage independent of that larger signup flow.
+    """
+
+    def setUp(self):
+        """Create a teacher (required before other users, as profile creation notifies staff),
+        a local user with an unverified email, the Google SocialApp, and a tenant client."""
+        self.client = TenantClient(self.tenant)
+        self.User = get_user_model()
+        self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
+        self.user = self.User.objects.create_user('existing_student', email='student@example.com')
+        self._setup_social_app()
+
+    def tearDown(self):
+        """Clear the cache after each test."""
+        cache.clear()
+
+    def _setup_social_app(self):
+        """Create the Google SocialApp in the public schema and propagate the provider so
+        ``SocialLogin.serialize()``/``deserialize()`` work (mirrors test_forms setup)."""
+        with schema_context(get_public_schema_name()):
+            app = SocialApp.objects.create(
+                provider='google',
+                name='Test Google App',
+                client_id='test_client_id',
+                secret='test_secret',
+            )
+            app.sites.add(Site.objects.get_current())
+        SiteConfig.get()._propagate_google_provider()
+
+    def _social_login(self, email):
+        """Build a SocialLogin the way the Google provider would for the given email."""
+        provider = SocialApp.objects.filter(provider='google').first().get_provider(request=None)
+        return SocialLogin(
+            provider=provider,  # required by serialize() since django-allauth 65
+            user=self.User(email=email, first_name='Given', last_name='Family'),
+            account=SocialAccount(provider='google', extra_data={'email': email}),
+            email_addresses=[EmailAddress(email=email, verified=True, primary=True)],
+        )
+
+    def _seed_merge_session(self, email=None):
+        """Populate the session as the adapter does before redirecting to the merge page."""
+        email = email or self.user.email
+        session = self.client.session
+        session['merge_with_user_id'] = self.user.pk
+        session['socialaccount_sociallogin'] = self._social_login(email).serialize()
+        session.save()
+
+    def test_oauth_merge_account__get_renders_merge_page(self):
+        """GET shows the merge confirmation page with the matched account's username and email."""
+        self._seed_merge_session()
+        response = self.client.get(reverse('profiles:oauth_merge_account'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['other_account_username'], self.user.username)
+        self.assertEqual(response.context['email_address'], self.user.email)
+
+    def test_oauth_merge_account__post_yes_links_account_verifies_email_and_logs_in(self):
+        """Clicking Yes links the Google account to the local user, marks their email
+        verified+primary, clears the merge session keys, and logs them in."""
+        self._seed_merge_session()
+        self.assertFalse(SocialAccount.objects.filter(user=self.user, provider='google').exists())
+
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'yes'})
+
+        # The Google account is now linked to the local user...
+        self.assertTrue(SocialAccount.objects.filter(user=self.user, provider='google').exists())
+        # ...their email is verified and primary...
+        self.assertTrue(
+            EmailAddress.objects.filter(user=self.user, email=self.user.email, verified=True, primary=True).exists()
+        )
+        # ...they are logged in...
+        self.assertEqual(int(self.client.session['_auth_user_id']), self.user.pk)
+        # ...and the merge session data has been popped so it doesn't leak.
+        self.assertNotIn('merge_with_user_id', self.client.session)
+        self.assertNotIn('socialaccount_sociallogin', self.client.session)
+        self.assertEqual(response.status_code, 302)
+
+    def test_oauth_merge_account__post_no_clears_email_and_redirects_to_signup(self):
+        """Clicking No removes the conflicting email from the local user and sends them to the
+        social signup page to create a separate account."""
+        self._seed_merge_session()
+        response = self.client.post(reverse('profiles:oauth_merge_account'), data={'submit': 'no'})
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, '')
+        self.assertFalse(self.user.emailaddress_set.filter(email='student@example.com').exists())
+        self.assertRedirects(response, reverse('socialaccount_signup'), fetch_redirect_response=False)
+
+    def test_oauth_merge_account__missing_session_user_returns_404(self):
+        """With no ``merge_with_user_id`` in the session, ``get_object_or_404`` short-circuits to a
+        404 before any POST handling — which is why the view's own ``if not merge_with_user_id``
+        guard can never be reached."""
+        response = self.client.get(reverse('profiles:oauth_merge_account'))
         self.assertEqual(response.status_code, 404)

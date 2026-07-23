@@ -12,6 +12,8 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from quest_manager.models import Quest, QuestSubmission
+from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
@@ -152,7 +154,12 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn(scape.name, str(messages[0]))
 
 
-class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CourseViewTestData:
+    """Shared fixtures for the Course / CourseStudent view tests: a teacher, a student, the active
+    semester plus a block/course/grade, and valid registration form data.
+
+    A plain mixin (not a TestCase) so the test runner doesn't collect it as an empty test class.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -177,6 +184,9 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
+
+
+class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -386,31 +396,7 @@ class CourseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, dt_well_ptag)
 
 
-class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-
-    @classmethod
-    def setUpTestData(cls):
-        """Create a teacher, student, block, course and grade plus valid registration form data."""
-        # need a teacher and a student so tests can log in as each with force_login()
-
-        # need a teacher before students can be created or the profile creation will fail when trying to notify
-        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
-        cls.test_student1 = User.objects.create_user('test_student')
-
-        cls.sem = SiteConfig.get().active_semester
-        cls.block = baker.make('courses.block')
-        cls.course = baker.make('courses.course')
-        cls.grade = baker.make('courses.grade')
-
-        cls.valid_form_data = {
-            'semester': cls.sem.pk,
-            'block': cls.block.pk,
-            'course': cls.course.pk,
-        }
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
+class CourseStudentViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_CourseStudentUpdate_view__staff_can_update(self):
         """ Staff can update a student's course """
@@ -456,13 +442,7 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Now try adding them a second time, should not validate:
         response = self.client.post(add_course_url, data=self.valid_form_data)
 
-        # invalid form
         # GRADE field is depercated and no longer used within unique_together
-        # form = response.context['form']
-        # self.assertFalse(form.is_valid())
-        # self.assertEqual(response.status_code, 200)
-        # self.assertContains(response, 'Student Course with this User, Course and Grade already exists')
-        # self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
         # Change the grade, still fails cus same block in same semester
         self.valid_form_data['grade_fk'] = baker.make('courses.grade').pk
@@ -510,6 +490,91 @@ class CourseStudentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
+
+    def test_CourseStudentCreate_view__active_registration_in_old_semester_does_not_block(self):
+        """A student with an active registration left over in an old (not-yet-closed) semester can
+        still reach the registration view for the new active semester — no 403 (#1893). Previously
+        any active registration blocked registration, so an unclosed old semester locked students
+        out of joining courses in the new one."""
+        self.client.force_login(self.test_student1)
+
+        # Active registration left over in the original (now-old) semester.
+        old_semester = SiteConfig.get().active_semester
+        baker.make('courses.coursestudent', user=self.test_student1, semester=old_semester, active=True)
+
+        # A new semester becomes active while the old one stays open (not closed).
+        new_semester = baker.make('courses.semester')
+        config = SiteConfig.get()
+        config.active_semester = new_semester
+        config.full_clean()
+        config.save()
+
+        # The stale active registration is in a different, still-open semester, so it must not 403.
+        response = self.client.get(reverse('courses:create'))
+        self.assertNotEqual(response.status_code, 403)
+
+    def _close_active_semester(self):
+        """Close the deck's active semester (leaving it as the active semester), reproducing the
+        'no semester is open' state from issue #2060. Saving fires the SiteConfig cache invalidation.
+        """
+        active = SiteConfig.get().active_semester
+        active.closed = True
+        active.save()
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__get(self):
+        """When the active semester is closed, the join page shows a 'no semesters open' message
+        instead of the registration form (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertNotContains(response, 'id="coursestudentform"')
+
+    def test_CourseStudentCreate_view__blocked_when_no_open_semester__post(self):
+        """A student can't register when the active semester is closed: POSTing valid data creates
+        no CourseStudent and shows the 'no semesters open' message (issue #2060)."""
+        self.client.force_login(self.test_student1)
+        self._close_active_semester()
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'No semesters are currently open')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    def test_no_open_semester__staff_gets_dismissable_message_on_home(self):
+        """When the deck has no open semester, staff landing on home get a dismissable message
+        (linking to the semesters page) so they know students can't join a course (issue #2060)."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('home'), follow=True)
+
+        self.assertContains(response, 'Create and activate a semester')
+
+    def test_no_open_semester__no_message_on_home_when_semester_open(self):
+        """No warning message on home when a semester is open (the default state)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('home'), follow=True)
+
+        self.assertNotContains(response, 'Create and activate a semester')
+
+    def test_no_open_semester__student_join_button_replaced_by_message(self):
+        """A student with no course sees a 'no semester open' note instead of the Join a Course
+        button when the deck has no open semester (issue #2060)."""
+        student = User.objects.create_user('no_course_student')  # no CourseStudent registration
+        self._close_active_semester()
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, 'Join a Course')
 
     def test_CourseStudentCreate__simple_registration_hidden_fields(self):
         """
@@ -1148,6 +1213,95 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         self.assertEqual(total_students, len(active_sem_students))
 
 
+class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the Ajax_TagChart view (courses:ajax_tag_progress_chart), which returns
+    per-tag quest/badge XP datasets for chart.js."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create the target user whose tag chart is requested, and cache the active semester."""
+        cls.user = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+
+    def setUp(self):
+        """Set up a tenant client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
+        """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.
+
+        xp_requested is pinned to 0 so each submission's earned xp is deterministically the
+        quest's xp (Greatest(quest.xp, xp_requested)).
+        """
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        quest.tags.add(tag)
+        baker.make(
+            QuestSubmission, quest=quest, user=self.user,
+            is_completed=True, is_approved=True, do_not_grant_xp=False,
+            xp_requested=0, semester=self.semester, _quantity=quantity,
+        )
+        return quest
+
+    def _tagged_badge_with_assertions(self, tag, xp, quantity):
+        """Make a tagged badge and `quantity` active-semester assertions for self.user."""
+        badge = baker.make(Badge, xp=xp)
+        badge.tags.add(tag)
+        baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            do_not_grant_xp=False, semester=self.semester, _quantity=quantity,
+        )
+        return badge
+
+    def test_non_ajax_status_code__forbidden(self):
+        """A non-ajax request to the tag chart is forbidden (403)."""
+        self.assert403('courses:ajax_tag_progress_chart', args=[self.user.pk])
+
+    def test_ajax_status_code__anonymous_redirected(self):
+        """An anonymous ajax request to the tag chart is redirected to login (302)."""
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 302)
+
+    def test_ajax__no_tag_data_returns_empty_datasets(self):
+        """With no tagged quests/badges, the chart returns 200 with empty quest/badge datasets."""
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        data = json.loads(response.content)['data']
+        self.assertEqual(data['quest_dataset'], [])
+        self.assertEqual(data['badge_dataset'], [])
+
+    def test_ajax__builds_quest_and_badge_datasets(self):
+        """The chart builds per-tag datasets from the user's tagged quest submissions and badge assertions.
+
+        The capped quest (max_xp set) with two submissions exercises the max-xp cutoff loop and the
+        ordinal-in-name path; the uncapped quest (max_xp = -1) exercises the keep-everything branch;
+        the badge with two assertions exercises the badge loop and its ordinal-in-name path.
+        """
+        self._tagged_quest_with_submissions('alpha', xp=50, max_xp=60, quantity=2)
+        self._tagged_quest_with_submissions('beta', xp=20, max_xp=-1, quantity=1)
+        self._tagged_badge_with_assertions('alpha', xp=30, quantity=2)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        self.assertIn('alpha', payload['labels'])
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # the two-submission quest and two-assertion badge get an ordinal appended to their name
+        self.assertTrue(any('(' in name for name in quest_names), quest_names)
+        self.assertTrue(any('(' in name for name in badge_names), badge_names)
+
+
 class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
@@ -1234,6 +1388,12 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # get
         response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 404)
+
+    def test_ajax_status_code__user_id_zero_uses_request_user(self):
+        """user_id=0 resolves to the logged-in user (request.user), so a student's own POST succeeds (200)."""
+        self.client.force_login(self.student)
+        response = self.client.post(reverse('courses:ajax_progress_chart', args=[0]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertEqual(response.status_code, 200)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
@@ -1596,3 +1756,98 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # check if it was marked as read
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)
+
+
+class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Enforcement of the deck's current-student cap at the registration choke points
+    (#1729 PR 4; closes the 'trial mode (max 5 users)' checkbox of #1730)."""
+
+    def setUp(self):
+        """Give the deck a subscribed cap of 1, fill that seat, and log nobody in yet.
+
+        The deck cache is cleared because the cache backend outlives each test's
+        transaction.
+        """
+        from django.core.cache import cache
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.tenant.paid_until = timezone.localdate() + datetime.timedelta(days=30)
+        self.tenant.max_active_users = 1
+        self.tenant.save()
+
+        self.client = TenantClient(self.tenant)
+        self.occupant = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.occupant, active=True, semester=SiteConfig.get().active_semester)
+        self.newcomer = baker.make(User)
+        self.staff = baker.make(User, is_staff=True)
+
+    def test_student_registration__refused_at_cap(self):
+        """A student hitting the join page on a full deck sees the student-facing
+        refusal instead of the form, on both GET and POST, and no registration happens."""
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its limit of current students')
+
+        response = self.client.post(reverse('courses:create'), data={})
+        self.assertContains(response, 'reached its limit of current students')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_student_registration__allowed_below_cap(self):
+        """With a free seat, the join page renders the normal registration form."""
+        self.tenant.max_active_users = 2
+        self.tenant.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'reached its limit of current students')
+
+    def test_student_registration__simplified_auto_create_blocked_at_cap(self):
+        """The simplified-registration auto-create shortcut cannot bypass the cap: the
+        guard runs before it, so the student sees the refusal and no row is created."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        self.client.force_login(self.newcomer)
+
+        response = self.client.get(reverse('courses:create'))
+        self.assertContains(response, 'reached its limit of current students')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__refused_at_cap_with_helpful_links(self):
+        """Staff adding a student to a full deck see the staff-facing refusal with the
+        archive-help and subscription-page links, on both GET and POST."""
+        self.client.force_login(self.staff)
+        url = reverse('courses:join', args=[self.newcomer.id])
+
+        response = self.client.get(url)
+        self.assertContains(response, 'Current-student limit reached')
+        self.assertContains(response, reverse('courses:archive_students_help'))
+        # PR 6: the upgrade link now goes to the deck's own subscription page
+        self.assertContains(response, reverse('decks:subscription'))
+
+        response = self.client.post(url, data={})
+        self.assertContains(response, 'Current-student limit reached')
+        self.assertFalse(CourseStudent.objects.filter(user=self.newcomer).exists())
+
+    def test_staff_add_student__staff_target_allowed_at_cap(self):
+        """Adding a STAFF member to a course is always allowed -- staff never consume seats."""
+        other_staff = baker.make(User, is_staff=True)
+        self.client.force_login(self.staff)
+
+        response = self.client.get(reverse('courses:join', args=[other_staff.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Current-student limit reached')
+
+    def test_archive_students_help__staff_only(self):
+        """The archive-students help page renders for staff and is blocked for students."""
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('courses:archive_students_help'))
+        self.assertContains(response, 'Freeing up student seats')
+
+        self.client.force_login(self.newcomer)
+        response = self.client.get(reverse('courses:archive_students_help'))
+        self.assertEqual(response.status_code, 403)

@@ -58,6 +58,13 @@ app.conf.beat_schedule = {
             "queue": "default",
         }
     },
+    "Daily deck status check for all schemas": {
+        "task": "tenant.tasks.daily_deck_status_check_for_all_tenants",
+        "schedule": crontab(minute=0, hour=6),
+        "options": {
+            "queue": "default",
+        }
+    },
 }
 
 

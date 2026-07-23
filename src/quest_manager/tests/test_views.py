@@ -454,6 +454,41 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
 
+    def test_submission_view__quest_quick_reply_button_shown_when_set(self):
+        """When a quest has quick_reply text, staff reviewing a submission of it get a quest-specific quick-reply button (#161)."""
+        self.quest1.quick_reply = "Reminder: attach a screenshot of your working code."
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
+        self.assertContains(response, "Reminder: attach a screenshot of your working code.")
+
+    def test_submission_view__no_quest_quick_reply_button_when_unset(self):
+        """A quest without quick_reply text shows no quest-specific quick-reply button (#161)."""
+        self.quest1.quick_reply = ""
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, f'btn_quest_quick_text{self.sub1.id}')
+
+    def test_submission_view__ta_sees_copy_quest_button(self):
+        """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
+        self.test_student1.profile.is_TA = True
+        self.test_student1.profile.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, reverse('quests:quest_copy', args=[self.sub1.quest.id]))
+
+    def test_submission_view__non_ta_student_has_no_copy_button(self):
+        """A regular (non-TA) student viewing the full submission page does not get the copy-quest link (#141)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, reverse('quests:quest_copy', args=[self.sub1.quest.id]))
+
     def test_drop__student_can_drop_completed_submission_when_hidden(self):
         """
         Make sure student can drop a submission from a quest when an admin decides
@@ -1401,15 +1436,16 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(statuses[self.student2.username], 'Returned')
         self.assertEqual(statuses[self.student3.username], 'Awaiting Approval')
 
-        # Verify status_stats
-        status_stats = response.context['status_stats']
-        stats_dict = {stat['status']: stat for stat in status_stats}
-        self.assertEqual(stats_dict['Approved']['count'], 1)
-        self.assertEqual(stats_dict['Returned']['count'], 1)
-        self.assertEqual(stats_dict['Awaiting Approval']['count'], 1)
-        self.assertEqual(stats_dict['Approved']['percent'], "33%")
-        self.assertEqual(stats_dict['Returned']['percent'], "33%")
-        self.assertEqual(stats_dict['Awaiting Approval']['percent'], "33%")
+        # Verify the status breakdown (all three students are active and enrolled, none in a block
+        # this teacher teaches, so the counts land in the enrolled/active columns).
+        breakdown = {row['status']: row for row in response.context['status_breakdown']}
+        for group in ('enrolled', 'active'):
+            self.assertEqual(breakdown['Approved'][group]['count'], 1)
+            self.assertEqual(breakdown['Returned'][group]['count'], 1)
+            self.assertEqual(breakdown['Awaiting Approval'][group]['count'], 1)
+            self.assertEqual(breakdown['Approved'][group]['percent'], "33%")
+            self.assertEqual(breakdown['Returned'][group]['percent'], "33%")
+            self.assertEqual(breakdown['Awaiting Approval'][group]['percent'], "33%")
 
     def test_quest_user_status__users_with_no_submission_show_not_started(self):
         """Students without a submission are listed with the 'Not Started' status and no submission."""
@@ -1454,6 +1490,74 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         statuses = {entry['user'].username: entry['status'] for entry in response.context['user_status_list']}
         self.assertEqual(statuses[self.student1.username], 'Awaiting Approval')
+
+    def test_quest_user_status__default_scope_falls_back_to_active_when_no_blocks(self):
+        """The default scope is the teacher's own blocks, but falls back to all active students when
+        they teach none, so the page isn't empty (issue #1973)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertEqual(response.context['scope'], 'active')
+        self.assertFalse(response.context['has_my_blocks'])
+        self.assertEqual(len(response.context['user_status_list']), 3)
+
+    def test_quest_user_status__scope_my_blocks_limits_to_taught_students(self):
+        """scope=my_blocks lists only students in a course block the logged-in teacher teaches (#1973)."""
+        block = baker.make('courses.Block', current_teacher=self.staff_user)
+        course_student = self.student1.coursestudent_set.get(semester=SiteConfig.get().active_semester)
+        course_student.block = block
+        course_student.save()
+
+        url = reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=my_blocks'
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['scope'], 'my_blocks')
+        self.assertTrue(response.context['has_my_blocks'])
+        usernames = [entry['user'].username for entry in response.context['user_status_list']]
+        self.assertEqual(usernames, [self.student1.username])
+
+    def test_quest_user_status__completed_date_and_breakdown_groups(self):
+        """Approved submissions expose a completion date, and the breakdown counts each of the three
+        student groups (my blocks / enrolled / active) — issue #1973."""
+        approved_time = timezone.now()
+        QuestSubmission.objects.create(
+            quest=self.quest, user=self.student1, is_approved=True, is_completed=True,
+            time_approved=approved_time, time_completed=approved_time, ordinal=1,
+            semester=SiteConfig.get().active_semester,
+        )
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=active')
+
+        entries = {e['user'].username: e for e in response.context['user_status_list']}
+        self.assertEqual(entries[self.student1.username]['completed'], approved_time)
+        # a student without an approved submission has no completion date
+        self.assertIsNone(entries[self.student2.username]['completed'])
+
+        breakdown = {row['status']: row for row in response.context['status_breakdown']}
+        self.assertEqual(breakdown['Approved']['enrolled']['count'], 1)
+        self.assertEqual(breakdown['Approved']['active']['count'], 1)
+        # the teacher teaches no blocks in this test, so the my_blocks column is empty
+        self.assertEqual(breakdown['Approved']['my_blocks']['count'], 0)
+
+    def test_quest_user_status__started_but_not_submitted_shows_in_progress(self):
+        """A submission that has been started but not completed/returned/approved shows In Progress."""
+        QuestSubmission.objects.create(
+            quest=self.quest, user=self.student1, is_approved=False, is_completed=False,
+            ordinal=1, semester=SiteConfig.get().active_semester,
+        )
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=active')
+
+        statuses = {entry['user'].username: entry['status'] for entry in response.context['user_status_list']}
+        self.assertEqual(statuses[self.student1.username], 'In Progress')
+
+    def test_quest_user_status__unknown_scope_falls_back(self):
+        """An unrecognised ?scope value is treated as the default (and then falls back to all active
+        students when the teacher teaches no blocks)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=bogus')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['scope'], 'active')
 
 
 class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
@@ -3035,6 +3139,33 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.context['s'], self.submission)
         self.assertFalse(response.context['completed'])
         self.assertTrue(response.context['past'])
+
+    def test_ajax_submission_info__ta_sees_copy_quest_button(self):
+        """A TA viewing a submission preview gets a 'copy quest' link so they can copy a started quest (#141)."""
+        ta = User.objects.create_user('test_ta')
+        ta.profile.is_TA = True
+        ta.profile.save()
+        self.client.force_login(ta)
+
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+        # The copy link targets the submission's underlying quest.
+        self.assertContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
+
+    def test_ajax_submission_info__non_ta_student_has_no_copy_button(self):
+        """A regular (non-TA) student viewing a submission preview does not get the copy-quest link (#141)."""
+        # setUp logs in the non-TA test_student
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
 
 
 class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):

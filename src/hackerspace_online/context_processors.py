@@ -18,3 +18,29 @@ def config(request):
     if connection.schema_name != get_public_schema_name():
         return {"config": SiteConfig.get()}
     return {"config": None}
+
+
+def deck_status(request):
+    """Expose the current deck's Tenant row and subscribe URL to templates.
+
+    Powers the deck status banner in base.html (trial / expiring / over-limit /
+    suspended, epic #1729). `current_deck` is None on the public and shared-library
+    schemas, which also suppresses the banner entirely.
+
+    `deck_subscribe_url` points at the deck's own staff-facing subscription page
+    (PR 6) -- every template that renders it does so in a staff-only branch. The
+    page itself falls back to the public subscribe flatpage when Stripe isn't
+    configured.
+        TEMPLATE_CONTEXT_PROCESSORS = (
+            # ...
+            'hackerspace_online.context_processors.deck_status',
+        )
+    """
+    from django.urls import reverse
+
+    from tenant.utils import get_current_deck
+
+    deck = get_current_deck()
+    if deck is None:
+        return {"current_deck": None}
+    return {"current_deck": deck, "deck_subscribe_url": reverse('decks:subscription')}

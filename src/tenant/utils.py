@@ -226,3 +226,64 @@ class DeckRequestService:
             args=[subject, message, [user.email]],
             queue="default",
         )
+
+
+def deck_cache_key(schema_name):
+    """Cache key for the per-schema cached Tenant row used by get_current_deck."""
+    return f'{schema_name}-deck'
+
+
+def invalidate_current_deck_cache(schema_name):
+    """Drop the cached Tenant row for a schema (called on every Tenant save).
+
+    The cache's KEY_FUNCTION (django_tenants.cache.make_key) prefixes every key
+    with the CURRENT connection's schema, and Tenant saves usually happen from
+    the public schema (admin edits; later, Stripe webhooks). Deleting inside
+    schema_context(schema_name) makes the prefix match the one the banner's
+    get_current_deck() used when it cached the row -- without it, the delete
+    silently targets a different key and the banner stays stale for up to an hour.
+    """
+    from django_tenants.utils import schema_context
+
+    with schema_context(schema_name):
+        cache.delete(deck_cache_key(schema_name))
+
+
+def get_current_deck():
+    """Return the current schema's Tenant row for status/banner display, or None.
+
+    None on the public schema and the shared-library schema (not billable decks).
+    The row is cached per schema for an hour -- mirroring the SiteConfig.get()
+    pattern, since the status banner reads it on every page -- and invalidated by
+    the Tenant post_save signal so admin edits (and later, Stripe syncs) show
+    promptly.
+    """
+    from django.db import connection
+    from django_tenants.utils import get_public_schema_name
+    from library.utils import get_library_schema_name
+
+    schema_name = connection.schema_name
+    if schema_name in (get_public_schema_name(), get_library_schema_name()):
+        return None
+
+    cache_key = deck_cache_key(schema_name)
+    deck = cache.get(cache_key)
+    if deck is None:
+        deck = Tenant.objects.filter(schema_name=schema_name).first()
+        if deck is not None:
+            cache.set(cache_key, deck, 60 * 60)
+    return deck
+
+
+def get_public_subscribe_url():
+    """Absolute URL of the public tenant's subscribe page.
+
+    Flatpages are per-schema, so a schema-relative "/pages/subscribe/" link 404s on
+    every deck subdomain -- the banner must link to the public host explicitly.
+    Mirrors Tenant.get_root_url()'s dev/production scheme handling.
+    """
+    from django.conf import settings
+
+    if 'localhost' in settings.ROOT_DOMAIN:  # Development
+        return f"http://{settings.ROOT_DOMAIN}:8000/pages/subscribe/"
+    return f"https://{settings.ROOT_DOMAIN}/pages/subscribe/"

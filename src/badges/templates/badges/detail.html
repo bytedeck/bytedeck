@@ -18,14 +18,16 @@
 
     <div class="media-body">
       <div class="row">
-        <div class="col-xs-12 col-sm-8">
+        <div class="col-xs-12 col-sm-7">
           {{ badge.short_description|safe }}
         </div>
 
         {% if request.user.is_staff %}
-        <div class="col-xs-12 col-sm-4 text-right">
-          {# btn-group keeps the actions on a single row (fa-fw gives them a uniform width) #}
-          <div class="btn-group pull-right" role="group">
+        <div class="col-xs-12 col-sm-5 text-right">
+          {# One btn-group keeps every action button the same height and connected (like the
+             Current/All Active toggle below); fa-fw gives the icons a uniform width. The column is
+             col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. #}
+          <div class="btn-group pull-right" role="group" aria-label="{{ config.custom_name_for_badge }} actions">
             <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
               <i class="fa fa-fw fa-edit"></i>
             </a>

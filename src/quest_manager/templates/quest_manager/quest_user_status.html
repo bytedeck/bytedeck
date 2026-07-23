@@ -65,27 +65,63 @@
 
 
   <h5>Status Breakdown</h5>
-  <table class="table" style="width: 350px;">
-      {% for stat in status_stats %}
+  <table class="table table-hover" style="max-width: 520px;">
+    <thead>
       <tr>
-          <td>{{ stat.status }}:</td>
-          <td>{{ stat.count }} ({{ stat.percent }})</td>
+        <th>Status</th>
+        <th class="text-right">My blocks <small class="text-muted">({{ totals.my_blocks }})</small></th>
+        <th class="text-right">All enrolled <small class="text-muted">({{ totals.enrolled }})</small></th>
+        <th class="text-right">All active <small class="text-muted">({{ totals.active }})</small></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in status_breakdown %}
+      <tr>
+        <td>{{ row.status }}</td>
+        <td class="text-right">{{ row.my_blocks.count }} <small class="text-muted">({{ row.my_blocks.percent }})</small></td>
+        <td class="text-right">{{ row.enrolled.count }} <small class="text-muted">({{ row.enrolled.percent }})</small></td>
+        <td class="text-right">{{ row.active.count }} <small class="text-muted">({{ row.active.percent }})</small></td>
       </tr>
       {% endfor %}
+    </tbody>
   </table>
 
+  {# Which group of students the table below lists (issue #1973). #}
+  <div class="btn-group" role="group" aria-label="Which students to show" style="margin-bottom: 10px;">
+    <a href="?scope=my_blocks" role="button" class="btn btn-{% if scope == 'my_blocks' %}primary{% else %}default{% endif %}">My blocks</a>
+    <a href="?scope=enrolled" role="button" class="btn btn-{% if scope == 'enrolled' %}primary{% else %}default{% endif %}">All enrolled</a>
+    <a href="?scope=active" role="button" class="btn btn-{% if scope == 'active' %}primary{% else %}default{% endif %}">All active</a>
+  </div>
+
   {% if user_status_list %}
+    <div class="form-inline" style="margin-bottom: 8px;">
+      <label for="status-filter">Filter by status:</label>
+      <select id="status-filter" class="form-control input-sm">
+        <option value="">All</option>
+        <option value="Approved">Approved</option>
+        <option value="Returned">Returned</option>
+        <option value="Awaiting Approval">Awaiting Approval</option>
+        <option value="In Progress">In Progress</option>
+        <option value="Not Started">Not Started</option>
+      </select>
+    </div>
+
     {% include 'snippets/table_loading.html' %}
     <table id="user-status-table"
           class="user-status-table"
           data-toggle="table"
-          data-classes="table table-striped table-bordered table-hover"
+          data-classes="table table-striped table-hover"
           data-search="true"
           data-trim-on-search="false">
       <thead>
         <tr>
           <th data-field="user" data-sortable="true">User</th>
-          <th data-field="status">Status</th>
+          <th data-field="status" data-sortable="true">Status</th>
+          {# "Completed" sorts on the hidden ISO-8601 companion field so it orders by date, not text. #}
+          <th data-field="completed" data-sortable="true" data-sort-name="completed_sort">Completed</th>
+          <th data-field="completed_sort" data-visible="false" data-switchable="false"></th>
+          {# Plain-text status used by the filter dropdown (filterBy matches the field value). #}
+          <th data-field="status_text" data-visible="false" data-switchable="false"></th>
         </tr>
       </thead>
       <tbody>
@@ -101,11 +137,29 @@
               {{ entry.status }}
             {% endif %}
           </td>
+          <td>{% if entry.completed %}{{ entry.completed|date:"M j, Y" }}{% else %}&mdash;{% endif %}</td>
+          <td>{{ entry.completed|date:"c" }}</td>
+          <td>{{ entry.status }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   {% else %}
-    <p>No active students found.</p>
+    <p>No students found for this view.</p>
   {% endif %}
+{% endblock %}
+
+{% block js %}
+{{ block.super }}
+<script>
+  // #1973: filter the status table by the hidden plain-text `status_text` field (bootstrap-table's
+  // core filterBy, so it works regardless of the filter-control extension).
+  $(function () {
+    var $table = $('#user-status-table');
+    $('#status-filter').on('change', function () {
+      var value = $(this).val();
+      $table.bootstrapTable('filterBy', value ? { status_text: [value] } : {});
+    });
+  });
+</script>
 {% endblock %}

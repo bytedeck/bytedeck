@@ -1,3 +1,4 @@
+from django.contrib import messages
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import connection
 from django.shortcuts import redirect, render
@@ -25,6 +26,15 @@ def home(request):
 
     else:  # Non public tenants
         if request.user.is_staff:
+            # Warn staff, via a dismissable message, when the deck has no open semester so students
+            # can't join a course — with a link to open one (issue #2060).
+            if SiteConfig.get().has_no_open_semester():
+                messages.warning(
+                    request,
+                    'This deck has no open semester, so students can’t join a course. '
+                    f'<a href="{reverse("courses:semester_list")}">Create and activate a semester</a> to let them register.',
+                    extra_tags='safe',
+                )
             return redirect('quests:approvals')
 
         if request.user.is_authenticated:
