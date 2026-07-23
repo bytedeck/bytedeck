@@ -474,7 +474,11 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertNotContains(response, f'btn_quest_quick_text{self.sub1.id}')
 
     def test_submission_view__student_buttons_have_tooltips(self):
-        """The student's Save Draft / Submit / Drop buttons carry explanatory tooltips (#2112)."""
+        """The student's Save Draft / Submit / Drop buttons carry explanatory title tooltips (#2112).
+
+        Native `title` (browser default popup) to match the action-button convention used elsewhere
+        in the app (e.g. the staff submission and badge-detail buttons), rather than a JS tooltip.
+        """
         self.quest1.published = True
         self.quest1.save()
         self.sub1.is_approved = False
