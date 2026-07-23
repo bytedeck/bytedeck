@@ -429,9 +429,11 @@ def oauth_merge_account(request):
 
         merge_account = request.POST.get('submit') == 'yes'
 
-        # The socialaccount_sociallogin must've been removed from the session
-        # or there is no user to merge with so we don't have anything else to do...
-        if not merge_with_user_id:
+        # Unreachable guard: get_object_or_404(User, id=merge_with_user_id) above already
+        # 404s when merge_with_user_id is missing/falsy, so this can never be True here.
+        # Kept as a defensive no-op; excluded from coverage (see
+        # OAuthMergeAccountViewTests.test_oauth_merge_account__missing_session_user_returns_404).
+        if not merge_with_user_id:  # pragma: no cover
             return redirect('account_login')
 
         if merge_account:
