@@ -1,12 +1,16 @@
+import uuid
+
+from django.contrib import admin as django_admin
 from django.contrib.auth import get_user_model
 
+import tablib
 from model_bakery import baker
 
-from badges.admin import BadgeResource
+from badges.admin import BadgeAdmin, BadgeResource
 from badges.models import Badge, BadgeType
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import Prereq
-from quest_manager.models import Quest
+from quest_manager.models import Category, Quest
 
 User = get_user_model()
 
@@ -50,6 +54,14 @@ class BadgeResourceDehydrateTest(ByteDeckTenantTestCase):
     def test_dehydrate_prereq_import_ids__empty_when_no_prereqs(self):
         """A badge with no prerequisites exports an empty prereq string."""
         badge = baker.make(Badge)
+        self.assertEqual(self.resource.dehydrate_prereq_import_ids(badge), '')
+
+    def test_dehydrate_prereq_import_ids__skips_non_quest_or_badge_prereqs(self):
+        """Prereqs that aren't quests or badges (e.g. a campaign) aren't exportable and are skipped."""
+        badge = baker.make(Badge)
+        campaign = baker.make(Category)
+        Prereq.add_simple_prereq(badge, campaign)
+
         self.assertEqual(self.resource.dehydrate_prereq_import_ids(badge), '')
 
 
@@ -144,3 +156,52 @@ class BadgeResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
         self.resource.generate_simple_prereqs(parent, data_dict)
 
         self.assertEqual(len(parent.prereqs()), 0)
+
+    def test_generate_simple_prereqs__unknown_import_id_adds_nothing(self):
+        """An import_id matching neither a quest nor a badge is silently skipped."""
+        parent = baker.make(Badge)
+        data_dict = {'prereq_import_ids': '&' + str(uuid.uuid4())}
+
+        self.resource.generate_simple_prereqs(parent, data_dict)
+
+        self.assertEqual(len(parent.prereqs()), 0)
+
+
+class BadgeResourceAfterImportTest(ByteDeckTenantTestCase):
+    """Tests for BadgeResource.after_import, which rebuilds prereqs once a real import commits."""
+
+    def setUp(self):
+        """Build a fresh BadgeResource and a dataset carrying one badge + a quest prereq import_id."""
+        self.resource = BadgeResource()
+        self.parent = baker.make(Badge)
+        self.prereq_quest = baker.make(Quest)
+        self.dataset = tablib.Dataset(headers=['import_id', 'prereq_import_ids'])
+        self.dataset.append([str(self.parent.import_id), '&' + str(self.prereq_quest.import_id)])
+
+    def test_after_import__generates_prereqs_on_real_import(self):
+        """On a committed import (dry_run=False) the row's prereq import_ids become real prereqs."""
+        self.resource.after_import(self.dataset, None, dry_run=False)
+
+        self.assertIn(self.prereq_quest, [p.get_prereq() for p in self.parent.prereqs()])
+
+    def test_after_import__skips_prereq_generation_during_dry_run(self):
+        """During the dry-run/preview step (dry_run=True) no prereqs are created."""
+        self.resource.after_import(self.dataset, None, dry_run=True)
+
+        self.assertEqual(len(self.parent.prereqs()), 0)
+
+
+class BadgeAdminFormatsTest(ByteDeckTenantTestCase):
+    """Tests that BadgeAdmin restricts import/export to CSV."""
+
+    def test_get_import_formats__csv_only(self):
+        """Importing is restricted to CSV."""
+        modeladmin = BadgeAdmin(Badge, django_admin.site)
+        formats = modeladmin.get_import_formats()
+        self.assertEqual([fmt().get_title() for fmt in formats], ['csv'])
+
+    def test_get_export_formats__csv_only(self):
+        """Exporting is restricted to CSV."""
+        modeladmin = BadgeAdmin(Badge, django_admin.site)
+        formats = modeladmin.get_export_formats()
+        self.assertEqual([fmt().get_title() for fmt in formats], ['csv'])
