@@ -33,21 +33,31 @@
 {% endif %}
 
 <h3>Dates</h3>
+{# one governing deadline row, not both: a paid date (even lapsed) supersedes the trial date #}
 <table class="table" style="max-width: 30em;">
-  <tr><th>Trial ends</th><td>{{ deck.trial_end_date|default:"&mdash;" }}</td></tr>
-  <tr><th>Paid until</th><td>{{ deck.paid_until|default:"&mdash;" }}</td></tr>
-  <tr><th>Grace period</th><td>{{ grace_days }} days after <em>paid until</em></td></tr>
+  {% if deck.paid_until %}
+    <tr><th>Paid until</th><td>{{ deck.paid_until }}</td></tr>
+    <tr><th>Grace period</th><td>{{ grace_days }} days after <em>paid until</em></td></tr>
+  {% elif deck.trial_end_date %}
+    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }}</td></tr>
+  {% else %}
+    <tr><th>Expires</th><td>Never &mdash; this deck is managed manually</td></tr>
+  {% endif %}
 </table>
 
 <h3>Student seats</h3>
 <table class="table" style="max-width: 30em;">
   <tr>
+    <th>Maximum allowed</th>
+    <td>{% if cap == -1 %}Unlimited{% else %}{{ cap }}{% endif %}</td>
+  </tr>
+  <tr>
     <th>Current students</th>
     <td>{{ current_student_count }}</td>
   </tr>
-  <tr>
-    <th>Maximum allowed</th>
-    <td>{% if cap == -1 %}Unlimited{% else %}{{ cap }}{% endif %}</td>
+  <tr class="total-row">
+    <th>Remaining students</th>
+    <td>{% if cap == -1 %}Unlimited{% else %}{{ remaining_seats }}{% endif %}</td>
   </tr>
 </table>
 {% if cap != -1 and current_student_count >= cap %}

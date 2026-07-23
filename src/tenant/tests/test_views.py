@@ -651,15 +651,60 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.get_page()
 
     def test_page__shows_dates_seats_and_status(self):
-        """A subscribed deck shows its status, both dates, days remaining, and seat usage."""
+        """A subscribed deck shows its status, the governing date, days remaining,
+        and the three seat rows (maximum / current / remaining)."""
         response = self.get_page()
         self.assertContains(response, 'Subscribed')
         self.assertContains(response, '100 days remaining')
         self.assertContains(response, 'Paid until')
-        self.assertContains(response, 'Trial ends')
         self.assertContains(response, 'Current students')
         self.assertContains(response, 'Maximum allowed')
+        self.assertContains(response, 'Remaining students')
         self.assertContains(response, '30')
+
+    def test_page__dates_show_only_the_governing_deadline(self):
+        """The Dates table shows ONE deadline row -- Paid until when a paid date
+        exists (it supersedes the trial date, even while lapsed), Trial ends on a
+        trial-only deck, and a never-expires row on a managed-manually deck."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        # subscribed decks keep their old trial date; only the paid row shows
+        self.set_deck(trial_end_date=localdate() - timedelta(days=300))
+        response = self.get_page()
+        self.assertContains(response, 'Paid until')
+        self.assertNotContains(response, 'Trial ends')
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=10), paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Never')
+        self.assertNotContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+    def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
+        """Remaining students = cap minus the LIVE current-student count, clamped
+        at 0 when over the limit; None (rendered "Unlimited") on unlimited decks."""
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        self.assertEqual(self.get_page().context['remaining_seats'], 30)
+
+        for _ in range(2):  # two current students on a cap of 1: clamped, not -1
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
+        self.set_deck(max_active_users=1)
+        response = self.get_page()
+        self.assertEqual(response.context['remaining_seats'], 0)
+
+        self.set_deck(max_active_users=-1)
+        self.assertIsNone(self.get_page().context['remaining_seats'])
 
     def test_page__grace_period_states_trial_cap(self):
         """A deck in its paid grace window explains the grace period and the trial
