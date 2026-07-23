@@ -414,10 +414,15 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
 
         context = super().get_context_data(**kwargs)
         deck = self.request.tenant
+        current_student_count = deck.get_active_user_count()  # live, not cached
+        cap = deck.effective_max_active_users
         context.update({
             'deck': deck,
-            'current_student_count': deck.get_active_user_count(),  # live, not cached
-            'cap': deck.effective_max_active_users,
+            'current_student_count': current_student_count,
+            'cap': cap,
+            # None for unlimited decks; clamped at 0 when over the limit (the
+            # template's at-limit warning covers the overage)
+            'remaining_seats': None if cap == -1 else max(0, cap - current_student_count),
             'trial_cap': TRIAL_MAX_ACTIVE_USERS,
             'grace_days': GRACE_PERIOD_DAYS,
             'stripe_configured': billing_configured(),
