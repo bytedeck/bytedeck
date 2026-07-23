@@ -158,6 +158,7 @@ TENANT_APPS = (
     'taggit',
 
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',
@@ -243,6 +244,7 @@ INSTALLED_APPS = (
 
     # local apps
     'quest_manager',
+    'questions',
     'profile_manager',
     'announcements',
     'comments',
@@ -669,6 +671,27 @@ SHOW_PUBLIC_IF_NO_TENANT_FOUND = True
 # See this: https://github.com/timberline-secondary/hackerspace/issues/388
 # The design choice for media files it serving all the media files from one directory instead of separate directory for each tenant.
 SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
+
+
+# RECAPTCHA #######################################################
+
+# Deck status notices (epic #1729, #1733): when False (the default), the nightly
+# deck-status task runs the reminder engine in REPORT-ONLY mode -- it logs which
+# expiry/limit/suspension notices it *would* send, but sends nothing and records
+# nothing. Flip to True in production once a report-only cycle has been reviewed
+# (see docs/plans/PLAN-1729-automated-payments-onboarding.md §10.2).
+DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
+
+# STRIPE ##########################################################
+
+# Automated deck subscriptions (epic #1729). All default to None: when the keys
+# are absent the billing UI degrades gracefully (the subscription page shows
+# "billing not configured" and falls back to the public subscribe page), so dev
+# and self-hosted environments boot clean without a Stripe account.
+STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
+STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # used by the webhook endpoint (plan PR 7)
+STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
 
 
 # RECAPTCHA #######################################################

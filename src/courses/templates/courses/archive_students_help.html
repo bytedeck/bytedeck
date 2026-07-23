@@ -1,33 +1,42 @@
 {% extends "courses/base.html" %}
 
-{% block heading_inner %}Archiving past students{% endblock %}
+{% block heading_inner %}Freeing up student seats{% endblock %}
 
 {% block content %}
 <p>
-  Your deck's subscription is based on the number of <strong>active students</strong> &mdash; students
-  currently registered in a course in the active semester. Staff never count. Students you archive stop
-  counting immediately, freeing their seats.
+  Your deck's subscription is based on the number of <strong>current</strong> students. Students on a deck
+  are in one of three states:
 </p>
+<ul>
+  <li><strong>Current</strong> &mdash; registered in a course in the active semester.
+    <em>Only current students count toward your deck's limit.</em> Staff never count.</li>
+  <li><strong>Active</strong> &mdash; every other student: they can still sign in and browse, but they aren't
+    registered in a course this semester, so they don't count.</li>
+  <li><strong>Inactive (archived)</strong> &mdash; students marked as not active on their profile. They can't
+    sign in, and they appear under their own <em>Inactive</em> tab on the Students page.</li>
+</ul>
 
 <h3>End the active semester (whole class at once)</h3>
 <p>
   When a semester ends, close it from the
   <a href="{% url 'courses:semester_list' %}">Semesters page</a> using <em>End Active Semester</em>.
-  All of its course registrations are deactivated, so those students stop counting as soon as a new
-  semester becomes active. This is the normal end-of-term workflow.
+  All of its course registrations are deactivated, so those students go from <strong>current</strong> to
+  merely <strong>active</strong> &mdash; they stop counting toward your limit as soon as a new semester
+  becomes active, while still being able to sign in. This is the normal end-of-term workflow.
 </p>
 
 <h3>Archive individual students</h3>
 <p>
-  To archive a single student, edit their profile and un-check <em>Active</em>. Archived students can't
-  log in and don't count toward your limit; their work and XP are kept, and re-activating them restores
-  everything. You can find archived students under the <em>Inactive</em> tab of the Students list.
+  To archive a single student, edit their profile and un-check <em>Active</em>. Archived
+  (<strong>inactive</strong>) students can't sign in and never count toward your limit; their work and XP
+  are kept, and re-activating them restores everything. Find them under the <em>Inactive</em> tab of the
+  Students list.
 </p>
 
 <h3>When do the numbers update?</h3>
 <p>
-  The counts shown on banners refresh nightly. Enforcement when a student joins a course always uses a
-  live count, so archiving a student frees their seat right away even if a banner still shows the old
-  number.
+  The counts shown on banners refresh nightly. Enforcement when a student registers in a course always uses
+  a live count, so freeing a seat (either way above) takes effect right away even if a banner still shows
+  the old number.
 </p>
 {% endblock %}

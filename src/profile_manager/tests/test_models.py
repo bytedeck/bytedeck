@@ -3,6 +3,7 @@ from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.test import SimpleTestCase
+from django.utils import timezone
 
 from model_bakery import baker
 from model_bakery.recipe import Recipe
@@ -153,32 +154,36 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         # TODO fully test this with multiple blocks
 
     def test_teachers__empty_until_registered(self):
-        """teachers() is empty until the student has a course registration."""
+        """teachers() is empty before registration, yields a single None while the current
+        course's block has no teacher, and yields the teacher once one is assigned."""
         self.assertEqual(list(self.profile.teachers()), [])
         course_registration = self.create_active_course_registration()
-        # Still no teachers since no teacher assign to this course's block yet
-        # why is this a list of None instead of just empty? SQLite thing?
+        # Registered, but the course's block has no teacher yet, so teachers() -- which reads
+        # block__current_teacher -- yields a single None (one current course, no teacher).
         self.assertEqual(list(self.profile.teachers()), [None])
-
         self.assertTrue(self.profile.has_current_course)
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
 
-        # TODO should have teachers now... why not working? Should not be None...
-        # self.assertEqual(list(self.profile.teachers()), [None])
+        # Assign AND persist a block with a teacher (the DB query only sees a saved block);
+        # teachers() now lists that teacher.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertEqual(list(self.profile.teachers()), [self.teacher.id])
 
     def test_current_teachers__empty_until_teacher_assigned(self):
-        """current_teachers() stays empty until a teacher is assigned to the student's block."""
+        """current_teachers() stays empty until a teacher is assigned to the student's block,
+        then includes that teacher."""
         self.assertFalse(self.profile.current_teachers().exists())
 
         course_registration = self.create_active_course_registration()
 
-        # Still no teachers since no teacher assign to this course's block yet
+        # Still no teachers since no teacher is assigned to this course's block yet.
         self.assertFalse(self.profile.current_teachers().exists())
 
-        course_registration.block = baker.make('courses.block', current_teacher=self.teacher)
-
-        # print(course_registration)
-        # print(self.profile.current_teachers()) # why is this empty?!?!
+        # Assign AND persist a block with a teacher (an in-memory assignment isn't visible to the
+        # DB query behind current_teachers()); the teacher now shows up.
+        course_registration.block = baker.make('courses.Block', current_teacher=self.teacher)
+        course_registration.save()
+        self.assertIn(self.teacher, self.profile.current_teachers())
 
     def test_rank__default_for_new_user(self):
         """ By default a new user has a rank"""
@@ -236,6 +241,7 @@ class ProfileTestModel(ByteDeckTenantTestCase):
 
 
 class SmartListTests(SimpleTestCase):
+    """Covers the module-level smart_list value parser."""
 
     def test_smart_list__empty_inputs(self):
         """smart_list() returns an empty list for empty/None-like inputs."""
@@ -267,6 +273,24 @@ class SmartListTests(SimpleTestCase):
     def test_smart_list__single_int(self):
         """smart_list() wraps a single int in a list."""
         self.assertEqual(smart_list(1), [1])
+
+    def test_smart_list__parses_bracketed_delimited_string(self):
+        """A bracketed, comma-separated string is split and mapped by func."""
+        self.assertEqual(smart_list("[1, 2, 3]", func=int), [1, 2, 3])
+
+    def test_smart_list__empty_after_stripping_returns_empty_list(self):
+        """A bracket/whitespace-only string that strips to empty returns an empty list."""
+        self.assertEqual(smart_list("[   ]"), [])
+
+    def test_smart_list__raises_valueerror_for_unparseable_type(self):
+        """An unsupported value type raises ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list(3.14)
+
+    def test_smart_list__raises_valueerror_when_func_fails_on_an_element(self):
+        """A per-element func that raises is re-raised as a ValueError."""
+        with self.assertRaises(ValueError):
+            smart_list("x,y", func=int)
 
 
 class UserDeletionTest(ByteDeckTenantTestCase):
@@ -314,3 +338,105 @@ class UserDeletionTest(ByteDeckTenantTestCase):
         self.assertRaises(Notification.DoesNotExist, self.notification.refresh_from_db)
         self.assertRaises(Portfolio.DoesNotExist, self.portfolio.refresh_from_db)
         self.assertRaises(QuestSubmission.DoesNotExist, self.quest_submission.refresh_from_db)
+
+
+class ProfileNameMethodsTest(ByteDeckTenantTestCase):
+    """Covers Profile's display-name variants and small string helpers."""
+
+    def setUp(self):
+        """A user with a real first/last name whose auto-created profile we exercise."""
+        self.user = baker.make(User, first_name="Jane", last_name="Doe")
+        self.profile = self.user.profile
+
+    def test_str__includes_preferred_name_and_alias(self):
+        """__str__ shows 'First (Preferred) Last, aka <clipped alias>' when all are set."""
+        self.profile.preferred_name = "Janey"
+        self.profile.alias = "JD"
+        self.assertEqual(str(self.profile), "Jane (Janey) Doe, aka JD")
+
+    def test_get_preferred_name__prefers_preferred_over_first_name(self):
+        """get_preferred_name returns the preferred name when one is set."""
+        self.profile.preferred_name = "Janey"
+        self.assertEqual(self.profile.get_preferred_name(), "Janey")
+
+    def test_preferred_full_name__appends_last_name(self):
+        """With no preferred name, preferred_full_name is the first + last name."""
+        self.assertEqual(self.profile.preferred_full_name(), "Jane Doe")
+
+    def test_public_name__internal_only_returns_formal_name(self):
+        """When preferred_internal_only is set, the public name falls back to the formal name."""
+        self.profile.preferred_internal_only = True
+        self.assertEqual(self.profile.public_name(), self.user.get_full_name())
+
+    def test_internal_name__appends_clipped_alias(self):
+        """internal_name appends ', aka <alias>' when an alias is set."""
+        self.profile.alias = "JD"
+        self.assertEqual(self.profile.internal_name(), "Jane Doe, aka JD")
+
+    def test_formal_name__is_users_full_name(self):
+        """formal_name is the user's full name."""
+        self.assertEqual(self.profile.formal_name(), "Jane Doe")
+
+    def test_get_avatar_url__returns_avatar_url_when_set(self):
+        """get_avatar_url returns the avatar's own url once an avatar is set."""
+        self.profile.avatar = "avatars/jane.png"
+        self.assertTrue(self.profile.get_avatar_url().endswith("avatars/jane.png"))
+
+
+class ProfileManagerAndQuerySetTest(ByteDeckTenantTestCase):
+    """Covers the ProfileManager / ProfileQuerySet filter helpers."""
+
+    def test_all_visible__filters_visible_to_other_students(self):
+        """all_visible() returns only profiles flagged visible to other students."""
+        Profile.objects.all().update(visible_to_other_students=True)
+        self.assertTrue(Profile.objects.all_visible().exists())
+
+    def test_all_inactive__includes_profiles_of_inactive_users(self):
+        """all_inactive() returns the profiles of users whose accounts are inactive."""
+        inactive_user = baker.make(User, is_active=False)
+        self.assertIn(inactive_user.profile, Profile.objects.all_inactive())
+
+    def test_queryset__announcement_email_filter(self):
+        """The announcement_email queryset filter selects profiles opted into announcement emails."""
+        Profile.objects.all().update(get_announcements_by_email=True)
+        self.assertTrue(Profile.objects.get_queryset().announcement_email().exists())
+
+
+class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
+    """Covers gone_stale, xp_to_next_rank, xp_since_last_rank, and the no-course chillax path."""
+
+    def setUp(self):
+        """A user whose auto-created profile we exercise."""
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def test_gone_stale__true_with_no_submissions(self):
+        """A profile that has never submitted a quest is considered stale."""
+        self.profile.time_of_last_submission = None
+        self.assertTrue(self.profile.gone_stale())
+
+    def test_gone_stale__true_when_last_submission_over_five_days_ago(self):
+        """A profile whose last submission was more than five days ago is stale."""
+        self.profile.time_of_last_submission = timezone.now() - timezone.timedelta(days=6)
+        self.assertTrue(self.profile.gone_stale())
+
+    def test_gone_stale__false_when_last_submission_is_recent(self):
+        """A profile that submitted a quest just now is not stale."""
+        self.profile.time_of_last_submission = timezone.now()
+        self.assertFalse(self.profile.gone_stale())
+
+    def test_xp_to_next_rank__zero_when_maxed_out(self):
+        """When there is no next rank (maxed out), xp_to_next_rank is 0."""
+        with patch.object(Profile, 'next_rank', return_value=None):
+            self.assertEqual(self.profile.xp_to_next_rank(), 0)
+
+    def test_xp_since_last_rank__zero_when_rank_lookup_fails(self):
+        """xp_since_last_rank swallows a failed rank lookup and returns 0."""
+        with patch.object(Profile, 'rank', side_effect=Exception("boom")):
+            self.assertEqual(self.profile.xp_since_last_rank(), 0)
+
+    def test_chillax__false_when_not_registered_in_a_course(self):
+        """chillax() is False for a user with no current course."""
+        self.assertFalse(self.profile.chillax())
+
+

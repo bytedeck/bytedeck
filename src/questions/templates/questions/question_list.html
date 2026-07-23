@@ -1,0 +1,25 @@
+{% extends 'questions/base.html' %}
+
+{% block heading_inner %}Questions for <a href="{% url 'quests:quest_detail' quest.id %}">{{ quest.name }}</a>
+<div class="btn-toolbar">
+   {% for value, verbose_name in type_choices %}
+      <a class="btn btn-primary"
+            href="{% url 'questions:create' quest.id value %}"
+            title="Create {{ verbose_name }} Question"><i class="fa fa-plus-circle"></i> {{ verbose_name }}</a>
+   {% endfor %}
+</div>
+{% endblock %}
+
+{% block content %}
+  {% include 'questions/snippets/question_table.html' %}
+{% endblock %}
+
+{% block js %}
+<script>
+    // initialize the popovers and tooltips used by the question table
+    $(document).ready(function(){
+        $('[data-toggle="popover"]').popover();
+        $('[data-toggle="tooltip"]').tooltip();
+    });
+</script>
+{% endblock %}

@@ -12,7 +12,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 from tenant.models import (
-    EXPIRY_WARNING_DAYS, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant, check_tenant_name, default_trial_end_date,
+    EXPIRY_WARNING_DAYS, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, DeckNotice, Tenant, check_tenant_name, default_trial_end_date,
 )
 
 User = get_user_model()
@@ -95,8 +95,12 @@ class CheckTenantNameTest(SimpleTestCase):
         self.assertRaises(ValidationError, check_tenant_name, '9tenant')
 
     def test_check_tenant_name__uppercase_invalid(self):
-        """A name containing uppercase letters is rejected."""
-        self.assertRaises(ValidationError, check_tenant_name, 'Tenant')
+        """A name containing uppercase letters (after the first character) is rejected.
+
+        The mid-string capital matters: a leading capital trips the must-start-lowercase
+        check instead, leaving the capital-letter branch untested.
+        """
+        self.assertRaises(ValidationError, check_tenant_name, 'tEnant')
 
     def test_check_tenant_name__start_dash_invalid(self):
         """A name starting with a dash is rejected."""
@@ -360,3 +364,14 @@ class TenantBannerStatusTest(SimpleTestCase):
         decks have no deadline to warn about."""
         self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_expiring_soon)
         self.assertFalse(self.make_tenant().is_expiring_soon)
+
+
+class DeckNoticeModelTest(ByteDeckTenantTestCase):
+    """Tests for the DeckNotice reminder ledger model (epic #1729 PR 5, #1733)."""
+
+    def test_str__identifies_deck_kind_threshold_and_period(self):
+        """The string form names the deck schema, kind/threshold, and period key."""
+        notice = DeckNotice.objects.create(
+            tenant=self.tenant, kind=DeckNotice.KIND_LIMIT, threshold='pct80', period_key='2026-08'
+        )
+        self.assertEqual(str(notice), f'{self.tenant.schema_name}: limit/pct80 for 2026-08')
