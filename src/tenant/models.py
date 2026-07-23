@@ -225,7 +225,7 @@ class Tenant(TenantMixin):
         admin-set ``max_active_users``: new decks are created with the trial
         default (5), so the trial cap is the default, not an override, and an
         admin who deliberately raises a trial or comped deck's cap is honored.
-        (Production bug find, PR 7 review: the old subscription_active-based rule
+        (Production bug find, 2026-07-22: the old subscription_active-based rule
         capped comped/managed-manually decks at 5, contradicting their admin-set
         cap on the banner and subscription page.)
         """

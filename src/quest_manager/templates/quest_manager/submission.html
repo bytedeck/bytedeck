@@ -89,7 +89,8 @@
           {% endwith %}
         {% else %}
           {% if submission.quest.published %}
-            <a id='save-draft-btn' class='btn btn-default'>
+            <a id='save-draft-btn' class='btn btn-default'
+               title="Your draft autosaves about every minute, but you can force a save now with this button. Note: attached files are NOT saved in a draft.">
               <span id="draft-text">Save Draft</span>
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
@@ -97,8 +98,10 @@
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
-              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval' />
-              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval'
+                     title="The quest will move to your &quot;Completed&quot; tab and your teacher will be notified (unless the quest is automatically approved)." />
+              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button"
+                 title="Remove this quest from your &quot;In Progress&quot; tab, delete any saved draft, and it will re-appear in your Available quests tab.">Drop Quest</a>
             {% endif %}
           {% endif %}
           {% comment %} TAs can copy the quest from the full submission view too, not just the
