@@ -14,6 +14,15 @@
 
   <hr>
 
+  <div class="alert alert-info">
+    <strong>When is this {{ config.custom_name_for_badge|lower }} granted automatically?</strong>
+    Students earn it on their own the next time one of their quest submissions is approved, or when
+    their profile page loads &mdash; that's when the system re-checks which
+    {{ config.custom_name_for_badge|lower }}s they've qualified for. Use this page to grant it to
+    everyone who <em>already</em> qualifies right now (for example, right after you change its
+    prerequisites), instead of waiting for each student's next quest.
+  </div>
+
   <h3>Students who qualify for this {{ config.custom_name_for_badge|lower }}</h3>
 
   {% if qualifying_students %}
