@@ -287,6 +287,22 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # heading and the XP that granting will award are both shown (issue #2061)
         self.assertContains(response, 'Students who qualify for this')
         self.assertContains(response, f'{self.test_badge.xp} XP')
+        # the qualifying students render as a bulleted list, not the previous unstyled list (#2117)
+        self.assertNotContains(response, 'list-unstyled')
+        # a note explains that badges are granted automatically on quest approval / profile view (#2117)
+        self.assertContains(response, 'granted automatically')
+        self.assertContains(response, 'the next time one of their quest submissions is approved')
+
+    def test_badge_grant_qualifying__auto_grant_note_shown_when_no_qualifiers(self):
+        """The auto-grant explanation note is shown even when no current student qualifies, so a
+        teacher always sees when the badge grants on its own (#2117)."""
+        self.client.force_login(self.test_teacher)
+        # test_badge has no prereqs / no qualifying students in this fresh state
+        response = self.client.get(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['qualifying_students']), [])
+        self.assertContains(response, 'granted automatically')
 
     @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
     def test_badge_grant_qualifying__POST_queues_task_and_redirects(self, task):
