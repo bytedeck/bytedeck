@@ -454,6 +454,22 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
 
+    def test_submission_view__ta_sees_copy_quest_button(self):
+        """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
+        self.test_student1.profile.is_TA = True
+        self.test_student1.profile.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, reverse('quests:quest_copy', args=[self.sub1.quest.id]))
+
+    def test_submission_view__non_ta_student_has_no_copy_button(self):
+        """A regular (non-TA) student viewing the full submission page does not get the copy-quest link (#141)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, reverse('quests:quest_copy', args=[self.sub1.quest.id]))
+
     def test_drop__student_can_drop_completed_submission_when_hidden(self):
         """
         Make sure student can drop a submission from a quest when an admin decides

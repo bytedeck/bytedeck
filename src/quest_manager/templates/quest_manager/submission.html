@@ -101,6 +101,15 @@
               <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
             {% endif %}
           {% endif %}
+          {% comment %} TAs can copy the quest from the full submission view too, not just the
+             In Progress/Completed tab preview (#141). Shown regardless of the quest's published
+             state so a TA can always template off a quest they've started. {% endcomment %}
+          {% if request.user.profile.is_TA %}
+            <a title="Create a new quest using this one as a template. By default this quest will be a prerequisite for the new one."
+               class="btn btn-default" role="button" href="{% url 'quests:quest_copy' submission.quest.id %}">
+              <i class="fa fa-fw fa-copy"></i> Copy Quest
+            </a>
+          {% endif %}
         {% endif %}
         </div>
       </form>
