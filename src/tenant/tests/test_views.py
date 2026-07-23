@@ -561,6 +561,34 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Trial Mode')
         self.assertContains(response, reverse('decks:subscription'))
 
+    def test_banner__trial_mode_shows_days_remaining_and_seat_usage(self):
+        """The trial banner spells out the time remaining after the end date and the
+        seats used out of the cap, pointing at the Subscription details page
+        (maintainer request from staging v1.19 testing)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=52), active_user_count=3, max_active_users=5)
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, '52 days remaining')
+        self.assertContains(response, '3 current student seats used')
+        self.assertContains(response, 'out of a maximum of 5')
+        self.assertContains(response, 'Subscription details')
+
+    def test_banner__trial_mode_unlimited_deck_shows_no_seat_limit(self):
+        """A trial deck with the -1 unlimited cap says "no seat limit" instead of
+        "a maximum of -1"."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=52), active_user_count=1, max_active_users=-1)
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, '1 current student seat used')
+        self.assertContains(response, 'no seat limit')
+        self.assertNotContains(response, 'maximum of -1')
+
     def test_banner__not_shown_to_students_on_trial_deck(self):
         """Students never see the trial banner (it's staff-facing nagware)."""
         response = self.get_quests_page(self.student)
