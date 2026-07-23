@@ -4,7 +4,7 @@
 {% load utility_tags %}
 
 {% block head %}
-{# bootstrap-table CSS is loaded globally in head_css.html; only the JS is needed here #}
+<link rel="stylesheet" href="{% static 'css/bootstrap-table.min.css' %}">
 <script src="{% static 'js/bootstrap-table.min.js' %}"></script>
 {% endblock %}
 
