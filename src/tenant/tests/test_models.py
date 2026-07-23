@@ -425,6 +425,50 @@ class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, later)
 
+    def test_sync__stale_instance_cannot_lower_paid_until(self):
+        """The monotonic guard is evaluated against the LOCKED database row, not this
+        instance's in-memory state: a sync through an instance loaded before a
+        concurrent sync advanced paid_until must not lower it back (the stale
+        instance reproduces exactly what a lost race between two workers reads)."""
+        self.set_deck(paid_until=None, stripe_subscription_id='')
+        stale = Tenant.objects.get(pk=self.tenant.pk)  # loaded BEFORE the newer sync
+
+        later_ts = self.PERIOD_END_TS + 100 * 86400
+        self.tenant.sync_from_stripe_subscription(self.make_subscription(
+            items={'data': [{'current_period_end': later_ts, 'price': {'id': 'price_x', 'metadata': {}}}]},
+        ))
+        self.tenant.refresh_from_db()
+        advanced = self.tenant.paid_until
+
+        # the older event passes the STALE in-memory check (None < older date) but
+        # must be rejected against the fresh row
+        summary = stale.sync_from_stripe_subscription(self.make_subscription())
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, advanced)
+
+    def test_sync__stale_cancellation_for_other_subscription_ignored(self):
+        """A delayed cancellation for a SUPERSEDED subscription (resolved to this
+        deck via the customer-id fallback) must not unlink the deck's current
+        subscription."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_new')
+        summary = self.tenant.sync_from_stripe_subscription(
+            self.make_subscription(id='sub_old', status='canceled'))
+        self.assertIn('ignored', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_new')
+
+    def test_sync__active_event_for_other_subscription_ignored(self):
+        """A delayed ACTIVE event for a superseded subscription must not relink it
+        (or touch billing state) on a deck now linked to a different subscription --
+        link switches only happen via the checkout reconciler or the admin."""
+        self.set_deck(paid_until=None, stripe_subscription_id='sub_new')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription(id='sub_old'))
+        self.assertIn('ignored', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_new')
+        self.assertIsNone(self.tenant.paid_until)
+
     def test_sync__cap_from_price_metadata_and_fallback_map(self):
         """max_active_users comes from the Price's metadata; the settings tier map
         is the fallback; with neither, the cap is left alone."""

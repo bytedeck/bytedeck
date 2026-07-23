@@ -3,7 +3,7 @@ from datetime import date
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
@@ -288,7 +288,16 @@ class Tenant(TenantMixin):
 
         Every webhook handler, the admin "Sync from Stripe" action, and the
         nightly reconcile funnel through here -- handlers never write billing
-        fields directly. Applies, with ``update_fields`` and cache invalidation:
+        fields directly. All guards are evaluated against the row's FRESH state
+        under ``select_for_update()`` (this instance may have been loaded before
+        a concurrent sync), then applied as a targeted ``QuerySet.update()`` --
+        which bypasses ``save()`` hooks and model validation -- plus cache
+        invalidation. Events for a subscription OTHER than the deck's currently
+        linked one are ignored outright: webhook resolution can fall back to the
+        customer id, so a delayed event for a superseded subscription could
+        otherwise unlink or relink the wrong one (legitimate link switches go
+        through the checkout reconciler or the admin, which change the linked id
+        itself). Applies:
 
         * ``paid_until`` = the subscription's current period end -- **monotonic**
           (a re-delivered or out-of-order older event can never LOWER it) and
@@ -322,28 +331,47 @@ class Tenant(TenantMixin):
         # to cover that window. paid_until therefore only advances on
         # active/trialing (i.e. on payment), matching the checkout reconciler.
         grants_access = status in ('active', 'trialing')
-
-        updates = {}
-        if grants_access:
-            period_end = subscription_period_end_date(subscription)
-            if period_end is not None and (self.paid_until is None or period_end > self.paid_until):
-                updates['paid_until'] = period_end
-
-            cap = subscription_max_active_users(subscription)
-            if cap is not None and cap != self.max_active_users:
-                updates['max_active_users'] = cap
-
         sub_id = subscription.get('id') or ''
-        if status in ('canceled', 'incomplete_expired'):
-            if self.stripe_subscription_id:
-                updates['stripe_subscription_id'] = ''
-        elif sub_id and sub_id != self.stripe_subscription_id:
-            updates['stripe_subscription_id'] = sub_id
+
+        with transaction.atomic():
+            # Lock the row and evaluate every guard against its FRESH state: this
+            # instance can be stale (loaded before a concurrent sync committed),
+            # and deciding from stale state would let an out-of-order event lower
+            # paid_until past the monotonic guard.
+            current = Tenant.objects.select_for_update().get(pk=self.pk)
+
+            # Identity guard: only the deck's linked subscription may change its
+            # billing state. A delayed event for a superseded subscription reaches
+            # this deck via the customer-id fallback and must not unlink or relink
+            # anything. An unlinked deck accepts any subscription (initial link).
+            if current.stripe_subscription_id and sub_id and sub_id != current.stripe_subscription_id:
+                return f"ignored: {sub_id} is not this deck's linked subscription"
+
+            updates = {}
+            if grants_access:
+                period_end = subscription_period_end_date(subscription)
+                if period_end is not None and (current.paid_until is None or period_end > current.paid_until):
+                    updates['paid_until'] = period_end
+
+                cap = subscription_max_active_users(subscription)
+                if cap is not None and cap != current.max_active_users:
+                    updates['max_active_users'] = cap
+
+            if status in ('canceled', 'incomplete_expired'):
+                # the identity guard above guarantees this clears only the event's own sub
+                if current.stripe_subscription_id:
+                    updates['stripe_subscription_id'] = ''
+            elif sub_id and sub_id != current.stripe_subscription_id:
+                updates['stripe_subscription_id'] = sub_id
+
+            if updates:
+                Tenant.objects.filter(pk=self.pk).update(**updates)
 
         if updates:
-            Tenant.objects.filter(pk=self.pk).update(**updates)
             for field, value in updates.items():
                 setattr(self, field, value)
+            # invalidate after the write is committed/queued, so a concurrent
+            # request can't re-cache the pre-update row between the two steps
             invalidate_current_deck_cache(self.schema_name)
             return 'updated ' + ', '.join(f'{field}={value}' for field, value in updates.items())
         return 'no changes'

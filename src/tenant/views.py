@@ -530,6 +530,10 @@ def stripe_webhook(request):
     StripeEventLog before any handler runs; handler crashes return 500 so Stripe
     retries the event (the log row rolls back with the transaction).
 
+    Args:
+        request (HttpRequest): The POST carrying Stripe's raw JSON event payload
+            in the body and the ``Stripe-Signature`` header it is verified with.
+
     Returns:
         HttpResponse: 200 acknowledged (handled, duplicate, or ignored type),
         400 for a bad/unverifiable payload, 503 when no webhook secret is
