@@ -155,8 +155,8 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
             'client_reference_id': self.tenant.schema_name, 'customer': 'cus_wh', 'subscription': 'sub_wh',
         })
         with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
-            summary = handle_webhook_event(event)
-        self.assertIn(self.tenant.schema_name, summary)
+            schema_name, summary = handle_webhook_event(event)
+        self.assertEqual(schema_name, self.tenant.schema_name)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_wh')
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
@@ -169,7 +169,8 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
 
         self.set_deck(paid_until=None, stripe_subscription_id='sub_wh')
         event = self.make_event('customer.subscription.updated', self.stripe_subscription())
-        summary = handle_webhook_event(event)
+        schema_name, summary = handle_webhook_event(event)
+        self.assertEqual(schema_name, self.tenant.schema_name)
         self.assertIn('paid_until', summary)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
@@ -180,8 +181,8 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
             'customer.subscription.created',
             self.stripe_subscription(metadata={'schema_name': self.tenant.schema_name}),
         )
-        summary = handle_webhook_event(event)
-        self.assertIn(self.tenant.schema_name, summary)  # resolved via the stamped metadata
+        schema_name, summary = handle_webhook_event(event)
+        self.assertEqual(schema_name, self.tenant.schema_name)  # resolved via the stamped metadata
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
 
@@ -193,7 +194,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=None, stripe_customer_id='cus_wh', stripe_subscription_id='sub_wh')
         event = self.make_event('invoice.paid', {'id': 'in_1', 'customer': 'cus_wh', 'subscription': 'sub_wh'})
         with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
-            summary = handle_webhook_event(event)
+            _, summary = handle_webhook_event(event)
         self.assertIn('paid_until', summary)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
@@ -231,9 +232,9 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
             tasks.send_email_message, 'apply_async',
             side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
         ):
-            summary = handle_webhook_event(event)
+            _, summary = handle_webhook_event(event)
             self.assertIn('sent payment-failure notice', summary)
-            summary = handle_webhook_event(event)  # Stripe retry of the same invoice
+            _, summary = handle_webhook_event(event)  # Stripe retry of the same invoice
             self.assertIn('already sent', summary)
 
         self.assertEqual(DeckNotice.objects.filter(kind=DeckNotice.KIND_PAYMENT_FAILED).count(), 1)
@@ -250,7 +251,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
 
         self.set_deck(stripe_customer_id='cus_wh')
         event = self.make_event('invoice.payment_failed', {'id': 'in_fail', 'customer': 'cus_wh'})
-        summary = handle_webhook_event(event)
+        _, summary = handle_webhook_event(event)
         self.assertIn('REPORT-ONLY', summary)
         self.assertFalse(DeckNotice.objects.filter(kind=DeckNotice.KIND_PAYMENT_FAILED).exists())
         self.assertEqual(len(mail.outbox), 0)
@@ -260,9 +261,9 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         with a log summary and change nothing."""
         from tenant.billing import handle_webhook_event
 
-        summary = handle_webhook_event(self.make_event('invoice.paid', {'customer': 'cus_nobody'}))
+        _, summary = handle_webhook_event(self.make_event('invoice.paid', {'customer': 'cus_nobody'}))
         self.assertEqual(summary, 'no deck resolved')
-        summary = handle_webhook_event(self.make_event('charge.refunded', {}))
+        _, summary = handle_webhook_event(self.make_event('charge.refunded', {}))
         self.assertIn('ignored event type', summary)
 
     def test_invoice_paid__without_subscription_is_ignored(self):
@@ -270,7 +271,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         from tenant.billing import handle_webhook_event
 
         self.set_deck(stripe_customer_id='cus_wh')
-        summary = handle_webhook_event(self.make_event('invoice.paid', {'id': 'in_2', 'customer': 'cus_wh'}))
+        _, summary = handle_webhook_event(self.make_event('invoice.paid', {'id': 'in_2', 'customer': 'cus_wh'}))
         self.assertIn('invoice without subscription', summary)
 
 
@@ -304,14 +305,14 @@ class ResolveDeckTest(ByteDeckTenantTestCase):
             ('customer.subscription.updated', {'id': 'sub_gone', 'customer': 'cus_gone'}),
             ('invoice.payment_failed', {'id': 'in_x', 'customer': 'cus_gone'}),
         ):
-            summary = handle_webhook_event({'id': 'evt_r', 'type': event_type, 'data': {'object': obj}})
-            self.assertEqual(summary, 'no deck resolved', event_type)
+            schema_name, summary = handle_webhook_event({'id': 'evt_r', 'type': event_type, 'data': {'object': obj}})
+            self.assertEqual((schema_name, summary), ('', 'no deck resolved'), event_type)
 
         # setup-mode checkout (no subscription on the session): customer link only
         Tenant.objects.filter(pk=self.tenant.pk).update(stripe_customer_id='', stripe_subscription_id='')
-        summary = handle_webhook_event({'id': 'evt_r2', 'type': 'checkout.session.completed',
-                                        'data': {'object': {'client_reference_id': self.tenant.schema_name,
-                                                            'customer': 'cus_only'}}})
+        _, summary = handle_webhook_event({'id': 'evt_r2', 'type': 'checkout.session.completed',
+                                           'data': {'object': {'client_reference_id': self.tenant.schema_name,
+                                                               'customer': 'cus_only'}}})
         self.assertIn('linked customer', summary)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_only')

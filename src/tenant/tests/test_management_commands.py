@@ -159,8 +159,6 @@ class StripeBackfillReportTest(ByteDeckTenantTestCase):
 
         from tenant.models import Tenant
 
-        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
-
         def sub(sub_id, email, customer_id='cus_x'):
             return {'id': sub_id, 'customer': {'id': customer_id, 'email': email}}
 

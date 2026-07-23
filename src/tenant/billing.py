@@ -24,6 +24,19 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localdate
 
+# Cap outbound Stripe HTTP time: webhook handlers retrieve subscriptions inside
+# the request's DB transaction (needed for the StripeEventLog dedupe + rollback
+# semantics), so the SDK's default read timeout (80s) could pin a DB connection
+# through a slow Stripe response. 15s is generous for single-object calls.
+# (_http_client is the SDK's internal module; guarded so a future layout change
+# degrades to the default timeout instead of an ImportError at boot.)
+try:
+    from stripe import _http_client as _stripe_http_client
+
+    stripe.default_http_client = _stripe_http_client.new_default_http_client(timeout=15)
+except (ImportError, AttributeError):  # pragma: no cover -- requires a different SDK layout
+    pass
+
 
 def billing_configured():
     """Whether Stripe checkout can run: the secret key and the subscription Price are set.
@@ -209,13 +222,18 @@ def _sync_deck_from_subscription_id(deck, subscription_id):
 
 
 def handle_webhook_event(event):
-    """Dispatch one verified Stripe webhook event; return a log summary string.
+    """Dispatch one verified Stripe webhook event.
 
     Handlers are thin translators (plan §5.2): resolve the deck, then call one
     named method -- ``Tenant.sync_from_stripe_subscription`` for anything that
     changes billing state, the notices machinery for payment failures. Unhandled
     event types are logged and acknowledged. Idempotence (duplicate delivery)
     is enforced by the caller via StripeEventLog before this runs.
+
+    Returns:
+        tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema
+        (empty string when no deck resolved) as structured data for the event
+        log's audit trail, and a human-readable summary for the worker log.
     """
     from django_tenants.utils import tenant_context
 
@@ -227,7 +245,7 @@ def handle_webhook_event(event):
         deck = _resolve_deck(schema_name=obj.get('client_reference_id') or metadata.get('schema_name'),
                              customer_id=obj.get('customer'))
         if deck is None:
-            return 'no deck resolved'
+            return '', 'no deck resolved'
         # link the customer now; the subscription sync follows via retrieve
         # (the webhook payload carries the subscription only as an id string)
         from tenant.models import Tenant
@@ -235,33 +253,33 @@ def handle_webhook_event(event):
         summary = 'linked customer'
         if obj.get('subscription'):
             summary += '; ' + _sync_deck_from_subscription_id(deck, obj['subscription'])
-        return f'{deck.schema_name}: {summary}'
+        return deck.schema_name, summary
 
     if event_type in ('customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'):
         deck = _resolve_deck(schema_name=metadata.get('schema_name'),
                              customer_id=obj.get('customer'), subscription_id=obj.get('id'))
         if deck is None:
-            return 'no deck resolved'
-        return f'{deck.schema_name}: {deck.sync_from_stripe_subscription(obj)}'
+            return '', 'no deck resolved'
+        return deck.schema_name, deck.sync_from_stripe_subscription(obj)
 
     if event_type == 'invoice.paid':
         subscription_id = obj.get('subscription')
         deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=subscription_id)
         if deck is None:
-            return 'no deck resolved'
+            return '', 'no deck resolved'
         if not subscription_id:
-            return f'{deck.schema_name}: invoice without subscription, ignored'
-        return f'{deck.schema_name}: {_sync_deck_from_subscription_id(deck, subscription_id)}'
+            return deck.schema_name, 'invoice without subscription, ignored'
+        return deck.schema_name, _sync_deck_from_subscription_id(deck, subscription_id)
 
     if event_type == 'invoice.payment_failed':
         deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=obj.get('subscription'))
         if deck is None:
-            return 'no deck resolved'
+            return '', 'no deck resolved'
         # Delivery resolves the owner/staff from the deck's schema, and respects
         # the same report-only rollout gate as the reminder engine.
         from tenant.notices import record_and_deliver_payment_failure
         with tenant_context(deck):
             summary = record_and_deliver_payment_failure(deck, invoice_id=obj.get('id') or 'unknown')
-        return f'{deck.schema_name}: {summary}'
+        return deck.schema_name, summary
 
-    return f'ignored event type {event_type}'
+    return '', f'ignored event type {event_type}'

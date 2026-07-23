@@ -543,22 +543,21 @@ def stripe_webhook(request):
     from .models import StripeEventLog
 
     if not settings.STRIPE_WEBHOOK_SECRET:
-        return HttpResponse('webhook secret not configured', status=503)
+        return HttpResponse('webhook secret not configured', status=503, content_type='text/plain')
     try:
         event = stripe_lib.Webhook.construct_event(
             request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
         )
     except (ValueError, stripe_lib.SignatureVerificationError):
-        return HttpResponse('invalid payload or signature', status=400)
+        return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
 
     with transaction.atomic():
         _, created = StripeEventLog.objects.get_or_create(
             event_id=event['id'], defaults={'event_type': event.get('type', '')},
         )
         if not created:  # duplicate delivery: acknowledged without re-running the handler
-            return HttpResponse('duplicate event', status=200)
-        summary = handle_webhook_event(event)
+            return HttpResponse('duplicate event', status=200, content_type='text/plain')
+        schema_name, summary = handle_webhook_event(event)
         # record which deck the event resolved to, for the audit trail
-        schema_name = summary.split(':', 1)[0] if ':' in summary else ''
         StripeEventLog.objects.filter(event_id=event['id']).update(schema_name=schema_name)
-    return HttpResponse(summary, status=200)
+    return HttpResponse(summary, status=200, content_type='text/plain')

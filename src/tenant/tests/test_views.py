@@ -1008,3 +1008,20 @@ class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = tenant_client.post(
             reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json')
         self.assertEqual(response.status_code, 404)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__handler_crash_rolls_back_event_log_so_stripe_retries(self):
+        """A handler crash returns 500 and rolls the StripeEventLog row back with the
+        transaction, so Stripe's retry of the event is re-processed, not absorbed
+        as a duplicate."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_crash', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_crash'}}}
+        # surface the 500 as a response instead of re-raising into the test
+        self.public_client.raise_request_exception = False
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            with patch('tenant.billing.handle_webhook_event', side_effect=RuntimeError('handler boom')):
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(StripeEventLog.objects.filter(event_id='evt_crash').exists())
