@@ -18,6 +18,18 @@
     <!-- jQuery 2.2.4 and Bootstrap 3.4.1 JS (vendored locally under src/static/js/) -->
     <script src="{% static 'js/jquery.min.js' %}"></script>
     <script src="{% static 'js/bootstrap.min.js' %}"></script>
+    <script>
+        // Bootstrap 3.4 added an allow-list HTML sanitizer to tooltip/popover content.
+        // Every HTML tooltip/popover in ByteDeck (badge popovers, mark-calculation
+        // breakdowns) renders only deck-owner/staff-authored or system-generated content
+        // -- never student/general-user free-text -- so the sanitizer strips legitimate
+        // markup (e.g. the inline color on badge rarity icons) without guarding any
+        // untrusted input. Disable it to keep the pre-3.4 rendering. Note: the separate
+        // 3.4.x data-attribute XSS fixes (collapse/scrollspy/affix/tooltip selectors) are
+        // NOT part of this sanitizer and remain in effect.
+        if (window.jQuery && $.fn.tooltip) { $.fn.tooltip.Constructor.DEFAULTS.sanitize = false; }
+        if (window.jQuery && $.fn.popover) { $.fn.popover.Constructor.DEFAULTS.sanitize = false; }
+    </script>
 
 
     <!-- ** head block ** -->
