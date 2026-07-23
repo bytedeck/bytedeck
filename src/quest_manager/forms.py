@@ -142,12 +142,12 @@ class QuestForm(forms.ModelForm):
                 'instructions',
                 'submission_details',
                 'instructor_notes',
-                'quick_reply',
                 'campaign',
                 'common_data',
                 'max_repeats',
                 'hours_between_repeats',
                 'tags',
+                'quick_reply',
                 Accordion(
                     AccordionGroup(
                         "Basic Prerequisites",

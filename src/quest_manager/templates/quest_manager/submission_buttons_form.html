@@ -20,18 +20,18 @@
     {% endif %}
 
     <button type="button" class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quick_text{{s.id}}"
-       title='ADD TEXT: "{{ quick_reply_text }}"' aria-label="Insert the site-wide quick reply text into your response">
+       title='ADD TEXT: "{{ quick_reply_text }}" (This text can be customized in your Site Configuration.)'
+       aria-label="Insert the site-wide quick reply text into your response">
        <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i>
     </button>
 
-    {% comment %} Quest-specific quick reply (#161): only shown when this quest has its own quick
-       reply text set. Carries the text in a data attribute so the shared handler can insert it. {% endcomment %}
-    {% if s.quest.quick_reply %}
-      <button type="button" class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quest_quick_text{{s.id}}"
-         data-quick-reply="{{ s.quest.quick_reply }}"
-         title='ADD QUEST-SPECIFIC TEXT: "{{ s.quest.quick_reply }}"'
-         aria-label="Insert this quest's quick reply text into your response">
-         <i class="fa fa-fw fa-commenting fa-flip-horizontal"></i>
-      </button>
-    {% endif %}
+    {% comment %} Quest-specific quick reply (#161, #2114): always shown so teachers discover it.
+       Carries this quest's text in a data attribute (empty when unset); the handler no-ops on empty,
+       and the tooltip then explains how to set it on the quest form. {% endcomment %}
+    <button type="button" class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quest_quick_text{{s.id}}"
+       data-quick-reply="{{ s.quest.quick_reply }}"
+       {% if s.quest.quick_reply %}title='ADD QUEST-SPECIFIC TEXT: "{{ s.quest.quick_reply }}"'{% else %}title='ADD TEXT: (Add quest-specific quick-reply text by changing the "Quick Reply Text" field when editing the quest)'{% endif %}
+       aria-label="Insert this quest's quick reply text into your response">
+       <i class="fa fa-fw fa-commenting fa-flip-horizontal"></i>
+    </button>
   </div>

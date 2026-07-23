@@ -73,9 +73,10 @@ $( document ).ready(function() {
     // Quest-specific quick reply (#161): the text lives in the button's data-quick-reply attribute.
     // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
     $(document).on('click', '[id^=btn_quest_quick_text]', function () {
-        var msg = ' ' + $(this).attr('data-quick-reply') + ' ';
+        var raw = $(this).attr('data-quick-reply');
+        if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
         var textarea = $($(this).data('target')).find('textarea');
-        textarea.val(textarea.val() + msg);
+        textarea.val(textarea.val() + ' ' + raw + ' ');
     });
 
     $('[data-toggle="tooltip"]').tooltip();
