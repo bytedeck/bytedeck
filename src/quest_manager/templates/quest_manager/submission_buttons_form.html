@@ -23,4 +23,14 @@
        title='ADD TEXT: "{{ quick_reply_text }}"'>
        <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i>
     </a>
+
+    {% comment %} Quest-specific quick reply (#161): only shown when this quest has its own quick
+       reply text set. Carries the text in a data attribute so the shared handler can insert it. {% endcomment %}
+    {% if s.quest.quick_reply %}
+      <a class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quest_quick_text{{s.id}}" role="button"
+         data-quick-reply="{{ s.quest.quick_reply }}"
+         title='ADD QUEST-SPECIFIC TEXT: "{{ s.quest.quick_reply }}"'>
+         <i class="fa fa-fw fa-commenting fa-flip-horizontal"></i>
+      </a>
+    {% endif %}
   </div>

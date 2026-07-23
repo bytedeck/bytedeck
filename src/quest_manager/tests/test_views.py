@@ -454,6 +454,25 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
 
+    def test_submission_view__quest_quick_reply_button_shown_when_set(self):
+        """When a quest has quick_reply text, staff reviewing a submission of it get a quest-specific quick-reply button (#161)."""
+        self.quest1.quick_reply = "Reminder: attach a screenshot of your working code."
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
+        self.assertContains(response, "Reminder: attach a screenshot of your working code.")
+
+    def test_submission_view__no_quest_quick_reply_button_when_unset(self):
+        """A quest without quick_reply text shows no quest-specific quick-reply button (#161)."""
+        self.quest1.quick_reply = ""
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertNotContains(response, f'btn_quest_quick_text{self.sub1.id}')
+
     def test_submission_view__ta_sees_copy_quest_button(self):
         """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
         self.test_student1.profile.is_TA = True

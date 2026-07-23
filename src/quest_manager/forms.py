@@ -69,7 +69,7 @@ class QuestForm(forms.ModelForm):
         model = Quest
         fields = ('name', 'published', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
-                  'campaign', 'common_data', 'submission_details', 'instructor_notes',
+                  'campaign', 'common_data', 'submission_details', 'instructor_notes', 'quick_reply',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'map_transition', 'tags',
                   'new_quest_prerequisite',
@@ -142,6 +142,7 @@ class QuestForm(forms.ModelForm):
                 'instructions',
                 'submission_details',
                 'instructor_notes',
+                'quick_reply',
                 'campaign',
                 'common_data',
                 'max_repeats',

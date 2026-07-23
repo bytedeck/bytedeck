@@ -70,6 +70,13 @@ $( document ).ready(function() {
         textarea.val(textarea.val() + msg);
     });
 
+    // Quest-specific quick reply (#161): the text lives in the button's data-quick-reply attribute.
+    $(document).on('click', '[id^=btn_quest_quick_text]', function () {
+        var msg = ' ' + $(this).data('quick-reply') + ' ';
+        var textarea = $($(this).data('target')).find('textarea');
+        textarea.val(textarea.val() + msg);
+    });
+
     $('[data-toggle="tooltip"]').tooltip();
 });
 

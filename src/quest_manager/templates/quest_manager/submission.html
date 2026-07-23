@@ -140,6 +140,16 @@
                   text_area.append(msg);
             });
 
+            // Quest-specific quick reply (#161): text comes from the button's data-quick-reply attribute.
+            $('[id^=btn_quest_quick_text]').on('click', function () {
+                var msg = '<p>' + $('<div>').text($(this).data('quick-reply')).html() + '<br></p>';
+                var text_area = $('div.note-editable');
+                if (text_area.html() == "<p><br></p>") // default empty summernote text area
+                  text_area.html(msg)
+                else
+                  text_area.append(msg);
+            });
+
             // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading

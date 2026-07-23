@@ -32,6 +32,22 @@ class QuestFormTest(ByteDeckTenantTestCase):
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
 
+    def test_QuestForm__saves_quick_reply(self):
+        """QuestForm exposes the quest-specific quick_reply field and saves it on the quest (#161)."""
+        form_data = dict(self.minimal_valid_data)
+        form_data["quick_reply"] = "See the rubric — you're missing the reflection paragraph."
+        form = QuestForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "See the rubric — you're missing the reflection paragraph.")
+
+    def test_QuestForm__quick_reply_is_optional(self):
+        """quick_reply is optional — a quest without it is still valid and defaults to empty (#161)."""
+        form = QuestForm(data=self.minimal_valid_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "")
+
     def test_QuestForm__hideable_and_blocking_both_true_is_invalid(self):
         """If a quest is Blocking then it should not validate if it is also Hideable"""
         form_data = self.minimal_valid_data
