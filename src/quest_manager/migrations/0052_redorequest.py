@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("courses", "0028_semester_name"),
-        ("quest_manager", "0050_category_map_order"),
+        ("quest_manager", "0051_quest_quick_reply"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

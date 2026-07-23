@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("courses", "0028_semester_name"),
-        ("quest_manager", "0051_redorequest"),
+        ("quest_manager", "0052_redorequest"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
