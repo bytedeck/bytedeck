@@ -27,6 +27,8 @@ class CommentForm(forms.Form):
     comment_text = forms.CharField()
 
     def clean_comment_text(self):
+        """Return the submitted comment text, sanitized to safe HTML for the plain-text
+        (non-wysiwyg) variant; the wysiwyg variant is left for the summernote widget."""
         text = self.cleaned_data.get('comment_text', '')
         if not self.wysiwyg:
             # The plain-text (non-wysiwyg) comment field is accessible to all users

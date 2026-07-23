@@ -288,6 +288,7 @@ class SanitizeCommentTextMixin:
     """
 
     def clean_comment_text(self):
+        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
         return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
 
 
