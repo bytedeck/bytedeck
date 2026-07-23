@@ -144,6 +144,7 @@
             // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
             $('[id^=btn_quest_quick_text]').on('click', function () {
                 var raw = $(this).attr('data-quick-reply');
+                if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
                 // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
                 var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
                 var msg = '<p>' + escaped + '<br></p>';

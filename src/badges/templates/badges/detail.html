@@ -24,9 +24,9 @@
 
         {% if request.user.is_staff %}
         <div class="col-xs-12 col-sm-5 text-right">
-          {# One btn-group keeps every action button the same height and connected (like the
+          {% comment %} One btn-group keeps every action button the same height and connected (like the
              Current/All Active toggle below); fa-fw gives the icons a uniform width. The column is
-             col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. #}
+             col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. {% endcomment %}
           <div class="btn-group pull-right" role="group" aria-label="{{ config.custom_name_for_badge }} actions">
             <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
               <i class="fa fa-fw fa-edit"></i>
