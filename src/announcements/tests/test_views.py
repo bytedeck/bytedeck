@@ -36,6 +36,15 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """Set up a tenant test client for each test."""
         self.client = TenantClient(self.tenant)
 
+    def test_announcement_form__has_unsaved_changes_guard(self):
+        """The announcement create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
+        self.client.force_login(self.test_teacher)
+
+        for url in (reverse('announcements:create'), reverse('announcements:update', args=[self.ann_pk])):
+            response = self.client.get(url)
+            self.assertContains(response, 'data-warn-unsaved')
+            self.assertContains(response, 'warn-unsaved-changes.js')
+
     def test_all_announcement_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
 
