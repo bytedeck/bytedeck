@@ -554,6 +554,17 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         return response
 
+    def test_banner__renders_inside_messages_container(self):
+        """The banner renders INSIDE #messages-container so it inherits the exact
+        same alert styling (margins) as django messages -- outside it, the
+        container-scoped rules in custom_common.css don't apply and the banner
+        sits flush against the navbar with a mismatched gap below (#2132)."""
+        response = self.get_quests_page(self.staff)
+        content = response.content.decode()
+        # before the fix the banner rendered above (before) the container, so the
+        # container's opening tag appearing first is exactly what the fix changes
+        self.assertLess(content.index('id="messages-container"'), content.index('id="deck-status-banner"'))
+
     def test_banner__trial_mode_shown_to_staff_with_subscribe_link(self):
         """Staff on a trial deck see the Trial Mode banner linking to the deck's own
         subscription page (PR 6; previously the public subscribe flatpage)."""

@@ -53,8 +53,9 @@
 <!-- ** end  content_first block ** -->
 {% include 'navbar-fixed.html' %}
 <div class="container-fluid" id="main-container">
-    {% include 'deck_status_banner.html' %}
     <div id="messages-container">
+        {# inside the messages container so the banner gets the exact same alert styling as django messages (#2132) #}
+        {% include 'deck_status_banner.html' %}
         {% include 'messages-snippet.html' %}
     </div>
 
