@@ -654,6 +654,13 @@ class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
                                         help_text="This field is only visible to Staff. \
                                         Use it to place answer keys or other notes.")
 
+    quick_reply = models.CharField(
+        blank=True, max_length=255, default="",
+        verbose_name="Quick Reply Text",
+        help_text="Quest-specific text (e.g. a reminder for a common mistake) that you can insert "
+                  "into a reply with one button when approving or returning submissions of this quest."
+    )
+
     editor = models.ForeignKey(settings.AUTH_USER_MODEL, blank=True, null=True, related_name="quest_editor",
                                help_text='Provides a student TA access to work on the draft of this quest.',
                                on_delete=models.SET_NULL)
