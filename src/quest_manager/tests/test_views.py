@@ -486,9 +486,19 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
 
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
-        self.assertContains(response, "you can force a save now")           # Save Draft
-        self.assertContains(response, "your teacher will be notified")      # Submit Quest for Approval
-        self.assertContains(response, "re-appear in your Available quests")  # Drop Quest
+        self.assertEqual(response.status_code, 200)
+        # Assert each explanatory text sits inside its button's title attribute (tie the phrase to
+        # the title="..." so the test can't pass on the text appearing elsewhere on the page).
+        self.assertContains(
+            response,
+            'title="Your draft autosaves about every minute, but you can force a save now with this button.')  # Save Draft
+        self.assertContains(
+            response,
+            'title="The quest will move to your &quot;Completed&quot; tab and your teacher will be notified')  # Submit
+        self.assertContains(
+            response,
+            'title="Remove this quest from your &quot;In Progress&quot; tab, delete any saved draft, '
+            'and it will re-appear in your Available quests tab.')  # Drop Quest
 
     def test_submission_view__ta_sees_copy_quest_button(self):
         """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
