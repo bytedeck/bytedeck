@@ -281,6 +281,8 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # heading and the XP that granting will award are both shown (issue #2061)
         self.assertContains(response, 'Students who qualify for this')
         self.assertContains(response, f'{self.test_badge.xp} XP')
+        # the qualifying students render as a bulleted list, not the previous unstyled list (#2117)
+        self.assertNotContains(response, 'list-unstyled')
 
     @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
     def test_badge_grant_qualifying__POST_queues_task_and_redirects(self, task):

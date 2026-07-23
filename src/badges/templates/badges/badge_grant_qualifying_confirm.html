@@ -34,7 +34,7 @@
       </p>
 
       <div class="well">
-        <ul class="list-unstyled">
+        <ul>
           {% for student in qualifying_students %}
             <li><a href="{{ student.profile.get_absolute_url }}">{{ student.profile }}</a></li>
           {% endfor %}
