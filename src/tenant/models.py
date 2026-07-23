@@ -217,12 +217,21 @@ class Tenant(TenantMixin):
 
     @property
     def effective_max_active_users(self):
-        """The active-user cap that should be enforced right now: `max_active_users`
-        while a subscription is active, otherwise the trial cap ("back to trial mode",
-        #1734). -1 (unlimited, admin-set) is passed through unchanged."""
+        """The current-student cap that should be enforced right now.
+
+        -1 (unlimited, admin-set) passes through unchanged. A SUSPENDED deck
+        reverts to the trial cap ("back to trial mode", #1734). Every other deck
+        -- subscribed, on trial, or managed manually (no dates) -- uses its
+        admin-set ``max_active_users``: new decks are created with the trial
+        default (5), so the trial cap is the default, not an override, and an
+        admin who deliberately raises a trial or comped deck's cap is honored.
+        (Production bug find, 2026-07-22: the old subscription_active-based rule
+        capped comped/managed-manually decks at 5, contradicting their admin-set
+        cap on the banner and subscription page.)
+        """
         if self.max_active_users == -1:
             return -1
-        return self.max_active_users if self.subscription_active else TRIAL_MAX_ACTIVE_USERS
+        return TRIAL_MAX_ACTIVE_USERS if self.is_suspended else self.max_active_users
 
     @property
     def days_until_expiry(self):

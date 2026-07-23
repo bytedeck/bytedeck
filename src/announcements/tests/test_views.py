@@ -214,10 +214,10 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, self.test_announcement.get_absolute_url())
         self.assertTrue(Comment.objects.all_with_target_object(self.test_announcement).exists())
 
-    def test_comment_on_announcement__escapes_html(self):
-        """HTML entered in the announcement comment form is completely escaped when
-        the comment is saved, so scripts can't execute when the comment is rendered.
-        Regression test for issue #1343.
+    def test_comment_on_announcement__sanitizes_html(self):
+        """HTML entered in the announcement comment form is sanitized when the comment
+        is saved: scripts and event handlers are stripped so nothing executes when the
+        comment is rendered. Regression test for issue #1343.
         """
         self.client.force_login(self.test_student1)
 
@@ -230,9 +230,29 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         comment = Comment.objects.all_with_target_object(self.test_announcement).first()
         self.assertIsNotNone(comment)
+        # the <script> tag is neutralized (escaped, not a live tag) and the onerror
+        # event handler is stripped, so no JavaScript can run
         self.assertNotIn('<script', comment.text)
-        self.assertNotIn('<img', comment.text)
         self.assertIn('&lt;script&gt;', comment.text)
+        self.assertNotIn('onerror', comment.text)
+
+    def test_comment_on_announcement__preserves_formatting(self):
+        """Legitimate formatting HTML entered in an announcement comment survives so it
+        renders instead of showing its literal tags. Regression test for issue #2113.
+        """
+        self.client.force_login(self.test_student1)
+
+        payload = '<p>hello <b>bold</b> <a href="http://example.com">link</a></p>'
+        response = self.client.post(
+            reverse('announcements:comment', args=[self.test_announcement.id]),
+            data={'comment_text': payload, 'comment_button': True}
+        )
+        self.assertRedirects(response, self.test_announcement.get_absolute_url())
+
+        comment = Comment.objects.all_with_target_object(self.test_announcement).first()
+        self.assertIsNotNone(comment)
+        self.assertIn('<b>bold</b>', comment.text)
+        self.assertIn('href="http://example.com"', comment.text)
 
     def test_copy_announcement__creates_new_announcement(self):
         """Copying an announcement via POST creates a new announcement and redirects to it."""
