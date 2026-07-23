@@ -4,6 +4,13 @@
 {% block heading_inner %}Completion Statuses{% endblock %}
 
 {% block content %}
+  <style>
+    /* Move the status filter into the bootstrap-table toolbar's right side so it sits next to the
+       search box (#2115). bootstrap-table puts our custom toolbar in a .bs-bars.pull-left wrapper,
+       so we override the .pull-left float and add a gap before the search box. */
+    .fixed-table-toolbar .bs-bars.pull-left { float: right !important; margin-right: 12px; }
+    #status-filter-toolbar label { margin-right: 4px; font-weight: normal; }
+  </style>
   <h3>Quest: {{ q.name }}</h3>
 
   {% include "quest_manager/buttons.html" %}
@@ -64,14 +71,14 @@
   </div>
 
 
-  <h5>Status Breakdown</h5>
+  <h3>Status Summary Stats</h3>
   <table class="table table-hover" style="max-width: 520px;">
     <thead>
       <tr>
         <th>Status</th>
         <th class="text-right">My blocks <small class="text-muted">({{ totals.my_blocks }})</small></th>
-        <th class="text-right">All enrolled <small class="text-muted">({{ totals.enrolled }})</small></th>
-        <th class="text-right">All active <small class="text-muted">({{ totals.active }})</small></th>
+        <th class="text-right">Current <small class="text-muted">({{ totals.current }})</small></th>
+        <th class="text-right">All <small class="text-muted">({{ totals.active }})</small></th>
       </tr>
     </thead>
     <tbody>
@@ -79,22 +86,27 @@
       <tr>
         <td>{{ row.status }}</td>
         <td class="text-right">{{ row.my_blocks.count }} <small class="text-muted">({{ row.my_blocks.percent }})</small></td>
-        <td class="text-right">{{ row.enrolled.count }} <small class="text-muted">({{ row.enrolled.percent }})</small></td>
+        <td class="text-right">{{ row.current.count }} <small class="text-muted">({{ row.current.percent }})</small></td>
         <td class="text-right">{{ row.active.count }} <small class="text-muted">({{ row.active.percent }})</small></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 
+  <hr>
+
+  <h3>Status by Student</h3>
+
   {# Which group of students the table below lists (issue #1973). #}
   <div class="btn-group" role="group" aria-label="Which students to show" style="margin-bottom: 10px;">
     <a href="?scope=my_blocks" role="button" class="btn btn-{% if scope == 'my_blocks' %}primary{% else %}default{% endif %}">My blocks</a>
-    <a href="?scope=enrolled" role="button" class="btn btn-{% if scope == 'enrolled' %}primary{% else %}default{% endif %}">All enrolled</a>
-    <a href="?scope=active" role="button" class="btn btn-{% if scope == 'active' %}primary{% else %}default{% endif %}">All active</a>
+    <a href="?scope=current" role="button" class="btn btn-{% if scope == 'current' %}primary{% else %}default{% endif %}">Current</a>
+    <a href="?scope=active" role="button" class="btn btn-{% if scope == 'active' %}primary{% else %}default{% endif %}">All</a>
   </div>
 
   {% if user_status_list %}
-    <div class="form-inline" style="margin-bottom: 8px;">
+    {# Filter lives in the bootstrap-table toolbar so it sits on the right next to the search box (#2115). #}
+    <div id="status-filter-toolbar" class="form-inline">
       <label for="status-filter">Filter by status:</label>
       <select id="status-filter" class="form-control input-sm">
         <option value="">All</option>
@@ -111,6 +123,7 @@
           class="user-status-table"
           data-toggle="table"
           data-classes="table table-striped table-hover"
+          data-toolbar="#status-filter-toolbar"
           data-search="true"
           data-trim-on-search="false">
       <thead>
