@@ -181,6 +181,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
             self.stripe_subscription(metadata={'schema_name': self.tenant.schema_name}),
         )
         summary = handle_webhook_event(event)
+        self.assertIn(self.tenant.schema_name, summary)  # resolved via the stamped metadata
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
 
