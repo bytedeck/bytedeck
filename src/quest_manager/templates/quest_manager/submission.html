@@ -105,7 +105,7 @@
              In Progress/Completed tab preview (#141). Shown regardless of the quest's published
              state so a TA can always template off a quest they've started. {% endcomment %}
           {% if request.user.profile.is_TA %}
-            <a title="Create a new quest using this one as a template. By default this quest will be a prerequisite for the new one."
+            <a title="Copy Quest &mdash; available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
                class="btn btn-default" role="button" href="{% url 'quests:quest_copy' submission.quest.id %}">
               <i class="fa fa-fw fa-copy"></i> Copy Quest
             </a>
