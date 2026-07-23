@@ -40,8 +40,14 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
         {% elif current_deck.is_on_trial %}
             <div class="alert alert-info" id="deck-status-banner">
                 <strong>Trial Mode:</strong> this deck is on a free trial until {{ current_deck.trial_end_date }}
-                (max {{ current_deck.effective_max_active_users }} current students).
-                <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> for more.
+                ({{ current_deck.days_until_expiry }} day{{ current_deck.days_until_expiry|pluralize }} remaining).
+                {{ current_deck.active_user_count }} current student seat{{ current_deck.active_user_count|pluralize }} used
+                {% if current_deck.effective_max_active_users == -1 %}
+                    (no seat limit).
+                {% else %}
+                    out of a maximum of {{ current_deck.effective_max_active_users }}.
+                {% endif %}
+                See your <a href="{{ deck_subscribe_url }}" class="alert-link">Subscription details</a> page for more info.
             </div>
         {% endif %}
     {% endif %}
