@@ -10,22 +10,17 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtils
 from quest_manager.models import Quest, QuestSubmission
 from questions.models import Question, QuestionSubmission
 from questions.utils import sync_draft_question_submissions
-from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
 class QuestionSubmissionFlowTestBase(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    """Shared fixtures for the submission-flow integration tests: an opted-in deck, a quest
-    with a required short answer + an optional long answer, and a student mid-submission."""
+    """Shared fixtures for the submission-flow integration tests: a quest with a required
+    short answer + an optional long answer, and a student mid-submission."""
 
     @classmethod
     def setUpTestData(cls):
-        """Enable the feature; teacher, student, quest with two questions."""
-        config = SiteConfig.get()
-        config.enable_submission_questions = True
-        config.save()
-
+        """A teacher, a student, and a quest with two questions."""
         cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
         cls.test_student = User.objects.create_user("test_student", password="password")
 
@@ -44,8 +39,8 @@ class QuestionSubmissionFlowTestBase(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         the same way the submission view does)."""
         self.client = TenantClient(self.tenant)
         self.submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
-        # visiting the submission page creates the draft comment and (with the feature on)
-        # the draft answer rows; do it through the view so tests exercise the real flow
+        # visiting the submission page creates the draft comment and the draft answer
+        # rows; do it through the view so tests exercise the real flow
         self.client.force_login(self.test_student)
         self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.submission.refresh_from_db()
@@ -78,14 +73,6 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(len(formset.forms), 2)
         self.assertContains(response, "What is your website URL?")
         self.assertContains(response, "Describe your process.")
-
-    def test_submission_page__no_formset_when_flag_off(self):
-        """With the deck's flag off, the submission page has no answer formset."""
-        config = SiteConfig.get()
-        config.enable_submission_questions = False
-        config.save()
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertIsNone(response.context["question_formset"])
 
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset even with the flag on."""
@@ -160,20 +147,6 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(self.submission.is_completed)
         self.assertFalse(QuestionSubmission.objects.filter(
             quest_submission=self.submission, comment__isnull=False).exists())
-
-    def test_complete__flag_off_ignores_formset(self):
-        """With the deck's flag off, completion behaves exactly as before questions existed:
-        a comment (or file) is still demanded and no answers are touched."""
-        config = SiteConfig.get()
-        config.enable_submission_questions = False
-        config.save()
-
-        response = self.client.post(
-            self.complete_url(), data={"complete": True, "comment_text": ""})
-        # blocked by the attach-something-or-comment rule (verification_required quest)
-        self.assertRedirects(response, self.submission.get_absolute_url())
-        self.submission.refresh_from_db()
-        self.assertFalse(self.submission.is_completed)
 
     def test_complete__quest_without_questions_unchanged(self):
         """A quest with no questions completes exactly as before when a comment is left."""
@@ -343,18 +316,6 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "My answer")
         self.assertNotContains(response, "SECRET SOLUTION")
 
-    def test_display__nothing_when_flag_off(self):
-        """Turning the flag off hides the answers display (data is kept, nothing renders)."""
-        self.complete_with_answers()
-        config = SiteConfig.get()
-        config.enable_submission_questions = False
-        config.save()
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertNotContains(response, "Question Answers:")
-        # the data survives for re-enabling
-        self.assertEqual(QuestionSubmission.objects.filter(
-            quest_submission=self.submission, comment__isnull=False).count(), 2)
-
 
 class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
     """The quest detail page links staff to question management when the feature is on."""
@@ -371,13 +332,4 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         which embeds the same quest detail content and renders for the owning student)."""
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Manage Questions")
-
-    def test_quest_detail__staff_no_panel_when_flag_off(self):
-        """With the flag off the staff panel disappears."""
-        config = SiteConfig.get()
-        config.enable_submission_questions = False
-        config.save()
-        self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
         self.assertNotContains(response, "Manage Questions")

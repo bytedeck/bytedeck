@@ -11,6 +11,22 @@
 {% endblock %}
 
 {% block content %}
+  <div class="help-block">
+    <p>Students answer these questions as part of submitting the quest — each question adds its own
+    answer field to the quest's submission form, shown in order above the usual comment box.
+    Use the buttons above to add a question of each type:</p>
+    <ul>
+      <li><strong>Short Answer</strong>: a single-line text response, up to 200 characters.</li>
+      <li><strong>Long Answer</strong>: a full rich-text response with formatting, images, and links.</li>
+      <li><strong>File Upload</strong>: a file response; you can restrict the allowed file types
+        (image, video, audio, image or video, or any file).</li>
+    </ul>
+    <p>Questions marked <strong>Required</strong> must be answered before the quest can be submitted;
+    optional questions can be left blank. Students' answers are saved with their draft as they work,
+    and once submitted they appear with the submission for marking — right beside each question's
+    <strong>Solution</strong> and <strong>Marker Notes</strong>, which only staff ever see.
+    Deleting a question keeps any answers students have already submitted.</p>
+  </div>
   {% include 'questions/snippets/question_table.html' %}
 {% endblock %}
 

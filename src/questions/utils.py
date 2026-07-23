@@ -1,12 +1,4 @@
-from siteconfig.models import SiteConfig
-
 from .models import QuestionSubmission
-
-
-def questions_enabled_for(quest):
-    """Whether submission questions are active for this quest: the deck has opted in via
-    SiteConfig.enable_submission_questions AND the quest has at least one question."""
-    return SiteConfig.get().enable_submission_questions and quest.question_set.exists()
 
 
 def sync_draft_question_submissions(quest_submission):

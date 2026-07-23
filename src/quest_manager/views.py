@@ -28,7 +28,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission
-from questions.utils import questions_enabled_for, sync_draft_question_submissions
+from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import from_library_schema_first
 from notifications.signals import notify
@@ -1686,7 +1686,7 @@ def complete(request, submission_id):
     # formset: commenting ("comment" button) never does, and a duplicate "complete" POST
     # (browser back button) must not spawn fresh draft rows on a completed submission.
     question_formset = None
-    if "complete" in request.POST and not submission.is_completed and questions_enabled_for(submission.quest):
+    if "complete" in request.POST and not submission.is_completed and submission.quest.question_set.exists():
         question_formset = QuestionSubmissionFormsetFactory(
             request.POST, request.FILES,
             instance=submission, queryset=sync_draft_question_submissions(submission),
@@ -2019,7 +2019,7 @@ def ajax_save_draft(request):
         # upload when the quest is submitted). Sent as a JSON object of the formset's field
         # names, pairing each row's hidden id with its response_text.
         answers_json = request.POST.get("answers")
-        if answers_json and sub.user == request.user and questions_enabled_for(sub.quest):
+        if answers_json and sub.user == request.user and sub.quest.question_set.exists():
             try:
                 answers = json.loads(answers_json)
             except ValueError:
@@ -2124,7 +2124,7 @@ def submission(request, submission_id=None, quest_id=None):
         # The quest's questions, as an answer formset over this submission's draft rows.
         # Only while the submission can still be worked on; answers on completed/approved
         # submissions are published and shown with their comment instead.
-        if not sub.is_completed and not sub.is_approved and questions_enabled_for(sub.quest):
+        if not sub.is_completed and not sub.is_approved and sub.quest.question_set.exists():
             question_formset = QuestionSubmissionFormsetFactory(
                 instance=sub, queryset=sync_draft_question_submissions(sub)
             )
