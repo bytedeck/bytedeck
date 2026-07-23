@@ -5,10 +5,11 @@
 
 {% block content %}
   <style>
-    /* Move the status filter into the bootstrap-table toolbar's right side so it sits next to the
-       search box (#2115). bootstrap-table puts our custom toolbar in a .bs-bars.pull-left wrapper,
-       so we override the .pull-left float and add a gap before the search box. */
-    .fixed-table-toolbar .bs-bars.pull-left { float: right !important; margin-right: 12px; }
+    /* Lay the bootstrap-table toolbar out with flexbox so the search box stays rightmost (matching
+       every other table) and the status filter sits just to its left, with a gap between them
+       (#2115). The toolbar's DOM order is [filter (.bs-bars)] then [.search], so justify-content:
+       flex-end right-aligns them as filter | search; flex neutralizes bootstrap-table's floats. */
+    .fixed-table-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: 15px; }
     #status-filter-toolbar label { margin-right: 4px; font-weight: normal; }
   </style>
   <h3>Quest: {{ q.name }}</h3>
