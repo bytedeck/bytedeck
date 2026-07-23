@@ -1668,6 +1668,16 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn('id_tags', content)
         self.assertGreater(content.index('id_quick_reply'), content.index('id_tags'))
 
+    def test_quest_form__has_unsaved_changes_guard(self):
+        """The quest create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+
+        for url in (reverse('quests:quest_create'), reverse('quests:quest_update', args=[quest.pk])):
+            response = self.client.get(url)
+            self.assertContains(response, 'data-warn-unsaved')
+            self.assertContains(response, 'warn-unsaved-changes.js')
+
     def test_quest_create__teacher_can_create_and_delete(self):
         """Teachers can create quests and delete both live and archived quests."""
         # simulate a logged in teacher

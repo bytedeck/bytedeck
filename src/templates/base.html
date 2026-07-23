@@ -31,6 +31,9 @@
         if (window.jQuery && $.fn.popover) { $.fn.popover.Constructor.DEFAULTS.sanitize = false; }
     </script>
 
+    <!-- Warn before leaving a form with unsaved changes (issue #192); opt in via `data-warn-unsaved` on a <form>. -->
+    <script src="{% static 'js/warn-unsaved-changes.js' %}"></script>
+
 
     <!-- ** head block ** -->
     {% block head %}{% endblock %}
