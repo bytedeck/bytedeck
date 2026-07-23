@@ -473,6 +473,19 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, f'btn_quest_quick_text{self.sub1.id}')
 
+    def test_submission_view__student_buttons_have_tooltips(self):
+        """The student's Save Draft / Submit / Drop buttons carry explanatory tooltips (#2112)."""
+        self.quest1.published = True
+        self.quest1.save()
+        self.sub1.is_approved = False
+        self.sub1.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, "you can force a save now")           # Save Draft
+        self.assertContains(response, "your teacher will be notified")      # Submit Quest for Approval
+        self.assertContains(response, "re-appear in your Available quests")  # Drop Quest
+
     def test_submission_view__ta_sees_copy_quest_button(self):
         """A TA viewing the full submission page gets a 'copy quest' link (#141), targeting the submission's quest."""
         self.test_student1.profile.is_TA = True
