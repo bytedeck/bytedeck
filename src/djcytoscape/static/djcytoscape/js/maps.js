@@ -220,10 +220,29 @@ addedCampaignLayoutEdges.remove();
 
     // Drop the i-th campaign (desired order) into the i-th slot, shifting its quests horizontally as
     // a rigid block. Positions were all read before any shift, so swaps don't interfere.
+    var moved = false;
     desired.forEach(function (item, idx) {
         var dx = slots[idx] - item.x;
-        if (dx !== 0) { item.kids.shift({ x: dx, y: 0 }); }
+        if (dx !== 0) { item.kids.shift({ x: dx, y: 0 }); moved = true; }
     });
+
+    // Reordering a campaign can strand a campaign-less "connector" node — the intro quest that leads
+    // into a campaign, a shared badge, etc. — over the campaign's OLD position (e.g. an intro quest
+    // left sitting above where a campaign used to be instead of above the one it points to). Re-centre
+    // each campaign-less node over the mean x of its neighbours so it follows the campaign(s) it
+    // connects to. Skip this entirely when nothing moved (every campaign at the default map_order) so
+    // those maps stay byte-for-byte unchanged; read all neighbour positions before moving anything.
+    if (!moved) { return; }
+    var recentre = [];
+    cy.nodes().forEach(function (node) {
+        if (node.isParent() || node.isChild()) { return; }  // campaigns and their quests already placed
+        var neighbours = node.neighborhood('node');
+        if (neighbours.empty()) { return; }
+        var sum = 0;
+        neighbours.forEach(function (m) { sum += m.position('x'); });
+        recentre.push({ node: node, x: sum / neighbours.length });
+    });
+    recentre.forEach(function (r) { r.node.position('x', r.x); });
 })();
 
 /***************************************

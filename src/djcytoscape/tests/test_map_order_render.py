@@ -75,7 +75,7 @@ var elements = {{
     {{ data: {{ id: '11', parent: '10', label: 'A1', campaignOrder: {order_a} }} }},
     {{ data: {{ id: '12', parent: '10', label: 'A2', campaignOrder: {order_a} }} }},
     {{ data: {{ id: '21', parent: '20', label: 'B1', campaignOrder: {order_b} }} }},
-    {{ data: {{ id: '22', parent: '20', label: 'B2', campaignOrder: {order_b} }} }}
+    {{ data: {{ id: '22', parent: '20', label: 'B2', campaignOrder: {order_b} }} }}{extra_nodes}
   ],
   edges: [
     {{ data: {{ id: '101', source: '11', target: '12' }} }},
@@ -110,18 +110,25 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
         cls._pw.stop()
         super().tearDownClass()
 
-    def _campaign_mean_x(self, order_a, order_b, connected=False):
-        """Render the two-campaign map with the given map_orders; return (meanX_A, meanX_B).
+    def _positions(self, order_a, order_b, connected=False, intro=False):
+        """Render the two-campaign map and return ``{'a': meanX_A, 'b': meanX_B, 'intro': x|None}``.
 
-        When ``connected`` is True, add a cross-campaign prerequisite edge from A's first quest to
-        B's first quest, so campaign B branches off the side of campaign A (A1 continues to A2 AND
-        to B1) — the case that used to merge the two campaigns into a single un-orderable column
-        (issue #1977).
+        ``connected`` adds a cross-campaign prerequisite edge from A's first quest to B's first quest,
+        so campaign B branches off the side of campaign A (A1 continues to A2 AND to B1) — the case
+        that used to merge the two campaigns into a single un-orderable column (issue #1977).
+
+        ``intro`` adds a campaign-less node that leads into campaign A (intro -> A1); its rendered x is
+        returned so a test can check the intro node follows campaign A when the columns are reordered.
         """
-        extra_edges = ",\n    { data: { id: '201', source: '11', target: '21' } }" if connected else ""
+        extra_nodes = ",\n    { data: { id: '1', label: 'Intro' } }" if intro else ""
+        extra_edges = ""
+        if connected:
+            extra_edges += ",\n    { data: { id: '201', source: '11', target: '21' } }"
+        if intro:
+            extra_edges += ",\n    { data: { id: '301', source: '1', target: '11' } }"
         html = _PAGE_TEMPLATE.format(
             jquery_stub=_JQUERY_STUB, js_dir=self.js_dir, order_a=order_a, order_b=order_b,
-            extra_edges=extra_edges,
+            extra_nodes=extra_nodes, extra_edges=extra_edges,
         )
         # Load from a real file so the browser will fetch the file:// asset <script>s (it refuses
         # to load file:// sub-resources for an in-memory set_content document).
@@ -134,12 +141,20 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
             # maps.js repositions synchronously right after layout.run(); give the page a beat to settle.
             page.wait_for_timeout(300)
             mean_x = "(ids) => ids.reduce((s, id) => s + cy.getElementById(id).position('x'), 0) / ids.length"
-            ax = page.evaluate(mean_x, ["11", "12"])
-            bx = page.evaluate(mean_x, ["21", "22"])
+            result = {
+                "a": page.evaluate(mean_x, ["11", "12"]),
+                "b": page.evaluate(mean_x, ["21", "22"]),
+                "intro": page.evaluate(mean_x, ["1"]) if intro else None,
+            }
         finally:
             page.close()
             os.unlink(html_path)
-        return ax, bx
+        return result
+
+    def _campaign_mean_x(self, order_a, order_b, connected=False):
+        """Render the two-campaign map with the given map_orders; return (meanX_A, meanX_B)."""
+        p = self._positions(order_a, order_b, connected=connected)
+        return p["a"], p["b"]
 
     def test_map_order__lower_map_order_campaign_renders_on_the_left(self):
         """Campaign B (larger id) with a lower map_order than A must render to the left of A."""
@@ -173,3 +188,22 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
         # for the connected case either.
         ax, bx = self._campaign_mean_x(order_a=0, order_b=1000, connected=True)
         self.assertLess(ax, bx, "connected campaign A (lower map_order) should be left of B")
+
+    def test_map_order__intro_node_follows_its_reordered_campaign(self):
+        """A campaign-less intro node that leads into a campaign follows that campaign after the
+        columns are reordered, instead of being stranded over the campaign's old slot (#1977).
+
+        The intro leads into campaign A; B has the lower map_order (so B goes left, A right). The
+        intro must sit over A's column, not stay stranded on the left where A used to be. Checked
+        both ways so it isn't direction-dependent.
+        """
+        p = self._positions(order_a=1000, order_b=0, connected=True, intro=True)
+        self.assertLess(
+            abs(p["intro"] - p["a"]), abs(p["intro"] - p["b"]),
+            "intro node should sit over campaign A (which it leads into), not the reordered-away B",
+        )
+        p = self._positions(order_a=0, order_b=1000, connected=True, intro=True)
+        self.assertLess(
+            abs(p["intro"] - p["a"]), abs(p["intro"] - p["b"]),
+            "intro node should still sit over campaign A after swapping the order",
+        )
