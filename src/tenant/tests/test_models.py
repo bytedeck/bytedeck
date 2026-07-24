@@ -326,6 +326,29 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         stale.update_cached_fields()
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, date(2030, 1, 1))
+
+    def test_is_over_user_limit__compares_live_count_to_effective_cap(self):
+        """Over-limit only when the LIVE current-student count exceeds the effective
+        cap -- the nightly-cached field is ignored (production find: a stale cached
+        count made the banner disagree with the live student list)."""
+        from django.utils.timezone import localdate
+
+        baseline = self.tenant.get_active_user_count()
+        for _ in range(2):
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
+        live = baseline + 2
+
+        # cached count deliberately left stale at 0 in every case: it must not matter
+        def deck(**fields):
+            Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=0, **fields)
+            return Tenant.objects.get(pk=self.tenant.pk)
+
+        self.assertTrue(deck(trial_end_date=localdate(), max_active_users=live - 1).is_over_user_limit)
+        self.assertFalse(deck(max_active_users=live).is_over_user_limit)  # at the cap is not over it
+        # subscribed deck uses its own (tier) cap, not the trial cap
+        self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
+        self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
 class DefaultTrialEndDateTest(SimpleTestCase):
     """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
 
@@ -358,17 +381,10 @@ class TenantBannerStatusTest(SimpleTestCase):
             max_active_users=max_active_users, active_user_count=active_user_count,
         )
 
-    def test_is_over_user_limit__compares_cached_count_to_effective_cap(self):
-        """Over-limit only when the cached count exceeds the effective cap; unlimited (-1) is never over."""
-        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=6).is_over_user_limit)
-        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=5).is_over_user_limit)
-        # subscribed deck uses its own (tier) cap, not the trial cap
-        self.assertFalse(
-            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=39).is_over_user_limit
-        )
-        self.assertTrue(
-            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=41).is_over_user_limit
-        )
+    def test_is_over_user_limit__unlimited_short_circuits_without_querying(self):
+        """An unlimited (-1) deck is never over its limit -- and the check must not
+        touch the database at all (this SimpleTestCase would raise on any query),
+        since the live recount is skipped entirely by the -1 short-circuit."""
         self.assertFalse(self.make_tenant(max_active_users=-1, active_user_count=999).is_over_user_limit)
 
     def test_is_expiring_soon__within_warning_window_or_grace(self):

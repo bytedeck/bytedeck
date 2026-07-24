@@ -573,33 +573,45 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'fa-info-circle')  # banner level icon (review request)
         self.assertContains(response, reverse('decks:subscription'))
 
-    def test_banner__trial_mode_shows_days_remaining_and_seat_usage(self):
-        """The trial banner spells out the time remaining after the end date and the
-        seats used out of the cap, pointing at the Subscription details page
-        (maintainer request from staging v1.19 testing)."""
+    def test_banner__trial_mode_shows_days_remaining_and_live_seat_usage(self):
+        """The trial banner's one-line copy shows the short date, the time remaining,
+        and the LIVE seats-used count -- a student registered moments ago counts even
+        though the nightly-cached field still says 0 (production find: banner claimed
+        0 seats used beside a student list showing 1)."""
         from datetime import timedelta
 
+        from django.template.defaultfilters import date as date_filter
         from django.utils.timezone import localdate
 
-        self.set_deck(trial_end_date=localdate() + timedelta(days=52), active_user_count=3, max_active_users=5)
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        end = localdate() + timedelta(days=52)
+        # cached count deliberately left at 0: the live count must win
+        self.set_deck(trial_end_date=end, active_user_count=0, max_active_users=5)
+        baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                   semester=SiteConfig.get().active_semester)
         response = self.get_quests_page(self.staff)
-        self.assertContains(response, '52 days remaining')
-        self.assertContains(response, '3 current student seats used')
-        self.assertContains(response, 'out of a maximum of 5')
+        self.assertContains(response, f'until {date_filter(end, "j M Y")}')
+        self.assertContains(response, '52 days remain')
+        # template whitespace collapses in HTML; normalize before asserting the sentence
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('You are using 1 out of max 5 current students.', text)
         self.assertContains(response, 'Subscription details')
 
     def test_banner__trial_mode_unlimited_deck_shows_no_seat_limit(self):
-        """A trial deck with the -1 unlimited cap says "no seat limit" instead of
-        "a maximum of -1"."""
+        """A trial deck with the -1 unlimited cap says "unlimited" instead of
+        "max -1"."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
 
-        self.set_deck(trial_end_date=localdate() + timedelta(days=52), active_user_count=1, max_active_users=-1)
+        self.set_deck(trial_end_date=localdate() + timedelta(days=52), max_active_users=-1)
         response = self.get_quests_page(self.staff)
-        self.assertContains(response, '1 current student seat used')
-        self.assertContains(response, 'no seat limit')
-        self.assertNotContains(response, 'maximum of -1')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('You are using 0 out of unlimited current students.', text)
+        self.assertNotIn('max -1', text)
 
     def test_banner__not_shown_to_students_on_trial_deck(self):
         """Students never see the trial banner (it's staff-facing nagware)."""
@@ -622,12 +634,22 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
 
-    def test_banner__over_limit_warns_staff(self):
-        """Staff see the over-limit warning when the cached count exceeds the cap."""
-        self.set_deck(active_user_count=99)
+    def test_banner__over_limit_warns_staff_from_live_count(self):
+        """Staff see the over-limit warning from the LIVE current-student count --
+        a stale cached count (still 0 here) neither hides a real overage nor keeps
+        the warning up after students were archived."""
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        self.set_deck(active_user_count=0, max_active_users=1)
+        for _ in range(2):
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
 
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Current-student limit exceeded')
+        self.assertContains(response, 'this deck has 2')
         self.assertContains(response, 'fa-exclamation-triangle')  # warning-level banner icon
 
     def test_banner__expiring_soon_warns_staff(self):
@@ -730,6 +752,45 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Remaining students')
         self.assertContains(response, '30')
 
+    def test_page__dates_show_relative_time_in_every_state(self):
+        """Every Dates row carries a relative phrase: time remaining while the date
+        is ahead, or how long ago it passed -- for Paid until, the grace period's
+        end, and Trial ends alike (maintainer request from staging live testing)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        # subscribed: paid_until ahead, grace end further ahead
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(100 days remaining)', text)
+        self.assertIn('extends 30 days after your subscription ends (ends in 130 days)', text)
+
+        # in grace: paid_until behind, grace end still ahead
+        self.set_deck(paid_until=localdate() - timedelta(days=10))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 10 days ago)', text)
+        self.assertIn('(ends in 20 days)', text)
+
+        # suspended: both behind (the maintainer's "ended 24 days ago" example)
+        self.set_deck(paid_until=localdate() - timedelta(days=54))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 54 days ago)', text)
+        self.assertIn('(ended 24 days ago)', text)
+
+        # trial deck: the Trial ends row gets the same treatment, both directions
+        self.set_deck(paid_until=None, trial_end_date=localdate() + timedelta(days=10))
+        self.assertIn('(10 days remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() - timedelta(days=3))
+        self.assertIn('(expired 3 days ago)', ' '.join(self.get_page().content.decode().split()))
+
+        # boundary days read "today", singular day is "1 day"
+        self.set_deck(trial_end_date=localdate())
+        self.assertIn('(expires today)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() + timedelta(days=1))
+        self.assertIn('(1 day remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=30))  # final grace day
+        self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
+
     def test_page__dates_show_only_the_governing_deadline(self):
         """The Dates table shows ONE deadline row -- Paid until when a paid date
         exists (it supersedes the trial date, even while lapsed), Trial ends on a
@@ -775,14 +836,18 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(self.get_page().context['remaining_seats'])
 
     def test_page__grace_period_states_trial_cap(self):
-        """A deck in its paid grace window explains the grace period and the trial
-        cap it will revert to (5), not its current paid cap."""
+        """A deck in its paid grace window gets its own DANGER "Grace period" label --
+        never the green "Subscribed" badge (maintainer review find) -- and explains
+        the trial cap it will revert to (5), not its current paid cap."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
 
         self.set_deck(paid_until=localdate() - timedelta(days=5))
         response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        self.assertNotContains(response, 'Subscribed')
         self.assertContains(response, 'grace period')
         self.assertContains(response, 'max 5 current students')
 
