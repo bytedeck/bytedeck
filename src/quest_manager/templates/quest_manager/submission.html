@@ -42,6 +42,23 @@
   {% endwith %}
   {% endif %}
 
+  {% comment %} A quest can be unpublished (drafted) or archived after a student has already
+     submitted it. The student keeps access to review their past work, but the submission form
+     below is useless and confusing (a form with no submit button), so hide it and explain why
+     with a notice, matching the red "Quest Preview" panel shown for not-yet-available quests
+     (issue #798). Staff still see the form so they can manage the submission. {% endcomment %}
+  {% if quest_no_longer_available and not request.user.is_staff %}
+    <div id="quest-unavailable-{{ submission.quest.id }}" class="panel panel-danger panel-top">
+      <div class="panel-heading">
+        <h3 class="panel-title"><i class="fa fa-warning"></i> Quest No Longer Available</h3>
+      </div>
+      <div class="panel-body">
+        <p>This quest is no longer available, so it can't be submitted or commented on.
+           You can still view your past work below.</p>
+      </div>
+    </div>
+  {% endif %}
+
   {% with submission.quest as quest %}
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
@@ -67,6 +84,9 @@
     </ul>
   </div>
 
+  {% comment %} Hide the whole submission form from students when the quest is no longer available
+     (see the notice above, issue #798); staff keep it to manage the submission. {% endcomment %}
+  {% if not quest_no_longer_available or request.user.is_staff %}
   <div id='submission-form-{{submission.quest.id}}' class="panel panel-primary">
     <div class="panel-heading">
       <h3 class="panel-title">Quest Submission Form</h3>
@@ -119,6 +139,7 @@
       </form>
     </div>
   </div>
+  {% endif %}{# submission form hidden when quest no longer available (#798) #}
 
 {% endblock %}
 {% block js %}
