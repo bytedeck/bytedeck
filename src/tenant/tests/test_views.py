@@ -851,6 +851,31 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'grace period')
         self.assertContains(response, 'max 5 current students')
 
+    def test_page__suspended_deck_shows_admin_cap_below_trial_limit(self):
+        """A suspended deck whose admin deliberately lowered the cap below the
+        trial limit shows THAT cap -- in the status copy and the seats table --
+        not the trial default of 5, and a grace deck's revert-to prediction
+        matches (production find, 2026-07-24: a cap set to 1 still showed and
+        enforced 'max 5' everywhere)."""
+        from datetime import date, timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        response = self.get_page()
+        self.assertContains(response, 'max 1 current student')
+        self.assertNotContains(response, 'max 5 current students')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
+
+        # in grace, the revert-to prediction states the lowered cap, not 5
+        # (set_deck bypasses save(), so drop the cached deck row by hand)
+        from tenant.utils import deck_cache_key
+
+        self.set_deck(paid_until=localdate() - timedelta(days=5))
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.assertContains(self.get_page(), 'revert to trial limits (max 1 current student)')
+
     def test_page__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""
         from datetime import date, timedelta

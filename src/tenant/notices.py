@@ -29,7 +29,7 @@ from django.utils.timezone import localdate
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import TRIAL_MAX_ACTIVE_USERS, DeckNotice
+from tenant.models import DeckNotice
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -136,9 +136,6 @@ def _deliver(deck, kind):
         'config': config,
         'days': deck.days_until_expiry,
         'cap': deck.effective_max_active_users,
-        # what a lapsed deck reverts to -- during the paid grace period the effective
-        # cap is still the paid cap, so the grace email can't derive this from `cap`
-        'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe

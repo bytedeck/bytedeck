@@ -245,11 +245,20 @@ class Tenant(TenantMixin):
         capped comped/managed-manually decks at 5, contradicting their admin-set
         cap on the banner and subscription page.)
         """
+        return self.suspension_cap if self.is_suspended else self.max_active_users
+
+    @property
+    def suspension_cap(self):
+        """The current-student cap this deck has -- or would have -- while
+        suspended: the trial cap acting as a CEILING over the admin-set
+        ``max_active_users`` (so a deliberately lowered cap keeps holding), with
+        the -1 unlimited sentinel passing through. Also feeds the "will revert
+        to trial limits (max N)" copy on the banner, subscription page, and
+        expiry-reminder email, so those predictions match what enforcement will
+        actually do."""
         if self.max_active_users == -1:
             return -1
-        if self.is_suspended:
-            return min(self.max_active_users, TRIAL_MAX_ACTIVE_USERS)
-        return self.max_active_users
+        return min(self.max_active_users, TRIAL_MAX_ACTIVE_USERS)
 
     @property
     def days_until_expiry(self):

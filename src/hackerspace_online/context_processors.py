@@ -38,7 +38,6 @@ def deck_status(request):
     """
     from django.urls import reverse
 
-    from tenant.models import TRIAL_MAX_ACTIVE_USERS
     from tenant.utils import get_current_deck
 
     deck = get_current_deck()
@@ -47,7 +46,4 @@ def deck_status(request):
     return {
         "current_deck": deck,
         "deck_subscribe_url": reverse('decks:subscription'),
-        # what a lapsed deck reverts to -- the grace banner can't derive this from
-        # the deck's effective cap, which is still the paid cap during grace
-        "trial_cap": TRIAL_MAX_ACTIVE_USERS,
     }

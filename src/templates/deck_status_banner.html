@@ -32,7 +32,7 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
                 {% if current_deck.days_until_expiry < 0 %}
                     <strong>Subscription expired</strong> &mdash; this deck is in its grace period, which ends in
                     {{ current_deck.grace_days_remaining }} day{{ current_deck.grace_days_remaining|pluralize }};
-                    it will then revert to trial limits (max {{ trial_cap }} current students).
+                    it will then revert to trial limits (max {{ current_deck.suspension_cap }} current student{{ current_deck.suspension_cap|pluralize }}).
                 {% elif current_deck.is_on_trial %}
                     <strong>Trial ending soon:</strong> this deck's free trial ends in
                     {{ current_deck.days_until_expiry }} day{{ current_deck.days_until_expiry|pluralize }}.

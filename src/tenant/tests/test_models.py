@@ -244,6 +244,14 @@ class TenantBillingStatusTest(SimpleTestCase):
             1,
         )
 
+    def test_suspension_cap__trial_limit_is_a_ceiling_with_unlimited_passthrough(self):
+        """suspension_cap -- what a deck has (or would have) while suspended, feeding
+        the revert-to copy on the banner/page/email -- is min(admin cap, trial cap),
+        with the -1 unlimited sentinel passing through."""
+        self.assertEqual(self.make_tenant(max_active_users=80).suspension_cap, TRIAL_MAX_ACTIVE_USERS)
+        self.assertEqual(self.make_tenant(max_active_users=1).suspension_cap, 1)
+        self.assertEqual(self.make_tenant(max_active_users=-1).suspension_cap, -1)
+
     def test_effective_max_active_users__unlimited_passthrough(self):
         """The admin-set unlimited sentinel (-1) is honored in every state."""
         self.assertEqual(self.make_tenant(max_active_users=-1).effective_max_active_users, -1)
