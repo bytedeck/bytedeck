@@ -2067,6 +2067,14 @@ def submission(request, submission_id=None, quest_id=None):
         "submission_form": main_comment_form,
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
+        # A quest can become unpublished (drafted) after a student has already submitted it.
+        # The student can still open the submission to review their past work, but the submission
+        # form is useless (it has no submit button) and confusing (issue #798), so the template
+        # hides the form and shows a "no longer available" notice instead. Staff keep the form so
+        # they can still manage the submission. (Archived quests are already unreachable here -- the
+        # QuestSubmission manager excludes them from this view entirely, so they 404, which matches
+        # the "no longer viewable" fallback the issue accepts for the archived case.)
+        "quest_no_longer_available": not sub.quest.published,
     }
     return render(request, "quest_manager/submission.html", context)
 
