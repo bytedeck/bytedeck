@@ -85,10 +85,17 @@
 
 </script>
 
-<script src="{% static 'djcytoscape/js/maps.js' %}"></script>
+{% comment %}
+  Cache-bust the map scripts with a ?v= query (same convention as the versioned CSS in
+  head_css.html and other JS like jquery-double-submission.js). maps.js has no hashed
+  filename, so without this a browser keeps serving a stale copy — which is why the campaign
+  name-wrap fix (#1289 / PR #1937) never reached users who had already cached the old maps.js.
+  Bump this version whenever maps.js / maps-dark.js changes.
+{% endcomment %}
+<script src="{% static 'djcytoscape/js/maps.js' %}?v=1.1"></script>
 
 {% if request.user.profile.dark_theme %}
- <script src="{% static 'djcytoscape/js/maps-dark.js' %}"></script>
+ <script src="{% static 'djcytoscape/js/maps-dark.js' %}?v=1.1"></script>
 {% endif %}
 
 

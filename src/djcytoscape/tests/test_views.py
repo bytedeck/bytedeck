@@ -107,6 +107,19 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.assert200('djcytoscape:regenerate', args=[self.map.id])
         # self.assert200('djcytoscape:regenerate_all')
 
+    def test_quest_map__map_scripts_are_cache_busted(self):
+        """maps.js (and maps-dark.js) are served with a ?v= cache-buster so browsers don't keep
+        serving a stale copy that misses map fixes like the campaign name-wrap fix (#1289 / #1937)."""
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('djcytoscape:quest_map', args=[self.map.id]))
+        self.assertContains(response, 'js/maps.js?v=')
+
+        # dark-theme users load an extra script that must be cache-busted too
+        self.test_student1.profile.dark_theme = True
+        self.test_student1.profile.save()
+        response = self.client.get(reverse('djcytoscape:quest_map', args=[self.map.id]))
+        self.assertContains(response, 'js/maps-dark.js?v=')
+
     def test_ScapeGenerateMap__POST(self):
         """ Assert a teacher can generate a map using ScapeGenerateMapView """
         from djcytoscape.forms import GenerateQuestMapForm
