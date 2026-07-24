@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.mail import EmailMultiAlternatives
 from django.utils import timezone
+from django_tenants.utils import get_tenant_model
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications import tasks
@@ -176,8 +177,15 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn(str(notification), html_content)  # Links to notifications
 
     def test_generate_notification_email__non_enrolled_student_returns_none(self):
-        """A non-staff student not enrolled in a current course gets no notification email at all."""
-        non_enrolled_student = baker.make(User)  # not staff, no course
+        """A non-staff student not enrolled in a current course gets no notification email, even
+        when they have unread notifications that would otherwise generate one."""
+        non_enrolled_student = baker.make(User, is_staff=False)  # not staff, no course
+        # an unread notification, so the None result must come from the enrollment guard
+        # rather than the "no content to send" branch
+        baker.make(
+            Notification, recipient=non_enrolled_student,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
         self.assertIsNone(generate_notification_email(non_enrolled_student, 'https://test.com'))
 
     def test_get_notification_emails__skips_inactive_students(self):
@@ -240,7 +248,8 @@ class DeleteOldNotificationsTestCase(ByteDeckTenantTestCase):
         """The all-tenants task schedules a per-schema delete for each non-public tenant."""
         result = tasks.delete_old_notifications_for_all_tenants()
 
-        # at least the (non-public) test tenant is scheduled
-        self.assertTrue(mock_apply_async.called)
-        mock_apply_async.assert_called_with(queue='default')
+        # one scheduled delete per non-public tenant, each on the default queue
+        expected_tenants = get_tenant_model().objects.exclude(schema_name='public')
+        self.assertEqual(mock_apply_async.call_count, expected_tenants.count())
+        self.assertTrue(all(call.kwargs == {'queue': 'default'} for call in mock_apply_async.call_args_list))
         self.assertEqual(result, "Scheduled notifications.tasks.delete_old_notifications for all schemas/tenants")
