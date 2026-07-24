@@ -205,6 +205,19 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "have not been refreshed yet")
 
+    def test_changelist_view__freshness_notice_not_duplicated_by_action_posts(self):
+        """The freshness notice is queued on GET only: an action POST also passes
+        through changelist_view before redirecting, and a notice queued during the
+        POST survives into the redirected page, rendering as a duplicate beside the
+        GET's own copy (production find after running the refresh action)."""
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        action_data = {"action": "refresh_cached_fields", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "were last refreshed", count=1)
+
     def test_refresh_cached_fields_action__refreshes_selected_decks(self):
         """The "Refresh deck stats" changelist action refreshes the selected decks'
         cached stats on demand -- the admin-UI alternative to the management command."""

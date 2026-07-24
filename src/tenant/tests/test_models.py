@@ -163,6 +163,20 @@ class TenantBillingStatusTest(SimpleTestCase):
         """A deck with no paid_until has no subscription, regardless of its trial date."""
         self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30)).subscription_active)
 
+    def test_grace_days_remaining__counts_down_through_the_grace_window(self):
+        """Days of grace left after paid_until: GRACE_PERIOD_DAYS minus the days
+        elapsed, 0 on the final grace day, and None for any deck not in grace
+        (still paid, on trial, suspended, or unmanaged)."""
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=10)).grace_days_remaining, GRACE_PERIOD_DAYS - 10)
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).grace_days_remaining, 0)
+        self.assertIsNone(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=90)).grace_days_remaining)  # still paid
+        self.assertIsNone(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30)).grace_days_remaining)  # trial
+        self.assertIsNone(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).grace_days_remaining)  # suspended
+        self.assertIsNone(self.make_tenant().grace_days_remaining)  # unmanaged
+
     def test_in_grace_period__only_between_paid_until_and_grace_end(self):
         """in_grace_period is True strictly after paid_until and only while subscription_active."""
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY).in_grace_period)
@@ -344,6 +358,29 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         stale.update_cached_fields()
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, date(2030, 1, 1))
+
+    def test_is_over_user_limit__compares_live_count_to_effective_cap(self):
+        """Over-limit only when the LIVE current-student count exceeds the effective
+        cap -- the nightly-cached field is ignored (production find: a stale cached
+        count made the banner disagree with the live student list)."""
+        from django.utils.timezone import localdate
+
+        baseline = self.tenant.get_active_user_count()
+        for _ in range(2):
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
+        live = baseline + 2
+
+        # cached count deliberately left stale at 0 in every case: it must not matter
+        def deck(**fields):
+            Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=0, **fields)
+            return Tenant.objects.get(pk=self.tenant.pk)
+
+        self.assertTrue(deck(trial_end_date=localdate(), max_active_users=live - 1).is_over_user_limit)
+        self.assertFalse(deck(max_active_users=live).is_over_user_limit)  # at the cap is not over it
+        # subscribed deck uses its own (tier) cap, not the trial cap
+        self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
+        self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
 class DefaultTrialEndDateTest(SimpleTestCase):
     """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
 
@@ -376,17 +413,10 @@ class TenantBannerStatusTest(SimpleTestCase):
             max_active_users=max_active_users, active_user_count=active_user_count,
         )
 
-    def test_is_over_user_limit__compares_cached_count_to_effective_cap(self):
-        """Over-limit only when the cached count exceeds the effective cap; unlimited (-1) is never over."""
-        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=6).is_over_user_limit)
-        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30), active_user_count=5).is_over_user_limit)
-        # subscribed deck uses its own (tier) cap, not the trial cap
-        self.assertFalse(
-            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=39).is_over_user_limit
-        )
-        self.assertTrue(
-            self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=30), max_active_users=40, active_user_count=41).is_over_user_limit
-        )
+    def test_is_over_user_limit__unlimited_short_circuits_without_querying(self):
+        """An unlimited (-1) deck is never over its limit -- and the check must not
+        touch the database at all (this SimpleTestCase would raise on any query),
+        since the live recount is skipped entirely by the -1 short-circuit."""
         self.assertFalse(self.make_tenant(max_active_users=-1, active_user_count=999).is_over_user_limit)
 
     def test_is_expiring_soon__within_warning_window_or_grace(self):

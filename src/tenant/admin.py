@@ -283,9 +283,17 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         The cached deck stats (current-student counts, owner info, quest counts) refresh via the
         nightly deck-status task, not on page load, so tell the admin how old the
         numbers they're looking at are.
+
+        GET only: an action POST runs through this view too and then redirects (or
+        re-renders), so a notice queued during the POST would survive into the next
+        render and show as a duplicate beside the one the follow-up GET queues
+        (production find after running the refresh action).
         """
         from django.db.models import Max
         from django.utils.timesince import timesince
+
+        if request.method != 'GET':
+            return super().changelist_view(request, extra_context)
 
         latest = self.model.objects.aggregate(latest=Max('cached_fields_updated_on'))['latest']
         if latest:

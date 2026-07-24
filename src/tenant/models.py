@@ -206,6 +206,19 @@ class Tenant(TenantMixin):
         return self.subscription_active and localdate() > self.paid_until
 
     @property
+    def grace_days_remaining(self):
+        """Days of paid grace left after `paid_until`; None when not in the grace
+        period. 0 on the final day (the grace period ends today). Drives the
+        expired banner's "grace period ends in N days" copy.
+
+        days_until_expiry is negative throughout the grace window, so the days
+        left until suspension are GRACE_PERIOD_DAYS + days_until_expiry.
+        """
+        if not self.in_grace_period:
+            return None
+        return GRACE_PERIOD_DAYS + self.days_until_expiry
+
+    @property
     def is_on_trial(self):
         """Whether the deck is in trial mode: no active subscription, and a trial
         clock that hasn't run out."""
@@ -271,15 +284,19 @@ class Tenant(TenantMixin):
 
     @property
     def is_over_user_limit(self):
-        """Whether the deck's cached current-student count exceeds its effective cap.
+        """Whether the deck's LIVE current-student count exceeds its effective cap.
 
-        Advisory (banner/notification) check against the nightly-refreshed cached
-        count -- enforcement at the registration choke points recounts live.
-        Always False for unlimited (-1) decks.
+        Recounts live (like the registration choke points) rather than reading the
+        nightly-cached ``active_user_count``: the banner this drives renders next
+        to pages that list current students live, so a stale cached count reads as
+        a bug (production find: banner claimed 0 seats used beside a student list
+        showing 1). Only the banner uses this property, and only for staff, so the
+        extra COUNT per staff page load is acceptable. Always False for unlimited
+        (-1) decks. Must be evaluated inside the deck's schema.
         """
         if self.effective_max_active_users == -1:
             return False
-        return self.active_user_count > self.effective_max_active_users
+        return self.get_active_user_count() > self.effective_max_active_users
 
     @property
     def is_expiring_soon(self):
