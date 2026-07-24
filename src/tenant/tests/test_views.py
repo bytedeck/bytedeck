@@ -851,6 +851,39 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'grace period')
         self.assertContains(response, 'max 5 current students')
 
+    def test_page__suspended_deck_shows_its_admin_cap(self):
+        """A suspended deck shows its ADMIN-SET cap -- in the status copy and the
+        seats table -- whatever it is: the field is authoritative (the trial
+        default is written into it once per suspension by the nightly task, and
+        admin adjustments stick). Production find, 2026-07-24: a cap lowered to 1
+        still showed and enforced 'max 5' everywhere."""
+        from datetime import date
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        response = self.get_page()
+        self.assertContains(response, 'max 1 current student')
+        self.assertNotContains(response, 'max 5 current students')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
+
+    def test_page__maintenance_subscription_gets_its_own_status(self):
+        """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
+        status label and copy (kept alive, capped, upgradable) instead of the
+        plain green Subscribed badge -- while a paid deck with a higher cap keeps
+        the Subscribed status."""
+        self.set_deck(max_active_users=5)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'Maintenance')
+        self.assertContains(response, 'maintenance subscription')
+        self.assertContains(response, 'capped at the trial limit')
+        self.assertContains(response, 'max 5 current students')
+        self.assertNotContains(response, '>Subscribed</span>')
+
+        self.set_deck(max_active_users=30)
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        self.assertNotContains(response, 'Maintenance')
+
     def test_page__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""
         from datetime import date, timedelta
