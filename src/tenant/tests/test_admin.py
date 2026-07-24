@@ -642,6 +642,11 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
                 name="extra",
             )
             cls.extra_tenant.save()
+            # abandoned for over a year, so the deletion tests clear the
+            # inactivity guard (#2044) and keep exercising the Django perms
+            Tenant.objects.filter(pk=cls.extra_tenant.pk).update(
+                last_staff_login=timezone.now() - timezone.timedelta(days=366))
+            cls.extra_tenant.refresh_from_db()
 
         # We need to check if library tenant exist
         # Since library is created elsewhere it will fail only if full tests are ran
@@ -734,22 +739,64 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
         self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
 
-    def test_delete_view__uses_delete_model(self):
+    def test_delete_view__uses_delete_model_and_drops_schema(self):
         """
-        The delete view uses ModelAdmin.delete_model() method, that delete items, but leaves schemas in database.
+        The delete view uses ModelAdmin.delete_model(), which deletes the row AND
+        drops the deck's Postgres schema (#2044 retirement policy) -- an orphaned
+        schema would silently keep all the deck's data forever.
         """
         delete_dict = {"post": "yes", "confirmation": "owner/extra"}
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
 
         # assert number of tenants, should be three objects (test, public and extra)
         self.assertEqual(Tenant.objects.count(), 3 + self.lib)
+        self.assertTrue(schema_exists("extra"))
 
         self.client.force_login(self.deleteuser)
         post = self.client.post(delete_url, delete_dict)
         self.assertRedirects(post, reverse("admin:index"))
-        # tenant object was removed (extra tenant is gone)
+        # tenant object was removed (extra tenant is gone)...
         self.assertEqual(Tenant.objects.count(), 2 + self.lib)
-        # ...but schema still in database
+        # ...and its schema was dropped with it
+        self.assertFalse(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_for_recently_active_deck(self):
+        """A deck with a staff sign-in inside the last year cannot be deleted, even
+        by a user holding the Django delete permission: the change form hides the
+        delete route and the delete view 403s on GET and POST (#2044 guard)."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        post = self.client.post(delete_url, {"post": "yes", "confirmation": "owner/extra"})
+        self.assertEqual(post.status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertTrue(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_without_last_staff_login_on_record(self):
+        """A deck whose cached last_staff_login is blank cannot be deleted -- blank
+        means "no login on record", which can't prove a year of abandonment."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(last_staff_login=None)
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+
+    def test_delete_model__guard_fails_closed_even_if_reached_directly(self):
+        """delete_model itself refuses a protected deck (defense in depth: schema
+        drops are unrecoverable, so any future code path must fail closed too)."""
+        from django.core.exceptions import PermissionDenied
+
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        self.extra_tenant.refresh_from_db()
+        with self.assertRaises(PermissionDenied):
+            TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
         self.assertTrue(schema_exists("extra"))
 
     def test_delete_view__nonexistent_obj(self):

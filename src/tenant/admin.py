@@ -260,9 +260,35 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             )
         return super().changelist_view(request, extra_context)
 
+    def has_delete_permission(self, request, obj=None):
+        """Deletion is gated on the deck being abandoned (#2044 retirement policy).
+
+        Per object, the Django delete permission must hold AND the deck must be
+        deletable (no staff sign-in for over a year -- ``Tenant.is_deletable``);
+        this both hides the change form's Delete button and 403s the delete view
+        for protected decks. With no object (module/changelist level) the default
+        applies, so the model itself stays visible to authorized admins.
+        """
+        allowed = super().has_delete_permission(request, obj)
+        if obj is None:
+            return allowed
+        return allowed and obj.is_deletable
+
     def delete_model(self, request, obj):
-        # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
-        obj.delete(force_drop=False)  # delete model, but *DO NOT* drop schema
+        """Delete the deck AND drop its Postgres schema (#2044 retirement policy).
+
+        Re-checks the abandonment guard even though the delete view already
+        enforces has_delete_permission -- schema drops are unrecoverable, so any
+        future code path that reaches here must fail closed too.
+
+        For reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
+        (auto_drop_schema stays False model-wide; only this admin flow force-drops.)
+        """
+        if not obj.is_deletable:
+            raise PermissionDenied(
+                "Only decks with no staff sign-in for over a year can be deleted."
+            )
+        obj.delete(force_drop=True)  # delete the row AND drop the schema
 
     def _delete_view(self, request, object_id, extra_context):
         """Custom `_delete_view` method.

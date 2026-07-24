@@ -53,6 +53,11 @@ GRACE_PERIOD_DAYS = 30
 # paid_until) is this many days away or closer (#1733's "2 week notice").
 EXPIRY_WARNING_DAYS = 14
 
+# A deck may be DELETED from the admin only once no staff member has signed in
+# for this long (#2044 retirement policy): a year of staff silence means the
+# deck is abandoned, not merely dormant over a summer or a leave.
+INACTIVE_DELETE_DAYS = 365
+
 
 class Tenant(TenantMixin):
     # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
@@ -282,6 +287,25 @@ class Tenant(TenantMixin):
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
+
+    @property
+    def is_deletable(self):
+        """Whether the admin may delete this deck (and drop its schema): no staff
+        sign-in for more than INACTIVE_DELETE_DAYS (#2044 retirement policy).
+
+        Never true for the public schema (deleting it would take down the whole
+        installation), and never true while ``last_staff_login`` is blank -- the
+        cached field refreshes nightly, so blank means "no staff login on record",
+        which cannot PROVE a year of silence the way an old timestamp can.
+        """
+        from django_tenants.utils import get_public_schema_name
+
+        if self.schema_name == get_public_schema_name():
+            return False
+        return (
+            self.last_staff_login is not None
+            and now() - self.last_staff_login > timedelta(days=INACTIVE_DELETE_DAYS)
+        )
 
     # END BILLING / LIFECYCLE STATUS ##################################
 

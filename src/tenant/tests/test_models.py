@@ -169,6 +169,22 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
 
+    def test_is_deletable__requires_a_year_of_staff_silence(self):
+        """A deck is deletable only when its recorded last_staff_login is more than
+        INACTIVE_DELETE_DAYS ago -- never when blank (no login on record cannot
+        prove abandonment), and never for the public schema (#2044)."""
+        from django.utils.timezone import now
+
+        from tenant.models import INACTIVE_DELETE_DAYS
+
+        def deck(schema_name='statustest', last_staff_login=None):
+            return Tenant(name='statustest', schema_name=schema_name, last_staff_login=last_staff_login)
+
+        self.assertTrue(deck(last_staff_login=now() - timedelta(days=INACTIVE_DELETE_DAYS + 1)).is_deletable)
+        self.assertFalse(deck(last_staff_login=now() - timedelta(days=10)).is_deletable)
+        self.assertFalse(deck().is_deletable)  # blank: no login on record
+        self.assertFalse(deck(schema_name='public', last_staff_login=now() - timedelta(days=999)).is_deletable)
+
     def test_is_on_trial__true_through_trial_end_date(self):
         """A deck with no subscription is on trial through its trial_end_date."""
         self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY).is_on_trial)
