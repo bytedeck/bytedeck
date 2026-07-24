@@ -167,12 +167,13 @@ variables are left untouched.
 **S3** and they are served through **CloudFront**. nginx does not serve app
 media in normal operation.
 
-> Legacy detail: `nginx/bytedeck.conf.template` still contains a hardcoded
-> `location ~ /media/(.*)$` that 301-redirects to a specific CloudFront
-> distribution (`d10ge8y4vx8iud.cloudfront.net/public_media/$1`). It's a
-> workaround for old hardcoded `/media/...` URLs and causes a redundant redirect
-> hop. Prefer generating correct absolute S3/CloudFront URLs in the app and
-> removing this block when practical.
+> Legacy detail: `nginx/bytedeck.conf.template` still contains a
+> `location ~ /media/(.*)$` that 301-redirects to the S3/CloudFront
+> distribution. The CDN host is injected from the `CDN_static` `.env` value at
+> image-build time (`envsubst` in `nginx/Dockerfile`) rather than hardcoded. It's
+> a workaround for old hardcoded `/media/...` URLs and causes a redundant
+> redirect hop. Prefer generating correct absolute S3/CloudFront URLs in the app
+> and removing this block when practical.
 
 ## Database
 

@@ -29,9 +29,16 @@ server {
 
     client_max_body_size 17M;
 
-    # Temp workaround to serve hardcoded media files(this causes redundant redirects to CDN)
+    # Legacy compatibility shim: 301-redirect any lingering /media/... links on
+    # the app domain to the S3/CloudFront distribution (django-storages already
+    # generates absolute CDN URLs for new content, so this only catches old
+    # hardcoded /media/ URLs and adds a redundant hop -- remove when practical,
+    # see production/SERVER-README.md). The CDN host comes from the ${CDN_static}
+    # build arg (wired to the CDN_static .env value via docker-compose.prod.aws.yml
+    # and substituted by envsubst in nginx/Dockerfile) so the real distribution
+    # is not hardcoded here. If CDN_static is unset the block is inert.
     location ~ /media/(.*)$ {
-        return 301  https://d10ge8y4vx8iud.cloudfront.net/public_media/$1;
+        return 301  https://${CDN_static}/public_media/$1;
     }
 
     # Enable below if media files to be served from nginx instead of S3

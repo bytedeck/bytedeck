@@ -85,6 +85,10 @@ services:
         # and cert paths). Reuses ROOT_DOMAIN from .env so production and
         # staging build the same image from one template.
         DOMAIN: $ROOT_DOMAIN
+        # S3/CloudFront domain for the legacy /media/ redirect in the template,
+        # reused from the app's CDN_static .env value so the real distribution
+        # isn't hardcoded in the repo. Optional: if unset the redirect is inert.
+        CDN_static: $CDN_static
     volumes:
         - /etc/letsencrypt:/etc/letsencrypt
     #   - static_data:/var/www/bytedeck/static

@@ -13,10 +13,15 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # so it substitutes only the domain and leaves nginx's own
 # $host/$scheme/$request_uri/$1 variables intact.
 ARG DOMAIN
+# CDN_static is the S3/CloudFront domain, reused from the app's CDN_static .env
+# value (see docker-compose.prod.aws.yml). It is substituted into the legacy
+# /media/ redirect in the template so the real distribution is not hardcoded in
+# the repo. Unlike DOMAIN it is optional: if empty the redirect block is inert.
+ARG CDN_static
 COPY bytedeck.conf.template /tmp/bytedeck.conf.template
 RUN test -n "$DOMAIN" || { echo "ERROR: DOMAIN build arg is required (normally supplied from ROOT_DOMAIN by docker-compose.prod.aws.yml; e.g. --build-arg DOMAIN=bytedeck.com)." >&2; exit 1; } \
     && mkdir -p /etc/nginx/sites-available \
-    && envsubst '${DOMAIN}' < /tmp/bytedeck.conf.template > /etc/nginx/sites-available/bytedeck.conf \
+    && envsubst '${DOMAIN} ${CDN_static}' < /tmp/bytedeck.conf.template > /etc/nginx/sites-available/bytedeck.conf \
     && rm /tmp/bytedeck.conf.template
 
 # SSL details
