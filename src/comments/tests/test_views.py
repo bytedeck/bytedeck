@@ -108,7 +108,7 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, path)
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
-    def test_comment_content_has_user_content_class(self):
+    def test_comment_content__has_user_content_class(self):
         """Rendered comment bodies carry the `user-content` class (#1388).
 
         Comments live inside a Bootstrap `.list-group`, which is itself a `<ul>`, so a
