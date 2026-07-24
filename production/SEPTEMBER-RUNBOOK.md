@@ -136,6 +136,8 @@ The app already emails `ADMINS` on celery task failures and unhandled 5xx.
 
 Run on the host during peak:
 ```bash
+cd ~/bytedeck   # the -f compose files below are referenced relatively, so run from the repo dir
+                # (an SSH session lands in ~ by default; the app lives in ~/bytedeck -- see the systemd unit)
 C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 watch -n5 'free -h; echo; docker stats --no-stream'
 # Redis: memory-cap pressure (used vs max -- with noeviction, reaching the cap
