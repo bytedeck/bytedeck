@@ -125,10 +125,12 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_recalculate_current_xp__invalidates_active_semester_profiles(self):
-        """recalculate_current_xp invalidates the XP cache of each active-semester profile."""
+    def test_recalculate_current_xp__dispatches_background_task(self):
+        """recalculate_current_xp hands the all-student XP recompute to a background task
+        rather than looping over every active-semester profile synchronously in the request,
+        which had grown a web worker large enough to be OOM-killed (issue #2081).
+        """
         # a student registered in the active semester so all_for_active_semester() is non-empty
-        # and the loop body actually runs
         baker.make(
             'courses.CourseStudent', user=self.test_student1,
             semester=self.active_sem, course=baker.make('courses.Course'),
@@ -136,12 +138,15 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(Profile.objects.all_for_active_semester().exists())
         self.client.force_login(self.test_teacher)
 
-        with patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+        # The view must NOT recompute in-request; it must dispatch the celery task instead.
+        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch, \
+                patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
             response = self.client.get(reverse('profiles:recalculate_xp_current'))
 
         self.assertEqual(response.status_code, 302)
-        # the view actually invalidated the XP cache (would still pass on a bare redirect otherwise)
-        self.assertTrue(mock_invalidate.called)
+        mock_dispatch.assert_called_once()
+        # nothing was recomputed synchronously in the request
+        self.assertFalse(mock_invalidate.called)
 
     def test_tour_complete__marks_completed_and_redirects_to_quests(self):
         """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
