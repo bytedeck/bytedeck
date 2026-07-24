@@ -372,12 +372,15 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         live = baseline + 2
 
         # cached count deliberately left stale at 0 in every case: it must not matter
-        def deck(**fields):
-            Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=0, **fields)
+        def deck(trial_end_date=None, paid_until=None, **fields):
+            # reset both clocks every call: update() is cumulative on the same row, and a
+            # leaked date would silently change which billing branch an assertion exercises
+            Tenant.objects.filter(pk=self.tenant.pk).update(
+                active_user_count=0, trial_end_date=trial_end_date, paid_until=paid_until, **fields)
             return Tenant.objects.get(pk=self.tenant.pk)
 
         self.assertTrue(deck(trial_end_date=localdate(), max_active_users=live - 1).is_over_user_limit)
-        self.assertFalse(deck(max_active_users=live).is_over_user_limit)  # at the cap is not over it
+        self.assertFalse(deck(trial_end_date=localdate(), max_active_users=live).is_over_user_limit)  # at the cap is not over it
         # subscribed deck uses its own (tier) cap, not the trial cap
         self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
         self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
