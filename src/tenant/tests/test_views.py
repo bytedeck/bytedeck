@@ -642,6 +642,31 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Subscription expiring')
 
+    def test_banner__expired_grace_deck_gets_danger_styling_and_grace_copy(self):
+        """A deck past paid_until (in grace) gets the DANGER (red) banner -- not the
+        approaching-deadline warning style -- and the copy states when the grace
+        period ends and that the deck then reverts to the trial cap (maintainer
+        requests from staging live testing)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from tenant.models import TRIAL_MAX_ACTIVE_USERS
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=10))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Subscription expired')
+        self.assertContains(response, 'alert-danger')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('which ends in 20 days', text)
+        self.assertIn(f'revert to trial limits (max {TRIAL_MAX_ACTIVE_USERS} current students)', text)
+        # the approaching-deadline variants keep the warning style
+        self.set_deck(paid_until=localdate() + timedelta(days=3))
+        self.assertContains(self.get_quests_page(self.staff), 'alert-warning')
+        # self.tenant is shared across the class in memory and set_deck saves the
+        # whole object, so clear the paid date or it leaks into later tests
+        self.set_deck(paid_until=None)
+
 
 class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Access and rendering tests for the staff-facing Subscription details page

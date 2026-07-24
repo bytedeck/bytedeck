@@ -194,6 +194,19 @@ class Tenant(TenantMixin):
         return self.subscription_active and localdate() > self.paid_until
 
     @property
+    def grace_days_remaining(self):
+        """Days of paid grace left after `paid_until`; None when not in the grace
+        period. 0 on the final day (the grace period ends today). Drives the
+        expired banner's "grace period ends in N days" copy.
+
+        days_until_expiry is negative throughout the grace window, so the days
+        left until suspension are GRACE_PERIOD_DAYS + days_until_expiry.
+        """
+        if not self.in_grace_period:
+            return None
+        return GRACE_PERIOD_DAYS + self.days_until_expiry
+
+    @property
     def is_on_trial(self):
         """Whether the deck is in trial mode: no active subscription, and a trial
         clock that hasn't run out."""

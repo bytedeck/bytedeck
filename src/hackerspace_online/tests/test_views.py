@@ -136,3 +136,40 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('account_signup'))
         self.assertIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
+
+
+class MessagesSnippetIconTest(ByteDeckTenantTestCase):
+    """Rendering tests for the level icons on django messages (messages-snippet.html,
+    maintainer request from staging live testing)."""
+
+    class FakeMessage:
+        """Stand-in for a django.contrib.messages Message: the snippet only reads
+        .tags and renders str(message)."""
+
+        def __init__(self, tags, text):
+            self.tags = tags
+            self.text = text
+
+        def __str__(self):
+            return self.text
+
+    def render_messages(self, tags):
+        """Render the snippet with one fake message of the given tags."""
+        from django.template.loader import render_to_string
+        return render_to_string('messages-snippet.html', {'messages': [self.FakeMessage(tags, 'the message text')]})
+
+    def test_messages_snippet__renders_level_icon_left_of_text(self):
+        """Each message level renders its FontAwesome icon before the text: ban for
+        error/danger, exclamation-triangle for warning, info-circle for info."""
+        for tags, icon in (('error', 'fa-ban'), ('warning', 'fa-exclamation-triangle'), ('info', 'fa-info-circle')):
+            html = self.render_messages(tags)
+            self.assertIn(icon, html)
+            self.assertLess(html.index(icon), html.index('the message text'))  # icon sits left of the text
+
+    def test_messages_snippet__success_messages_have_no_icon(self):
+        """Success messages keep their icon-free look (only info/warning/error were
+        requested); no stray fa- icon renders."""
+        html = self.render_messages('success')
+        self.assertNotIn('fa-ban', html)
+        self.assertNotIn('fa-exclamation-triangle', html)
+        self.assertNotIn('fa-info-circle', html)

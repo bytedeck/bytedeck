@@ -24,10 +24,12 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
                 or <a href="{{ deck_subscribe_url }}" class="alert-link">upgrade your subscription</a>.
             </div>
         {% elif current_deck.is_expiring_soon %}
-            <div class="alert alert-warning" id="deck-status-banner">
+            {# expired-into-grace escalates to danger styling; the approaching-deadline variants stay warnings #}
+            <div class="alert {% if current_deck.days_until_expiry < 0 %}alert-danger{% else %}alert-warning{% endif %}" id="deck-status-banner">
                 {% if current_deck.days_until_expiry < 0 %}
-                    <strong>Subscription expired</strong> &mdash; this deck is in its grace
-                    period and will revert to trial limits soon.
+                    <strong>Subscription expired</strong> &mdash; this deck is in its grace period, which ends in
+                    {{ current_deck.grace_days_remaining }} day{{ current_deck.grace_days_remaining|pluralize }};
+                    it will then revert to trial limits (max {{ trial_cap }} current students).
                 {% elif current_deck.is_on_trial %}
                     <strong>Trial ending soon:</strong> this deck's free trial ends in
                     {{ current_deck.days_until_expiry }} day{{ current_deck.days_until_expiry|pluralize }}.

@@ -23,6 +23,11 @@
     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
         <span aria-hidden="true">&times;</span>
     </button>
+    {# level icon left of the text (inherits the alert variant's text color); success stays icon-free #}
+    {% if 'error' in message.tags %}<i class="fa fa-fw fa-ban"></i>
+    {% elif 'warning' in message.tags %}<i class="fa fa-fw fa-exclamation-triangle"></i>
+    {% elif 'info' in message.tags %}<i class="fa fa-fw fa-info-circle"></i>
+    {% endif %}
     {% if 'safe' in message.tags %}
     {{ message|safe }}
     {% else %}

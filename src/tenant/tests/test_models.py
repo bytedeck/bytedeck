@@ -163,6 +163,20 @@ class TenantBillingStatusTest(SimpleTestCase):
         """A deck with no paid_until has no subscription, regardless of its trial date."""
         self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30)).subscription_active)
 
+    def test_grace_days_remaining__counts_down_through_the_grace_window(self):
+        """Days of grace left after paid_until: GRACE_PERIOD_DAYS minus the days
+        elapsed, 0 on the final grace day, and None for any deck not in grace
+        (still paid, on trial, suspended, or unmanaged)."""
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=10)).grace_days_remaining, GRACE_PERIOD_DAYS - 10)
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).grace_days_remaining, 0)
+        self.assertIsNone(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=90)).grace_days_remaining)  # still paid
+        self.assertIsNone(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=30)).grace_days_remaining)  # trial
+        self.assertIsNone(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).grace_days_remaining)  # suspended
+        self.assertIsNone(self.make_tenant().grace_days_remaining)  # unmanaged
+
     def test_in_grace_period__only_between_paid_until_and_grace_end(self):
         """in_grace_period is True strictly after paid_until and only while subscription_active."""
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY).in_grace_period)
