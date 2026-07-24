@@ -35,6 +35,10 @@
         var $el = $(this);
         var title = $el.text();
         $el.attr("id", title);
+        // Give each heading the `.anchor` class so its `scroll-margin-top` (custom_common.css)
+        // offsets the fixed navbar; without it a ToC jump lands with the heading hidden behind
+        // the navbar (issue #821).
+        $el.addClass("anchor");
 
         var tocEntry =
             "<li>" +
