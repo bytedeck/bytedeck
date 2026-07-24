@@ -149,11 +149,13 @@ class QuestionSubmissionForm(forms.ModelForm):
             del self.fields["response_file"]
             # replace the model's TextField default with a CharField so the 200-character
             # limit is enforced server-side, not just by the widget's maxlength attribute
+            # no visible label (the question's instructions directly above serve as the label,
+            # matching the long answer field); aria-label keeps it accessible
             self.fields["response_text"] = forms.CharField(
-                label="Response text",
+                label="",
                 required=self.question.required,
                 max_length=200,
-                widget=forms.Textarea(attrs={'maxlength': '200', 'rows': '2'}),
+                widget=forms.Textarea(attrs={'maxlength': '200', 'rows': '2', 'aria-label': 'Response'}),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]

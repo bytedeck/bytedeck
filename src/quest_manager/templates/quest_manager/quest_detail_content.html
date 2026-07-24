@@ -88,7 +88,9 @@
 </div>
 <div id="quest-questions-{{quest.id}}" class="panel panel-primary">
   <div class="panel-heading">
-    <h3 class="panel-title">Submission Questions <small>(visible to staff only)</small>
+    {# the questions themselves are visible to students (they answer them when submitting); #}
+    {# only this management panel and the solutions/marker notes are staff-only #}
+    <h3 class="panel-title">Submission Questions <small>(students answer these when submitting)</small>
       <a class="btn btn-info btn-xs pull-right" href="{% url 'questions:list' quest.id %}">Manage Questions</a>
     </h3>
   </div>
