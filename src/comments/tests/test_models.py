@@ -137,9 +137,11 @@ class CleanHTMLTests(TestCase):
         self.assertEqual(cleaned_text, expected_output)
 
     def test_clean_html__convert_newlines_false_keeps_newlines_unbroken(self):
-        """With convert_newlines=False, newlines in the text are not turned into <br> tags."""
+        """With convert_newlines=False, newlines in the text are preserved rather than turned into <br> tags."""
         text = "line one\nline two"
-        self.assertNotIn("<br>", clean_html(text, convert_newlines=False))
+        cleaned = clean_html(text, convert_newlines=False)
+        self.assertNotIn("<br>", cleaned)
+        self.assertIn("\n", cleaned)  # the newline is kept, not dropped or collapsed
 
 
 class CommentModelTest(ByteDeckTenantTestCase):
