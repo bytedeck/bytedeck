@@ -16,7 +16,7 @@
             {% endif %}
             {% if answer.question.solution_file %}
               <p class="text-muted"><small><b>Solution file:</b>
-                <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename }}</a></small></p>
+                <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
             {% endif %}
             {% if answer.question.marker_notes %}
               <p class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|safe }}</small></p>
@@ -28,7 +28,7 @@
       </td>
       <td class="col-sm-7">
         {% if answer.response_file %}
-          <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename }}</a>
+          <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename|safe }}</a>
         {% elif answer.response_text %}
           {{ answer.response_text|safe }}
         {% else %}

@@ -26,6 +26,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
+from comments.sanitize import sanitize_comment_html
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission
 from questions.utils import sync_draft_question_submissions
@@ -1687,10 +1688,28 @@ def complete(request, submission_id):
     # (browser back button) must not spawn fresh draft rows on a completed submission.
     question_formset = None
     if "complete" in request.POST and not submission.is_completed and submission.quest.question_set.exists():
+        draft_rows = sync_draft_question_submissions(submission)
         question_formset = QuestionSubmissionFormsetFactory(
             request.POST, request.FILES,
-            instance=submission, queryset=sync_draft_question_submissions(submission),
+            instance=submission, queryset=draft_rows,
         )
+
+        # The management form is client-controlled: a tampered TOTAL_FORMS/INITIAL_FORMS (or a
+        # stale page from before the quest's questions changed) can present fewer answer forms
+        # than the quest has questions. Without this guard those omitted questions are never
+        # validated yet still published (the blanket publish below), so required questions
+        # could be bypassed — completing/auto-approving a quest with nothing answered. Require
+        # the POST to cover exactly the quest's current questions; otherwise bounce back to a
+        # freshly-built page that shows them all.
+        expected_ids = set(draft_rows.values_list("pk", flat=True))
+        posted_ids = {f.instance.pk for f in question_formset.forms if f.instance.pk}
+        if posted_ids != expected_ids:
+            messages.error(
+                request,
+                "This quest's questions have changed since you opened this page. "
+                "Please review and answer them, then submit again.",
+            )
+            return redirect(origin_path)
 
     if not form.is_valid() or (question_formset and not question_formset.is_valid()):
         # The main form path should only occur if a student tries to use the quick reply form
@@ -1710,13 +1729,21 @@ def complete(request, submission_id):
 
     comment_text = form.cleaned_data.get("comment_text")
 
+    # Whether the student actually answered at least one question (a BaseFormSet is always
+    # truthy, so `if question_formset:` alone would treat a set of only-blank optional
+    # answers as content and wrongly bypass the verification-required check below).
+    answered_a_question = bool(question_formset) and any(
+        f.cleaned_data.get("response_text") or f.cleaned_data.get("response_file")
+        for f in question_formset.forms
+    )
+
     # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
     # then need to check if we should bother handling this form submission
     if not comment_text or comment_text == "<p><br></p>":
 
-        # If the quest has questions, their (already validated) answers are the submission's
+        # If the student answered at least one question, those answers are the submission's
         # content, so don't demand an additional comment or attachment on top of them.
-        if question_formset:
+        if answered_a_question:
             comment_text = "(submitted without comment)"
         # If the `verification_required` flag is set, then the teacher is expecting either
         # a comment or a file (something to check).  We already know there isn't a comment
@@ -2036,7 +2063,12 @@ def ajax_save_draft(request):
                 text = row_data.get("response_text")
                 if not row_id or text is None:
                     continue
-                # only this submission's own unpublished rows can be draft-saved
+                # only this submission's own unpublished rows can be draft-saved.
+                # Sanitize on write: this raw draft is published verbatim on completion
+                # (the blanket publish below doesn't re-clean unchanged rows) and rendered
+                # with |safe in the marking display, so an unsanitized draft would be
+                # stored XSS against the marker (issues #1343 / #2113).
+                text = sanitize_comment_html(text)
                 row = QuestionSubmission.objects.filter(
                     pk=row_id, quest_submission=sub, comment__isnull=True
                 ).first()

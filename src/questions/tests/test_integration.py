@@ -365,3 +365,104 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         short_rows = rows.filter(question=self.short_question)
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().id, contentful.id)
+
+
+class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
+    """The complete flow can't be tricked into publishing unvalidated or unsanitized answers,
+    nor into bypassing required questions (regression tests for the review round)."""
+
+    def autosave(self, answers):
+        """POST an ajax draft save (as the AJAX request the view demands) for self.submission."""
+        return self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={"comment": "<p>x</p>", "submission_id": self.submission.id, "answers": json.dumps(answers)},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_autosave__sanitizes_script_on_write(self):
+        """A hostile draft answer is neutralized as it is stored, not just on the form path —
+        the raw value would otherwise be published verbatim and rendered with |safe."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        self.autosave({
+            "question_submissions-0-id": str(row.id),
+            "question_submissions-0-response_text": '<img src=x onerror="alert(1)">answer',
+        })
+        row.refresh_from_db()
+        self.assertNotIn("onerror", row.response_text)
+        self.assertIn("answer", row.response_text)
+
+    def test_complete__autosaved_script_not_published_raw(self):
+        """Publishing an autosaved answer via completion can't smuggle raw script into the
+        marking display, even when the completion POST re-sends the same value unchanged."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        short_row = next(r for r in rows if r.question_id == self.short_question.id)
+        self.autosave({
+            "question_submissions-0-id": str(short_row.id),
+            "question_submissions-0-response_text": '<img src=x onerror="alert(1)">',
+        })
+        short_row.refresh_from_db()
+        # complete, re-sending the (already sanitized) stored value so the form is "unchanged"
+        data = self.formset_data(short_text=short_row.response_text)
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **data})
+        self.assertRedirects(response, reverse("quests:quests"))
+        short_row.refresh_from_db()
+        self.assertTrue(short_row.is_published)
+        self.assertNotIn("onerror", short_row.response_text)
+
+    def test_complete__zero_forms_rejected_required_not_bypassed(self):
+        """A tampered management form declaring zero answer forms can't complete a quest
+        whose required question was never answered."""
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={
+                "complete": True, "comment_text": "",
+                "question_submissions-TOTAL_FORMS": "0",
+                "question_submissions-INITIAL_FORMS": "0",
+                "question_submissions-MIN_NUM_FORMS": "0",
+                "question_submissions-MAX_NUM_FORMS": "1000",
+            })
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        self.assertFalse(QuestionSubmission.objects.filter(
+            quest_submission=self.submission, comment__isnull=False).exists())
+
+    def test_complete__question_added_after_page_load_blocks_and_redirects(self):
+        """If the quest gains a question after the student's page loaded, the stale POST
+        (missing that answer form) is bounced back rather than completing silently."""
+        # student's page has 2 questions; teacher adds a required 3rd
+        stale_data = self.formset_data()
+        baker.make(Question, quest=self.quest, ordinal=3, type="short_answer", required=True)
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **stale_data})
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+
+    def test_complete__optional_blank_answers_still_require_comment_when_verification_required(self):
+        """A verification-required quest whose only questions are optional and left blank
+        still demands a comment or attachment — answers-that-aren't-answers aren't content."""
+        # replace the fixture questions with a single optional one
+        Question.objects.filter(quest=self.quest).delete()
+        optional = baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
+        # rebuild the draft rows for the new question set
+        rows = list(sync_draft_question_submissions(self.submission))
+        data = {
+            "question_submissions-TOTAL_FORMS": "1",
+            "question_submissions-INITIAL_FORMS": "1",
+            "question_submissions-MIN_NUM_FORMS": "0",
+            "question_submissions-MAX_NUM_FORMS": "1000",
+            "question_submissions-0-id": str(rows[0].id),
+            "question_submissions-0-response_text": "",
+        }
+        self.assertEqual(rows[0].question_id, optional.id)
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **data})
+        # bounced by the attach-or-comment rule, not completed
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
