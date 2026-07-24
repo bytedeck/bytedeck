@@ -168,3 +168,8 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
         """
         ax, bx = self._campaign_mean_x(order_a=1000, order_b=0, connected=True)
         self.assertLess(bx, ax, "connected campaign B (lower map_order) should still be left of A")
+
+        # Mirror it — swapping the values swaps the columns, so the fix isn't direction-dependent
+        # for the connected case either.
+        ax, bx = self._campaign_mean_x(order_a=0, order_b=1000, connected=True)
+        self.assertLess(ax, bx, "connected campaign A (lower map_order) should be left of B")
