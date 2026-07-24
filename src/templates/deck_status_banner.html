@@ -18,7 +18,7 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
     {% elif request.user.is_staff %}
         {% if current_deck.is_over_user_limit %}
             <div class="alert alert-warning" id="deck-status-banner">
-                <strong>Current-student limit exceeded:</strong> this deck has {{ current_deck.active_user_count }}
+                <strong>Current-student limit exceeded:</strong> this deck has {{ current_deck.get_active_user_count }}
                 current students of {{ current_deck.effective_max_active_users }} allowed.
                 <a href="{% url 'courses:archive_students_help' %}" class="alert-link">Archive past students</a>,
                 or <a href="{{ deck_subscribe_url }}" class="alert-link">upgrade your subscription</a>.
@@ -39,15 +39,14 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
             </div>
         {% elif current_deck.is_on_trial %}
             <div class="alert alert-info" id="deck-status-banner">
-                <strong>Trial Mode:</strong> this deck is on a free trial until {{ current_deck.trial_end_date }}
-                ({{ current_deck.days_until_expiry }} day{{ current_deck.days_until_expiry|pluralize }} remaining).
-                {{ current_deck.active_user_count }} current student seat{{ current_deck.active_user_count|pluralize }} used
-                {% if current_deck.effective_max_active_users == -1 %}
-                    (no seat limit).
-                {% else %}
-                    out of a maximum of {{ current_deck.effective_max_active_users }}.
-                {% endif %}
-                See your <a href="{{ deck_subscribe_url }}" class="alert-link">Subscription details</a> page for more info.
+                {# always plural here: this branch only renders when days_until_expiry > EXPIRY_WARNING_DAYS (the warning banner covers the final days) #}
+                <strong>Trial Mode:</strong> this deck is on a free trial until {{ current_deck.trial_end_date|date:"j M Y" }}
+                ({{ current_deck.days_until_expiry }} days remain).
+                {# the count is LIVE (get_active_user_count), not the nightly-cached field: the cached figure reads as a bug beside live student lists #}
+                You are using {{ current_deck.get_active_user_count }} out of
+                {% if current_deck.effective_max_active_users == -1 %}unlimited{% else %}max {{ current_deck.effective_max_active_users }}{% endif %}
+                current students.
+                See your <a href="{{ deck_subscribe_url }}" class="alert-link">Subscription details</a> for more info.
             </div>
         {% endif %}
     {% endif %}
