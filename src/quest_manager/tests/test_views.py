@@ -549,6 +549,42 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertNotContains(response, 'Submit Quest for Approval')
 
+    def test_submission__unavailable_quest_shows_notice_and_hides_form_for_student(self):
+        """A student viewing a submission of an unpublished quest gets a "no longer available"
+        notice and the (empty, useless) submission form is hidden entirely (issue #798).
+
+        quest3/sub4 is unpublished, so the submission form has no submit button; rather than
+        leave the confusing empty form, the student sees a red notice and no form panel.
+        """
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub4.pk]))
+        self.assertContains(response, 'Quest No Longer Available')
+        self.assertNotContains(response, 'Quest Submission Form')
+
+    def test_submission__available_quest_shows_form_without_notice(self):
+        """A published, non-archived quest still shows the submission form and no notice (issue #798)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, 'Quest Submission Form')
+        self.assertNotContains(response, 'Quest No Longer Available')
+
+    def test_submission__archived_quest_submission_is_not_viewable(self):
+        """A submission of an archived quest is already not viewable (404), which matches the
+        "no longer viewable" fallback the issue accepts for the archived case (issue #798).
+
+        The QuestSubmission manager excludes archived quests from this view, so there is no empty
+        form to worry about -- the page simply isn't served.
+        """
+        self.client.force_login(self.test_student1)
+
+        self.quest3.archived = True
+        self.quest3.save()
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub4.pk]))
+        self.assertEqual(response.status_code, 404)
+
     def test_submission__drop_button_hidden_when_approved(self):
         """
         Make sure drop button is not visible when quest submission is already approved
