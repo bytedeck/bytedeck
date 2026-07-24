@@ -3,14 +3,15 @@ from copy import deepcopy
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.db import connection
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, connection
 from django.urls import reverse
 from django_tenants.test.client import TenantClient
 from django_tenants.utils import schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
-from library.exporter import export_campaign_and_copy_quests
+from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
 from model_bakery import baker
 from notifications.models import Notification
 from quest_manager.models import Category, Quest
@@ -1120,3 +1121,37 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
         # "Campaigns" should be the active tab
         self.assertEqual(response.context['tab'], 'campaigns')
+
+
+class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
+    """Error-handling branches of ``library.exporter`` — the cases where a quest or
+    campaign export can't complete and the exporter re-raises a clearer exception."""
+
+    def test_export_quest_to_library__unknown_import_id_raises_does_not_exist(self):
+        """Exporting a quest whose import_id isn't in the source schema raises Quest.DoesNotExist."""
+        with self.assertRaises(Quest.DoesNotExist):
+            export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
+
+    @patch("library.exporter.QuestResource.import_data")
+    def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
+        mock_import_data.side_effect = IntegrityError("duplicate key")
+        quest = baker.make(Quest, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to import quest to library schema"):
+            export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=quest.import_id)
+
+    def test_export_campaign_to_library__no_published_quests_raises_validation_error(self):
+        """Exporting a campaign that has no published quests (and no skip list) is rejected with a ValidationError."""
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign, published=False)
+        with self.assertRaisesMessage(ValidationError, "Cannot export a campaign without any published quests."):
+            export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
+
+    @patch("library.exporter.QuestResource.import_data")
+    def test_export_campaign_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A validation error while importing a campaign is re-raised as a clearer ValidationError with context."""
+        mock_import_data.side_effect = ValidationError("bad data")
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to import campaign to library schema"):
+            export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
