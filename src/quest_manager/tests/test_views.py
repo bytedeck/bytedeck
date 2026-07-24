@@ -2254,13 +2254,16 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_quest_copy__copies_submission_questions(self):
         """Copying a quest duplicates its submission questions onto the copy (issue #2161).
-        Each question's fields are carried over, and the source quest keeps its own questions."""
+        Each question's fields — including marker_notes and the (shared) solution_file — are
+        carried over, and the source quest keeps its own questions."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
         from questions.models import Question
 
         # give the source quest a question of each type, in a specific order
         Question.objects.create(
             quest=self.quest, ordinal=1, type="short_answer", required=True,
             instructions="What is your name?", solution_text="Any name",
+            marker_notes="Accept any non-empty name.",
         )
         Question.objects.create(
             quest=self.quest, ordinal=2, type="long_answer", required=False,
@@ -2269,6 +2272,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         Question.objects.create(
             quest=self.quest, ordinal=3, type="file_upload", required=True,
             instructions="Attach your work.", allowed_file_type="image",
+            solution_file=SimpleUploadedFile("solution.png", b"file_content", content_type="image/png"),
         )
 
         self.client.force_login(self.test_teacher)
@@ -2289,7 +2293,10 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(copy_q.required, src_q.required)
             self.assertEqual(copy_q.instructions, src_q.instructions)
             self.assertEqual(copy_q.solution_text, src_q.solution_text)
+            self.assertEqual(copy_q.marker_notes, src_q.marker_notes)
             self.assertEqual(copy_q.allowed_file_type, src_q.allowed_file_type)
+            # the copy references the same solution file as the source (not re-uploaded)
+            self.assertEqual(copy_q.solution_file.name, src_q.solution_file.name)
         # the source quest still has exactly its own three questions
         self.assertEqual(Question.objects.filter(quest=self.quest).count(), 3)
 
@@ -2305,6 +2312,32 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         copied_quest = Quest.objects.get(name='Test Quest - COPY')
         self.assertRedirects(response, copied_quest.get_absolute_url())
         self.assertEqual(Question.objects.filter(quest=copied_quest).count(), 0)
+
+    def test_quest_copy__question_failure_rolls_back_whole_copy(self):
+        """If duplicating a question fails, the whole copy rolls back — no orphaned quest is
+        left behind (the copy, its prereqs and its questions commit or roll back together)."""
+        from django.core.exceptions import ValidationError
+        from questions.models import Question
+
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?",
+        )
+
+        quests_before = Quest.objects.count()
+        self.client.force_login(self.test_teacher)
+
+        # force the second step (question duplication) to blow up
+        with patch.object(Question, "full_clean", side_effect=ValidationError("boom")):
+            with self.assertRaises(ValidationError):
+                self.client.post(
+                    reverse('quests:quest_copy', args=[self.quest.id]),
+                    data=self.valid_copy_form_data,
+                )
+
+        # the transaction rolled back: no copied quest, and the quest count is unchanged
+        self.assertFalse(Quest.objects.filter(name='Test Quest - COPY').exists())
+        self.assertEqual(Quest.objects.count(), quests_before)
 
 
 class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
