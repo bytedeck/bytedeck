@@ -723,6 +723,45 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Remaining students')
         self.assertContains(response, '30')
 
+    def test_page__dates_show_relative_time_in_every_state(self):
+        """Every Dates row carries a relative phrase: time remaining while the date
+        is ahead, or how long ago it passed -- for Paid until, the grace period's
+        end, and Trial ends alike (maintainer request from staging live testing)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        # subscribed: paid_until ahead, grace end further ahead
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(100 days remaining)', text)
+        self.assertIn('extends 30 days after your subscription ends (ends in 130 days)', text)
+
+        # in grace: paid_until behind, grace end still ahead
+        self.set_deck(paid_until=localdate() - timedelta(days=10))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 10 days ago)', text)
+        self.assertIn('(ends in 20 days)', text)
+
+        # suspended: both behind (the maintainer's "ended 24 days ago" example)
+        self.set_deck(paid_until=localdate() - timedelta(days=54))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 54 days ago)', text)
+        self.assertIn('(ended 24 days ago)', text)
+
+        # trial deck: the Trial ends row gets the same treatment, both directions
+        self.set_deck(paid_until=None, trial_end_date=localdate() + timedelta(days=10))
+        self.assertIn('(10 days remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() - timedelta(days=3))
+        self.assertIn('(expired 3 days ago)', ' '.join(self.get_page().content.decode().split()))
+
+        # boundary days read "today", singular day is "1 day"
+        self.set_deck(trial_end_date=localdate())
+        self.assertIn('(expires today)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() + timedelta(days=1))
+        self.assertIn('(1 day remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=30))  # final grace day
+        self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
+
     def test_page__dates_show_only_the_governing_deadline(self):
         """The Dates table shows ONE deadline row -- Paid until when a paid date
         exists (it supersedes the trial date, even while lapsed), Trial ends on a

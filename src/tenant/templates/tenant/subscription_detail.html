@@ -36,10 +36,10 @@
 {# one governing deadline row, not both: a paid date (even lapsed) supersedes the trial date #}
 <table class="table" style="max-width: 30em;">
   {% if deck.paid_until %}
-    <tr><th>Paid until</th><td>{{ deck.paid_until }}</td></tr>
-    <tr><th>Grace period</th><td>{{ grace_days }} days after <em>paid until</em></td></tr>
+    <tr><th>Paid until</th><td>{{ deck.paid_until }} ({{ paid_until_phrase }})</td></tr>
+    <tr><th>Grace period</th><td>extends {{ grace_days }} days after your subscription ends ({{ grace_end_phrase }})</td></tr>
   {% elif deck.trial_end_date %}
-    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }}</td></tr>
+    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
   {% else %}
     <tr><th>Expires</th><td>Never &mdash; this deck is managed manually</td></tr>
   {% endif %}
