@@ -642,9 +642,12 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
                 name="extra",
             )
             cls.extra_tenant.save()
-            # abandoned for over a year, so the deletion tests clear the
-            # inactivity guard (#2044) and keep exercising the Django perms
+            # armed for deletion, suspended (lapsed trial), and abandoned for over a
+            # year, so the deletion tests clear every #2044 guard and keep
+            # exercising the Django perms and confirmation mechanics
             Tenant.objects.filter(pk=cls.extra_tenant.pk).update(
+                can_delete=True,
+                trial_end_date=date(2020, 1, 1),
                 last_staff_login=timezone.now() - timezone.timedelta(days=366))
             cls.extra_tenant.refresh_from_db()
 
@@ -785,6 +788,36 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         self.client.get(delete_url)  # anonymous first: move client to public schema
         self.client.force_login(self.deleteuser)
         self.assertEqual(self.client.get(delete_url).status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_when_not_armed_via_can_delete(self):
+        """Even a suspended, year-abandoned deck cannot be deleted until an admin
+        deliberately arms it by turning on can_delete (#2044 protection)."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(can_delete=False)
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        post = self.client.post(delete_url, {"post": "yes", "confirmation": "owner/extra"})
+        self.assertEqual(post.status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertTrue(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_while_billing_state_is_active(self):
+        """An active subscription, a running trial, or a managed-manually deck (both
+        dates blank) is never deletable, even armed and long-abandoned (#2044)."""
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        for fields in (
+            {"paid_until": timezone.localdate() + timezone.timedelta(days=30)},   # subscribed
+            {"paid_until": None, "trial_end_date": timezone.localdate() + timezone.timedelta(days=30)},  # on trial
+            {"paid_until": None, "trial_end_date": None},                          # managed manually
+        ):
+            Tenant.objects.filter(pk=self.extra_tenant.pk).update(**fields)
+            self.assertEqual(self.client.get(delete_url).status_code, 403)
         self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
 
     def test_delete_model__guard_fails_closed_even_if_reached_directly(self):

@@ -111,6 +111,13 @@ class Tenant(TenantMixin):
         help_text="If the deck is not in trial mode, then the deck will become inaccessable to students after this date."
     )
 
+    can_delete = models.BooleanField(
+        default=False,
+        help_text="Arms this deck for deletion (#2044): deletion from the admin is refused until an "
+                  "admin deliberately turns this on -- and even then only a suspended deck whose staff "
+                  "have been silent for over a year can actually be deleted."
+    )
+
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
     # manually; set automatically by checkout reconciliation, or by hand in the admin
     # when backfilling legacy subscribers (#2043).
@@ -290,17 +297,24 @@ class Tenant(TenantMixin):
 
     @property
     def is_deletable(self):
-        """Whether the admin may delete this deck (and drop its schema): no staff
-        sign-in for more than INACTIVE_DELETE_DAYS (#2044 retirement policy).
+        """Whether the admin may delete this deck (and drop its schema) -- the
+        #2044 retirement policy. ALL of these must hold:
 
-        Never true for the public schema (deleting it would take down the whole
-        installation), and never true while ``last_staff_login`` is blank -- the
-        cached field refreshes nightly, so blank means "no staff login on record",
-        which cannot PROVE a year of silence the way an old timestamp can.
+        * ``can_delete`` was deliberately armed by an admin (default False);
+        * the deck is SUSPENDED -- an active subscription, a running trial, or a
+          managed-manually deck (both dates blank) is never deletable;
+        * no staff sign-in for more than INACTIVE_DELETE_DAYS, with a login
+          actually on record -- a blank ``last_staff_login`` cannot PROVE a year
+          of silence the way an old timestamp can;
+        * never the public schema (deleting it would take down the installation).
         """
         from django_tenants.utils import get_public_schema_name
 
         if self.schema_name == get_public_schema_name():
+            return False
+        if not self.can_delete:
+            return False
+        if not self.is_suspended:  # active sub, on trial, or managed manually
             return False
         return (
             self.last_staff_login is not None

@@ -169,21 +169,37 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
 
-    def test_is_deletable__requires_a_year_of_staff_silence(self):
-        """A deck is deletable only when its recorded last_staff_login is more than
-        INACTIVE_DELETE_DAYS ago -- never when blank (no login on record cannot
-        prove abandonment), and never for the public schema (#2044)."""
+    def test_is_deletable__requires_arming_suspension_and_a_year_of_staff_silence(self):
+        """A deck is deletable only when ALL protections clear (#2044): can_delete
+        deliberately armed, the deck SUSPENDED (an active subscription, a running
+        trial, or a managed-manually deck with both dates blank is never
+        deletable), a recorded last_staff_login more than INACTIVE_DELETE_DAYS
+        ago (never blank), and never the public schema."""
         from django.utils.timezone import now
 
         from tenant.models import INACTIVE_DELETE_DAYS
 
-        def deck(schema_name='statustest', last_staff_login=None):
-            return Tenant(name='statustest', schema_name=schema_name, last_staff_login=last_staff_login)
+        old_login = now() - timedelta(days=INACTIVE_DELETE_DAYS + 1)
+        lapsed_trial = FROZEN_TODAY - timedelta(days=30)  # suspended: trial long over, no paid date
 
-        self.assertTrue(deck(last_staff_login=now() - timedelta(days=INACTIVE_DELETE_DAYS + 1)).is_deletable)
+        def deck(schema_name='statustest', trial_end_date=lapsed_trial, paid_until=None,
+                 can_delete=True, last_staff_login=old_login):
+            return Tenant(name='statustest', schema_name=schema_name, trial_end_date=trial_end_date,
+                          paid_until=paid_until, can_delete=can_delete, last_staff_login=last_staff_login)
+
+        self.assertTrue(deck().is_deletable)  # armed + suspended + year of silence
+
+        # not armed: the default protects every deck until an admin flips can_delete
+        self.assertFalse(deck(can_delete=False).is_deletable)
+        # billing state protects: active subscription, running trial, or managed manually
+        self.assertFalse(deck(paid_until=FROZEN_TODAY + timedelta(days=30)).is_deletable)
+        self.assertFalse(deck(trial_end_date=FROZEN_TODAY + timedelta(days=30)).is_deletable)
+        self.assertFalse(deck(trial_end_date=None, paid_until=None).is_deletable)
+        # staff-activity protections
         self.assertFalse(deck(last_staff_login=now() - timedelta(days=10)).is_deletable)
-        self.assertFalse(deck().is_deletable)  # blank: no login on record
-        self.assertFalse(deck(schema_name='public', last_staff_login=now() - timedelta(days=999)).is_deletable)
+        self.assertFalse(deck(last_staff_login=None).is_deletable)  # blank: no login on record
+        # the public schema is never deletable
+        self.assertFalse(deck(schema_name='public').is_deletable)
 
     def test_is_on_trial__true_through_trial_end_date(self):
         """A deck with no subscription is on trial through its trial_end_date."""
