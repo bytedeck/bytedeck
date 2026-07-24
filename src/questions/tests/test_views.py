@@ -17,7 +17,9 @@ class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """A teacher, a student, and a quest with one question of each type."""
+        """A teacher, a student, and a quest with short- and long-answer questions
+        (the file-upload question is created per-test in setUp, since its uploaded
+        file is consumed when read)."""
         cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
         cls.test_student = User.objects.create_user("test_student", password="password")
 

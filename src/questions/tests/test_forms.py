@@ -209,3 +209,44 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         }
         formset = QuestionSubmissionFormsetFactory(data, instance=self.submission, queryset=queryset)
         self.assertFalse(formset.is_valid())
+
+
+class QuestionSubmissionFormSanitizationTest(ByteDeckTenantTestCase):
+    """Answer text is sanitized on clean: it renders with |safe in the marking display, so
+    script vectors must be stripped while legitimate formatting is kept (issues #1343/#2113)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A quest with a required short answer and a required long answer, each with a draft row."""
+        cls.quest = baker.make(Quest)
+        cls.short_question = baker.make(
+            Question, quest=cls.quest, ordinal=1, type="short_answer", required=True,
+        )
+        cls.long_question = baker.make(
+            Question, quest=cls.quest, ordinal=2, type="long_answer", required=True,
+        )
+        cls.submission = baker.make(QuestSubmission, quest=cls.quest)
+        cls.short_answer = baker.make(
+            QuestionSubmission, quest_submission=cls.submission, question=cls.short_question,
+        )
+        cls.long_answer = baker.make(
+            QuestionSubmission, quest_submission=cls.submission, question=cls.long_question,
+        )
+
+    def test_clean__short_answer_script_neutralized(self):
+        """A script tag typed into the plain short answer field can't survive as markup."""
+        form = QuestionSubmissionForm(
+            data={"response_text": "<script>alert(1)</script>hi"}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertNotIn("<script>", form.cleaned_data["response_text"])
+        self.assertIn("hi", form.cleaned_data["response_text"])
+
+    def test_clean__long_answer_event_handler_stripped_formatting_kept(self):
+        """Rich-text answers keep allowed formatting but lose inline event handlers, which the
+        'safe' summernote widget alone would let through."""
+        form = QuestionSubmissionForm(
+            data={"response_text": '<p onclick="evil()"><b>bold</b> answer</p>'}, instance=self.long_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        cleaned = form.cleaned_data["response_text"]
+        self.assertNotIn("onclick", cleaned)
+        self.assertIn("<b>bold</b>", cleaned)

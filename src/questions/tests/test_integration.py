@@ -75,7 +75,7 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "Describe your process.")
 
     def test_submission_page__no_formset_without_questions(self):
-        """A quest with no questions renders no formset even with the flag on."""
+        """A quest with no questions renders no formset."""
         plain_quest = baker.make(Quest)
         plain_sub = baker.make(QuestSubmission, quest=plain_quest, user=self.test_student)
         response = self.client.get(reverse("quests:submission", args=[plain_sub.id]))
@@ -318,7 +318,7 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
 
 
 class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
-    """The quest detail page links staff to question management when the feature is on."""
+    """The quest detail page links staff to question management."""
 
     def test_quest_detail__staff_see_manage_questions_button(self):
         """Staff get the Submission Questions panel with its Manage Questions link."""
@@ -333,3 +333,22 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, "Manage Questions")
+
+
+class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
+    """sync_draft_question_submissions heals duplicate draft rows for the same question."""
+
+    def test_sync__duplicate_draft_rows_healed_keeping_content(self):
+        """When duplicate draft rows exist for one question (concurrency race, or a deleted
+        published comment reverting answers into an active cycle), sync keeps the row with
+        content and deletes the empty duplicates."""
+        contentful = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        contentful.response_text = "keep me"
+        contentful.save()
+        # simulate a duplicate empty draft row for the same question (bypassing sync)
+        QuestionSubmission.objects.create(quest_submission=self.submission, question=self.short_question)
+
+        rows = sync_draft_question_submissions(self.submission)
+        short_rows = rows.filter(question=self.short_question)
+        self.assertEqual(short_rows.count(), 1)
+        self.assertEqual(short_rows.first().response_text, "keep me")

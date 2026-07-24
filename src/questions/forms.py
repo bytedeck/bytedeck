@@ -5,6 +5,7 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Div, HTML
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget, ByteDeckSummernoteSafeInplaceWidget
+from comments.sanitize import sanitize_comment_html
 from quest_manager.models import QuestSubmission
 from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
 
@@ -205,6 +206,17 @@ class QuestionSubmissionForm(forms.ModelForm):
             instructions_label,
             form_fields,
         )
+
+    def clean_response_text(self):
+        """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).
+
+        Answers are rendered with |safe in the marking display, and neither input path is
+        safe on its own: the plain short answer textarea accepts anything, and the "safe"
+        summernote widget filters tags but allows every attribute (so onclick etc. survive).
+        Sanitizing here keeps legitimate formatting while stripping script vectors, matching
+        how comment text is handled.
+        """
+        return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 
     def clean(self):
         """Enforce required answers per question type, and fail cleanly on stale rows."""
