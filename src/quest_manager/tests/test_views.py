@@ -3013,7 +3013,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__returns_json(self):
-        """An ajax POST (with or without a quest id) returns a JsonResponse with a 200 status."""
+        """An ajax POST with a quest id returns a JsonResponse with a 200 status."""
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
             content_type='application/json',
@@ -3023,15 +3023,19 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(type(response), JsonResponse)
 
-        # Same without a quest ID:
+    def test_ajax_quest_info__no_quest_id_returns_404(self):
+        """An ajax POST without a quest id is rejected (404) rather than rendering every quest.
+
+        The accordion UI always requests one quest by id; the "all quests" branch was an unbounded
+        per-request memory hog with no staff gate that any logged-in user could POST directly
+        (issue #2081), so it now 404s like the view's other invalid requests.
+        """
         response = self.client.post(
             reverse('quests:ajax_quest_all'),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        self.assertEqual(response.status_code, 200)
-
-        self.assertEqual(type(response), JsonResponse)
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__can_export_student_false(self):
         """
