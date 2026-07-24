@@ -233,6 +233,17 @@ class TenantBillingStatusTest(SimpleTestCase):
         # managed manually (no dates at all): the admin-set cap is honored
         self.assertEqual(self.make_tenant(max_active_users=40).effective_max_active_users, 40)
 
+    def test_effective_max_active_users__suspended_honors_admin_cap_below_trial_limit(self):
+        """On a suspended deck the trial cap is a CEILING, not a replacement: an
+        admin who deliberately lowers max_active_users below the trial limit (e.g.
+        to 1) must see that cap enforced and displayed, not the default 5.
+        (Production find, 2026-07-24: a suspended deck with an admin-set cap of 1
+        still showed and enforced 'max 5 current students'.)"""
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=1).effective_max_active_users,
+            1,
+        )
+
     def test_effective_max_active_users__unlimited_passthrough(self):
         """The admin-set unlimited sentinel (-1) is honored in every state."""
         self.assertEqual(self.make_tenant(max_active_users=-1).effective_max_active_users, -1)
