@@ -807,14 +807,18 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIsNone(self.get_page().context['remaining_seats'])
 
     def test_page__grace_period_states_trial_cap(self):
-        """A deck in its paid grace window explains the grace period and the trial
-        cap it will revert to (5), not its current paid cap."""
+        """A deck in its paid grace window gets its own DANGER "Grace period" label --
+        never the green "Subscribed" badge (maintainer review find) -- and explains
+        the trial cap it will revert to (5), not its current paid cap."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
 
         self.set_deck(paid_until=localdate() - timedelta(days=5))
         response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        self.assertNotContains(response, 'Subscribed')
         self.assertContains(response, 'grace period')
         self.assertContains(response, 'max 5 current students')
 
