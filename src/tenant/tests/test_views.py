@@ -471,6 +471,43 @@ class DeckRequestServiceTest(TestCase):
         self.assertNotIn("john.doe", link.lower())
         self.assertNotIn("example.com", link.lower())
 
+    def test_build_verification_link__returns_absolute_url_for_nonce(self):
+        """build_verification_link turns the nonce's verify path into a fully-qualified URL."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        link = DeckRequestService.build_verification_link(request, nonce)
+
+        self.assertEqual(link, request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])))
+        self.assertIn(nonce, link)
+        self.assertTrue(link.startswith("http"))
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__with_request_uses_absolute_link(self, mock_apply_async):
+        """With a request, the emailed verification link is absolute, and the message is queued."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=request)
+
+        mock_apply_async.assert_called_once()
+        subject, message, recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertEqual(subject, "Verify your email to confirm your deck request")
+        self.assertEqual(recipients, ["john.doe@example.com"])
+        self.assertIn(request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])), message)
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__without_request_uses_relative_link(self, mock_apply_async):
+        """Without a request, the emailed verification link is the relative path (no host)."""
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=None)
+
+        mock_apply_async.assert_called_once()
+        _subject, message, _recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertIn(reverse("decks:verify_deck_request", args=[nonce]), message)
+        self.assertNotIn("testserver", message)  # relative link, so no absolute host
+
 
 class DummyView(EmailVerificationRequiredMixin, View):
     """Minimal view used to exercise EmailVerificationRequiredMixin.dispatch."""
