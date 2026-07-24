@@ -989,6 +989,17 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
+    def test_SemesterDelete_view__lists_registrations_in_context(self):
+        """The delete confirmation page lists the students registered in the semester."""
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(Semester)
+        registration = baker.make(CourseStudent, user=baker.make(User), course=baker.make(Course), semester=semester)
+
+        response = self.client.get(reverse('courses:semester_delete', args=[semester.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(registration, response.context['registrations'])
+
 
 class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
@@ -1553,6 +1564,25 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
         siteconfig.save()
+
+    def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
+        """When mark-calculation display is turned off, staff get the 'deactivated' notice page
+        (students get a 404 instead, since they shouldn't reach this URL)."""
+        siteconfig = SiteConfig.get()
+        siteconfig.display_marks_calculation = False
+        siteconfig.save()
+
+        self.client.force_login(baker.make(User, is_staff=True))
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'courses/mark_calculations_deactivated.html')
+
+    def test_mark_calculations__staff_can_view_another_students_marks(self):
+        """Staff can view a specific student's mark page via the user_id URL."""
+        self.client.force_login(baker.make(User, is_staff=True))
+        response = self.client.get(reverse('courses:marks', args=[self.student.pk]))
+        self.assertEqual(response.status_code, 200)
 
     @patch('courses.models.Semester.fraction_complete')
     def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
