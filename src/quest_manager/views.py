@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db import transaction
 from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
@@ -393,6 +394,27 @@ class QuestCopy(QuestCreate):
 
         kwargs["instance"] = new_quest
         return kwargs
+
+    def form_valid(self, form):
+        """Save the new (copied) quest, then duplicate the source quest's submission questions
+        onto it, so a copied quest keeps its questions (issue #2161).
+
+        Student answers are not copied — those belong to submissions, not to the quest. The
+        solution_file reference is shared with the source question, matching how the copied
+        quest already shares its icon file.
+        """
+        # local import avoids a load-time dependency between quest_manager and the questions app
+        from questions.models import Question
+
+        response = super().form_valid(form)  # saves self.object (the new quest) and sets prereqs
+
+        source_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+        with transaction.atomic():
+            for question in Question.objects.filter(quest=source_quest):
+                question.pk = None
+                question.quest = self.object
+                question.save()
+        return response
 
 
 class QuestSubmissionSummary(UserPassesTestMixin, DetailView):

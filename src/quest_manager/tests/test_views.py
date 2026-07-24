@@ -2252,6 +2252,60 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn("new-prereq-quest", str(copied_quest.prereqs()))
         self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
+    def test_quest_copy__copies_submission_questions(self):
+        """Copying a quest duplicates its submission questions onto the copy (issue #2161).
+        Each question's fields are carried over, and the source quest keeps its own questions."""
+        from questions.models import Question
+
+        # give the source quest a question of each type, in a specific order
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?", solution_text="Any name",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=2, type="long_answer", required=False,
+            instructions="Explain your reasoning.",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="Attach your work.", allowed_file_type="image",
+        )
+
+        self.client.force_login(self.test_teacher)
+        self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+
+        # the copy has the same questions, in the same order, with the same fields
+        source = list(Question.objects.filter(quest=self.quest).order_by("ordinal"))
+        copied = list(Question.objects.filter(quest=copied_quest).order_by("ordinal"))
+        self.assertEqual(len(copied), 3)
+        for src_q, copy_q in zip(source, copied):
+            self.assertNotEqual(src_q.pk, copy_q.pk)  # a distinct row
+            self.assertEqual(copy_q.ordinal, src_q.ordinal)
+            self.assertEqual(copy_q.type, src_q.type)
+            self.assertEqual(copy_q.required, src_q.required)
+            self.assertEqual(copy_q.instructions, src_q.instructions)
+            self.assertEqual(copy_q.solution_text, src_q.solution_text)
+            self.assertEqual(copy_q.allowed_file_type, src_q.allowed_file_type)
+        # the source quest still has exactly its own three questions
+        self.assertEqual(Question.objects.filter(quest=self.quest).count(), 3)
+
+    def test_quest_copy__questionless_quest_still_copies(self):
+        """A quest with no submission questions copies as before — the clone step is a no-op."""
+        from questions.models import Question
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+        self.assertRedirects(response, copied_quest.get_absolute_url())
+        self.assertEqual(Question.objects.filter(quest=copied_quest).count(), 0)
+
 
 class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
