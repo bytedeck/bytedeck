@@ -12,16 +12,16 @@
     This deck's trial and/or subscription period has ended, so it has reverted to trial limits
     (max {{ trial_cap }} current student{{ trial_cap|pluralize }}). Existing students keep their access and
     nothing has been deleted, but no new students can register in a course beyond the trial limit.</p>
+{% elif deck.in_grace_period %}
+  {# grace gets its own DANGER label -- a green "Subscribed" badge on an expired deck reads as a bug (maintainer review find) #}
+  <p><span class="label label-danger">Grace period</span>
+    The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
+    {{ grace_days }}-day grace period &mdash; renew to keep full access; otherwise it will revert to
+    trial limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).</p>
 {% elif deck.subscription_active %}
   <p><span class="label label-success">Subscribed</span>
-    {% if deck.days_until_expiry >= 0 %}
-      Paid through <strong>{{ deck.paid_until }}</strong>
-      ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).
-    {% else %}
-      The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
-      {{ grace_days }}-day grace period &mdash; renew to keep full access; otherwise it will revert to
-      trial limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).
-    {% endif %}</p>
+    Paid through <strong>{{ deck.paid_until }}</strong>
+    ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).</p>
 {% elif deck.is_on_trial %}
   <p><span class="label label-info">Free trial</span>
     Ends <strong>{{ deck.trial_end_date }}</strong>
@@ -36,10 +36,10 @@
 {# one governing deadline row, not both: a paid date (even lapsed) supersedes the trial date #}
 <table class="table" style="max-width: 30em;">
   {% if deck.paid_until %}
-    <tr><th>Paid until</th><td>{{ deck.paid_until }}</td></tr>
-    <tr><th>Grace period</th><td>{{ grace_days }} days after <em>paid until</em></td></tr>
+    <tr><th>Paid until</th><td>{{ deck.paid_until }} ({{ paid_until_phrase }})</td></tr>
+    <tr><th>Grace period</th><td>extends {{ grace_days }} days after your subscription ends ({{ grace_end_phrase }})</td></tr>
   {% elif deck.trial_end_date %}
-    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }}</td></tr>
+    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
   {% else %}
     <tr><th>Expires</th><td>Never &mdash; this deck is managed manually</td></tr>
   {% endif %}
