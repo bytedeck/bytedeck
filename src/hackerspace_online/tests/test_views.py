@@ -139,8 +139,9 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 
 class MessagesSnippetIconTest(ByteDeckTenantTestCase):
-    """Rendering tests for the level icons on django messages (messages-snippet.html,
-    maintainer request from staging live testing)."""
+    """Rendering tests pinning django messages (messages-snippet.html) icon-free:
+    the level-icon request from staging live testing was scoped to the
+    subscription-status banner only (#2140 review)."""
 
     class FakeMessage:
         """Stand-in for a django.contrib.messages Message: the snippet only reads
@@ -158,18 +159,12 @@ class MessagesSnippetIconTest(ByteDeckTenantTestCase):
         from django.template.loader import render_to_string
         return render_to_string('messages-snippet.html', {'messages': [self.FakeMessage(tags, 'the message text')]})
 
-    def test_messages_snippet__renders_level_icon_left_of_text(self):
-        """Each message level renders its FontAwesome icon before the text: ban for
-        error/danger, exclamation-triangle for warning, info-circle for info."""
-        for tags, icon in (('error', 'fa-ban'), ('warning', 'fa-exclamation-triangle'), ('info', 'fa-info-circle')):
+    def test_messages_snippet__messages_have_no_level_icon(self):
+        """Django messages render icon-free at every level: the maintainer scoped the
+        icon request to the subscription-status banner only, so no fa- icon may leak
+        into the shared messages snippet."""
+        for tags in ('error', 'warning', 'info', 'success'):
             html = self.render_messages(tags)
-            self.assertIn(icon, html)
-            self.assertLess(html.index(icon), html.index('the message text'))  # icon sits left of the text
-
-    def test_messages_snippet__success_messages_have_no_icon(self):
-        """Success messages keep their icon-free look (only info/warning/error were
-        requested); no stray fa- icon renders."""
-        html = self.render_messages('success')
-        self.assertNotIn('fa-ban', html)
-        self.assertNotIn('fa-exclamation-triangle', html)
-        self.assertNotIn('fa-info-circle', html)
+            self.assertNotIn('fa-ban', html)
+            self.assertNotIn('fa-exclamation-triangle', html)
+            self.assertNotIn('fa-info-circle', html)
