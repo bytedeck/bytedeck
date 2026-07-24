@@ -175,6 +175,11 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notification), html_content)  # Links to notifications
 
+    def test_generate_notification_email__non_enrolled_student_returns_none(self):
+        """A non-staff student not enrolled in a current course gets no notification email at all."""
+        non_enrolled_student = baker.make(User)  # not staff, no course
+        self.assertIsNone(generate_notification_email(non_enrolled_student, 'https://test.com'))
+
     def test_get_notification_emails__skips_inactive_students(self):
         """A student not enrolled in any course gets no email even with notifications enabled."""
         root_url = 'https://test.com'
@@ -229,3 +234,13 @@ class DeleteOldNotificationsTestCase(ByteDeckTenantTestCase):
         """Ensure the task can be scheduled via Celery."""
         delete_old_notifications.delay()
         mock_task.assert_called_once()
+
+    @patch('notifications.tasks.delete_old_notifications.apply_async')
+    def test_delete_old_notifications_for_all_tenants__schedules_per_tenant(self, mock_apply_async):
+        """The all-tenants task schedules a per-schema delete for each non-public tenant."""
+        result = tasks.delete_old_notifications_for_all_tenants()
+
+        # at least the (non-public) test tenant is scheduled
+        self.assertTrue(mock_apply_async.called)
+        mock_apply_async.assert_called_with(queue='default')
+        self.assertEqual(result, "Scheduled notifications.tasks.delete_old_notifications for all schemas/tenants")
