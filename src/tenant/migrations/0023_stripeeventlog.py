@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("tenant", "0021_tenant_stripe_customer_id_and_more"),
+        ("tenant", "0022_tenant_can_delete"),
     ]
 
     operations = [

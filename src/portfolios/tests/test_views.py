@@ -53,6 +53,29 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """
 
     @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir before any uploads happen.
+
+        The uploads these tests make (e.g. clip.mp4) otherwise land in the
+        project's real _media_uploads and stay there: on the NEXT run Django's
+        storage dedupes the repeat filename to clip_XXXX.mp4, so the view titles
+        the Artwork "clip_XXXX" and the get(title="clip") assertions error --
+        the suite passes once, then fails on every rerun in the same workspace.
+        A throwaway MEDIA_ROOT keeps runs deterministic and the repo clean.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-portfolios-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
     def setUpTestData(cls):
         """Create a student with a portfolio, one artwork, and a commented document."""
         cls.test_student = baker.make(User)
