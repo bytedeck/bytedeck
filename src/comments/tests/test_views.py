@@ -108,6 +108,24 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, path)
         self.assertFalse(Comment.objects.filter(id=self.comment.id).exists())
 
+    def test_comment_content_has_user_content_class(self):
+        """Rendered comment bodies carry the `user-content` class (#1388).
+
+        Comments live inside a Bootstrap `.list-group`, which is itself a `<ul>`, so a
+        bullet/number list typed into a comment would otherwise be treated as a *nested*
+        list and marked with the hollow level-2 style. The `.user-content` class re-establishes
+        depth-correct markers (solid disc at the first level) via custom_common.css.
+        """
+        Comment.objects.create_comment(
+            user=self.teacher,
+            text="<ul><li>a bullet</li></ul>",
+            path=self.announcement.get_absolute_url(),
+            target=self.announcement,
+        )
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse('announcements:list'))
+        self.assertContains(response, 'comment-content user-content')
+
     def test_delete_comment__cancel_button_path(self):
         ''' Test if the 'Cancel' button in src/comments/templates/comments/confirm_delete.html
         correctly contains the `comment.path` as its href attribute.
