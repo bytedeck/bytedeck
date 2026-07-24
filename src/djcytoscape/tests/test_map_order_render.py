@@ -79,7 +79,7 @@ var elements = {{
   ],
   edges: [
     {{ data: {{ id: '101', source: '11', target: '12' }} }},
-    {{ data: {{ id: '102', source: '21', target: '22' }} }}
+    {{ data: {{ id: '102', source: '21', target: '22' }} }}{extra_edges}
   ]
 }};
 var cy = cytoscape({{ container: document.getElementById('cy'), elements: elements, style: [] }});
@@ -110,10 +110,18 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
         cls._pw.stop()
         super().tearDownClass()
 
-    def _campaign_mean_x(self, order_a, order_b):
-        """Render the two-campaign map with the given map_orders; return (meanX_A, meanX_B)."""
+    def _campaign_mean_x(self, order_a, order_b, connected=False):
+        """Render the two-campaign map with the given map_orders; return (meanX_A, meanX_B).
+
+        When ``connected`` is True, add a cross-campaign prerequisite edge from A's first quest to
+        B's first quest, so campaign B branches off the side of campaign A (A1 continues to A2 AND
+        to B1) — the case that used to merge the two campaigns into a single un-orderable column
+        (issue #1977).
+        """
+        extra_edges = ",\n    { data: { id: '201', source: '11', target: '21' } }" if connected else ""
         html = _PAGE_TEMPLATE.format(
             jquery_stub=_JQUERY_STUB, js_dir=self.js_dir, order_a=order_a, order_b=order_b,
+            extra_edges=extra_edges,
         )
         # Load from a real file so the browser will fetch the file:// asset <script>s (it refuses
         # to load file:// sub-resources for an in-memory set_content document).
@@ -149,3 +157,14 @@ class CampaignMapOrderRenderTest(SimpleTestCase):
         """
         ax, bx = self._campaign_mean_x(order_a=0, order_b=0)
         self.assertLess(ax, bx, "with equal map_order, smaller-id campaign A should be left")
+
+    def test_map_order__connected_campaigns_still_ordered_by_map_order(self):
+        """A campaign that branches off another must still obey map_order (reopened #1977).
+
+        When B's first quest is a prerequisite continuation of A (a cross-campaign edge), the
+        previous connected-component grouping merged A and B into one column, so map_order between
+        them did nothing. B has the lower map_order here and must render to the left of A even
+        though it hangs off A.
+        """
+        ax, bx = self._campaign_mean_x(order_a=1000, order_b=0, connected=True)
+        self.assertLess(bx, ax, "connected campaign B (lower map_order) should still be left of A")

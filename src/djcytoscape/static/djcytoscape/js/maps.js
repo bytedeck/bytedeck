@@ -179,73 +179,51 @@ addedCampaignLayoutEdges.remove();
 /***************************************
  * #1977: order the campaign columns left-to-right by Category.map_order.
  *
- * dagre decides the order of same-rank nodes with a crossing-minimization heuristic and ignores
- * the order elements were fed in, so the campaign order can't be set before layout — it has to be
- * imposed on the finished layout. Each campaign (a compound node + its member quests) and each
- * connected clump of campaign-less quests is one connected "column"; we sort the columns by their
- * campaign map_order (ties, and campaign-less columns, fall back to the smallest node id — the
- * deterministic #2012 order) and repack them left-to-right, shifting each column horizontally as a
- * rigid block so its internal shape and every node's vertical position are untouched.
+ * dagre decides the order of same-rank nodes with a crossing-minimization heuristic and ignores the
+ * order the elements were fed in, so campaign order has to be imposed on the finished layout.
+ *
+ * Rather than repack every column left-to-right (which spreads the map out whenever campaign-less
+ * "bridge" nodes — e.g. a shared badge, or the intro quest — sit between campaigns, and which merged
+ * two campaigns into one un-orderable column when one branches off the other), we PERMUTE the
+ * campaigns among the x-slots dagre already gave them: sort the campaigns by (map_order, smallest
+ * quest id) and drop the i-th into the i-th slot from the left. The set of x positions is unchanged,
+ * so the map stays exactly as compact as dagre made it and campaign-less nodes don't move — only the
+ * campaigns swap places. Each campaign's quests shift together as a rigid block, so their internal
+ * shape and every node's vertical position (the #1787 vertical stacking) are untouched. Because both
+ * the sorted slots and the desired order are deterministic, the result no longer toggles between
+ * generations even though dagre's raw order does (the original #1977 complaint).
  ***************************************/
 (function orderCampaignColumns() {
-    // A node's "root" is its campaign compound parent, or itself when it isn't in a campaign.
-    function rootOf(node) { return node.isChild() ? node.parent() : node; }
+    // Only campaigns (compound parents) are reordered; campaign-less quests stay where dagre put them.
+    var campaigns = cy.nodes().filter(function (n) { return n.isParent(); });
+    if (campaigns.length < 2) { return; }
 
-    // Union-find over roots, joined by every (real) edge between two different roots, so a campaign
-    // and any campaign-less quest-chain each collapse to a single column.
-    var parent = {};
-    function find(x) {
-        while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
-        return x;
-    }
-    function union(a, b) { parent[find(a)] = find(b); }
-
-    cy.nodes().forEach(function (node) {
-        var r = rootOf(node).id();
-        if (parent[r] === undefined) { parent[r] = r; }
-    });
-    cy.edges().forEach(function (edge) {
-        var a = rootOf(edge.source()).id();
-        var b = rootOf(edge.target()).id();
-        if (parent[a] === undefined) { parent[a] = a; }
-        if (parent[b] === undefined) { parent[b] = b; }
-        if (a !== b) { union(a, b); }
-    });
-
-    // Bucket every node into its column, tracking each column's order key and smallest node id.
-    var columns = {};
-    cy.nodes().forEach(function (node) {
-        var key = find(rootOf(node).id());
-        var col = columns[key] || (columns[key] = { nodes: cy.collection(), order: Infinity, minId: Infinity });
-        col.nodes = col.nodes.union(node);
-        var order = node.data('campaignOrder');
+    var info = campaigns.map(function (camp) {
+        var kids = camp.children();
+        var order = camp.data('campaignOrder');
         if (order === undefined || order === null) { order = 0; }
-        if (order < col.order) { col.order = order; }
-        var idNum = parseInt(node.id(), 10);
-        if (!isNaN(idNum) && idNum < col.minId) { col.minId = idNum; }
+        var minId = Infinity;
+        kids.forEach(function (k) {
+            var idNum = parseInt(k.id(), 10);
+            if (!isNaN(idNum) && idNum < minId) { minId = idNum; }
+        });
+        // A campaign's column x is its compound node's centre (which follows its children).
+        return { kids: kids, x: camp.position('x'), order: order, minId: minId };
     });
 
-    var cols = Object.keys(columns).map(function (key) { return columns[key]; });
-    if (cols.length > 1) {
-        // Left-to-right by campaign map_order, then smallest node id (the deterministic #2012 order).
-        cols.sort(function (a, b) { return (a.order - b.order) || (a.minId - b.minId); });
+    // The x-slots the campaigns currently occupy, left to right.
+    var slots = info.map(function (i) { return i.x; }).sort(function (a, b) { return a - b; });
 
-        var GAP = 45;  // horizontal gap between columns, matching dagre's nodeSep above
-        var cursorX = null;
-        cols.forEach(function (col) {
-            // Shift only the leaf nodes — moving a compound (campaign) parent in cytoscape drags its
-            // children too, so shifting the whole collection would move them twice. The parent's box
-            // re-wraps its children automatically once they move.
-            var leaves = col.nodes.filter(function (n) { return !n.isParent(); });
-            // Measure by node extents only (not labels) so columns pack as tightly as dagre spaced
-            // them — the node labels are drawn offset to the left and would otherwise inflate the gap.
-            var bb = leaves.boundingBox({ includeLabels: false });
-            if (cursorX === null) { cursorX = bb.x1; }  // anchor at the current leftmost column
-            var dx = cursorX - bb.x1;
-            if (dx !== 0) { leaves.shift({ x: dx, y: 0 }); }
-            cursorX += bb.w + GAP;
-        });
-    }
+    // Desired left-to-right order: campaign map_order, then smallest quest id (the deterministic
+    // #2012 order) so ties — and every campaign at the default map_order 0 — stay stable.
+    var desired = info.slice().sort(function (a, b) { return (a.order - b.order) || (a.minId - b.minId); });
+
+    // Drop the i-th campaign (desired order) into the i-th slot, shifting its quests horizontally as
+    // a rigid block. Positions were all read before any shift, so swaps don't interfere.
+    desired.forEach(function (item, idx) {
+        var dx = slots[idx] - item.x;
+        if (dx !== 0) { item.kids.shift({ x: dx, y: 0 }); }
+    });
 })();
 
 /***************************************
