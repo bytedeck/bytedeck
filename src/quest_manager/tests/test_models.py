@@ -670,6 +670,49 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
 
+    def test_mark_returned__moves_submission_to_active_semester(self):
+        """A submission returned in a later semester is re-attached to the current semester (issue #1231).
+
+        A quest completed in a past (now closed) semester and returned for a redo in a new semester used
+        to stay linked to the old semester, so it never showed up in the student's current in-progress
+        list and, once re-approved, granted its XP in the closed semester. Returning it now moves it to
+        the active semester so the redo behaves like any other current submission.
+        """
+        past_semester = baker.make(
+            Semester, name="Past", first_day=datetime.date(2020, 1, 1),
+            last_day=datetime.date(2020, 6, 1), closed=True,
+        )
+        active_semester = SiteConfig.get().active_semester
+        self.assertNotEqual(past_semester, active_semester)
+
+        # A quest completed and approved back in the past (closed) semester.
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=past_semester,
+            is_completed=True, is_approved=True,
+        )
+        self.assertEqual(sub.semester, past_semester)
+
+        # Teacher returns it in the current semester -- it should move to the active semester.
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
+
+    def test_mark_returned__keeps_active_semester_submission_on_active_semester(self):
+        """Returning a submission already in the active semester leaves it there (issue #1231).
+
+        The common case -- a teacher returning a submission for revision in the same semester it was
+        made -- must not be disturbed by the re-attachment above.
+        """
+        active_semester = SiteConfig.get().active_semester
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=active_semester,
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
+
 
 class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
     """Quest.expired() is called for every quest rendered in list templates, so
