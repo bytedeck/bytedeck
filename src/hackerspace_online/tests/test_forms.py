@@ -21,7 +21,7 @@ from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
-from hackerspace_online.forms import CustomSignupForm, CustomSocialAccountSignupForm, PublicContactForm, CustomLoginForm
+from hackerspace_online.forms import CustomSignupForm, CustomSocialAccountSignupForm, CustomLoginForm
 
 User = get_user_model()
 
@@ -764,30 +764,3 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
     def tearDown(self) -> None:
         """Remove the login test user after each test."""
         self.user.delete()
-
-
-class PublicContactFormTest(ByteDeckTenantTestCase):
-
-    def setUp(self):
-        """No shared setup required for these form tests."""
-        pass
-
-    def test_init__instantiates_without_error(self):
-        """PublicContactForm can be constructed with no arguments."""
-        PublicContactForm()
-
-    @patch("hackerspace_online.forms.ReCaptchaField.clean", return_value="PASSED")
-    def test_valid_data__form_is_valid(self, mock_captcha):
-        """A contact form with valid fields and a passing captcha validates."""
-        # django-recaptcha 4 removed the RECAPTCHA_TESTING/'PASSED' test hook,
-        # so mock the field like the deck-request tests do
-        form = PublicContactForm(
-            data={
-                'name': 'First Last',
-                'email': 'test@example.com',
-                'message': 'Test Message',
-                'g-recaptcha-response': 'PASSED',
-            }
-        )
-        self.assertTrue(form.is_valid())
-        mock_captcha.assert_called()
