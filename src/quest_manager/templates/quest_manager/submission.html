@@ -1,9 +1,10 @@
 {% extends "quest_manager/base.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 
 {% block head %}
     {{ submission_form.media }}
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css">
+    <link rel="stylesheet" href="{% static 'css/select2-bootstrap.min.css' %}">
 {% endblock %}
 
 {% block head_css %}
