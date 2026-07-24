@@ -53,6 +53,11 @@ GRACE_PERIOD_DAYS = 30
 # paid_until) is this many days away or closer (#1733's "2 week notice").
 EXPIRY_WARNING_DAYS = 14
 
+# A deck may be DELETED from the admin only once no staff member has signed in
+# for this long (#2044 retirement policy): a year of staff silence means the
+# deck is abandoned, not merely dormant over a summer or a leave.
+INACTIVE_DELETE_DAYS = 365
+
 
 class Tenant(TenantMixin):
     # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
@@ -104,6 +109,13 @@ class Tenant(TenantMixin):
     paid_until = models.DateField(
         blank=True, null=True,
         help_text="If the deck is not in trial mode, then the deck will become inaccessable to students after this date."
+    )
+
+    can_delete = models.BooleanField(
+        default=False,
+        help_text="Arms this deck for deletion (#2044): deletion from the admin is refused until an "
+                  "admin deliberately turns this on -- and even then only a suspended deck whose staff "
+                  "have been silent for over a year can actually be deleted."
     )
 
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
@@ -217,12 +229,21 @@ class Tenant(TenantMixin):
 
     @property
     def effective_max_active_users(self):
-        """The active-user cap that should be enforced right now: `max_active_users`
-        while a subscription is active, otherwise the trial cap ("back to trial mode",
-        #1734). -1 (unlimited, admin-set) is passed through unchanged."""
+        """The current-student cap that should be enforced right now.
+
+        -1 (unlimited, admin-set) passes through unchanged. A SUSPENDED deck
+        reverts to the trial cap ("back to trial mode", #1734). Every other deck
+        -- subscribed, on trial, or managed manually (no dates) -- uses its
+        admin-set ``max_active_users``: new decks are created with the trial
+        default (5), so the trial cap is the default, not an override, and an
+        admin who deliberately raises a trial or comped deck's cap is honored.
+        (Production bug find, 2026-07-22: the old subscription_active-based rule
+        capped comped/managed-manually decks at 5, contradicting their admin-set
+        cap on the banner and subscription page.)
+        """
         if self.max_active_users == -1:
             return -1
-        return self.max_active_users if self.subscription_active else TRIAL_MAX_ACTIVE_USERS
+        return TRIAL_MAX_ACTIVE_USERS if self.is_suspended else self.max_active_users
 
     @property
     def days_until_expiry(self):
@@ -273,6 +294,32 @@ class Tenant(TenantMixin):
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
+
+    @property
+    def is_deletable(self):
+        """Whether the admin may delete this deck (and drop its schema) -- the
+        #2044 retirement policy. ALL of these must hold:
+
+        * ``can_delete`` was deliberately armed by an admin (default False);
+        * the deck is SUSPENDED -- an active subscription, a running trial, or a
+          managed-manually deck (both dates blank) is never deletable;
+        * no staff sign-in for more than INACTIVE_DELETE_DAYS, with a login
+          actually on record -- a blank ``last_staff_login`` cannot PROVE a year
+          of silence the way an old timestamp can;
+        * never the public schema (deleting it would take down the installation).
+        """
+        from django_tenants.utils import get_public_schema_name
+
+        if self.schema_name == get_public_schema_name():
+            return False
+        if not self.can_delete:
+            return False
+        if not self.is_suspended:  # active sub, on trial, or managed manually
+            return False
+        return (
+            self.last_staff_login is not None
+            and now() - self.last_staff_login > timedelta(days=INACTIVE_DELETE_DAYS)
+        )
 
     # END BILLING / LIFECYCLE STATUS ##################################
 

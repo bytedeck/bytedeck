@@ -32,6 +32,22 @@ class QuestFormTest(ByteDeckTenantTestCase):
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
 
+    def test_QuestForm__saves_quick_reply(self):
+        """QuestForm exposes the quest-specific quick_reply field and saves it on the quest (#161)."""
+        form_data = dict(self.minimal_valid_data)
+        form_data["quick_reply"] = "See the rubric — you're missing the reflection paragraph."
+        form = QuestForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "See the rubric — you're missing the reflection paragraph.")
+
+    def test_QuestForm__quick_reply_is_optional(self):
+        """quick_reply is optional — a quest without it is still valid and defaults to empty (#161)."""
+        form = QuestForm(data=self.minimal_valid_data)
+        self.assertTrue(form.is_valid(), form.errors)
+        quest = form.save()
+        self.assertEqual(quest.quick_reply, "")
+
     def test_QuestForm__hideable_and_blocking_both_true_is_invalid(self):
         """If a quest is Blocking then it should not validate if it is also Hideable"""
         form_data = self.minimal_valid_data
@@ -78,30 +94,45 @@ class QuestFormTest(ByteDeckTenantTestCase):
         self.assertTrue(form.is_valid())
 
 
-class QuickReplyFormsEscapeHTMLTest(ByteDeckTenantTestCase):
-    """The plain-text (non-wysiwyg) reply forms are accessible to all users, so
-    all HTML entered in them must be completely escaped. Regression tests for
-    issue #1343 where scripts entered in the quick reply form would execute.
+class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):
+    """The plain-text (non-wysiwyg) reply forms are accessible to all users and
+    rendered with |safe. They carry rich HTML from the Summernote editor, so their
+    `comment_text` is sanitized with an allow-list on cleaning: legitimate
+    formatting is preserved (issue #2113) while scripts and event handlers are
+    stripped so they can't execute (regression tests for issue #1343).
     """
 
     xss_payload = '<script>alert("xss")</script><img src=x onerror=alert(1)>'
-    escaped_payload = ('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;'
-                       '&lt;img src=x onerror=alert(1)&gt;')
+    formatting_payload = '<p>hello <b>bold</b> <a href="http://example.com">link</a></p>'
 
-    def test_SubmissionQuickReplyFormStudent__escapes_html(self):
-        """All HTML in the student quick reply form is escaped on cleaning."""
-        form = SubmissionQuickReplyFormStudent(data={'comment_text': self.xss_payload})
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)
+    forms_under_test = (
+        ('student quick reply', SubmissionQuickReplyFormStudent),
+        ('staff quick reply', SubmissionQuickReplyForm),
+        ('reply', SubmissionReplyForm),
+    )
 
-    def test_SubmissionQuickReplyForm__escapes_html(self):
-        """All HTML in the staff quick reply form is escaped on cleaning."""
-        form = SubmissionQuickReplyForm(data={'comment_text': self.xss_payload})
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)
+    def test_reply_forms__strip_scripts_and_event_handlers(self):
+        """Scripts and inline event handlers are removed from every reply form so a
+        crafted comment can't run JavaScript when rendered (issue #1343)."""
+        for label, form_class in self.forms_under_test:
+            with self.subTest(form=label):
+                form = form_class(data={'comment_text': self.xss_payload})
+                self.assertTrue(form.is_valid())
+                cleaned = form.cleaned_data['comment_text']
+                # the <script> tag is neutralized (escaped, not a live tag)...
+                self.assertNotIn('<script>', cleaned)
+                self.assertIn('&lt;script&gt;', cleaned)
+                # ...and the onerror event handler is stripped off the surviving <img>
+                self.assertNotIn('onerror', cleaned)
 
-    def test_SubmissionReplyForm__escapes_html(self):
-        """All HTML in the reply form is escaped on cleaning."""
-        form = SubmissionReplyForm(data={'comment_text': self.xss_payload})
-        self.assertTrue(form.is_valid())
-        self.assertEqual(form.cleaned_data['comment_text'], self.escaped_payload)
+    def test_reply_forms__preserve_legitimate_formatting(self):
+        """Ordinary formatting HTML survives sanitizing so rich comments render
+        instead of showing their literal tags (issue #2113)."""
+        for label, form_class in self.forms_under_test:
+            with self.subTest(form=label):
+                form = form_class(data={'comment_text': self.formatting_payload})
+                self.assertTrue(form.is_valid())
+                cleaned = form.cleaned_data['comment_text']
+                self.assertIn('<b>bold</b>', cleaned)
+                self.assertIn('<a href="http://example.com">link</a>', cleaned)
+                self.assertIn('<p>', cleaned)

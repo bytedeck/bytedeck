@@ -7,12 +7,16 @@ from django.contrib import admin
 from django.core import mail
 from django.contrib.admin.helpers import ACTION_CHECKBOX_NAME
 from django.contrib.admin.models import DELETION, LogEntry
+from django.contrib.admin.options import TO_FIELD_VAR
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_permission_codename
 from django.contrib.auth.models import Permission
+from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sites.models import Site
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.test import RequestFactory, override_settings
@@ -29,7 +33,7 @@ from django_tenants.test.client import TenantClient
 from hackerspace_online.celery import app
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
-from tenant.admin import TenantAdmin, TenantAdminForm
+from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin, TenantAdmin, TenantAdminForm, TenantDomainInline
 from tenant.models import Tenant
 
 User = get_user_model()
@@ -72,6 +76,43 @@ class NonPublicTenantAdminTest(ByteDeckTenantTestCase):
         # Can't create tenant outside the `public` schema. Current schema is `test`, so should throw exception
         with self.assertRaises(TypeError):  # Why is this a TypeError and not a ProgrammingError?
             tenant_model_admin.save_model(obj=Tenant, request=None, form=None, change=None)
+
+
+class TenantAdminMixinInlineDisplayTest(ByteDeckTenantTestCase):
+    """Direct tests for the admin access mixin, the read-only domain inline, and a display helper.
+
+    These run on a non-public ('test') schema, which ByteDeckTenantTestCase provides.
+    """
+
+    def setUp(self):
+        """Build a throwaway request for the permission-method calls."""
+        self.request = RequestFactory().get("/")
+
+    def test_non_public_mixin__grants_access_off_the_public_schema(self):
+        """NonPublicSchemaOnlyAdminAccessMixin permits view/change/add/module access when the
+        current schema is not the public one (here: the 'test' tenant schema)."""
+
+        class _NonPublicAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+            """Minimal ModelAdmin using the mixin, just to exercise its permission methods."""
+
+        model_admin = _NonPublicAdmin(Tenant, AdminSite())
+        self.assertTrue(model_admin.has_view_or_change_permission(self.request))
+        self.assertTrue(model_admin.has_add_permission(self.request))
+        self.assertTrue(model_admin.has_module_permission(self.request))
+
+    def test_tenant_domain_inline__is_read_only(self):
+        """The domain inline forbids adding, changing and deleting domains from the tenant admin."""
+        inline = TenantDomainInline(Tenant, AdminSite())
+        self.assertFalse(inline.has_add_permission(self.request))
+        self.assertFalse(inline.has_delete_permission(self.request))
+        self.assertFalse(inline.has_change_permission(self.request))
+
+    def test_trial_end_date_text__none_when_unset(self):
+        """trial_end_date_text renders nothing when the tenant has no trial end date."""
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        tenant = Tenant.get()
+        tenant.trial_end_date = None
+        self.assertIsNone(model_admin.trial_end_date_text(tenant))
 
 
 class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
@@ -601,6 +642,14 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
                 name="extra",
             )
             cls.extra_tenant.save()
+            # armed for deletion, suspended (lapsed trial), and abandoned for over a
+            # year, so the deletion tests clear every #2044 guard and keep
+            # exercising the Django perms and confirmation mechanics
+            Tenant.objects.filter(pk=cls.extra_tenant.pk).update(
+                can_delete=True,
+                trial_end_date=date(2020, 1, 1),
+                last_staff_login=timezone.now() - timezone.timedelta(days=366))
+            cls.extra_tenant.refresh_from_db()
 
         # We need to check if library tenant exist
         # Since library is created elsewhere it will fail only if full tests are ran
@@ -693,22 +742,94 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         logged = LogEntry.objects.get(content_type=tenant_ct, action_flag=DELETION)
         self.assertEqual(logged.object_id, str(self.extra_tenant.pk))
 
-    def test_delete_view__uses_delete_model(self):
+    def test_delete_view__uses_delete_model_and_drops_schema(self):
         """
-        The delete view uses ModelAdmin.delete_model() method, that delete items, but leaves schemas in database.
+        The delete view uses ModelAdmin.delete_model(), which deletes the row AND
+        drops the deck's Postgres schema (#2044 retirement policy) -- an orphaned
+        schema would silently keep all the deck's data forever.
         """
         delete_dict = {"post": "yes", "confirmation": "owner/extra"}
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
 
         # assert number of tenants, should be three objects (test, public and extra)
         self.assertEqual(Tenant.objects.count(), 3 + self.lib)
+        self.assertTrue(schema_exists("extra"))
 
         self.client.force_login(self.deleteuser)
         post = self.client.post(delete_url, delete_dict)
         self.assertRedirects(post, reverse("admin:index"))
-        # tenant object was removed (extra tenant is gone)
+        # tenant object was removed (extra tenant is gone)...
         self.assertEqual(Tenant.objects.count(), 2 + self.lib)
-        # ...but schema still in database
+        # ...and its schema was dropped with it
+        self.assertFalse(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_for_recently_active_deck(self):
+        """A deck with a staff sign-in inside the last year cannot be deleted, even
+        by a user holding the Django delete permission: the change form hides the
+        delete route and the delete view 403s on GET and POST (#2044 guard)."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        post = self.client.post(delete_url, {"post": "yes", "confirmation": "owner/extra"})
+        self.assertEqual(post.status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertTrue(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_without_last_staff_login_on_record(self):
+        """A deck whose cached last_staff_login is blank cannot be deleted -- blank
+        means "no login on record", which can't prove a year of abandonment."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(last_staff_login=None)
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_when_not_armed_via_can_delete(self):
+        """Even a suspended, year-abandoned deck cannot be deleted until an admin
+        deliberately arms it by turning on can_delete (#2044 protection)."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(can_delete=False)
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        self.assertEqual(self.client.get(delete_url).status_code, 403)
+        post = self.client.post(delete_url, {"post": "yes", "confirmation": "owner/extra"})
+        self.assertEqual(post.status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+        self.assertTrue(schema_exists("extra"))
+
+    @override_settings(ROOT_URLCONF=__name__)
+    def test_delete_view__refused_while_billing_state_is_active(self):
+        """An active subscription, a running trial, or a managed-manually deck (both
+        dates blank) is never deletable, even armed and long-abandoned (#2044)."""
+        delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(delete_url)  # anonymous first: move client to public schema
+        self.client.force_login(self.deleteuser)
+        for fields in (
+            {"paid_until": timezone.localdate() + timezone.timedelta(days=30)},   # subscribed
+            {"paid_until": None, "trial_end_date": timezone.localdate() + timezone.timedelta(days=30)},  # on trial
+            {"paid_until": None, "trial_end_date": None},                          # managed manually
+        ):
+            Tenant.objects.filter(pk=self.extra_tenant.pk).update(**fields)
+            self.assertEqual(self.client.get(delete_url).status_code, 403)
+        self.assertTrue(Tenant.objects.filter(pk=self.extra_tenant.pk).exists())
+
+    def test_delete_model__guard_fails_closed_even_if_reached_directly(self):
+        """delete_model itself refuses a protected deck (defense in depth: schema
+        drops are unrecoverable, so any future code path must fail closed too)."""
+        from django.core.exceptions import PermissionDenied
+
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        self.extra_tenant.refresh_from_db()
+        with self.assertRaises(PermissionDenied):
+            TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
         self.assertTrue(schema_exists("extra"))
 
     def test_delete_view__nonexistent_obj(self):
@@ -721,6 +842,50 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
             [m.message for m in response.context["messages"]],
             ["tenant with ID “nonexistent” doesn’t exist. Perhaps it was deleted?"],
         )
+
+    def _delete_view_request(self, method, data=None):
+        """Build a RequestFactory request wired with the deleteuser, session and messages, for
+        calling TenantAdmin._delete_view() directly.
+
+        Calling the view method directly (rather than through the client) keeps these edge-case
+        tests independent of the full admin template's URL dependencies and the schema-ordering
+        dance. The leading anonymous client request just moves the connection to the public
+        schema so the deleteuser and extra_tenant resolve.
+        """
+        url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
+        self.client.get(url)  # move connection to the public schema (see class note)
+        request = getattr(RequestFactory(), method)(url, data or {})
+        request.user = self.deleteuser
+        request.session = self.client.session
+        request._messages = FallbackStorage(request)
+        return request
+
+    def test_delete_view__disallowed_to_field_raises(self):
+        """A delete request naming a _to_field that isn't a valid reference is rejected."""
+        request = self._delete_view_request("get", {TO_FIELD_VAR: "name"})
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        with self.assertRaises(DisallowedModelAdminToField):
+            model_admin._delete_view(request, str(self.extra_tenant.pk), {})
+
+    def test_delete_view__perms_needed_on_confirmed_post_raises_permission_denied(self):
+        """A confirmed deletion is denied when related objects need permissions the user lacks."""
+        request = self._delete_view_request("post", {"post": "yes", "confirmation": "owner/extra"})
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        # Force get_deleted_objects to report a needed permission (nothing protected).
+        with patch.object(TenantAdmin, "get_deleted_objects", return_value=([], {}, ["tenant.delete_tenant"], [])):
+            with self.assertRaises(PermissionDenied):
+                model_admin._delete_view(request, str(self.extra_tenant.pk), {})
+
+    def test_delete_view__protected_objects_set_cannot_delete_title(self):
+        """When related objects are protected, _delete_view builds the 'Cannot delete' title
+        (asserted against the unrendered TemplateResponse context)."""
+        request = self._delete_view_request("get")
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        # Force get_deleted_objects to report a protected related object.
+        with patch.object(TenantAdmin, "get_deleted_objects", return_value=([], {}, [], ["a protected object"])):
+            response = model_admin._delete_view(request, str(self.extra_tenant.pk), {})
+
+        self.assertIn("Cannot delete", str(response.context_data["title"]))
 
 
 class TenantAdminActionsTest(ByteDeckTenantTestCase):
@@ -955,4 +1120,24 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         response = self.client.post(url, action_data)
         self.assertRedirects(response, url, fetch_redirect_response=False)
         response = self.client.get(response.url)
+        self.assertContains(response, "No recipients found.")
+
+    def test_message_selected__skips_tenant_without_owner(self):
+        """A selected tenant whose SiteConfig has no deck_owner is skipped when building the
+        recipient list, leaving no recipients."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # anonymous first (schema dance)
+        self.client.force_login(self.superuser)
+
+        action_data = {
+            ACTION_CHECKBOX_NAME: [self.extra_tenant.pk],
+            "action": "message_verified",
+            "index": 0,
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # With no deck_owner on the selected tenant, the recipient loop hits its `owner is None` skip.
+        with patch("tenant.admin.SiteConfig.get") as mock_get:
+            mock_get.return_value.deck_owner = None
+            response = self.client.post(url, action_data)
+            self.assertRedirects(response, url, fetch_redirect_response=False)
+            response = self.client.get(response.url)
         self.assertContains(response, "No recipients found.")

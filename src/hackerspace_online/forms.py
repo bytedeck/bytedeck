@@ -1,14 +1,9 @@
-from smtplib import SMTPException
-
 from django import forms
-from django.core.mail import mail_admins
 from django.utils.translation import gettext_lazy as _
 
 from allauth.account.adapter import get_adapter
 from allauth.account.forms import ResetPasswordForm, SignupForm, LoginForm
 from allauth.account.utils import filter_users_by_email
-from django_recaptcha.fields import ReCaptchaField
-from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from siteconfig.models import SiteConfig
 from allauth.socialaccount import forms as socialaccount_forms
@@ -68,36 +63,6 @@ class CustomLoginForm(LoginForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['login'].help_text = 'Username is not case sensitive'
-
-
-class PublicContactForm(forms.Form):
-    name = forms.CharField(required=True)
-    email = forms.EmailField(
-        required=True,
-        help_text='We will never share your email with anyone else.')
-    message = forms.CharField(widget=forms.Textarea, required=True)
-
-    # The site's reCAPTCHA keys are for the v2 invisible widget; all captcha fields
-    # must use this widget type since a single key pair is configured globally.
-    captcha = ReCaptchaField(
-        label='',
-        widget=ReCaptchaV2Invisible
-    )
-
-    def send_email(self):
-        email = self.cleaned_data["email"]
-        name = self.cleaned_data["name"]
-        message = self.cleaned_data["message"]
-
-        try:
-            mail_admins(
-                subject=f"Contact from {name}",
-                message=f"Name: {name}\nEmail: {email}\nMessage: {message}",
-            )
-        except SMTPException:
-            return False
-
-        return True
 
 
 class CustomResetPasswordForm(ResetPasswordForm):

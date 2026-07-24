@@ -45,7 +45,7 @@
         </h3>
         <div class="comment-heading-divider"></div>
 
-        <div class="comment-content">{{comment.text|safe}}</div>
+        <div class="comment-content user-content">{{comment.text|safe}}</div>
         {% with comment.document_set.all as docs %}{% if docs %}
         <hr class="tighter">
         <p>Attached files:</p>

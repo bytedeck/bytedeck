@@ -1048,11 +1048,11 @@ def quest_user_status(request, quest_id):
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset
-    #   enrolled  — students enrolled in a course this active semester
+    #   current   — students registered in a course this active semester (the "current" students)
     #   my_blocks — students in a course block the current teacher teaches this semester
     active_profiles = list(Profile.objects.all_active().students_only().select_related('user'))
     active_ids = {profile.user_id for profile in active_profiles}
-    enrolled_ids = set(
+    current_ids = set(
         CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
@@ -1099,7 +1099,7 @@ def quest_user_status(request, quest_id):
 
     # Which group the table shows; default to the teacher's own blocks, falling back to all active
     # students when they teach none so the page isn't empty.
-    scopes = {"my_blocks": my_block_ids, "enrolled": enrolled_ids, "active": active_ids}
+    scopes = {"my_blocks": my_block_ids, "current": current_ids, "active": active_ids}
     scope = request.GET.get("scope", "my_blocks")
     if scope not in scopes:
         scope = "my_blocks"
@@ -1119,13 +1119,13 @@ def quest_user_status(request, quest_id):
         }
 
     breakdown_my_blocks = counts_for(my_block_ids)
-    breakdown_enrolled = counts_for(enrolled_ids)
+    breakdown_current = counts_for(current_ids)
     breakdown_active = counts_for(active_ids)
     status_breakdown = [
         {
             "status": status,
             "my_blocks": breakdown_my_blocks[status],
-            "enrolled": breakdown_enrolled[status],
+            "current": breakdown_current[status],
             "active": breakdown_active[status],
         }
         for status in STATUS_ORDER
@@ -1138,7 +1138,7 @@ def quest_user_status(request, quest_id):
         "status_breakdown": status_breakdown,
         "scope": scope,
         "has_my_blocks": bool(my_block_ids),
-        "totals": {"my_blocks": len(my_block_ids), "enrolled": len(enrolled_ids), "active": len(active_ids)},
+        "totals": {"my_blocks": len(my_block_ids), "current": len(current_ids), "active": len(active_ids)},
         "no_details": False,
         "is_library_view": False,
     }
