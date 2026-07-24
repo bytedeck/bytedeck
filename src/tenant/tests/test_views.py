@@ -851,15 +851,13 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'grace period')
         self.assertContains(response, 'max 5 current students')
 
-    def test_page__suspended_deck_shows_admin_cap_below_trial_limit(self):
-        """A suspended deck whose admin deliberately lowered the cap below the
-        trial limit shows THAT cap -- in the status copy and the seats table --
-        not the trial default of 5, and a grace deck's revert-to prediction
-        matches (production find, 2026-07-24: a cap set to 1 still showed and
-        enforced 'max 5' everywhere)."""
-        from datetime import date, timedelta
-
-        from django.utils.timezone import localdate
+    def test_page__suspended_deck_shows_its_admin_cap(self):
+        """A suspended deck shows its ADMIN-SET cap -- in the status copy and the
+        seats table -- whatever it is: the field is authoritative (the trial
+        default is written into it once per suspension by the nightly task, and
+        admin adjustments stick). Production find, 2026-07-24: a cap lowered to 1
+        still showed and enforced 'max 5' everywhere."""
+        from datetime import date
 
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
         response = self.get_page()
@@ -868,13 +866,23 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         text = ' '.join(response.content.decode().split())
         self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
 
-        # in grace, the revert-to prediction states the lowered cap, not 5
-        # (set_deck bypasses save(), so drop the cached deck row by hand)
-        from tenant.utils import deck_cache_key
+    def test_page__maintenance_subscription_gets_its_own_status(self):
+        """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
+        status label and copy (kept alive, capped, upgradable) instead of the
+        plain green Subscribed badge -- while a paid deck with a higher cap keeps
+        the Subscribed status."""
+        self.set_deck(max_active_users=5)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'Maintenance')
+        self.assertContains(response, 'maintenance subscription')
+        self.assertContains(response, 'capped at the trial limit')
+        self.assertContains(response, 'max 5 current students')
+        self.assertNotContains(response, '>Subscribed</span>')
 
-        self.set_deck(paid_until=localdate() - timedelta(days=5))
-        cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.assertContains(self.get_page(), 'revert to trial limits (max 1 current student)')
+        self.set_deck(max_active_users=30)
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        self.assertNotContains(response, 'Maintenance')
 
     def test_page__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""

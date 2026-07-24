@@ -105,6 +105,24 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.active_user_count, self.tenant.get_active_user_count())
         self.assertGreater(self.tenant.active_user_count, 0)
 
+    def test_deck_status_check__resets_cap_on_fresh_suspension(self):
+        """The nightly task applies the once-per-episode cap reset (#2178): a deck
+        whose trial lapsed yesterday comes out of the run at the trial default,
+        even with the notices rollout flag off (the reset is enforcement)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            trial_end_date=localdate() - timedelta(days=1), paid_until=None, max_active_users=80,
+        )
+
+        self.assertTrue(tasks.deck_status_check.apply().successful())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 5)
+
     def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
         """The dispatcher schedules one per-schema check per deck, skipping the
         public schema and the shared-library tenant."""

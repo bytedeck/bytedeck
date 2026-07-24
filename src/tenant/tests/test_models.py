@@ -215,16 +215,20 @@ class TenantBillingStatusTest(SimpleTestCase):
         """An actively subscribed deck's cap is its max_active_users field."""
         self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=80).effective_max_active_users, 80)
 
-    def test_effective_max_active_users__only_suspended_reverts_to_trial_cap(self):
-        """Only a SUSPENDED deck reverts to TRIAL_MAX_ACTIVE_USERS ("back to trial
-        mode"); trial and managed-manually (comped, no dates) decks keep their
-        admin-set cap -- new decks default to the trial cap anyway, so a raised cap
-        is a deliberate admin grant. (Production find: the old rule capped a comped
-        deck with an admin-set cap of 40 at 5.)"""
-        # suspended (trial lapsed, no subscription): reverts to the trial cap
+    def test_effective_max_active_users__always_the_admin_field(self):
+        """The enforced cap is ALWAYS the admin-set field, in every billing state --
+        including suspended. Suspension "reverts to trial limits" by WRITING the
+        trial default into the field once (reset_cap_on_new_suspension), after
+        which the admin's value, higher or lower, always wins (maintainer decision
+        on #2178: a suspended deck's cap lowered to 1 was silently overridden back
+        to 5)."""
+        # suspended (trial lapsed): the field, untouched at read time -- both above
+        # and below the trial default (the 80 only drops when the nightly reset runs)
         self.assertEqual(
-            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=80).effective_max_active_users,
-            TRIAL_MAX_ACTIVE_USERS,
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=80).effective_max_active_users, 80,
+        )
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=1).effective_max_active_users, 1,
         )
         # on trial with an admin-raised cap: the admin grant is honored
         self.assertEqual(
@@ -233,24 +237,22 @@ class TenantBillingStatusTest(SimpleTestCase):
         # managed manually (no dates at all): the admin-set cap is honored
         self.assertEqual(self.make_tenant(max_active_users=40).effective_max_active_users, 40)
 
-    def test_effective_max_active_users__suspended_honors_admin_cap_below_trial_limit(self):
-        """On a suspended deck the trial cap is a CEILING, not a replacement: an
-        admin who deliberately lowers max_active_users below the trial limit (e.g.
-        to 1) must see that cap enforced and displayed, not the default 5.
-        (Production find, 2026-07-24: a suspended deck with an admin-set cap of 1
-        still showed and enforced 'max 5 current students'.)"""
-        self.assertEqual(
-            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=1).effective_max_active_users,
-            1,
+    def test_is_on_maintenance__paid_at_or_below_trial_cap(self):
+        """A deck paying for a subscription that leaves the cap at (or below) the
+        trial limit is on MAINTENANCE: alive (never suspends or times out for
+        deletion) but capped. Higher caps are real subscriptions; unlimited (-1)
+        is never maintenance; unpaid states never are."""
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=TRIAL_MAX_ACTIVE_USERS).is_on_maintenance)
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=1).is_on_maintenance)
+        # grace still counts as paid, so a lapsing maintenance deck keeps the flag
+        self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=5), max_active_users=5).is_on_maintenance)
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=6).is_on_maintenance)
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=-1).is_on_maintenance)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY, max_active_users=5).is_on_maintenance)  # trial
+        self.assertFalse(self.make_tenant(max_active_users=5).is_on_maintenance)  # managed manually
+        self.assertFalse(  # suspended
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=5).is_on_maintenance
         )
-
-    def test_suspension_cap__trial_limit_is_a_ceiling_with_unlimited_passthrough(self):
-        """suspension_cap -- what a deck has (or would have) while suspended, feeding
-        the revert-to copy on the banner/page/email -- is min(admin cap, trial cap),
-        with the -1 unlimited sentinel passing through."""
-        self.assertEqual(self.make_tenant(max_active_users=80).suspension_cap, TRIAL_MAX_ACTIVE_USERS)
-        self.assertEqual(self.make_tenant(max_active_users=1).suspension_cap, 1)
-        self.assertEqual(self.make_tenant(max_active_users=-1).suspension_cap, -1)
 
     def test_effective_max_active_users__unlimited_passthrough(self):
         """The admin-set unlimited sentinel (-1) is honored in every state."""
