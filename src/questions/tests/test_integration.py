@@ -352,3 +352,16 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         short_rows = rows.filter(question=self.short_question)
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().response_text, "keep me")
+
+    def test_sync__duplicate_dropped_when_keeper_has_content(self):
+        """When the most recently edited duplicate is the contentful one, the older empty
+        duplicate is simply dropped."""
+        # older empty duplicate first, then the contentful row (edited last = the keeper)
+        QuestionSubmission.objects.create(quest_submission=self.submission, question=self.short_question)
+        contentful = QuestionSubmission.objects.create(
+            quest_submission=self.submission, question=self.short_question, response_text="newest wins")
+
+        rows = sync_draft_question_submissions(self.submission)
+        short_rows = rows.filter(question=self.short_question)
+        self.assertEqual(short_rows.count(), 1)
+        self.assertEqual(short_rows.first().id, contentful.id)
