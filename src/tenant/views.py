@@ -460,6 +460,8 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # None for unlimited decks; clamped at 0 when over the limit (the
             # template's at-limit warning covers the overage)
             'remaining_seats': None if cap == -1 else max(0, cap - current_student_count),
+            # what a fresh suspension will RESET the cap to -- the grace copy
+            # predicts it, and can't derive it from the deck's current paid cap
             'trial_cap': TRIAL_MAX_ACTIVE_USERS,
             'grace_days': GRACE_PERIOD_DAYS,
             'stripe_configured': billing_configured(),
