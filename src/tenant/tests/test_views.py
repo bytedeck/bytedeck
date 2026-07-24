@@ -570,6 +570,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         subscription page (PR 6; previously the public subscribe flatpage)."""
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Trial Mode')
+        self.assertContains(response, 'fa-info-circle')  # banner level icon (review request)
         self.assertContains(response, reverse('decks:subscription'))
 
     def test_banner__trial_mode_shows_days_remaining_and_seat_usage(self):
@@ -618,6 +619,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
 
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
 
     def test_banner__over_limit_warns_staff(self):
@@ -626,6 +628,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
 
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Current-student limit exceeded')
+        self.assertContains(response, 'fa-exclamation-triangle')  # warning-level banner icon
 
     def test_banner__expiring_soon_warns_staff(self):
         """Staff see the expiring-soon warning inside the two-week window, for both
@@ -657,6 +660,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'Subscription expired')
         self.assertContains(response, 'alert-danger')
+        self.assertContains(response, 'fa-exclamation-triangle')  # banner level icon (review request)
         text = ' '.join(response.content.decode().split())
         self.assertIn('which ends in 20 days', text)
         self.assertIn(f'revert to trial limits (max {TRIAL_MAX_ACTIVE_USERS} current students)', text)
