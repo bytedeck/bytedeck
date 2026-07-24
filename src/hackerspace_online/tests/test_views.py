@@ -136,3 +136,35 @@ class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('account_signup'))
         self.assertIn("btn_google_signin_dark_normal_web", response.content.decode('utf-8'))
+
+
+class MessagesSnippetIconTest(ByteDeckTenantTestCase):
+    """Rendering tests pinning django messages (messages-snippet.html) icon-free:
+    the level-icon request from staging live testing was scoped to the
+    subscription-status banner only (#2140 review)."""
+
+    class FakeMessage:
+        """Stand-in for a django.contrib.messages Message: the snippet only reads
+        .tags and renders str(message)."""
+
+        def __init__(self, tags, text):
+            self.tags = tags
+            self.text = text
+
+        def __str__(self):
+            return self.text
+
+    def render_messages(self, tags):
+        """Render the snippet with one fake message of the given tags."""
+        from django.template.loader import render_to_string
+        return render_to_string('messages-snippet.html', {'messages': [self.FakeMessage(tags, 'the message text')]})
+
+    def test_messages_snippet__messages_have_no_level_icon(self):
+        """Django messages render icon-free at every level: the maintainer scoped the
+        icon request to the subscription-status banner only, so no fa- icon may leak
+        into the shared messages snippet."""
+        for tags in ('error', 'warning', 'info', 'success'):
+            html = self.render_messages(tags)
+            self.assertNotIn('fa-ban', html)
+            self.assertNotIn('fa-exclamation-triangle', html)
+            self.assertNotIn('fa-info-circle', html)

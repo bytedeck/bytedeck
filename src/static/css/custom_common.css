@@ -615,6 +615,17 @@ form > div.alert.alert-block.alert-danger {
   margin-top: 8px;
 }
 
+/************TABLES *************************/
+
+/* Summary row at the bottom of a facts table (e.g. "Remaining students" on the
+   subscription page): set off from the rows above by a heavier rule, matching the
+   2px weight Bootstrap uses under a thead. Width-only override, so each theme
+   keeps its own table border color. */
+.table > tbody > tr.total-row > th,
+.table > tbody > tr.total-row > td {
+    border-top-width: 2px;
+}
+
 /******* Accordian ***********************/
 
 .panel-heading-tall {
