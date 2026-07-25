@@ -198,6 +198,25 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
         self.assertContains(request, course.title)
 
+    def test_profile_detail__staff_join_button_targets_the_student_not_themselves(self):
+        """On a courseless student's profile, the "Join a Course" button takes STAFF
+        to the staff add-student flow for THAT student (courses:join) -- not to
+        their own self-registration view (courses:create), which would register
+        the teacher instead of the student and 403s any teacher who is already
+        registered in a course this semester (staging live-testing find,
+        2026-07-24). The student still gets the self-registration link on their
+        own profile."""
+        spk = self.test_student1.profile.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(response, reverse('courses:join', args=[self.test_student1.id]))
+        self.assertNotContains(response, reverse('courses:create'))
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(response, reverse('courses:create'))
+
     def test_profile_detail__student_marks_button(self):
         """
         Student should be able to see marks button when `display_marks_calculation` is True.

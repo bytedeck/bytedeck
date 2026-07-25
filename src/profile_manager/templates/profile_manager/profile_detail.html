@@ -90,6 +90,9 @@
               You have not joined a course yet this semester.
               {% if config.has_no_open_semester %}
                 <br><em>No semester is open yet, so you can’t join a course — ask your teacher to open one.</em>
+              {% elif request.user.is_staff and request.user != object.user %}
+                {# staff viewing someone else's profile: add THAT student, not self-register (which 403s an already-registered teacher) #}
+                <a href="{% url 'courses:join' object.user.id %}">Join a Course</a>
               {% else %}
                 <a href="{% url 'courses:create' %}">Join a Course</a>
               {% endif %}
@@ -152,6 +155,9 @@
             <li class="list-group-item">You have not joined a course yet for this semester.
               {% if config.has_no_open_semester %}
                 <br><em>No semester is open yet, so you can’t join a course — ask your teacher to open one.</em>
+              {% elif request.user.is_staff and request.user != object.user %}
+                {# staff viewing someone else's profile: add THAT student, not self-register (which 403s an already-registered teacher) #}
+                <a href="{% url 'courses:join' object.user.id %}" class="btn btn-info" role="button">Join a Course</a>
               {% else %}
                 <a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a>
               {% endif %}
