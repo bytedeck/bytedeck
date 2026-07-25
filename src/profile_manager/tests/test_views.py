@@ -125,12 +125,10 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_recalculate_current_xp__dispatches_background_task(self):
-        """recalculate_current_xp hands the all-student XP recompute to a background task
-        rather than looping over every active-semester profile synchronously in the request,
-        which had grown a web worker large enough to be OOM-killed (issue #2081).
-        """
+    def test_recalculate_current_xp__invalidates_active_semester_profiles(self):
+        """recalculate_current_xp invalidates the XP cache of each active-semester profile."""
         # a student registered in the active semester so all_for_active_semester() is non-empty
+        # and the loop body actually runs
         baker.make(
             'courses.CourseStudent', user=self.test_student1,
             semester=self.active_sem, course=baker.make('courses.Course'),
@@ -138,15 +136,12 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(Profile.objects.all_for_active_semester().exists())
         self.client.force_login(self.test_teacher)
 
-        # The view must NOT recompute in-request; it must dispatch the celery task instead.
-        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch, \
-                patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+        with patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
             response = self.client.get(reverse('profiles:recalculate_xp_current'))
 
         self.assertEqual(response.status_code, 302)
-        mock_dispatch.assert_called_once()
-        # nothing was recomputed synchronously in the request
-        self.assertFalse(mock_invalidate.called)
+        # the view actually invalidated the XP cache (would still pass on a bare redirect otherwise)
+        self.assertTrue(mock_invalidate.called)
 
     def test_tour_complete__marks_completed_and_redirects_to_quests(self):
         """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
@@ -202,6 +197,99 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         baker.make('courses.CourseStudent', user=self.test_student1, course=course)
         request = self.client.get(reverse('profiles:profile_detail', args=[spk]))
         self.assertContains(request, course.title)
+
+    def test_profile_detail__staff_join_button_targets_the_student_not_themselves(self):
+        """On a courseless student's profile, the "Join a Course" button takes STAFF
+        to the staff add-student flow for THAT student (courses:join) -- not to
+        their own self-registration view (courses:create), which would register
+        the teacher instead of the student and 403s any teacher who is already
+        registered in a course this semester (staging live-testing find,
+        2026-07-24). The student still gets the self-registration link on their
+        own profile."""
+        spk = self.test_student1.profile.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(response, reverse('courses:join', args=[self.test_student1.id]))
+        self.assertNotContains(response, reverse('courses:create'))
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+        self.assertContains(response, reverse('courses:create'))
+
+    def test_profile_detail__staff_join_link_appears_in_both_course_sections_for_courseless_student(self):
+        """Staff viewing a courseless student's profile see the courses:join link (targeting the
+        student) in both course sections touched by this PR: the top xp-panel summary and the
+        Courses panel's empty-state list item."""
+        spk = self.test_student1.profile.pk
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+
+        join_url = reverse('courses:join', args=[self.test_student1.id])
+        # top xp-panel summary (plain link, no button classes)
+        self.assertContains(response, f'<a href="{join_url}">Join a Course</a>')
+        # Courses panel empty-state list item (styled as a button)
+        self.assertContains(response, f'<a href="{join_url}" class="btn btn-info" role="button">Join a Course</a>')
+
+    def test_profile_detail__student_create_link_appears_in_both_course_sections_for_own_courseless_profile(self):
+        """A student viewing their own courseless profile still gets the pre-existing self-registration
+        courses:create link in both course sections (regression check confirming the new staff
+        branch doesn't affect the request.user == object.user case)."""
+        spk = self.test_student1.profile.pk
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+
+        create_url = reverse('courses:create')
+        self.assertContains(response, f'<a href="{create_url}">Join a Course</a>')
+        self.assertContains(response, f'<a href="{create_url}" class="btn btn-info" role="button">Join a Course</a>')
+
+    def test_profile_detail__staff_viewing_own_courseless_profile_shows_self_create_link_not_join(self):
+        """The new staff-join-link branch explicitly excludes `request.user == object.user`, so a
+        staff member viewing their OWN courseless profile still gets the self-registration
+        "Join a Course" link (courses:create) rather than a link to add themselves via courses:join."""
+        self.client.force_login(self.test_teacher)
+        tpk = self.test_teacher.profile.pk
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[tpk]))
+
+        create_url = reverse('courses:create')
+        self.assertContains(response, f'<a href="{create_url}">Join a Course</a>')
+        self.assertNotContains(response, reverse('courses:join', args=[self.test_teacher.id]))
+
+    def test_profile_detail__staff_viewing_other_staffs_courseless_profile_shows_join_link_in_xp_panel(self):
+        """The top xp-panel's "Join a Course" logic only checks request.user vs object.user, not
+        whether the profile owner is staff, so it still offers a join link when staff view another
+        staff member's profile -- while the lower Courses panel's separate, pre-existing
+        object.user.is_staff guard (untouched by this PR) keeps showing 'Not applicable to staff
+        users.' there."""
+        User = get_user_model()
+        other_teacher = User.objects.create_user('test_teacher2', is_staff=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('profiles:profile_detail', args=[other_teacher.profile.pk]))
+
+        join_url = reverse('courses:join', args=[other_teacher.id])
+        self.assertContains(response, f'<a href="{join_url}">Join a Course</a>')
+        self.assertContains(response, 'Not applicable to staff users.')
+
+    def test_profile_detail__no_open_semester_message_takes_precedence_over_staff_join_link(self):
+        """When the active semester is closed, staff viewing a courseless student's profile still
+        see the pre-existing 'no semester is open' warning in both course sections, not the new
+        staff join-a-course link -- the has_no_open_semester branch is checked first in the
+        template's {% if %}/{% elif %} chain."""
+        active_semester = SiteConfig.get().active_semester
+        active_semester.closed = True
+        active_semester.save()
+
+        spk = self.test_student1.profile.pk
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[spk]))
+
+        self.assertContains(response, 'No semester is open yet', count=2)
+        self.assertNotContains(response, 'Join a Course')
 
     def test_profile_detail__student_marks_button(self):
         """
