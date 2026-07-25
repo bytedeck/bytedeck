@@ -105,6 +105,24 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.active_user_count, self.tenant.get_active_user_count())
         self.assertGreater(self.tenant.active_user_count, 0)
 
+    def test_deck_status_check__skips_non_deck_schemas_instead_of_crashing(self):
+        """Invoked on the public or shared-library schema -- an ad-hoc shell loop
+        over Tenant.objects.all() (which includes the public tenant), or a
+        mis-routed message -- the task reports and bails instead of crashing:
+        SiteConfig.get() returns None on the public schema, so the refresh blew
+        up with an AttributeError (staging ops find, 2026-07-25). The beat
+        dispatcher already excludes these schemas; this mirrors that rule at the
+        worker."""
+        from django_tenants.utils import get_public_schema_name, schema_context
+
+        from library.utils import get_library_schema_name
+
+        for schema_name in (get_public_schema_name(), get_library_schema_name()):
+            with schema_context(schema_name):
+                result = tasks.deck_status_check.apply()
+            self.assertTrue(result.successful())
+            self.assertIn('skipped', result.result)
+
     def test_deck_status_check__resets_cap_on_fresh_suspension(self):
         """The nightly task applies the once-per-episode cap reset (#2178): a deck
         whose trial lapsed yesterday comes out of the run at the trial default,
