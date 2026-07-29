@@ -46,6 +46,67 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         notification.mark_read()
         self.assertFalse(notification.unread)
 
+    def test_recent__returns_at_most_five_unread(self):
+        """recent() returns only the five most recent unread notifications."""
+        Notification.objects.all().delete()  # clear any created as a side effect of user setup
+        for _ in range(6):
+            Notification.objects.create(
+                recipient=self.student,
+                sender_content_type=ContentType.objects.get_for_model(self.teacher),
+                sender_object_id=self.teacher.id,
+                verb="pinged you",
+                unread=True,
+            )
+        recent = Notification.objects.all().recent()
+        self.assertEqual(len(recent), 5)
+        self.assertTrue(all(note.unread for note in recent))
+
+    def _latest_notification(self):
+        """Return the most recently created Notification (new_notification returns nothing)."""
+        return Notification.objects.order_by('id').last()
+
+    def test_get_link__with_target_and_action_renders_both(self):
+        """get_link() emphasises the target and quotes the action when the notification has both."""
+        target = baker.make('announcements.Announcement')
+        action = baker.make('comments.Comment')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            action=action,
+            verb="commented on",
+        )
+        link = self._latest_notification().get_link()
+        self.assertIn(f"<em>{target}</em>", link)
+        self.assertIn('with "', link)
+
+    def test_get_link__with_target_no_action_renders_target_only(self):
+        """get_link() emphasises the target but omits the 'with ...' clause when there is no action object."""
+        target = baker.make('announcements.Announcement')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            verb="posted",
+        )
+        link = self._latest_notification().get_link()
+        self.assertIn(f"<em>{target}</em>", link)
+        self.assertNotIn('with "', link)
+
+    def test_get_link__without_target_has_no_emphasis(self):
+        """get_link() renders only the sender/verb (no <em> target) when there is no target object."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent you a notification",
+        )
+        link = self._latest_notification().get_link()
+        self.assertNotIn("<em>", link)
+        self.assertTrue(link.endswith("</a>"))
+
     def test_new_notification__creates_unread_for_recipient(self):
         """new_notification() creates a single unread notification for the recipient."""
         # make sure the student doesn't have any notifications yet
