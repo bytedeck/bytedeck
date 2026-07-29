@@ -2252,6 +2252,93 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn("new-prereq-quest", str(copied_quest.prereqs()))
         self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
+    def test_quest_copy__copies_submission_questions(self):
+        """Copying a quest duplicates its submission questions onto the copy (issue #2161).
+        Each question's fields — including marker_notes and the (shared) solution_file — are
+        carried over, and the source quest keeps its own questions."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from questions.models import Question
+
+        # give the source quest a question of each type, in a specific order
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?", solution_text="Any name",
+            marker_notes="Accept any non-empty name.",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=2, type="long_answer", required=False,
+            instructions="Explain your reasoning.",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="Attach your work.", allowed_file_type="image",
+            solution_file=SimpleUploadedFile("solution.png", b"file_content", content_type="image/png"),
+        )
+
+        self.client.force_login(self.test_teacher)
+        self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+
+        # the copy has the same questions, in the same order, with the same fields
+        source = list(Question.objects.filter(quest=self.quest).order_by("ordinal"))
+        copied = list(Question.objects.filter(quest=copied_quest).order_by("ordinal"))
+        self.assertEqual(len(copied), 3)
+        for src_q, copy_q in zip(source, copied):
+            self.assertNotEqual(src_q.pk, copy_q.pk)  # a distinct row
+            self.assertEqual(copy_q.ordinal, src_q.ordinal)
+            self.assertEqual(copy_q.type, src_q.type)
+            self.assertEqual(copy_q.required, src_q.required)
+            self.assertEqual(copy_q.instructions, src_q.instructions)
+            self.assertEqual(copy_q.solution_text, src_q.solution_text)
+            self.assertEqual(copy_q.marker_notes, src_q.marker_notes)
+            self.assertEqual(copy_q.allowed_file_type, src_q.allowed_file_type)
+            # the copy references the same solution file as the source (not re-uploaded)
+            self.assertEqual(copy_q.solution_file.name, src_q.solution_file.name)
+        # the source quest still has exactly its own three questions
+        self.assertEqual(Question.objects.filter(quest=self.quest).count(), 3)
+
+    def test_quest_copy__questionless_quest_still_copies(self):
+        """A quest with no submission questions copies as before — the clone step is a no-op."""
+        from questions.models import Question
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+        self.assertRedirects(response, copied_quest.get_absolute_url())
+        self.assertEqual(Question.objects.filter(quest=copied_quest).count(), 0)
+
+    def test_quest_copy__question_failure_rolls_back_whole_copy(self):
+        """If duplicating a question fails, the whole copy rolls back — no orphaned quest is
+        left behind (the copy, its prereqs and its questions commit or roll back together)."""
+        from django.core.exceptions import ValidationError
+        from questions.models import Question
+
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?",
+        )
+
+        quests_before = Quest.objects.count()
+        self.client.force_login(self.test_teacher)
+
+        # force the second step (question duplication) to blow up
+        with patch.object(Question, "full_clean", side_effect=ValidationError("boom")):
+            with self.assertRaises(ValidationError):
+                self.client.post(
+                    reverse('quests:quest_copy', args=[self.quest.id]),
+                    data=self.valid_copy_form_data,
+                )
+
+        # the transaction rolled back: no copied quest, and the quest count is unchanged
+        self.assertFalse(Quest.objects.filter(name='Test Quest - COPY').exists())
+        self.assertEqual(Quest.objects.count(), quests_before)
+
 
 class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
@@ -3013,7 +3100,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__returns_json(self):
-        """An ajax POST (with or without a quest id) returns a JsonResponse with a 200 status."""
+        """An ajax POST with a quest id returns a JsonResponse with a 200 status."""
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
             content_type='application/json',
@@ -3023,15 +3110,19 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(type(response), JsonResponse)
 
-        # Same without a quest ID:
+    def test_ajax_quest_info__no_quest_id_returns_404(self):
+        """An ajax POST without a quest id is rejected (404) rather than rendering every quest.
+
+        The accordion UI always requests one quest by id; the "all quests" branch was an unbounded
+        per-request memory hog with no staff gate that any logged-in user could POST directly
+        (issue #2081), so it now 404s like the view's other invalid requests.
+        """
         response = self.client.post(
             reverse('quests:ajax_quest_all'),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        self.assertEqual(response.status_code, 200)
-
-        self.assertEqual(type(response), JsonResponse)
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__can_export_student_false(self):
         """

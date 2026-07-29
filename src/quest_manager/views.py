@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
+from django.db import transaction
 from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
@@ -393,6 +394,32 @@ class QuestCopy(QuestCreate):
 
         kwargs["instance"] = new_quest
         return kwargs
+
+    def form_valid(self, form):
+        """Save the new (copied) quest and duplicate the source quest's submission questions
+        onto it, so a copied quest keeps its questions (issue #2161).
+
+        `form` is the validated QuestForm bound to the new (copied) quest instance. Returns the
+        redirect response from the parent view. Quest creation, prerequisite setup and question
+        duplication all run inside a single transaction, so a failure duplicating a question rolls
+        back the whole copy rather than leaving an orphaned quest with no (or partial) questions.
+
+        Student answers are not copied — those belong to submissions, not to the quest. The
+        solution_file reference is shared with the source question, matching how the copied
+        quest already shares its icon file.
+        """
+        from questions.models import Question
+
+        with transaction.atomic():
+            response = super().form_valid(form)  # saves self.object (the new quest) and sets prereqs
+
+            source_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
+            for question in Question.objects.filter(quest=source_quest):
+                question.pk = None
+                question.quest = self.object
+                question.full_clean()
+                question.save()
+        return response
 
 
 class QuestSubmissionSummary(UserPassesTestMixin, DetailView):
@@ -912,17 +939,14 @@ def ajax_quest_info(request, quest_id=None):
 
                 return JsonResponse(data)
 
-            else:  # all quests, used for staff only.
-                quests = Quest.objects.all()
-                all_quest_info_html = {}
-
-                for q in quests:
-                    all_quest_info_html[q.id] = render_to_string(template,
-                                                                 {'q': q, 'is_library_view': is_library_view, 'can_export': can_export},
-                                                                 request=request)
-
-                data = json.dumps(all_quest_info_html)
-                return JsonResponse(data, safe=False)
+            else:
+                # No quest_id: the accordion UI always requests one quest at a time by id, so there
+                # is no legitimate caller for an "all quests" response. Rendering every quest's
+                # preview HTML into a single JSON blob (held twice in memory -- the dict of rendered
+                # strings and then the json.dumps of it) is an unbounded per-request memory hog that
+                # any logged-in user could trigger by POSTing the bare URL, and it had no staff gate
+                # (issue #2081). Reject it like the view's other invalid requests.
+                raise Http404
 
     else:
         raise Http404

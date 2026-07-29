@@ -10,7 +10,7 @@
 {% if deck.is_suspended %}
   <p><span class="label label-danger">Suspended</span>
     This deck's trial and/or subscription period has ended, so it has reverted to trial limits
-    (max {{ trial_cap }} current student{{ trial_cap|pluralize }}). Existing students keep their access and
+    (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}). Existing students keep their access and
     nothing has been deleted, but no new students can register in a course beyond the trial limit.</p>
 {% elif deck.in_grace_period %}
   {# grace gets its own DANGER label -- a green "Subscribed" badge on an expired deck reads as a bug (maintainer review find) #}
@@ -18,6 +18,13 @@
     The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
     {{ grace_days }}-day grace period &mdash; renew to keep full access; otherwise it will revert to
     trial limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).</p>
+{% elif deck.is_on_maintenance %}
+  <p><span class="label label-primary">Maintenance</span>
+    This deck is on a maintenance subscription through <strong>{{ deck.paid_until }}</strong>
+    ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining): it won't expire,
+    be suspended, or time out for deletion, but registration stays capped at the trial limit
+    (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
+    Upgrade any time to raise the cap.</p>
 {% elif deck.subscription_active %}
   <p><span class="label label-success">Subscribed</span>
     Paid through <strong>{{ deck.paid_until }}</strong>

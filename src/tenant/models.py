@@ -242,21 +242,37 @@ class Tenant(TenantMixin):
 
     @property
     def effective_max_active_users(self):
-        """The current-student cap that should be enforced right now.
+        """The current-student cap that should be enforced right now: ALWAYS the
+        admin-set ``max_active_users`` (-1 = unlimited).
 
-        -1 (unlimited, admin-set) passes through unchanged. A SUSPENDED deck
-        reverts to the trial cap ("back to trial mode", #1734). Every other deck
-        -- subscribed, on trial, or managed manually (no dates) -- uses its
-        admin-set ``max_active_users``: new decks are created with the trial
-        default (5), so the trial cap is the default, not an override, and an
-        admin who deliberately raises a trial or comped deck's cap is honored.
-        (Production bug find, 2026-07-22: the old subscription_active-based rule
-        capped comped/managed-manually decks at 5, contradicting their admin-set
-        cap on the banner and subscription page.)
+        Suspension does NOT override the cap at read time. Instead, when a
+        deck's suspension episode begins, the nightly ``deck_status_check``
+        writes the trial default (TRIAL_MAX_ACTIVE_USERS) into the field once
+        ("revert to trial limits", #1734; see
+        ``tenant.notices.reset_cap_on_new_suspension``) -- after that, whatever
+        the admin sets, higher or lower, always wins (comps and special cases;
+        maintainer decision on #2178 after a production find where a lowered
+        cap of 1 was silently overridden back to 5).
         """
-        if self.max_active_users == -1:
-            return -1
-        return TRIAL_MAX_ACTIVE_USERS if self.is_suspended else self.max_active_users
+        return self.max_active_users
+
+    @property
+    def is_on_maintenance(self):
+        """Whether the deck's active subscription is a MAINTENANCE subscription:
+        paid -- so the deck never suspends, and can never time out for deletion
+        (deletion requires suspension, #2044) -- but with the cap left at (or
+        below) the trial student limit.
+
+        The low-cost maintenance tier is simply a Stripe price whose metadata
+        cap IS the trial cap, so this is derived rather than stored: any active
+        subscription that doesn't lift the cap above trial limits is, by
+        definition, maintenance. Unlimited (-1) decks are never maintenance.
+        """
+        return (
+            self.subscription_active
+            and self.max_active_users != -1
+            and self.max_active_users <= TRIAL_MAX_ACTIVE_USERS
+        )
 
     @property
     def days_until_expiry(self):

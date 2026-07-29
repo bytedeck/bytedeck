@@ -47,7 +47,8 @@ def deck_status(request):
     return {
         "current_deck": deck,
         "deck_subscribe_url": reverse('decks:subscription'),
-        # what a lapsed deck reverts to -- the grace banner can't derive this from
-        # the deck's effective cap, which is still the paid cap during grace
+        # what a fresh suspension will RESET the cap to (reset_cap_on_new_suspension)
+        # -- the grace banner predicts it, and can't derive it from the deck's
+        # current cap, which is still the paid cap during grace
         "trial_cap": TRIAL_MAX_ACTIVE_USERS,
     }

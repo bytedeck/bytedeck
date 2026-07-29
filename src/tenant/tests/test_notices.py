@@ -18,6 +18,76 @@ NOW = "2026-08-15 20:00:00"
 
 
 @freeze_time(NOW)
+@override_settings(DECK_NOTICES_ENABLED=False)  # the reset is enforcement: NOT gated by the notices rollout flag
+class SuspensionCapResetTest(ByteDeckTenantTestCase):
+    """Tests for reset_cap_on_new_suspension (#2178): when a suspension episode
+    begins, the cap is written back to the trial default exactly once, and any
+    admin adjustment afterwards -- lower or higher -- sticks."""
+
+    def setUp(self):
+        """Clear the cached deck row so each test reads its own billing state."""
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+
+    def set_deck(self, **fields):
+        """Persist billing fields via update() + refresh (the reset reads the instance)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def reset(self):
+        """Shorthand: run the reset for this deck and return its log summary."""
+        from tenant.notices import reset_cap_on_new_suspension
+        return reset_cap_on_new_suspension(self.tenant)
+
+    def test_reset__fresh_suspension_reverts_cap_once_then_admin_wins(self):
+        """A deck whose trial lapsed yesterday gets its cap written back to the
+        trial default exactly once; an admin adjustment made afterwards (e.g.
+        lowering to 1 for a wind-down, or raising for a comp) is never clobbered
+        by later runs of the same episode."""
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None, max_active_users=80)
+        self.assertEqual(self.reset(), 'cap reset 80 -> 5')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 5)
+        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
+
+        self.set_deck(max_active_users=1)  # admin wind-down after the reset
+        self.assertEqual(self.reset(), 'cap already reset this episode')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 1)
+
+    def test_reset__paid_deck_episode_starts_after_the_grace_window(self):
+        """A paid deck's suspension episode begins the day after its grace window
+        ends (paid_until + 30 + 1), so the reset fires on the task's first run
+        after that day -- and -1 unlimited decks revert like any other."""
+        self.set_deck(trial_end_date=None, paid_until=TODAY - timedelta(days=31), max_active_users=-1)
+        self.assertEqual(self.reset(), 'cap reset -1 -> 5')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 5)
+
+    def test_reset__old_episodes_are_grandfathered(self):
+        """A deck already suspended for longer than the catch-up window keeps its
+        cap (its admin may have hand-set it since -- the production case that
+        motivated #2178); the episode is recorded so it is never revisited."""
+        self.set_deck(trial_end_date=TODAY - timedelta(days=60), paid_until=None, max_active_users=1)
+        self.assertIn('cap left alone', self.reset())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 1)
+        self.assertEqual(self.reset(), 'cap already reset this episode')
+
+    def test_reset__no_op_paths(self):
+        """Unsuspended decks are untouched (no ledger row), and a fresh suspension
+        whose cap is already the trial default records the episode without a write."""
+        self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None, max_active_users=80)
+        self.assertEqual(self.reset(), 'not suspended')
+        self.assertFalse(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), max_active_users=5)
+        self.assertEqual(self.reset(), 'cap already at the trial default')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 5)
+        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
+
+
+@freeze_time(NOW)
 @override_settings(DECK_NOTICES_ENABLED=True)
 class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
     """Tests for the reminder cadence engine (epic #1729 PR 5, #1733)."""
