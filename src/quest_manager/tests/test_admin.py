@@ -9,7 +9,9 @@ from badges.models import Badge
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from prerequisites.models import Prereq
 from quest_manager.admin import (
+    QUEST_EXPORT_EXCLUDED_HTML_FIELDS,
     QuestAdmin,
+    QuestAdminExportResource,
     QuestResource,
     QuestSubmissionAdmin,
     archive_selected_quests,
@@ -123,6 +125,40 @@ class QuestAdminQuerysetAndFormatsTest(ByteDeckTenantTestCase):
         modeladmin = QuestAdmin(Quest, django_admin.site)
         formats = modeladmin.get_export_formats()
         self.assertEqual([fmt().get_title() for fmt in formats], ['csv'])
+
+
+class QuestAdminExportResourceTest(ByteDeckTenantTestCase):
+    """The admin Export button drops bulky summernote HTML columns to bound per-request
+    memory (#2081), while the full QuestResource used by import / the Shared Library keeps
+    them so cross-deck sharing is unaffected."""
+
+    def test_admin_export_resource__omits_bulky_html_columns(self):
+        """QuestAdminExportResource's export has no instructions/submission_details/instructor_notes columns."""
+        quest = baker.make(Quest, instructions='<p>lots of html</p>', submission_details='<p>details</p>')
+
+        headers = QuestAdminExportResource().export([quest]).headers
+
+        for field in QUEST_EXPORT_EXCLUDED_HTML_FIELDS:
+            self.assertNotIn(field, headers)
+        # Identifying/lightweight columns are still exported.
+        self.assertIn('name', headers)
+
+    def test_full_resource__still_exports_instructions(self):
+        """The full QuestResource (import + Shared Library) still carries the HTML fields."""
+        quest = baker.make(Quest, instructions='<p>keep me</p>')
+
+        dataset = QuestResource().export([quest])
+
+        self.assertIn('instructions', dataset.headers)
+        self.assertIn('submission_details', dataset.headers)
+
+    def test_quest_admin__export_uses_slim_resource_import_uses_full(self):
+        """QuestAdmin exports with the slim resource but imports with the full one."""
+        modeladmin = QuestAdmin(Quest, django_admin.site)
+        request = request_with_messages()
+
+        self.assertEqual(modeladmin.get_export_resource_classes(request), [QuestAdminExportResource])
+        self.assertEqual(modeladmin.get_import_resource_classes(request), [QuestResource])
 
 
 class QuestResourceDehydratePrereqsTest(ByteDeckTenantTestCase):
