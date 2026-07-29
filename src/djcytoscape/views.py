@@ -229,11 +229,11 @@ def regenerate(request, scape_id):
 @non_public_only_view
 @staff_member_required
 def regenerate_all(request):
-    # Regenerating every map inline builds each map's full graph JSON in memory within a
-    # single request, which scales with the number/size of maps and contributes to the
-    # per-request memory blowups tracked in #2081. Always offload to the celery task
-    # (which regenerates each map, deletes any whose initial object is gone, and notifies
-    # the requesting user) instead of only doing so past an arbitrary map-count threshold.
+    # Offload to celery: regenerating maps builds each map's full graph JSON in memory, so
+    # doing it in the request would scale a single web request's memory with the number and
+    # size of maps -- one of the per-request memory blowups tracked in #2081. The task
+    # regenerates each map, deletes any whose initial object no longer exists, and notifies
+    # the requesting user of failures and completion.
     messages.info(request, "Map regeneration is being processed in the background. You'll be notified when it's complete.")
     regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
 
