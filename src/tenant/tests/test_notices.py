@@ -400,6 +400,22 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__comped_deck_limit_email_renders_without_any_dates(self):
+        """A comped/managed-manually deck (both date fields blank, days_until_expiry
+        None) can still hit its student cap; its limit email must render with no
+        expiry dates to lean on -- covering the dateless arms of the new context."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=None, max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('limit', summary)
+        self.assertEqual(len(mail.outbox), 1)
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('limit has been reached', html)
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_states_when_and_why_with_logo(self):
         """The suspension email says when the suspension began, which clock ran
         out (trial vs paid + grace), current seat usage, and carries the logo."""
