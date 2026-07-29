@@ -187,19 +187,39 @@ def process_deck_notices(deck):
 
 def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
+    from django.utils.timezone import timedelta
+
+    from tenant.models import GRACE_PERIOD_DAYS
+
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
+    days = deck.days_until_expiry
+    # the day the deck's suspension began (or would begin): the day after its LAST
+    # covered day -- trials end at trial_end_date, paid access after the grace window
+    last_covered_days = []
+    if deck.trial_end_date:
+        last_covered_days.append(deck.trial_end_date)
+    if deck.paid_until:
+        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
     context = {
         'deck': deck,
         'config': config,
-        'days': deck.days_until_expiry,
+        'days': days,
         'cap': deck.effective_max_active_users,
         # what a fresh suspension will RESET the cap to (reset_cap_on_new_suspension)
         # -- the grace email predicts it, and can't derive it from `cap`, which is
         # still the paid cap during grace
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
+        # every date the owner could want (maintainer request, 2026-07-25): when the
+        # paid period ended/ends, how long ago, when the grace window closes, and --
+        # for suspended decks -- the day the suspension began. None when not applicable.
+        'grace_days': GRACE_PERIOD_DAYS,
+        'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
+        'grace_days_left': deck.grace_days_remaining,
+        'expired_days_ago': -days if days is not None and days < 0 else None,
+        'suspended_since': max(last_covered_days) + timedelta(days=1) if deck.is_suspended and last_covered_days else None,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe
         # flatpage when Stripe isn't configured
