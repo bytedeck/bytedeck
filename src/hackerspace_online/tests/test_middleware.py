@@ -1,15 +1,17 @@
 from functools import wraps
 
 from django.conf import settings
+from django.db import connections
 from django.urls import reverse, path
 from django.contrib.messages import get_messages
-from django.test import override_settings
+from django.test import override_settings, RequestFactory, SimpleTestCase
 from django.http import HttpResponse
 
 from django_tenants.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
+from hackerspace_online.middleware import ForceDebugCursorMiddleware
 from hackerspace_online.urls import urlpatterns as hackerspace_urlpatterns
 
 
@@ -122,3 +124,23 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
         # should receive an empty response (ok) as if nothing has happened
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"")
+
+
+class ForceDebugCursorMiddlewareTestCase(SimpleTestCase):
+    """Tests for `hackerspace_online.middleware.ForceDebugCursorMiddleware`, which forces the
+    default DB connection's debug cursor on so queries get logged (enabled only when DEBUG)."""
+
+    def test_call__enables_force_debug_cursor_and_returns_response(self):
+        """Calling the middleware turns on the default connection's debug cursor and returns get_response's result."""
+        # restore the flag afterwards so this test can't leak state into others
+        original = connections['default'].force_debug_cursor
+        self.addCleanup(setattr, connections['default'], 'force_debug_cursor', original)
+        connections['default'].force_debug_cursor = False
+
+        expected_response = HttpResponse()
+        middleware = ForceDebugCursorMiddleware(get_response=lambda request: expected_response)
+
+        result = middleware(RequestFactory().get('/'))
+
+        self.assertIs(result, expected_response)
+        self.assertTrue(connections['default'].force_debug_cursor)
