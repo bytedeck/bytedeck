@@ -375,3 +375,62 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
         self.assertIn('grace period', body)
         self.assertIn('max 5 current students', body)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__grace_email_includes_dates_seats_and_logo(self):
+        """The grace-period expiry email states every date the owner needs -- when
+        the subscription expired and how long ago, when the grace period ends and
+        how many days remain -- plus current seat usage and the site logo
+        (maintainer request from staging live testing, 2026-07-25: the old email
+        gave no dates at all)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
+            max_active_users=30, active_user_count=2,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = mail.outbox[0].alternatives[0][0].replace('\n', ' ')
+        self.assertIn('Aug. 10, 2026', html)   # expired on paid_until...
+        self.assertIn('5 days ago', html)      # ...with the relative phrase
+        self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
+        self.assertIn('25 days left', html)    # ...with the countdown
+        self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__comped_deck_limit_email_renders_without_any_dates(self):
+        """A comped/managed-manually deck (both date fields blank, days_until_expiry
+        None) can still hit its student cap; its limit email must render with no
+        expiry dates to lean on -- covering the dateless arms of the new context."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=None, max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('limit', summary)
+        self.assertEqual(len(mail.outbox), 1)
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('limit has been reached', html)
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_states_when_and_why_with_logo(self):
+        """The suspension email says when the suspension began, which clock ran
+        out (trial vs paid + grace), current seat usage, and carries the logo."""
+        from datetime import date
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=date(2026, 8, 1), paid_until=None,  # trial lapsed -> suspended Aug 2
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('suspended', summary)
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
+        self.assertIn('free trial ended on Aug. 1, 2026', html)
+        self.assertIn('alt="[Logo]"', html)
