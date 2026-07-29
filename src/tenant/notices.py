@@ -219,7 +219,8 @@ def _deliver(deck, kind):
         'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
-        'suspended_since': max(last_covered_days) + timedelta(days=1) if deck.is_suspended and last_covered_days else None,
+        # is_suspended requires at least one date field, so the list is never empty here
+        'suspended_since': max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe
         # flatpage when Stripe isn't configured
