@@ -324,7 +324,10 @@ def create_initial_badges():
         ),
     ])
 
-    if not settings.TESTING:
+    # Icons are uploaded from static files only outside the test harness (settings.TESTING is
+    # always True under tests), so this call site never runs during testing -- excluded from
+    # coverage. set_initial_icons itself is covered directly in test_initialization.py.
+    if not settings.TESTING:  # pragma: no cover
         set_initial_icons(award_badges + team_badges)
 
 
@@ -429,7 +432,9 @@ def create_orientation_campaign():
     message_quest.tags.add(intro_tag)
 
     # quests with icons need to have them uploaded programmatically from static files to be displayed properly in development, same as badges.
-    if not settings.TESTING:
+    # settings.TESTING is always True under the test harness, so this call site never runs during
+    # testing -- excluded from coverage. set_initial_icons itself is covered directly in test_initialization.py.
+    if not settings.TESTING:  # pragma: no cover
         set_initial_icons([message_quest, cc_quest, avatar_quest, contract_quest, screenshots_quest])
 
     # now link them to the welcome quest with pre-requisites:

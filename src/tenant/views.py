@@ -179,7 +179,11 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
         # Normalize: valid Postgres schema and subdomain
         name_slug = slugify(form.instance.name)
         schema = name_slug.replace("-", "_")[:63]
-        if not schema or not schema[0].isalpha():
+        # check_tenant_name (the Tenant.name validator, already run by the form) requires the
+        # name to start with a lowercase letter, so the slug -- and thus the schema -- always
+        # does too. This t_ prefix is defensive normalization that can't trigger for validated
+        # input, so it's excluded from coverage.
+        if not schema or not schema[0].isalpha():  # pragma: no cover
             schema = f"t_{schema}"[:63]
         form.instance.schema_name = schema
         current_domain = Site.objects.get_current().domain

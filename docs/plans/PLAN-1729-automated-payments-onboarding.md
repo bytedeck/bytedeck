@@ -1,15 +1,65 @@
 # Implementation Plan — Automated Payments & Onboarding via Stripe (Epic #1729)
 
-Status: **proposal for review** · Branch: `claude/feature-1729-plan-tb1zqe` · Date: 2026-07-21 (facts re-verified against `develop` after the Django 5.2 / Python 3.12 upgrades, #2015/#2017)
+Status: **in rollout** · Branch: `claude/feature-1729-plan-tb1zqe` · Date: 2026-07-21, status updated 2026-07-30 (see §0)
 
-This plan covers the remainder of epic #1729 and its sub-issues:
+This plan covers the remainder of epic #1729 and its sub-issues (statuses as of 2026-07-30):
 
-* #1730 — New user form and response (**mostly merged**; two checkboxes remain: trial-mode enforcement and a Trial Mode banner)
-* #1731 — Subscription via Stripe API (not started)
-* #1733 — In-app messages/notifications when limits are approached (not started)
-* #1734 — Deck suspended if not renewed (not started; contains an open design question)
-* #2043 — Link existing manually-subscribed decks to their Stripe subscriptions (legacy backfill; detailed in §10.3)
-* #2044 — Retire unpaid/unused decks: reminders, then removal or recoverable archival (post-suspension lifecycle; see §10.5)
+* #1730 (new user form and response): **done** (trial-mode enforcement #2077, trial banner #2074)
+* #1731 (subscription via Stripe API): checkout half merged (#2089); webhook half open as #2110
+* #1733 (in-app messages/notifications when limits are approached): merged (#2083), report-only until `DECK_NOTICES_ENABLED` is flipped on
+* #1734 (deck suspended if not renewed): design settled 2026-07-30 (owner-only model, §0.2); landing as steps B1-B5, B1 = #2210
+* #2043 (link existing manually-subscribed decks to their Stripe subscriptions): backfill command ships with #2110; run at rollout (§10.3)
+* #2044 (retire unpaid/unused decks): admin deletion guard merged (#2146); deletion clock rework lands with step B3 (see §10.5)
+
+---
+
+## 0. Rollout status (updated 2026-07-30)
+
+This section is the live ledger for the epic. Everything below it (§1 onward) is the original 2026-07-21 proposal, kept for the design rationale; where the two disagree, this section wins. The biggest change since the proposal: the suspension-semantics question (§6.3, §11 Q1/Q2) was settled on 2026-07-30 with a redesign that replaces both of the original options (§0.2).
+
+### 0.1 Shipped
+
+Phases 1 through 6 of the §8 breakdown are merged into `develop`:
+
+| §8 phase | PR | What landed |
+|---|---|---|
+| 1. Status groundwork | #2047 | Derived status properties, count fixes, `deck_status_report` command |
+| 2. Nightly refresh task | #2070 | `daily-deck-status-check` beat fan-out; removed the `TenantAdmin` N+1 |
+| 3. Status banner | #2074 | Trial/expiring/over-limit/suspended banner variants |
+| 4. Active-user cap | #2077 | Cap enforced at course registration; archive-students help |
+| 5. Reminder engine | #2083 | `DeckNotice` cadence, limit warnings, suspension notice (report-only behind `DECK_NOTICES_ENABLED`) |
+| 6. Stripe checkout | #2089 | `stripe` dep, Checkout/Portal, staff Subscription details page |
+
+Follow-up hardening and copy work (mostly staging ops finds): #2111 (comped decks keep their cap), #2132/#2133, #2134, #2135, #2137, #2138, #2140, #2142 (banner and subscription-page copy), #2146 (admin deletion guard for #2044), #2178 (admin cap authoritative; its once-per-suspension reset is removed again by step B1 below), #2184 (nightly task bails on non-deck schemas), #2186 (notice emails carry full dates, seat usage, the logo), and #2200 (the suspension-lifecycle copy hotfix on `staging`: owner-only sign-in copy, deletion countdown, Maintenance pitch, Bytedeck-signed emails with the non-profit Society footer).
+
+Process conventions that now bind this epic's PRs: conventional-commit type prefixes (#2206) and the no-em-dash rule (#2208).
+
+### 0.2 The suspension redesign (decided 2026-07-30; supersedes §6.3 and §11 Q1/Q2)
+
+Suspended decks do not "revert to trial mode". The decided model:
+
+1. **Owner-only sign-in**: while a deck is suspended, only the deck owner (and the ByteDeck `admin` support account) can use it; everyone else is signed out at request time, and visitors see the suspended notice.
+2. **The open semester auto-closes at suspension** (once per suspension episode, after the grace period): awaiting-approval quest submissions are returned first, negative XP is clamped to zero, and current students drop to zero.
+3. **The Maintenance subscription is the trial-equivalent tier**: 5-student reference cap, and it pauses the deletion timer.
+4. **The deletion clock runs from the suspension date**: a suspended deck becomes deletable 365 days after suspension began (not keyed on last staff login).
+5. **Trials get the same 30-day grace period as paid subscriptions** before suspension: a trial is treated as just another kind of subscription.
+6. **Suspension never touches the admin-set cap** (`max_active_users`): the #2178 cap reset is removed; the trial cap stays a reference number for copy and Stripe price metadata only.
+
+The lifecycle copy for this model already shipped to production via hotfix #2200; the enforcement lands on `develop` as small sequential PRs, each starting when the previous one merges:
+
+| Step | Scope | Status |
+|---|---|---|
+| B1 | Owner-only sign-in middleware (`OwnerOnlyWhenSuspendedMiddleware`); remove the #2178 cap reset | **#2210 open** (fills §8's Phase 8 slot) |
+| B2 | Semester auto-close at suspension: once per episode in `deck_status_check`, return awaiting-approval submissions first, clamp negative XP to 0; fix `get_active_user_count` to count only `active=True` registrations | next (starts when B1 merges) |
+| B3 | Deletion clock from suspension: `suspended_since` / `deletion_date` properties; rework `is_deletable` to key on 365 days suspended | queued |
+| B4 | Unified grace deadline: trials get the same 30-day grace as paid subscriptions (single latest-clock deadline) | queued |
+| B5 | Copy-alignment pass: re-check banners, subscription page, and every notice email against the now-real behavior | queued |
+
+### 0.3 In flight and remaining
+
+* **#2110 (§8 Phase 7: webhook + sync)**: open, checks green, awaiting review. Its `deck_status_check` branch still calls the #2178 cap reset that B1 deletes; the next `develop` sync resolves that by dropping the call and keeping the nightly Stripe reconcile step.
+* **Deploy-time ops after Phase 7 merges** (§10.4): set the `STRIPE_*` keys, register `decks/stripe/webhook/` for the five handled event types, create the Stripe Prices with `metadata.max_active_users` (including the Maintenance tier with a cap of 5), run the #2043 legacy backfill, then flip `DECK_NOTICES_ENABLED` on after a report-only cycle (§10.2).
+* **§8 Phase 9 (optional guards)**: still unscheduled polish; unchanged.
 
 ---
 
@@ -205,14 +255,9 @@ Optional follow-ups (last PR): `max_quests` guard in `QuestCreate`/`QuestCopy` d
 
 Nothing extra to build: a new deck has `paid_until=None`, `trial_end_date=today+60`, `max_active_users=5`, so `effective_max_active_users` is 5 the moment the choke-point PR lands.
 
-### 6.3 Suspension semantics — decision needed from @tylerecouture (#1734's open question)
+### 6.3 Suspension semantics (RESOLVED 2026-07-30: owner-only suspension, see §0.2)
 
-Both options build on the same properties; the choice only affects one gate:
-
-* **Option A — soft (default in this plan's phasing):** suspended deck's cap reverts to 5; no lockout. Over-cap students keep access; no *new* activations until staff archive down or resubscribe; banner + notices apply pressure. Zero new middleware; least destructive.
-* **Option B — deterministic student gate (matches the `paid_until` help text and #1734's "only allow 5 to log in" idea, made race-free):** a `DeckStatusMiddleware` (after `AuthenticationMiddleware`; no-op on public schema; staff always pass) blocks **all** non-staff requests with a "deck suspended" page *only while* `is_suspended` **and** the live active count exceeds `TRIAL_MAX_ACTIVE_USERS`. Archiving down to ≤5 or resubscribing (webhook-driven, cache-invalidated, so near-instant) restores access. No arbitrary "first 5 to log in" race. Ships behind a `SUSPENSION_LOCKOUT_ENABLED` env kill-switch.
-
-Recommendation: ship Option A's mechanics first (they're needed regardless), ask for sign-off on the issue, and add Option B's middleware as its own small PR if chosen. The reminder/banner copy in earlier PRs stays neutral ("your deck has reverted to trial limits") so a later Option B doesn't force rewrites.
+The original question here offered two options: Option A (soft: the cap reverts to the trial default, no lockout) and Option B (a middleware gate that blocks non-staff requests while the deck is over the trial cap). The 2026-07-30 decision supersedes both: a suspended deck is **owner-only** (only the deck owner and the ByteDeck `admin` support account can use it; everyone else is signed out at request time), the open semester auto-closes, and the admin-set cap is never touched. §0.2 has the full model and the B1-B5 implementation steps; B1 (#2210) ships the request-time middleware (request-time rather than login-time because the 8-week session cookie outlives a suspension, and it also covers Google sign-ins). The original options' text is preserved in this file's git history.
 
 ---
 
@@ -254,7 +299,7 @@ Each PR is independently shippable, TenantTestCase-covered, and maps to sub-issu
 | **5. Reminder engine** | `DeckNotice` model; extend the daily task with cadence + limit warnings + suspension notice; email templates; deck-AI in-app notices. Report-only mode for the first cycle (§10.2). | #1733 |
 | **6. Stripe checkout** | `stripe` dep; `STRIPE_*` env plumbing; `stripe_customer_id`/`stripe_subscription_id` migration; **Subscription details page** (`decks:subscription`, admin-menu entry for all staff) with Checkout/Portal actions + polling success page that reconciles against Stripe; ALL subscribe links (banner, refusal page, reminder emails) switch to it. | #1731 (half) |
 | **7. Webhook + sync** | `stripe_webhook` (csrf_exempt, public-only, signature-verified); `StripeEventLog`; `sync_from_stripe_subscription`; admin "Sync from Stripe" action; nightly reconcile step; legacy-subscriber backfill command + report (§10.3). | #1731 |
-| **8. Suspension finish** | Whichever #1734 option is chosen: Option A = copy/notice polish only; Option B = `DeckStatusMiddleware` + suspended page behind a kill-switch. Record the decision on #1734. | #1734 |
+| **8. Suspension finish** | Superseded by the §0.2 redesign: this slot is realized by steps B1-B5 (B1 = #2210, the owner-only middleware, replaces the original Option A/B choice). | #1734 |
 | **9. Optional guards** | `max_quests` gate in `QuestCreate`/`QuestCopy`; `is_open_for_signup` block for at-cap simplified-registration decks; retire the admin change-list jQuery colorizer in favor of status-driven rendering. | polish |
 
 ---
@@ -296,9 +341,9 @@ Suspension (this epic) is where a deck's lifecycle *pauses*; #2044 defines where
 
 ## 11. Open questions for @tylerecouture
 
-1. **#1734 semantics (blocks PR 8, not PRs 1–7):** Option A (soft: trial cap + nag) or Option B (student lockout while over trial cap, staff exempt, race-free)? §6.3 has details; Option B matches the `paid_until` help text most closely and is the plan's recommended end state.
-2. **Grace period:** is 30 days (the existing admin gold-band convention) the intended paid grace before reversion? Applies to trial expiry too, or should trials revert immediately at `trial_end_date`? (Plan assumes: trials get no grace — trial expiry → suspended state next day; paid decks get 30 days.)
-3. **Reminder cadence confirmation (#1733 said "every day until it ends?"):** plan implements 30 d / 14 d / 7 d then daily through expiry + grace. OK?
+1. **#1734 semantics:** ANSWERED 2026-07-30. Neither original option: suspended decks are owner-only, the semester auto-closes, and the admin-set cap is untouched (§0.2). Implemented by steps B1 (#2210) through B5.
+2. **Grace period:** ANSWERED 2026-07-30. 30 days, and it applies to trials too: a trial is treated as a kind of subscription, so every deck falls back on the same 30-day grace before suspension (step B4).
+3. **Reminder cadence confirmation (#1733 said "every day until it ends?"):** shipped as proposed in #2083 (30 d / 14 d / 7 d then daily through expiry + grace); no objection raised.
 4. **Tiers:** confirm 40/80/120 active students with monthly + annual prices, and that tier limits should live as Stripe Price metadata (no repo record of amounts needed).
 5. **Trial length:** the model default is 60 days; #1730 mentions nothing else. Keep 60?
 
