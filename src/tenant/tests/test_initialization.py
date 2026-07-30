@@ -1,12 +1,18 @@
+import shutil
+import tempfile
+from unittest.mock import patch
+
 from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.test import override_settings
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from badges.models import Badge, BadgeRarity, BadgeType
 from courses.models import Block, Course, Grade, MarkRange, Rank
 from quest_manager.models import Category, Quest
 from siteconfig.models import SiteConfig
+from tenant.initialization import load_initial_tenant_data, set_initial_icons
 from tenant.models import Tenant
 from utilities.models import MenuItem
 
@@ -190,3 +196,65 @@ class CreateSiteConfigObjectTest(ByteDeckTenantTestCase):
         expected_title = deck_name.replace("-", " ").title()  # "Timberline Secondary Hackerspace"
         self.assertEqual(config.site_name_short, expected_title[:20])
         self.assertEqual(config.site_name, f"{expected_title} Deck"[:50])
+
+
+class LoadInitialTenantDataTest(ByteDeckTenantTestCase):
+    """Tests for the top-level load_initial_tenant_data entry point."""
+
+    def test_load_initial_tenant_data__public_schema_returns_early(self):
+        """Called from the public schema, load_initial_tenant_data returns immediately.
+
+        The public schema is the shared tenant registry, not a deck, so none of the
+        per-deck seeding should run there. Patch the first seeding step and assert it
+        is never reached.
+        """
+        with schema_context(get_public_schema_name()):
+            with patch("tenant.initialization.create_users") as mock_create_users:
+                load_initial_tenant_data()
+                mock_create_users.assert_not_called()
+
+
+class SetInitialIconsTest(ByteDeckTenantTestCase):
+    """Tests for set_initial_icons, which uploads a model's icon from a matching static file."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT to a temp dir so uploaded icons don't touch the real media store."""
+        super().setUpClass()
+        cls._media_root = tempfile.mkdtemp()
+        cls._media_override = override_settings(MEDIA_ROOT=cls._media_root)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._media_root, ignore_errors=True)
+
+    def test_set_initial_icons__uploads_matching_static_icon(self):
+        """A badge whose name matches a static icon file gets that icon saved to its ImageField.
+
+        "Dime" has a real static icon at badges/static/badges/img/Dime.png, so
+        set_initial_icons should locate it and populate the badge's icon field.
+        """
+        badge = Badge.objects.get(name="Dime")
+        self.assertFalse(badge.icon)  # icons aren't uploaded under the test harness by default
+
+        set_initial_icons([badge])
+
+        badge.refresh_from_db()
+        self.assertTrue(badge.icon)
+        self.assertTrue(badge.icon.name.endswith(".png"))
+
+    def test_set_initial_icons__missing_icon_does_not_raise(self):
+        """When no static icon matches the object's name, set_initial_icons swallows the error.
+
+        finders.find returns None, open() then raises OSError, and the function reports
+        the miss instead of crashing tenant creation.
+        """
+        badge = Badge.objects.create(name="No Such Icon Exists Here", xp=1, badge_type=BadgeType.objects.first())
+        self.assertFalse(badge.icon)
+
+        with patch("builtins.print") as mock_print:
+            set_initial_icons([badge])
+
+        badge.refresh_from_db()
+        self.assertFalse(badge.icon)  # nothing was uploaded
+        mock_print.assert_called_once()
+        self.assertIn("Couldn't open icon", mock_print.call_args[0][0])
