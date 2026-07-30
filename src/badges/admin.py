@@ -177,7 +177,16 @@ class BadgeAdminExportResource(BadgeResource):
     """
 
     def get_export_fields(self, selected_fields=None):
-        """Return the parent export fields minus the bulky summernote HTML column."""
+        """Return the parent export fields minus the bulky summernote HTML column.
+
+        Args:
+            selected_fields: Optional subset of fields to export (passed through to the
+                parent resource); ``None`` means export all of the resource's fields.
+
+        Returns:
+            list[Field]: The parent's export fields with any field whose ``column_name``
+            is in ``BADGE_EXPORT_EXCLUDED_HTML_FIELDS`` removed.
+        """
         fields = super().get_export_fields(selected_fields)
         return [f for f in fields if f.column_name not in BADGE_EXPORT_EXCLUDED_HTML_FIELDS]
 
@@ -198,7 +207,17 @@ class BadgeAdmin(NonPublicSchemaOnlyAdminAccessMixin, ImportExportActionModelAdm
         return [CSV]
 
     def get_export_resource_classes(self, request):
-        """Export uses the slim, HTML-free resource to bound per-request memory (#2081)."""
+        """Export uses the slim, HTML-free resource to bound per-request memory (#2081).
+
+        Import is left on the full ``BadgeResource`` (via ``resource_classes``).
+
+        Args:
+            request: The current admin request (unused; part of the django-import-export
+                ``ExportMixin`` hook signature).
+
+        Returns:
+            list[type[Resource]]: ``[BadgeAdminExportResource]`` -- the export-only resource.
+        """
         return [BadgeAdminExportResource]
 
 

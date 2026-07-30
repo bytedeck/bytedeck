@@ -7,7 +7,6 @@ import tablib
 from model_bakery import baker
 
 from badges.admin import (
-    BADGE_EXPORT_EXCLUDED_HTML_FIELDS,
     BadgeAdmin,
     BadgeAdminExportResource,
     BadgeResource,
@@ -222,8 +221,9 @@ class BadgeAdminExportResourceTest(ByteDeckTenantTestCase):
 
         headers = BadgeAdminExportResource().export([badge]).headers
 
-        for field in BADGE_EXPORT_EXCLUDED_HTML_FIELDS:
-            self.assertNotIn(field, headers)
+        # Assert the bulky column explicitly (not by iterating the constant) so an
+        # incorrect or incomplete BADGE_EXPORT_EXCLUDED_HTML_FIELDS is caught here too.
+        self.assertNotIn('short_description', headers)
         # Identifying/lightweight columns are still exported.
         self.assertIn('name', headers)
 

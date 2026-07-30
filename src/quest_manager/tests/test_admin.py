@@ -9,7 +9,6 @@ from badges.models import Badge
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from prerequisites.models import Prereq
 from quest_manager.admin import (
-    QUEST_EXPORT_EXCLUDED_HTML_FIELDS,
     QuestAdmin,
     QuestAdminExportResource,
     QuestResource,
@@ -138,19 +137,23 @@ class QuestAdminExportResourceTest(ByteDeckTenantTestCase):
 
         headers = QuestAdminExportResource().export([quest]).headers
 
-        for field in QUEST_EXPORT_EXCLUDED_HTML_FIELDS:
-            self.assertNotIn(field, headers)
+        # Assert each bulky column explicitly (not by iterating the constant) so an
+        # incorrect or incomplete QUEST_EXPORT_EXCLUDED_HTML_FIELDS is caught here too.
+        self.assertNotIn('instructions', headers)
+        self.assertNotIn('submission_details', headers)
+        self.assertNotIn('instructor_notes', headers)
         # Identifying/lightweight columns are still exported.
         self.assertIn('name', headers)
 
-    def test_full_resource__still_exports_instructions(self):
-        """The full QuestResource (import + Shared Library) still carries the HTML fields."""
+    def test_full_resource__still_exports_html_columns(self):
+        """The full QuestResource (import + Shared Library) still carries every bulky HTML field."""
         quest = baker.make(Quest, instructions='<p>keep me</p>')
 
         dataset = QuestResource().export([quest])
 
         self.assertIn('instructions', dataset.headers)
         self.assertIn('submission_details', dataset.headers)
+        self.assertIn('instructor_notes', dataset.headers)
 
     def test_quest_admin__export_uses_slim_resource_import_uses_full(self):
         """QuestAdmin exports with the slim resource but imports with the full one."""
