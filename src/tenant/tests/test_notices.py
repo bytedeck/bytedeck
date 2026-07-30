@@ -456,3 +456,39 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
         self.assertIn('<p>Bytedeck</p>', html)
         self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_paid_clock_and_overdue_countdown(self):
+        """A deck suspended after a PAID subscription lapsed explains the paid
+        clock (paid-through and grace-end dates) in its suspension email, with the
+        bottom line carried by the plain-text part too; a deck already suspended
+        past the deletion horizon still shows its (past) scheduled deletion date
+        but drops the "days from now" countdown."""
+        # paid clock: paid through Jul 6, grace ends Aug 5 -> suspended Aug 6, 2026
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=40),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('subscription was paid through July 6, 2026', html)
+        self.assertIn('grace period ended on Aug. 5, 2026', html)
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', html)
+        self.assertIn('356 days from now', html)
+        body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', body)
+
+        # overdue: suspended Aug 11, 2025 -> deletion day Aug 11, 2026 already passed,
+        # so the date still shows but no "days from now" countdown is promised
+        mail.outbox.clear()
+        Tenant.objects.filter(pk=self.tenant.pk).update(paid_until=TODAY - timedelta(days=400))
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('scheduled for deletion on Aug. 11, 2026', html)
+        self.assertNotIn('days from now', html)
