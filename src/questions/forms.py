@@ -149,14 +149,15 @@ class QuestionSubmissionForm(forms.ModelForm):
         if self.question.type == QuestionType.SHORT_ANSWER:
             del self.fields["response_file"]
             # replace the model's TextField default with a CharField so the 200-character
-            # limit is enforced server-side, not just by the widget's maxlength attribute
+            # limit is enforced server-side, not just by the widget's maxlength attribute.
+            # A short answer is a single line, so use a text input (not a textarea).
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); aria-label keeps it accessible
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,
                 max_length=200,
-                widget=forms.Textarea(attrs={'maxlength': '200', 'rows': '2', 'aria-label': 'Response'}),
+                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': 'Response'}),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
@@ -197,13 +198,10 @@ class QuestionSubmissionForm(forms.ModelForm):
 
         form_fields.css_class = 'form-group'
 
-        # The question's instructions (teacher-authored summernote HTML) shown above the response field
-        instructions_label = HTML(
-            "<p><strong>Instructions</strong>: {{ form.question.instructions|safe|default:'-'}}</p>"
-        )
-
+        # The question's instructions (teacher-authored summernote HTML) are rendered by the
+        # including template (submission.html) on the same line as the "Question N" heading, so
+        # the layout here is just the answer field.
         self.helper.layout = Layout(
-            instructions_label,
             form_fields,
         )
 

@@ -1,6 +1,7 @@
 {% extends "quest_manager/base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
+{% load question_tags %}
 
 {% block head %}
     {{ submission_form.media }}
@@ -89,11 +90,21 @@
           {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
           {% for form in question_formset %}
             <div class="well well-sm question-submission-form">
-              <p><strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}</strong></p>
+              {# question number and the teacher's instructions on one line to save space; unwrap_p strips #}
+              {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label #}
+              <p>
+                <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
+                {{ form.question.instructions|unwrap_p }}
+              </p>
               {% crispy form %}
             </div>
           {% endfor %}
           <hr>
+        {% endif %}
+        {% if question_formset %}
+          {# with per-question answer fields above, the general comment box needs its own heading #}
+          {# so students know it's for anything beyond their answers #}
+          <p><strong>Additional Submission Comments</strong></p>
         {% endif %}
         <div id="main-comment-form">
           {{ submission_form | crispy }}

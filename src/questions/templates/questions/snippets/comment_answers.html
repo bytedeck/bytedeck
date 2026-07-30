@@ -1,9 +1,17 @@
-{% load comment_tags %}
+{% load comment_tags question_tags %}
 {# A published comment's question answers. Expects `answers` (QuestionSubmission qs). #}
 {# Staff additionally see each question's solution and marker notes for easy comparison. #}
 <hr class="tighter">
 <p><strong>Question Answers:</strong></p>
 <table class="table table-condensed">
+  <thead>
+    <tr>
+      {# same col-sm-* widths as the body cells below so the headers line up with their columns #}
+      <th class="col-sm-5">Question</th>
+      {# staff are marking, so the right column is the student's answer to compare against; the student sees their own answer #}
+      <th class="col-sm-7">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</th>
+    </tr>
+  </thead>
   <tbody>
   {% for answer in answers %}
     <tr>
@@ -19,7 +27,8 @@
                 <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
             {% endif %}
             {% if answer.question.marker_notes %}
-              <p class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|safe }}</small></p>
+              {# unwrap_p strips summernote's wrapping <p> so a one-line note sits beside its label, like Solution above #}
+              <p class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></p>
             {% endif %}
           {% endif %}
         {% else %}
