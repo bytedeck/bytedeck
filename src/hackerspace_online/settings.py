@@ -273,11 +273,13 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'allauth.account.middleware.AccountMiddleware',  # required by django-allauth >= 0.56
-    'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',  # suspension policy: owner-only sign-in (#1734); needs auth + messages above
-
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Suspension policy: owner-only sign-in (#1734). Needs auth + messages above, and
+    # sits BELOW the clickjacking/security layers so its short-circuit redirects still
+    # pass back through them and pick up their response headers (review find on #2210).
+    'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
 ]
 

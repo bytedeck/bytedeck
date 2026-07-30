@@ -95,3 +95,22 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         suspends, so nobody is bounced."""
         self.set_deck(trial_end_date=None, paid_until=None)
         self.assertEqual(self.get_quests_page(self.staff).status_code, 200)
+
+    def test_bounce__non_deck_schemas_pass_through(self):
+        """On the public and shared-library schemas get_current_deck() returns
+        None (they are not billable decks), so authenticated requests pass
+        through to the view untouched, never redirected to login."""
+        from unittest.mock import patch
+
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+
+        from tenant.middleware import OwnerOnlyWhenSuspendedMiddleware
+
+        middleware = OwnerOnlyWhenSuspendedMiddleware(lambda request: HttpResponse('view ran'))
+        request = RequestFactory().get('/')
+        request.user = self.staff  # authenticated, and not any deck's owner
+        with patch('tenant.middleware.get_current_deck', return_value=None):
+            response = middleware(request)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b'view ran')
