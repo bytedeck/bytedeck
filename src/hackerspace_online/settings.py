@@ -273,6 +273,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'allauth.account.middleware.AccountMiddleware',  # required by django-allauth >= 0.56
+    'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',  # suspension policy: owner-only sign-in (#1734); needs auth + messages above
+
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',

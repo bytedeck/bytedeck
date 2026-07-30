@@ -696,21 +696,27 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.student)
         self.assertNotContains(response, 'deck-status-banner')
 
-    def test_banner__suspended_deck_warns_everyone(self):
-        """On a suspended deck, staff get the subscribe call-to-action and students
-        get the 'let your teacher know' variant."""
+    def test_banner__suspended_deck_warns_owner_and_visitors(self):
+        """On a suspended deck the banner reaches the two audiences who can still
+        load pages: the deck owner (the staff variant with the subscribe link) and
+        anonymous visitors on the sign-in page (the everyone-else variant).
+        Signed-in non-owners never see it, because the suspension middleware
+        signs them out first (#1734 redesign)."""
         from datetime import date
+
+        from siteconfig.models import SiteConfig
 
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
 
-        response = self.get_quests_page(self.student)
-        self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, 'let your teacher know')
-
-        response = self.get_quests_page(self.staff)
+        response = self.get_quests_page(SiteConfig.get().deck_owner)
         self.assertContains(response, 'This deck is suspended')
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
+
+        self.client.logout()
+        response = self.client.get(reverse('account_login'))
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'let your teacher know')
 
     def test_banner__over_limit_warns_staff_from_live_count(self):
         """Staff see the over-limit warning from the LIVE current-student count --
@@ -931,13 +937,16 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_page__suspended_deck_shows_its_admin_cap(self):
         """A suspended deck shows its ADMIN-SET cap -- in the status copy and the
-        seats table -- whatever it is: the field is authoritative (the trial
-        default is written into it once per suspension by the nightly task, and
-        admin adjustments stick). Production find, 2026-07-24: a cap lowered to 1
-        still showed and enforced 'max 5' everywhere."""
+        seats table -- whatever it is: the field is authoritative (admin
+        adjustments always stick; production find, 2026-07-24: a cap lowered to
+        1 still showed and enforced 'max 5' everywhere). Viewed as the deck
+        owner: the suspension middleware signs everyone else out (#1734)."""
         from datetime import date
 
+        from siteconfig.models import SiteConfig
+
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        self.client.force_login(SiteConfig.get().deck_owner)
         response = self.get_page()
         self.assertContains(response, 'max 1 current student')
         self.assertNotContains(response, 'max 5 current students')
