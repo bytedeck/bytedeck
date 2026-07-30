@@ -291,7 +291,7 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         """After submitting, the student sees their answers under the submission comment."""
         self.complete_with_answers()
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertContains(response, "Question Answers:")
+        self.assertContains(response, "Your answer")  # the answers table's student-facing column header
         self.assertContains(response, "My answer")
 
     def test_display__staff_see_answers_with_marker_notes(self):
