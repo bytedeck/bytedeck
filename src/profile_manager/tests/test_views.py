@@ -471,10 +471,12 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
 
-        qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
-        self.assertEqual(qs.count(), 2)  # these are the test students
-        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
-        self.assertFalse(filtered_qs.exists())
+        # object_list is a paginated page, so assert the total via the paginator
+        # and check the page's profiles directly (usernames 1 and 2 excluded).
+        self.assertEqual(response.context['paginator'].count, 2)  # these are the test students
+        for profile in response.context['object_list']:
+            self.assertTrue(profile.user.is_active)
+            self.assertFalse(profile.user.is_staff)
 
     def test_profile_list_current__view_type(self):
         """
@@ -511,8 +513,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_staff"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
 
-        qs = response.context['object_list']
-        self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+        self.assertEqual(response.context['paginator'].count, 3)  # self.test_teacher, deck_owner, admin
 
     def test_profile_list_block__get_queryset(self):
         """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
@@ -527,8 +528,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # get object queryset from profile list of the new block and assert empty
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 0)
+        self.assertEqual(response.context['paginator'].count, 0)
 
         # populate block with active coursestudent objects
         baker.make(CourseStudent, user=baker.make(User), block=testblock, semester=self.active_sem)
@@ -536,10 +536,126 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # get response and assert two active students in queryset + queryset is correct
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 2)
+        self.assertEqual(response.context['paginator'].count, 2)
         # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
+        expected = Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock)
+        self.assertEqual(
+            {profile.pk for profile in response.context['object_list']},
+            set(expected.values_list('pk', flat=True)),
+        )
+
+    def test_profile_list__is_paginated(self):
+        """ProfileList paginates server-side: only paginate_by profiles load per request, so a
+        deck with more students than paginate_by spills onto additional pages."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # setUpTestData already made 2 students; add enough to need a second page.
+        baker.make(User, _quantity=per_page)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertTrue(response.context['is_paginated'])
+        self.assertEqual(response.context['paginator'].count, per_page + 2)
+        self.assertEqual(response.context['paginator'].num_pages, 2)
+        # a single page only renders paginate_by profiles, not the whole deck
+        self.assertEqual(len(response.context['object_list']), per_page)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'page': 2})
+        self.assertEqual(len(response.context['object_list']), 2)
+
+    def test_profile_list__search_filters_across_all_students(self):
+        """The ?q= search runs server-side against every student (case-insensitive, partial),
+        not just the current page, and reports the term back to the template."""
+        User = get_user_model()
+        # distinctive student that shouldn't collide with the seeded ones
+        target = User.objects.create_user('zzz_target', first_name='Zebediah')
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'zebed'})
+        self.assertEqual(response.context['search_query'], 'zebed')
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, target.profile.pk)
+
+        # searching a username works too, and a non-match returns nothing
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'zzz_target'})
+        self.assertEqual(response.context['paginator'].count, 1)
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'no-such-student'})
+        self.assertEqual(response.context['paginator'].count, 0)
+
+    def test_profile_list__sort_orders_across_all_students(self):
+        """The ?sort=/?order= params reorder the whole queryset server-side; an unknown sort or
+        order falls back to the defaults."""
+        p1 = self.test_student1.profile
+        p1.xp_cached = 5
+        p1.save()
+        p2 = self.test_student2.profile
+        p2.xp_cached = 99
+        p2.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'desc'})
+        self.assertEqual(response.context['current_sort'], 'xp')
+        self.assertEqual(response.context['current_order'], 'desc')
+        xps = [profile.xp_cached for profile in response.context['object_list']]
+        self.assertEqual(xps, sorted(xps, reverse=True))
+        self.assertEqual(list(response.context['object_list'])[0].pk, p2.pk)
+
+        # an invalid sort/order silently falls back to the defaults
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'not-a-field', 'order': 'sideways'})
+        self.assertEqual(response.context['current_sort'], 'first')
+        self.assertEqual(response.context['current_order'], 'asc')
+
+    def test_profile_list__sort_puts_null_values_last(self):
+        """Sorting a nullable column (e.g. Mark) keeps students who have a value at the top in
+        both directions; unset (NULL) students sort last rather than dominating a descending sort."""
+        User = get_user_model()
+        high = User.objects.create_user('aaa_high').profile  # username sorts first, so only the sort matters
+        high.mark_cached = 80
+        high.save()
+        low = User.objects.create_user('aaa_low').profile
+        low.mark_cached = 20
+        low.save()
+        # test_student1 / test_student2 keep mark_cached = None
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'desc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [80, 20, None, None])
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'asc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [20, 80, None, None])
+
+    def test_profile_list__sort_by_preferred_name_falls_back_to_first_name(self):
+        """Sorting by the Preferred Name column orders by preferred_name, falling back to
+        first_name when it's blank -- matching what get_preferred_name() displays."""
+        s1 = self.test_student1
+        s1.first_name = 'Bob'
+        s1.save()
+        s1.profile.preferred_name = ''  # blank -> falls back to 'Bob'
+        s1.profile.save()
+        s2 = self.test_student2
+        s2.first_name = 'Alice'
+        s2.save()
+        s2.profile.preferred_name = 'Zara'  # shown instead of 'Alice'
+        s2.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'preferred', 'order': 'asc'})
+        names = [profile.get_preferred_name() for profile in response.context['object_list']]
+        self.assertEqual(names, ['Bob', 'Zara'])
+
+    def test_profile_list__pagination_querystring_preserves_search_and_sort(self):
+        """The querystring used to build pagination links keeps the active search/sort but drops page."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'foo', 'sort': 'xp', 'order': 'desc', 'page': 1})
+        querystring = response.context['querystring']
+        self.assertIn('q=foo', querystring)
+        self.assertIn('sort=xp', querystring)
+        self.assertIn('order=desc', querystring)
+        self.assertNotIn('page=', querystring)
 
     def test_profile_update__email_confirmation_flow(self):
         """
