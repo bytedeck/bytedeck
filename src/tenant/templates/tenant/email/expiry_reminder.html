@@ -1,4 +1,3 @@
-{% load utility_tags %}
 <p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
 
 {% if days >= 0 %}
@@ -6,15 +5,17 @@
   {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
   on <strong>{% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}</strong>
   &mdash; <strong>{{ days }} day{{ days|pluralize }}</strong> from now.
-  {% if not deck.is_on_trial %}After that, a {{ grace_days }}-day grace period keeps full access until
-  <strong>{{ grace_end_date }}</strong>; the deck then reverts to trial limits
-  (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).{% endif %}</p>
+  {% if deck.is_on_trial %}When the trial ends, the deck is suspended: only the deck owner can sign in,
+  and the 365-day countdown to deck deletion begins.{% else %}After that, a {{ grace_days }}-day grace
+  period keeps full access until <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
+  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.{% endif %}</p>
 {% else %}
 <p>Your deck <strong>{{ deck.name }}</strong>'s subscription expired on
   <strong>{{ deck.paid_until }}</strong> ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
   and is in its {{ grace_days }}-day grace period, which ends on <strong>{{ grace_end_date }}</strong>
   ({{ grace_days_left }} day{{ grace_days_left|pluralize }} left). When the grace period ends, the deck
-  will revert to trial limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}).</p>
+  will be suspended: only the deck owner will be able to sign in, and the 365-day countdown to deck
+  deletion begins.</p>
 {% endif %}
 
 <p>You are currently using <strong>{{ count }}</strong> of
@@ -26,5 +27,8 @@
   this semester &mdash; count toward your limit; see
   <a href="{{ archive_help_url }}">freeing up student seats</a>.</p>
 
-<p>{% firstof config.outgoing_email_signature config.site_name %}</p>
-<p><img alt="[Logo]" src="{% site_logo_url %}"></p>
+<p>Not planning to use the deck for a while? The low-cost <em>Maintenance</em> subscription keeps it
+  online with trial-level limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}) and
+  stops it from ever being deleted.</p>
+
+{% include "tenant/email/_email_footer.html" %}

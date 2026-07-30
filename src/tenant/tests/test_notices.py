@@ -359,10 +359,11 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
-    def test_process__grace_period_email_states_the_trial_cap(self):
-        """The grace-period expiry email tells the owner what the deck will revert to:
-        the TRIAL cap (5), not the deck's current (still-paid) cap -- during grace the
-        effective cap is the paid one, so the template can't derive this from `cap`."""
+    def test_process__grace_period_email_states_suspension_ahead(self):
+        """The grace-period expiry email tells the owner what follows the grace
+        window: suspension, with only the deck owner able to sign in and the
+        365-day deletion countdown starting (suspension redesign, 2026-07-30) --
+        checked on the plain-text part, which must carry the same message."""
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
             max_active_users=30, active_user_count=0,  # paid cap 30; no limit notice due
@@ -374,7 +375,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
         self.assertIn('grace period', body)
-        self.assertIn('max 5 current students', body)
+        self.assertIn('the deck will be suspended', body)
+        self.assertIn('only the deck owner will be able to sign in', body)
+        self.assertIn('365-day countdown to deck deletion', body)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__grace_email_includes_dates_seats_and_logo(self):
@@ -397,6 +400,8 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
         self.assertIn('25 days left', html)    # ...with the countdown
         self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
@@ -413,6 +418,8 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         html = mail.outbox[0].alternatives[0][0]
         self.assertIn('limit has been reached', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
@@ -433,4 +440,14 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
         self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
         self.assertIn('free trial ended on Aug. 1, 2026', html)
+        # the new suspension rules (redesign, 2026-07-30): owner-only sign-in, the
+        # deletion countdown, data intact, and the Maintenance escape hatch
+        self.assertIn('only the deck owner can sign in', html)
+        self.assertIn('suspended for 365 days', html)
+        self.assertIn('your content and student data are intact', html)
+        self.assertIn('<em>Maintenance</em> subscription', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
+        # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
+        self.assertIn('<p>Bytedeck</p>', html)
         self.assertIn('alt="[Logo]"', html)
