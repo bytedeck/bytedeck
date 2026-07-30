@@ -91,11 +91,13 @@
           {% for form in question_formset %}
             <div class="well well-sm question-submission-form">
               {# question number and the teacher's instructions on one line to save space; unwrap_p strips #}
-              {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label #}
-              <p>
+              {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label. #}
+              {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
+              {# would be invalid nested inside a <p> (the browser auto-closes the outer <p> early). #}
+              <div>
                 <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
                 {{ form.question.instructions|unwrap_p }}
-              </p>
+              </div>
               {% crispy form %}
             </div>
           {% endfor %}

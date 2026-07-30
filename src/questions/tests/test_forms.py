@@ -119,6 +119,30 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(instance=answer)
         self.assertFalse(form.fields["response_text"].required)
 
+    def test_short_answer__distinct_aria_labels_in_formset(self):
+        """Each short-answer input in a formset gets a position-based aria-label matching its
+        visible 'Question N:' heading, so screen-reader users can tell multiple short-answer
+        inputs apart (they'd otherwise all announce the identical 'Response')."""
+        # a second short-answer question so the formset renders two short-answer inputs
+        second_short = baker.make(
+            Question, quest=self.quest, ordinal=6, type="short_answer", required=True,
+        )
+        baker.make(QuestionSubmission, quest_submission=self.submission, question=second_short)
+
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission, question__type="short_answer",
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+
+        labels = [form.fields["response_text"].widget.attrs["aria-label"] for form in formset.forms]
+        self.assertEqual(labels, ["Response to question 1", "Response to question 2"])
+
+    def test_short_answer__aria_label_fallback_without_formset(self):
+        """A standalone short-answer form (no numeric formset prefix) falls back to a generic
+        'Response' aria-label rather than erroring on the missing position."""
+        form = QuestionSubmissionForm(instance=self.short_answer)
+        self.assertEqual(form.fields["response_text"].widget.attrs["aria-label"], "Response")
+
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and
         accepts a filled one."""

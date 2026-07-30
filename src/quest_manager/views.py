@@ -2051,6 +2051,10 @@ def ajax_save_draft(request):
                 answers = json.loads(answers_json)
             except ValueError:
                 answers = {}
+            # the payload is client-controlled: a valid-JSON scalar/list (e.g. "5" or [])
+            # would blow up on .items() below, so coerce anything but an object to empty.
+            if not isinstance(answers, dict):
+                answers = {}
 
             rows = {}  # formset index -> {'id': ..., 'response_text': ...}
             for key, value in answers.items():
@@ -2059,9 +2063,14 @@ def ajax_save_draft(request):
                     rows.setdefault(match.group(1), {})[match.group(2)] = value
 
             for row_data in rows.values():
-                row_id = row_data.get("id")
                 text = row_data.get("response_text")
-                if not row_id or text is None:
+                if text is None:
+                    continue
+                # the id is also client-supplied; a non-integer would make the pk lookup
+                # below raise ValueError (a 500), so skip rows without a usable integer id.
+                try:
+                    row_id = int(row_data["id"])
+                except (KeyError, TypeError, ValueError):
                     continue
                 # only this submission's own unpublished rows can be draft-saved.
                 # Sanitize on write: this raw draft is published verbatim on completion

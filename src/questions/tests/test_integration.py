@@ -248,6 +248,26 @@ class AnswerAutosaveTest(QuestionSubmissionFlowTestBase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_autosave__non_dict_answers_payload_ignored(self):
+        """A valid-JSON but non-object answers payload (e.g. a list) is ignored, not a 500."""
+        # json.loads("[1, 2, 3]") is a list, so answers.items() would blow up (500) without the
+        # dict guard; status 200 is the regression assertion.
+        response = self.autosave([1, 2, 3])
+        self.assertEqual(response.status_code, 200)
+
+    def test_autosave__non_integer_id_ignored(self):
+        """A row whose client-supplied id isn't an integer is skipped, not a 500."""
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        # filter(pk="abc") would raise ValueError (500) without the int() guard; the row is
+        # left untouched and the request succeeds.
+        response = self.autosave({
+            "question_submissions-0-id": "abc",
+            "question_submissions-0-response_text": "draft answer",
+        })
+        self.assertEqual(response.status_code, 200)
+        row.refresh_from_db()
+        self.assertEqual(row.response_text, "")
+
     def test_autosave__irrelevant_and_incomplete_answer_keys_ignored(self):
         """Answer keys that don't match the formset naming, and rows sent without an id or
         without their text, are skipped without saving anything."""
@@ -306,6 +326,18 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "My answer")
         self.assertContains(response, "An URL like https://example.com")
         self.assertContains(response, "Check it loads.")
+
+    def test_display__multiparagraph_marker_notes_render_in_div(self):
+        """Multi-paragraph marker notes keep their <p> tags (unwrap_p only strips a single
+        wrapping one), so the label wrapper is a <div>, not a <p>: a <p> nested in a <p> is
+        invalid and the browser would auto-close the outer one, breaking the label layout."""
+        self.short_question.marker_notes = "<p>First note.</p><p>Second note.</p>"
+        self.short_question.save()
+        self.complete_with_answers()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+        self.assertContains(response, '<div class="text-muted"><small><b>Marker notes:</b>')
 
     def test_display__student_does_not_see_marker_notes(self):
         """Solutions and marker notes stay staff-only in the answers display."""

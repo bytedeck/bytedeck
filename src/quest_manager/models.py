@@ -1233,6 +1233,14 @@ class QuestSubmission(models.Model):
         return self.time_completed is not None and not self.is_completed
 
     def get_comments(self):
+        """Return this submission's comments, each with its published question answers prefetched.
+
+        The answers (and their questions) are prefetched so the comments template can render
+        every comment's answer table without running a query per comment.
+
+        Returns:
+            QuerySet[Comment]: the comments targeting this submission.
+        """
         # local import: questions.models FKs onto this app's models (by string reference),
         # so importing it at module level here would be circular
         from questions.models import QuestionSubmission

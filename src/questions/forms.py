@@ -152,12 +152,13 @@ class QuestionSubmissionForm(forms.ModelForm):
             # limit is enforced server-side, not just by the widget's maxlength attribute.
             # A short answer is a single line, so use a text input (not a textarea).
             # no visible label (the question's instructions directly above serve as the label,
-            # matching the long answer field); aria-label keeps it accessible
+            # matching the long answer field); a distinct aria-label per question keeps each
+            # input tellable apart for screen-reader users when a page has several short answers.
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,
                 max_length=200,
-                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': 'Response'}),
+                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': self._response_aria_label()}),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
@@ -204,6 +205,24 @@ class QuestionSubmissionForm(forms.ModelForm):
         self.helper.layout = Layout(
             form_fields,
         )
+
+    def _response_aria_label(self):
+        """Return a per-question aria-label for the short-answer input.
+
+        Several short-answer inputs on one page would otherwise all announce the identical
+        "Response", so screen-reader users couldn't tell them apart. The form's formset prefix
+        is "question_submissions-<i>" (0-based); i + 1 matches the visible "Question N:" heading
+        rendered just above the input in submission.html. Falls back to "Response" if the form
+        isn't in a formset (no numeric prefix, e.g. the formset's empty_form placeholder).
+
+        Returns:
+            str: the aria-label for this input, e.g. "Response to question 2".
+        """
+        try:
+            position = int(self.prefix.rsplit("-", 1)[-1]) + 1
+        except (AttributeError, ValueError):
+            return "Response"
+        return f"Response to question {position}"
 
     def clean_response_text(self):
         """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).

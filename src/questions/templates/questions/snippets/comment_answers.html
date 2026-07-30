@@ -26,8 +26,9 @@
                 <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
             {% endif %}
             {% if answer.question.marker_notes %}
-              {# unwrap_p strips summernote's wrapping <p> so a one-line note sits beside its label, like Solution above #}
-              <p class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></p>
+              {# unwrap_p strips summernote's wrapping <p> so a one-line note sits beside its label, like Solution above. #}
+              {# A <div> (not <p>) wraps it because multi-paragraph notes keep their <p> tags, invalid nested in a <p>. #}
+              <div class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></div>
             {% endif %}
           {% endif %}
         {% else %}
