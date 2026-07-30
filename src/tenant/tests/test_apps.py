@@ -60,6 +60,20 @@ class ShortcutMonkeyPatchTest(ByteDeckTenantTestCase):
         with self.assertRaises(Http404):
             _shortcut(self.request, self.badge_ct.pk, missing_obj_pk)
 
+    def test_shortcut__malformed_object_id_raises_404(self):
+        """A non-numeric object id (against an integer pk) raises Http404.
+
+        The lookup casts the id to the model's pk type, raising ValueError for a
+        malformed value; _shortcut catches it alongside ObjectDoesNotExist.
+        """
+        with self.assertRaises(Http404):
+            _shortcut(self.request, self.badge_ct.pk, "not-a-number")
+
+    def test_shortcut__malformed_content_type_id_raises_404(self):
+        """A non-numeric content-type id raises Http404 via the same ValueError path."""
+        with self.assertRaises(Http404):
+            _shortcut(self.request, "not-a-number", self.badge.pk)
+
     def test_shortcut__object_without_get_absolute_url_raises_404(self):
         """An object whose model has no get_absolute_url raises Http404.
 
