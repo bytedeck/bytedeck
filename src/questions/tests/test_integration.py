@@ -308,11 +308,18 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.submission.refresh_from_db()
 
     def test_display__student_sees_published_answers(self):
-        """After submitting, the student sees their answers under the submission comment."""
+        """After submitting, the student sees their answers under the submission comment, each
+        numbered ("1.", "2.") ahead of its prompt in question (ordinal) order."""
         self.complete_with_answers()
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertContains(response, "Your answer")  # the answers table's student-facing column header
         self.assertContains(response, "My answer")
+        # each answer is numbered inline, in question order: "1. What is your website URL?" then
+        # "2. Describe your process." (short_question is ordinal 1, long_question ordinal 2)
+        content = response.content.decode()
+        self.assertLess(content.index("<strong>1.</strong>"), content.index("What is your website URL?"))
+        self.assertLess(content.index("What is your website URL?"), content.index("<strong>2.</strong>"))
+        self.assertLess(content.index("<strong>2.</strong>"), content.index("Describe your process."))
 
     def test_display__staff_see_answers_with_marker_notes(self):
         """Markers see the answers plus the question's solution and marker notes."""

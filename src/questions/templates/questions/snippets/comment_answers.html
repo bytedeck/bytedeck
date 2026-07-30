@@ -15,8 +15,11 @@
   {% for answer in answers %}
     <tr>
       <td class="col-sm-5">
+        {# number each answer inline, matching the "Question N" heading on the submission form; #}
+        {# unwrap_p strips summernote's wrapping <p> so the number sits right before a one-line prompt. #}
+        <strong>{{ forloop.counter }}.</strong>
         {% if answer.question %}
-          {{ answer.question.instructions|safe }}
+          {{ answer.question.instructions|unwrap_p }}
           {% if request.user.is_staff %}
             {% if answer.question.solution_text %}
               <p class="text-muted"><small><b>Solution:</b> {{ answer.question.solution_text|linebreaksbr }}</small></p>
