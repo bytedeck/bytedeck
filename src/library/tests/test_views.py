@@ -252,6 +252,21 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
+    def test_import_quest__post_when_quest_exists_locally_is_denied(self):
+        """POSTing to import a quest whose import_id already exists on the local deck is blocked (403), not duplicated."""
+        self.client.force_login(self.test_teacher)
+
+        local_quest = baker.make(Quest)
+        with library_schema_context():
+            library_quest = baker.make(Quest, import_id=local_quest.import_id)
+
+        url = reverse('library:import_quest', args=[library_quest.import_id])
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 403)
+        # the local quest was not duplicated by the blocked import
+        self.assertEqual(Quest.objects.all_including_archived().filter(import_id=local_quest.import_id).count(), 1)
+
     def test_quest_library_list__shows_correct_badge_count(self):
         """
         Ensure the quests tab displays the correct badge count for active quests.
@@ -541,6 +556,35 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
+
+    def test_import_campaign__post_when_campaign_exists_locally_is_denied(self):
+        """POSTing to import a campaign whose import_id already exists on the local deck is blocked (403), not duplicated."""
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            library_category = baker.make(Category)
+        # a local campaign already shares the import_id
+        baker.make(Category, import_id=library_category.import_id)
+
+        import_url = reverse('library:import_category', args=[library_category.import_id])
+        response = self.client.post(import_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Category.objects.filter(import_id=library_category.import_id).count(), 1)
+
+    def test_category_detail__with_no_displayed_quests_has_empty_quest_info(self):
+        """The campaign detail view returns an empty quest_info list for a library campaign with no displayable quests."""
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            empty_category = baker.make(Category)  # a campaign with no quests
+
+        url = reverse('library:category_detail_view', args=[empty_category.import_id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['quest_info'], [])
+        self.assertEqual(list(response.context['category_displayed_quests']), [])
 
     def test_import_campaign___success(self):
         """Importing a library campaign copies it and its quests as unpublished onto the deck."""
