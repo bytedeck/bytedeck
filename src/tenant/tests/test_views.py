@@ -587,6 +587,20 @@ class EmailVerificationRequiredMixinTest(TestCase):
         response = self.view(request)
         self.assertEqual(response.status_code, 403)
 
+    @patch("tenant.views.render")  # patch render to avoid template DB queries
+    def test_dispatch__verified_request_without_timestamp_is_cleared_and_denied(self, mock_render):
+        """A verified_deck_request carrying no verified_at is treated as malformed: it's dropped from the session and access is denied (403)."""
+        mock_render.side_effect = lambda request, template_name, context=None, status=None: HttpResponse(status=status or 200)
+
+        request = self.factory.get("/dummy/")
+        request.user = self.user
+        request.session = {"verified_deck_request": {"email": "john.doe@example.com"}}  # no verified_at
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("verified_deck_request", request.session)
+
 
 class DeckStatusBannerTest(ByteDeckTenantTestCase):
     """Rendering tests for the deck status banner in base.html (epic #1729 PR 3;
