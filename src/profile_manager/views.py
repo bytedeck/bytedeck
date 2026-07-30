@@ -78,6 +78,14 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     DEFAULT_SORT = 'first'
     DEFAULT_ORDER = 'asc'
 
+    # Sort keys a non-staff viewer may use. ProfileListCurrent is open to any
+    # authenticated user, so this is limited to the always-visible name columns:
+    # XP/Mark are per-student privacy-gated (an eye-slash for students who opt
+    # out) and Last Quest/Last Login/Username are only rendered to staff, so
+    # letting a student sort by them would leak the ordering of values they
+    # can't actually see. See get_allowed_sort_fields().
+    NON_STAFF_SORT_FIELDS = ('first', 'preferred', 'last', 'alias', 'custom_profile_field')
+
     # Fields the ?q= search box matches against (the visible text columns).
     SEARCH_FIELDS = [
         'user__first_name', 'preferred_name', 'user__last_name',
@@ -113,12 +121,30 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         return Profile.objects.all_students().get_active()
 
     def get_search_query(self):
+        """Return the trimmed ?q= search term (empty string if none)."""
         return self.request.GET.get('q', '').strip()
 
+    def get_allowed_sort_fields(self):
+        """The subset of SORT_FIELDS this request is permitted to sort by.
+
+        Staff may sort by any column; non-staff are limited to
+        NON_STAFF_SORT_FIELDS so they can't infer the ordering of columns that
+        are hidden from them (staff-only or privacy-gated). Returns a dict of
+        {sort key: ORM ordering}.
+        """
+        if self.request.user.is_staff:
+            return self.SORT_FIELDS
+        return {key: self.SORT_FIELDS[key] for key in self.NON_STAFF_SORT_FIELDS}
+
     def get_sort(self):
-        """Return the validated (sort, order) pair from the querystring."""
+        """Return the validated ``(sort, order)`` pair from the querystring.
+
+        An unknown/forbidden sort key or an invalid order falls back to the
+        defaults, so untrusted querystring input can't reorder by a column the
+        viewer isn't allowed to sort by.
+        """
         sort = self.request.GET.get('sort', self.DEFAULT_SORT)
-        if sort not in self.SORT_FIELDS:
+        if sort not in self.get_allowed_sort_fields():
             sort = self.DEFAULT_SORT
         order = self.request.GET.get('order', self.DEFAULT_ORDER)
         if order not in ('asc', 'desc'):
@@ -126,6 +152,8 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         return sort, order
 
     def apply_search(self, profiles_qs):
+        """Filter ``profiles_qs`` by the ?q= term (OR-matched, case-insensitive,
+        partial) across SEARCH_FIELDS; returns it unchanged when there's no term."""
         query = self.get_search_query()
         if query:
             search = Q()
@@ -135,6 +163,12 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         return profiles_qs
 
     def apply_sort(self, profiles_qs):
+        """Order ``profiles_qs`` by the validated ?sort=/?order= column.
+
+        NULLs sort last in both directions and username is the tie-break, so a
+        nullable column surfaces students who have a value (rather than every
+        unset one) and pages stay deterministic. Returns the ordered queryset.
+        """
         sort, order = self.get_sort()
         if sort == 'preferred':
             # get_preferred_name() shows preferred_name, falling back to first_name
@@ -152,11 +186,15 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         return profiles_qs.order_by(ordering, 'user__username')
 
     def get_queryset(self):
+        """The list's base queryset with shared prefetching, search and sort applied."""
         profiles_qs = self.queryset_append(self.get_base_queryset())
         profiles_qs = self.apply_search(profiles_qs)
         return self.apply_sort(profiles_qs)
 
     def get_context_data(self, **kwargs):
+        """Add the view type, the active search/sort state, and the pagination
+        helpers (querystring without ``page`` and a windowed page range) the
+        template needs to render search-, sort- and page-preserving links."""
         context = super().get_context_data(**kwargs)
         context['VIEW_TYPES'] = ProfileViewTypes
         context['view_type'] = self.view_type

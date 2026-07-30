@@ -647,6 +647,25 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         names = [profile.get_preferred_name() for profile in response.context['object_list']]
         self.assertEqual(names, ['Bob', 'Zara'])
 
+    def test_profile_list__non_staff_cannot_sort_by_staff_only_columns(self):
+        """ProfileListCurrent is open to any authenticated user, so a student may only sort by the
+        always-visible name columns. Requesting a staff-only (last_login/last_sub/username) or
+        privacy-gated (xp/mark) column silently falls back to the default sort, so its ordering
+        can't leak to students; staff keep full sorting."""
+        self.client.force_login(self.test_student1)
+        for forbidden in ('last_login', 'last_sub', 'username', 'xp', 'mark'):
+            response = self.client.get(reverse("profiles:profile_list_current"), {'sort': forbidden, 'order': 'asc'})
+            self.assertEqual(response.context['current_sort'], 'first', msg=f"student must not sort by {forbidden}")
+
+        # an allowed name column still works for the student
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last')
+
+        # staff can sort by the staff-only columns
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_login', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last_login')
+
     def test_profile_list__pagination_querystring_preserves_search_and_sort(self):
         """The querystring used to build pagination links keeps the active search/sort but drops page."""
         self.client.force_login(self.test_teacher)
