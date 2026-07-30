@@ -53,6 +53,11 @@ GRACE_PERIOD_DAYS = 30
 # paid_until) is this many days away or closer (#1733's "2 week notice").
 EXPIRY_WARNING_DAYS = 14
 
+# A deck may be DELETED from the admin only once no staff member has signed in
+# for this long (#2044 retirement policy): a year of staff silence means the
+# deck is abandoned, not merely dormant over a summer or a leave.
+INACTIVE_DELETE_DAYS = 365
+
 
 class Tenant(TenantMixin):
     # for reference: https://django-tenants.readthedocs.io/en/stable/use.html#deleting-a-tenant
