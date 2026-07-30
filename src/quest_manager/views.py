@@ -28,7 +28,7 @@ from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
 from questions.forms import QuestionSubmissionFormsetFactory
-from questions.models import QuestionSubmission
+from questions.models import QuestionSubmission, QuestionType
 from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import from_library_schema_first
@@ -2078,11 +2078,17 @@ def ajax_save_draft(request):
                 # with |safe in the marking display, so an unsanitized draft would be
                 # stored XSS against the marker (issues #1343 / #2113).
                 text = sanitize_comment_html(text)
+                # Only text-answer rows autosave: a crafted request could otherwise stash
+                # response_text on a file-upload row, which completion would then count as
+                # submission content, letting a student bypass the "attach or comment" gate
+                # without actually uploading the required file.
                 row = QuestionSubmission.objects.filter(
-                    pk=row_id, quest_submission=sub, comment__isnull=True
+                    pk=row_id, quest_submission=sub, comment__isnull=True,
+                    question__type__in=(QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER),
                 ).first()
                 if row and row.response_text != text:
                     row.response_text = text
+                    row.full_clean()
                     row.save()
                     response_data["result"] = "Draft saved"
 

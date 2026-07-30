@@ -209,6 +209,22 @@ class AnswerAutosaveTest(QuestionSubmissionFlowTestBase):
         row.refresh_from_db()
         self.assertEqual(row.response_text, "draft answer")
 
+    def test_autosave__file_answer_rows_reject_text(self):
+        """A crafted autosave can't stash text on a file-upload row: only short/long answer
+        rows accept response_text. Otherwise a file question could be turned into free-text
+        content, letting a student bypass the submission's 'attach or comment' requirement
+        without uploading the required file."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Upload a file.</p>")
+        file_row = sync_draft_question_submissions(self.submission).get(question=file_question)
+        self.autosave({
+            "question_submissions-0-id": str(file_row.id),
+            "question_submissions-0-response_text": "sneaky text answer",
+        })
+        file_row.refresh_from_db()
+        self.assertEqual(file_row.response_text, "")
+
     def test_autosave__cannot_touch_other_users_rows(self):
         """An answer row belonging to another student's submission can't be draft-saved
         through someone else's submission id."""
@@ -345,6 +361,9 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
         self.assertContains(response, '<div class="text-muted"><small><b>Marker notes:</b>')
+        # both paragraphs survive verbatim: unwrap_p only strips a single wrapping <p>, so
+        # multi-paragraph notes keep their tags (rather than being flattened or escaped)
+        self.assertContains(response, "<p>First note.</p><p>Second note.</p>")
 
     def test_display__student_does_not_see_marker_notes(self):
         """Solutions and marker notes stay staff-only in the answers display."""

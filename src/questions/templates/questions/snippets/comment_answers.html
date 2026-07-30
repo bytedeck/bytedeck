@@ -16,7 +16,7 @@
     <tr>
       <td class="col-sm-5">
         {# number each answer inline, matching the "Question N" heading on the submission form; #}
-        {# unwrap_p strips summernote's wrapping <p> so the number sits right before a one-line prompt. #}
+        {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
         <strong>{{ forloop.counter }}.</strong>
         {% if answer.question %}
           {{ answer.question.instructions|unwrap_p }}
@@ -29,8 +29,8 @@
                 <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
             {% endif %}
             {% if answer.question.marker_notes %}
-              {# unwrap_p strips summernote's wrapping <p> so a one-line note sits beside its label, like Solution above. #}
-              {# A <div> (not <p>) wraps it because multi-paragraph notes keep their <p> tags, invalid nested in a <p>. #}
+              {# unwrap_p strips Summernote's wrapping paragraph element so a one-line note sits beside its label, like Solution above. #}
+              {# A div wrapper (not a paragraph) holds it, because multi-paragraph notes keep their paragraph tags, which would be invalid nested inside another paragraph. #}
               <div class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></div>
             {% endif %}
           {% endif %}
