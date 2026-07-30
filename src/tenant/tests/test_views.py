@@ -942,10 +942,9 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
         """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
-        the status line and seats table still show the ADMIN-SET cap, whatever
-        it is (the field stays authoritative; production find, 2026-07-24).
-        Viewed as the deck owner: the suspension middleware signs everyone
-        else out (#1734)."""
+        the seats table still shows the ADMIN-SET cap, whatever it is (the
+        field stays authoritative; production find, 2026-07-24). Viewed as the
+        deck owner: the suspension middleware signs everyone else out (#1734)."""
         from datetime import date
 
         from siteconfig.models import SiteConfig
@@ -957,7 +956,6 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'suspended for 365 days')
         # page status copy specifically (the banner says similar things): data intact + how to restore
         self.assertContains(response, 'Nothing has been deleted yet')
-        self.assertContains(response, 'max 1 current student')  # the status line quotes the admin-set cap
         text = ' '.join(response.content.decode().split())
         self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
 
