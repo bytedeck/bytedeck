@@ -164,7 +164,10 @@ class GFKSelect2Mixin:
         all_choices = copy.copy(self.choices)
         if self.get_url():
             self.filter_choices_to_render(selected_choices)
-        elif not self.allow_multiple_selected:
+        # The AJAX branch above always runs: this widget always has a data_view (defaulted in
+        # __init__), so get_url() never returns falsy. The static-choices fallback below is
+        # inherited from django-select2 but unreachable for a GFKSelect2Widget.
+        elif not self.allow_multiple_selected:  # pragma: no cover
             if self.attrs.get('data-placeholder'):
                 self.choices.insert(0, (None, ''))
         result = super().optgroups(name, value, attrs)
