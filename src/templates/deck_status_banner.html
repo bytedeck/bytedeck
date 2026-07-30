@@ -9,10 +9,10 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
         <div class="alert alert-danger" id="deck-status-banner">
             <i class="fa fa-fw fa-ban"></i>
             {% if request.user.is_staff %}
-                <strong>This deck is suspended</strong> &mdash; its trial or subscription has ended: only the deck
+                <strong>This deck is suspended:</strong> its trial or subscription has ended. Only the deck
                 owner can sign in, and a deck suspended for 365 days may be permanently deleted.
-                <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> to restore access &mdash;
-                even the low-cost Maintenance subscription keeps the deck safe.
+                <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> to restore access
+                (even the low-cost Maintenance subscription keeps the deck safe).
             {% else %}
                 <strong>This deck is suspended.</strong> Only the deck owner can sign in until the deck has a
                 valid subscription.
@@ -32,7 +32,7 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
             <div class="alert {% if current_deck.days_until_expiry < 0 %}alert-danger{% else %}alert-warning{% endif %}" id="deck-status-banner">
                 <i class="fa fa-fw fa-exclamation-triangle"></i>
                 {% if current_deck.days_until_expiry < 0 %}
-                    <strong>Subscription expired</strong> &mdash; this deck is in its grace period, which ends in
+                    <strong>Subscription expired:</strong> this deck is in its grace period, which ends in
                     {{ current_deck.grace_days_remaining }} day{{ current_deck.grace_days_remaining|pluralize }};
                     the deck will then be suspended (only the deck owner will be able to sign in).
                 {% elif current_deck.is_on_trial %}

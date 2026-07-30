@@ -632,8 +632,9 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
 
         response = self.get_quests_page(self.staff)
         self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, 'only the deck')  # owner-only sign-in rule
-        self.assertContains(response, 'suspended for 365 days')  # deletion countdown
+        text = ' '.join(response.content.decode().split())  # template line-wraps mid-phrase
+        self.assertIn('Only the deck owner can sign in', text)  # owner-only sign-in rule
+        self.assertIn('suspended for 365 days', text)  # deletion countdown
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
 
@@ -882,7 +883,7 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Suspension')
         self.assertContains(response, 'Deletion')
         text = ' '.join(response.content.decode().split())
-        self.assertIn('only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
+        self.assertIn('Only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
         self.assertIn('max 5 current students', text)  # the Maintenance pitch states the trial cap
 
     def test_page__maintenance_subscription_gets_its_own_status(self):

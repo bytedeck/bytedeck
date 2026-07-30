@@ -4,7 +4,7 @@
 <p>Your deck <strong>{{ deck.name }}</strong>'s
   {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
   on <strong>{% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}</strong>
-  &mdash; <strong>{{ days }} day{{ days|pluralize }}</strong> from now.
+  (<strong>{{ days }} day{{ days|pluralize }}</strong> from now).
   {% if deck.is_on_trial %}When the trial ends, the deck is suspended: only the deck owner can sign in,
   and the 365-day countdown to deck deletion begins.{% else %}After that, a {{ grace_days }}-day grace
   period keeps full access until <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
@@ -23,8 +23,8 @@
   seat{{ cap|pluralize }}.</p>
 
 <p><a href="{{ subscribe_url }}">Subscribe or renew here</a> to keep full access.
-  Questions about which students count? Only <em>current</em> students &mdash; those registered in a course
-  this semester &mdash; count toward your limit; see
+  Questions about which students count? Only <em>current</em> students (those registered in a course
+  this semester) count toward your limit; see
   <a href="{{ archive_help_url }}">freeing up student seats</a>.</p>
 
 <p>Not planning to use the deck for a while? The low-cost <em>Maintenance</em> subscription keeps it

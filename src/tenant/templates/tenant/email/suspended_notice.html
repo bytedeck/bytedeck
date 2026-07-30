@@ -2,8 +2,8 @@
 
 {# the deck link stays OUTSIDE the <strong>: textify/html2text swallows the space before a link that opens inside one #}
 <p>Your deck <a href="{{ deck.get_root_url }}">{{ deck.name }}</a> is <strong>scheduled for deletion
-  on {{ deletion_date }}{% if deletion_days_left and deletion_days_left > 0 %} &mdash;
-  {{ deletion_days_left }} day{{ deletion_days_left|pluralize }} from now{% endif %}</strong>,
+  on {{ deletion_date }}{% if deletion_days_left and deletion_days_left > 0 %}
+  ({{ deletion_days_left }} day{{ deletion_days_left|pluralize }} from now){% endif %}</strong>,
   unless it gets a valid subscription before then.</p>
 
 <p>The deck has been <strong>suspended</strong>{% if suspended_since %}
@@ -11,12 +11,12 @@
   {% if deck.paid_until %}(its subscription was paid through {{ deck.paid_until }}, and the
   {{ grace_days }}-day grace period ended on {{ grace_end_date }}){% elif deck.trial_end_date %}(its
   free trial ended on {{ deck.trial_end_date }}){% endif %}: only the deck owner can sign in until the
-  deck has a valid subscription. Nothing has been deleted yet &mdash; your content and student data
+  deck has a valid subscription. Nothing has been deleted yet: your content and student data
   are intact until the deletion date above.</p>
 
-<p><a href="{{ subscribe_url }}">Subscribe here</a> to restore access &mdash; any level works, including
+<p><a href="{{ subscribe_url }}">Subscribe here</a> to restore access: any level works, including
   the low-cost <em>Maintenance</em> subscription, which keeps the deck online with trial-level limits
-  (max {{ trial_cap }} current student{{ trial_cap|pluralize }}) and stops the deletion countdown &mdash;
-  ideal if you just want to keep the deck for later.</p>
+  (max {{ trial_cap }} current student{{ trial_cap|pluralize }}) and stops the deletion countdown
+  (ideal if you just want to keep the deck for later).</p>
 
 {% include "tenant/email/_email_footer.html" %}

@@ -10,13 +10,13 @@
 {% if deck.is_suspended %}
   <p><span class="label label-danger">Suspended</span>
     This deck's trial and/or subscription period has ended: only the deck owner can sign in, and a deck
-    suspended for 365 days may be permanently deleted. Nothing has been deleted yet &mdash; subscribe
+    suspended for 365 days may be permanently deleted. Nothing has been deleted yet: subscribe
     (any level, including the low-cost Maintenance subscription) to restore access.</p>
 {% elif deck.in_grace_period %}
   {# grace gets its own DANGER label -- a green "Subscribed" badge on an expired deck reads as a bug (maintainer review find) #}
   <p><span class="label label-danger">Grace period</span>
     The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
-    {{ grace_days }}-day grace period &mdash; renew to keep full access; otherwise the deck will be
+    {{ grace_days }}-day grace period: renew to keep full access; otherwise the deck will be
     suspended (only the deck owner will be able to sign in, and the 365-day countdown to deck
     deletion begins).</p>
 {% elif deck.is_on_maintenance %}
@@ -49,7 +49,7 @@
   {% elif deck.trial_end_date %}
     <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
   {% else %}
-    <tr><th>Expires</th><td>Never &mdash; this deck is managed manually</td></tr>
+    <tr><th>Expires</th><td>Never (this deck is managed manually)</td></tr>
   {% endif %}
 </table>
 
@@ -70,10 +70,10 @@
 </table>
 {% if cap != -1 and current_student_count >= cap %}
   <p class="text-danger"><i class="fa fa-exclamation-triangle"></i>
-    The limit has been reached &mdash; no more students can register in a course.</p>
+    The limit has been reached: no more students can register in a course.</p>
 {% endif %}
 <p>
-  Only <em>current</em> students &mdash; those registered in a course in the active semester &mdash; count
+  Only <em>current</em> students (those registered in a course in the active semester) count
   toward the limit; staff and archived students never do. See
   <a href="{% url 'courses:archive_students_help' %}">freeing up student seats</a>.
 </p>
@@ -81,23 +81,23 @@
 <h3>How subscriptions work</h3>
 {# the full lifecycle, so an owner always knows what happens next (maintainer request, 2026-07-30) #}
 <ol>
-  <li><strong>Valid subscription</strong> &mdash; full use of the deck at your subscription level.</li>
-  <li><strong>Grace period</strong> &mdash; when a subscription expires, everything keeps working as
+  <li><strong>Valid subscription:</strong> full use of the deck at your subscription level.</li>
+  <li><strong>Grace period:</strong> when a subscription expires, everything keeps working as
     before for {{ grace_days }} more days while you renew.</li>
-  <li><strong>Suspension</strong> &mdash; after the grace period (or when a free trial ends), the deck
-    is suspended: only the deck owner can sign in, and the 365-day countdown to deck deletion begins.
+  <li><strong>Suspension:</strong> after the grace period (or when a free trial ends), the deck
+    is suspended. Only the deck owner can sign in, and the 365-day countdown to deck deletion begins.
     Content and student data stay intact.</li>
-  <li><strong>Deletion</strong> &mdash; a deck with no valid subscription for 365 days may be
+  <li><strong>Deletion:</strong> a deck with no valid subscription for 365 days may be
     permanently deleted.</li>
 </ol>
 <p>Not using the deck right now? The low-cost <strong>Maintenance</strong> subscription keeps it online
   indefinitely with trial-level limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }})
-  &mdash; ideal for building or testing between active use &mdash; and stops the deletion countdown.</p>
+  and stops the deletion countdown (ideal for building or testing between active use).</p>
 
 <h3>Upgrade or renew</h3>
 {% if stripe_configured %}
   {% if manually_subscribed %}
-    <p>This deck's subscription is <strong>managed manually</strong> &mdash; starting a new online
+    <p>This deck's subscription is <strong>managed manually</strong>: starting a new online
       subscription here would double-bill you. Contact ByteDeck to renew, upgrade, or switch this
       deck to online billing.</p>
   {% else %}
@@ -117,7 +117,7 @@
   </p>
   {% endif %}
 {% else %}
-  <p>Online billing isn't configured on this server &mdash;
+  <p>Online billing isn't configured on this server:
     <a href="{{ public_subscribe_url }}" class="btn btn-primary">
       <i class="fa fa-credit-card"></i>&nbsp;Subscribe, renew, or upgrade
     </a>
