@@ -324,6 +324,33 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
 
     @patch("tenant.models.Tenant.full_clean")
+    @patch("tenant.views.EmailAddress.objects.get_or_create")
+    def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
+        """When the owner already has an EmailAddress, form_valid marks that record verified+primary
+        (the get_or_create 'not created' branch) instead of relying on the create-time defaults."""
+        existing_email = Mock()
+        mock_get_or_create.return_value = (existing_email, False)
+
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+        request = self.factory.post(reverse("tenant:new"), data=self.form_data)
+        request.user = AnonymousUser()
+        request.session = {"verified_deck_request": {**self.form_data, "nonce": nonce}}
+
+        view = TenantCreate()
+        view.setup(request)
+
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with tenant_context(self.public_tenant):
+            view.form_valid(form)
+
+        self.assertTrue(existing_email.verified)
+        self.assertTrue(existing_email.primary)
+        existing_email.full_clean.assert_called_once()
+        existing_email.save.assert_called_once()
+
+    @patch("tenant.models.Tenant.full_clean")
     def test_form_valid__verification_nonce_is_single_use(self, mock_full_clean):
         """A verification nonce provisions at most one deck: a successful creation
         consumes it, and a second attempt with the same nonce is rejected
