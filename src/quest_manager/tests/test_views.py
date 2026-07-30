@@ -702,6 +702,15 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
 
+    def test_ajax_save_draft__ajax_get_returns_404(self):
+        """An ajax GET (with no POST data) to this view returns 404."""
+        self.client.force_login(self.test_student1)
+        response = self.client.get(
+            reverse('quests:ajax_save_draft'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax_save_draft__has_changes(self):
         """Should save if there are changes in the draft text"""
         # loging required for this view
@@ -3002,6 +3011,16 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_ajax_submission_count__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(
+            reverse('quests:ajax_submission_count'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax_submission_count__student_access_granted(self):
         """ The current behavior is that students can access the view.
         This test acknowledges that behavior."""
@@ -3215,7 +3234,7 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_ajax_approval_info__ajax_get_returns_404(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.get(
-            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
@@ -3280,6 +3299,15 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             reverse('quests:ajax_info_in_progress', args=[self.submission.id])
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_ajax_submission_info__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        response = self.client.get(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_submission_info__in_progress(self):
         """An in-progress submission returns JSON with completed and past both False; missing id 404s."""
@@ -3381,6 +3409,49 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
+
+
+class AjaxFlagTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for:
+    def ajax_flag(request)
+
+    via
+
+    url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user and a submission to flag."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.submission = baker.make(QuestSubmission)
+
+    def setUp(self):
+        """Set up a tenant-aware test client and log in the staff user."""
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.test_teacher)
+
+    def test_ajax_flag__ajax_post_flags_submission(self):
+        """An ajax POST records the requesting staff user as the submission's flagged_by and returns JSON."""
+        self.assertIsNone(self.submission.flagged_by)
+        response = self.client.post(
+            reverse('quests:ajax_flag'),
+            data={'submission_id': self.submission.id},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(type(response), JsonResponse)
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.flagged_by, self.test_teacher)
+
+    def test_ajax_flag__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        response = self.client.get(
+            reverse('quests:ajax_flag'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
