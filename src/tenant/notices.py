@@ -129,7 +129,7 @@ def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
     from django.utils.timezone import timedelta
 
-    from tenant.models import GRACE_PERIOD_DAYS
+    from tenant.models import GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS
 
     from tenant.tasks import send_email_message
 
@@ -142,6 +142,12 @@ def _deliver(deck, kind):
         last_covered_days.append(deck.trial_end_date)
     if deck.paid_until:
         last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
+    # is_suspended requires at least one date field, so the list is never empty here
+    suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
+    # the scheduled deletion day under the suspension policy -- INACTIVE_DELETE_DAYS
+    # after the suspension began; the suspended email LEADS with it (maintainer
+    # request, 2026-07-30: put the bottom line up front)
+    deletion_date = suspended_since + timedelta(days=INACTIVE_DELETE_DAYS) if suspended_since else None
     context = {
         'deck': deck,
         'config': config,
@@ -158,8 +164,9 @@ def _deliver(deck, kind):
         'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
-        # is_suspended requires at least one date field, so the list is never empty here
-        'suspended_since': max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None,
+        'suspended_since': suspended_since,
+        'deletion_date': deletion_date,
+        'deletion_days_left': (deletion_date - localdate()).days if deletion_date else None,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe
         # flatpage when Stripe isn't configured
