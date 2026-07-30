@@ -230,8 +230,12 @@ data-classes="table table-no-bordered table-hover"
                     {% endif %}
 
                     <td>
-                        {{ object.user.last_login|date:'y/m/d' }}<br>
-                        <small>{{ object.user.last_login|timesince }} ago</small>
+                        {% if object.user.last_login %}
+                            {{ object.user.last_login|date:'y/m/d' }}<br>
+                            <small>{{ object.user.last_login|timesince }} ago</small>
+                        {% else %}
+                            &nbsp;Never
+                        {% endif %}
                     </td>
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
 

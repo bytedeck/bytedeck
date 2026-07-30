@@ -666,6 +666,22 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_login', 'order': 'asc'})
         self.assertEqual(response.context['current_sort'], 'last_login')
 
+    def test_profile_list__last_login_never_fallback(self):
+        """The staff Last Login cell shows 'Never' for a student who has never logged in, mirroring
+        the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
+        from django.utils import timezone
+        now = timezone.now()
+        # give both students a last submission (Last Quest shows a date, not "Never")
+        # while leaving last_login unset, so the only "Never" comes from Last Login
+        for student in (self.test_student1, self.test_student2):
+            self.assertIsNone(student.last_login)
+            student.profile.time_of_last_submission = now
+            student.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertContains(response, "Never", count=2)  # one per student, from Last Login only
+
     def test_profile_list__pagination_querystring_preserves_search_and_sort(self):
         """The querystring used to build pagination links keeps the active search/sort but drops page."""
         self.client.force_login(self.test_teacher)
