@@ -438,12 +438,17 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('suspended', summary)
         self.assertEqual(len(mail.outbox), 1, summary)
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        # the bottom line LEADS (maintainer request, 2026-07-30): the scheduled
+        # deletion date (suspension start + 365 days) with the countdown, and the
+        # deck name links to the deck itself
+        self.assertIn('scheduled for deletion on Aug. 2, 2027', html)
+        self.assertIn('352 days from now', html)  # frozen TODAY Aug 15, 2026 -> Aug 2, 2027
+        self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
         self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
         self.assertIn('free trial ended on Aug. 1, 2026', html)
-        # the new suspension rules (redesign, 2026-07-30): owner-only sign-in, the
-        # deletion countdown, data intact, and the Maintenance escape hatch
+        # the new suspension rules (redesign, 2026-07-30): owner-only sign-in,
+        # data intact, and the Maintenance escape hatch
         self.assertIn('only the deck owner can sign in', html)
-        self.assertIn('suspended for 365 days', html)
         self.assertIn('your content and student data are intact', html)
         self.assertIn('<em>Maintenance</em> subscription', html)
         self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
