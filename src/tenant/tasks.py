@@ -115,8 +115,8 @@ def deck_status_check():
     # means a webhook outage shorter than the 30-day grace can never suspend a
     # paying deck. Stripe errors are reported, not raised: the notices below
     # must still run. Runs BEFORE the notices so a renewal Stripe knows about
-    # lifts the deck out of suspension first (no cap reset anymore: #2210
-    # removed it, suspension never touches the admin-set cap).
+    # lifts the deck out of suspension first (suspension never touches the
+    # admin-set cap: #2210).
     stripe_summary = 'not linked'
     if tenant.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
         from tenant.billing import _sync_deck_from_subscription_id

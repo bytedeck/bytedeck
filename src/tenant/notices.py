@@ -177,7 +177,7 @@ def _deliver(deck, kind):
         DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'trial/subscription expiry reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
         DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended'),
-        DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'subscription payment failed'),
+        DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"

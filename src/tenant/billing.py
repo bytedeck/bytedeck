@@ -215,8 +215,30 @@ def _resolve_deck(schema_name=None, customer_id=None, subscription_id=None):
     return None
 
 
+def _invoice_subscription_id(invoice):
+    """The subscription an invoice belongs to, or None.
+
+    Older Stripe API versions carry a top-level ``subscription`` on the invoice;
+    newer ones moved the reference under ``parent.subscription_details``. Same
+    dual-shape handling as :func:`subscription_period_end_date`.
+    """
+    sub_id = invoice.get('subscription')
+    if sub_id:
+        return sub_id
+    details = (invoice.get('parent') or {}).get('subscription_details') or {}
+    return details.get('subscription') or None
+
+
 def _sync_deck_from_subscription_id(deck, subscription_id):
-    """Retrieve a subscription from Stripe and run the single-write-path sync."""
+    """Retrieve a subscription from Stripe and run the single-write-path sync.
+
+    Skips (with a log summary) when ``STRIPE_SECRET_KEY`` is unset: a server
+    configured with only the webhook secret can still absorb events that sync
+    straight from their payloads, but it cannot retrieve, and an exception here
+    would turn into a 500 that Stripe retries for days (review find on #2110).
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return 'STRIPE_SECRET_KEY unset; retrieve skipped'
     subscription = stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY)
     return deck.sync_from_stripe_subscription(subscription)
 
@@ -247,10 +269,14 @@ def handle_webhook_event(event):
         if deck is None:
             return '', 'no deck resolved'
         # link the customer now; the subscription sync follows via retrieve
-        # (the webhook payload carries the subscription only as an id string)
-        from tenant.models import Tenant
-        Tenant.objects.filter(pk=deck.pk).update(stripe_customer_id=obj.get('customer') or '')
-        summary = 'linked customer'
+        # (the webhook payload carries the subscription only as an id string).
+        # Guarded on a truthy value: a session without a customer must not
+        # CLEAR a stored link (review find on #2110)
+        summary = 'no customer on session'
+        if obj.get('customer'):
+            from tenant.models import Tenant
+            Tenant.objects.filter(pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            summary = 'linked customer'
         if obj.get('subscription'):
             summary += '; ' + _sync_deck_from_subscription_id(deck, obj['subscription'])
         return deck.schema_name, summary
@@ -263,7 +289,7 @@ def handle_webhook_event(event):
         return deck.schema_name, deck.sync_from_stripe_subscription(obj)
 
     if event_type == 'invoice.paid':
-        subscription_id = obj.get('subscription')
+        subscription_id = _invoice_subscription_id(obj)
         deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=subscription_id)
         if deck is None:
             return '', 'no deck resolved'
@@ -272,7 +298,7 @@ def handle_webhook_event(event):
         return deck.schema_name, _sync_deck_from_subscription_id(deck, subscription_id)
 
     if event_type == 'invoice.payment_failed':
-        deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=obj.get('subscription'))
+        deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=_invoice_subscription_id(obj))
         if deck is None:
             return '', 'no deck resolved'
         # Delivery resolves the owner/staff from the deck's schema, and respects

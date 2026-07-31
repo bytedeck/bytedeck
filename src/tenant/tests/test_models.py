@@ -575,6 +575,17 @@ class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.max_active_users, 80)  # untouched
 
+    def test_sync__canceled_event_without_an_id_unlinks_nothing(self):
+        """A malformed cancellation payload with no subscription id (which the
+        identity guard cannot see) must not unlink the deck's current
+        subscription: unlinking requires an exact id match."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_sync')
+        summary = self.tenant.sync_from_stripe_subscription(
+            self.make_subscription(id='', status='canceled'))
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_sync')
+
     def test_sync__canceled_when_already_unlinked_is_a_no_op(self):
         """A cancellation event for a deck already unlinked changes nothing (a
         re-delivered deletion after the admin cleared the link, for example)."""

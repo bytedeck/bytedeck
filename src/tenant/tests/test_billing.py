@@ -239,7 +239,10 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
 
         self.assertEqual(DeckNotice.objects.filter(kind=DeckNotice.KIND_PAYMENT_FAILED).count(), 1)
         self.assertEqual(len(mail.outbox), 1)
-        self.assertIn('payment failed', mail.outbox[0].subject)
+        self.assertIn('failed-payment warning', mail.outbox[0].subject)
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('non-profit Society', html)  # the shared footer rides along
+        self.assertNotIn('&mdash;', html)  # no em dashes in subscription emails (#2208)
 
     def test_invoice_payment_failed__report_only_when_notices_disabled(self):
         """With DECK_NOTICES_ENABLED off (the default), the payment-failure notice is
@@ -273,6 +276,48 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         self.set_deck(stripe_customer_id='cus_wh')
         _, summary = handle_webhook_event(self.make_event('invoice.paid', {'id': 'in_2', 'customer': 'cus_wh'}))
         self.assertIn('invoice without subscription', summary)
+
+    def test_invoice_paid__newer_api_shape_resolves_subscription_from_parent(self):
+        """Newer Stripe API versions carry the invoice's subscription under
+        parent.subscription_details; the handler reads both shapes."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(paid_until=None, stripe_customer_id='cus_wh', stripe_subscription_id='sub_wh')
+        event = self.make_event('invoice.paid', {
+            'id': 'in_3', 'customer': 'cus_wh',
+            'parent': {'subscription_details': {'subscription': 'sub_wh'}},
+        })
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
+            _, summary = handle_webhook_event(event)
+        self.assertIn('paid_until', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+
+    def test_checkout_completed__session_without_customer_clears_nothing(self):
+        """A checkout.session.completed lacking a customer must not CLEAR a stored
+        customer link (the update is guarded on a truthy value)."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(stripe_customer_id='cus_keep', stripe_subscription_id='')
+        event = self.make_event('checkout.session.completed', {
+            'client_reference_id': self.tenant.schema_name,
+        })
+        _, summary = handle_webhook_event(event)
+        self.assertIn('no customer on session', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_keep')
+
+    def test_sync_helper__skips_retrieve_without_a_secret_key(self):
+        """A server holding only the webhook secret cannot retrieve subscriptions;
+        the helper reports and skips instead of raising into a 500 that Stripe
+        would retry for days."""
+        from django.test import override_settings as override
+
+        from tenant.billing import _sync_deck_from_subscription_id
+
+        with override(STRIPE_SECRET_KEY=None):
+            summary = _sync_deck_from_subscription_id(self.tenant, 'sub_wh')
+        self.assertIn('retrieve skipped', summary)
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')

@@ -429,8 +429,10 @@ class Tenant(TenantMixin):
                     updates['max_active_users'] = cap
 
             if status in ('canceled', 'incomplete_expired'):
-                # the identity guard above guarantees this clears only the event's own sub
-                if current.stripe_subscription_id:
+                # unlink strictly on an id match: with the identity guard above this
+                # means the event's own sub, and a malformed id-less payload (which
+                # the guard cannot see) unlinks nothing (review find on #2110)
+                if current.stripe_subscription_id and sub_id == current.stripe_subscription_id:
                     updates['stripe_subscription_id'] = ''
             elif sub_id and sub_id != current.stripe_subscription_id:
                 updates['stripe_subscription_id'] = sub_id
