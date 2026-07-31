@@ -28,8 +28,8 @@ from django.utils.timezone import localdate
 # the request's DB transaction (needed for the StripeEventLog dedupe + rollback
 # semantics), so the SDK's default read timeout (80s) could pin a DB connection
 # through a slow Stripe response. 15s is generous for single-object calls.
-# (_http_client is the SDK's internal module; guarded so a future layout change
-# degrades to the default timeout instead of an ImportError at boot.)
+# (_http_client is the SDK's internal module; under an incompatible SDK layout
+# the guard leaves Stripe's default timeout active and boot proceeds.)
 try:
     from stripe import _http_client as _stripe_http_client
 
@@ -189,9 +189,13 @@ def subscription_max_active_users(subscription):
     if raw is None:
         return None
     try:
-        return int(raw)
+        cap = int(raw)
     except (TypeError, ValueError):
         return None
+    # -1 = unlimited (the Tenant field's own convention); anything below it is
+    # meaningless metadata that would read as a cap every count exceeds, so it
+    # resolves to None like any other malformed value (review find on #2110)
+    return cap if cap >= -1 else None
 
 
 def _resolve_deck(schema_name=None, customer_id=None, subscription_id=None):
@@ -268,18 +272,35 @@ def handle_webhook_event(event):
                              customer_id=obj.get('customer'))
         if deck is None:
             return '', 'no deck resolved'
-        # link the customer now; the subscription sync follows via retrieve
-        # (the webhook payload carries the subscription only as an id string).
-        # Guarded on a truthy value: a session without a customer must not
-        # CLEAR a stored link (review find on #2110)
-        summary = 'no customer on session'
+        # Subscription sync first (the payload carries the subscription only as
+        # an id string, so this retrieves it): the sync's identity guard rules
+        # on whether this session's subscription is the deck's linked one, and
+        # the customer link below follows that same ruling.
+        parts = []
+        session_sub = obj.get('subscription') or ''
+        if session_sub:
+            parts.append(_sync_deck_from_subscription_id(deck, session_sub))
         if obj.get('customer'):
+            from django.db.models import Q
+
             from tenant.models import Tenant
-            Tenant.objects.filter(pk=deck.pk).update(stripe_customer_id=obj['customer'])
-            summary = 'linked customer'
-        if obj.get('subscription'):
-            summary += '; ' + _sync_deck_from_subscription_id(deck, obj['subscription'])
-        return deck.schema_name, summary
+            # Identity-guarded customer link, applied as one conditional UPDATE
+            # (atomic, so no read-then-write race): the customer is linked only
+            # when this session's subscription IS the deck's linked subscription,
+            # or the deck is entirely unlinked (the initial link on a server that
+            # cannot retrieve). A delayed event for a superseded checkout must
+            # not overwrite a newer customer link -- the same identity principle
+            # as sync_from_stripe_subscription (review find on #2110).
+            guard = Q(stripe_customer_id='', stripe_subscription_id='')
+            if session_sub:
+                guard |= Q(stripe_subscription_id=session_sub)
+            linked = Tenant.objects.filter(guard, pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            parts.append('linked customer' if linked else 'customer link kept (session not for the linked subscription)')
+        else:
+            # a session without a customer must not CLEAR a stored link
+            # (review find on #2110)
+            parts.append('no customer on session')
+        return deck.schema_name, '; '.join(parts)
 
     if event_type in ('customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'):
         deck = _resolve_deck(schema_name=metadata.get('schema_name'),

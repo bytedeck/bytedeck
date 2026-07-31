@@ -326,8 +326,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     @patch("tenant.models.Tenant.full_clean")
     @patch("tenant.views.EmailAddress.objects.get_or_create")
     def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
-        """When the owner already has an EmailAddress, form_valid marks that record verified+primary
-        (the get_or_create 'not created' branch) instead of relying on the create-time defaults."""
+        """When the owner already has an EmailAddress, form_valid explicitly marks that
+        record verified and primary (the get_or_create created=False branch)."""
         existing_email = Mock()
         mock_get_or_create.return_value = (existing_email, False)
 
@@ -701,8 +701,9 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         load pages: the deck owner (the staff variant with the owner-only sign-in
         rule, the 365-day deletion countdown, and the subscribe link) and
         anonymous visitors on the sign-in page (the everyone-else variant).
-        Signed-in non-owners never see it, because the suspension middleware
-        signs them out first (#1734 redesign)."""
+        Signed-in non-owners are signed out by the suspension middleware before
+        any page renders; that path is exercised in test_middleware.py
+        (test_bounce__non_owner_is_signed_out_and_redirected_with_message)."""
         from datetime import date
 
         from siteconfig.models import SiteConfig

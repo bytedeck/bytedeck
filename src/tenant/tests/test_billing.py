@@ -115,6 +115,15 @@ class SubscriptionMaxActiveUsersTest(SimpleTestCase):
         self.assertIsNone(subscription_max_active_users({'items': {'data': []}}))
         self.assertIsNone(subscription_max_active_users(self.make_subscription({'max_active_users': 'lots'})))
 
+    def test_cap__rejects_values_below_the_unlimited_sentinel(self):
+        """-1 means unlimited (the Tenant field convention) and passes through, but
+        anything below it (e.g. -2) would read as a cap every count exceeds, so it
+        resolves to None and the sync leaves the deck's cap alone."""
+        from tenant.billing import subscription_max_active_users
+
+        self.assertEqual(subscription_max_active_users(self.make_subscription({'max_active_users': '-1'})), -1)
+        self.assertIsNone(subscription_max_active_users(self.make_subscription({'max_active_users': '-2'})))
+
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
 class HandleWebhookEventTest(ByteDeckTenantTestCase):
@@ -306,6 +315,47 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         self.assertIn('no customer on session', summary)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_keep')
+
+    def test_checkout_completed__stale_session_cannot_overwrite_newer_links(self):
+        """A checkout.session.completed delivered late, for a checkout superseded by
+        a newer one (the deck is already linked to a different customer and
+        subscription), changes nothing: the sync's identity guard ignores the old
+        subscription, and the customer link only follows the linked subscription."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(stripe_customer_id='cus_new', stripe_subscription_id='sub_new')
+        event = self.make_event('checkout.session.completed', {
+            'client_reference_id': self.tenant.schema_name, 'customer': 'cus_old', 'subscription': 'sub_old',
+        })
+        with patch('tenant.billing.stripe.Subscription.retrieve',
+                   return_value=self.stripe_subscription(id='sub_old', customer='cus_old')):
+            _, summary = handle_webhook_event(event)
+        self.assertIn("not this deck's linked subscription", summary)
+        self.assertIn('customer link kept', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_new')
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_new')
+
+    def test_checkout_completed__links_unlinked_deck_even_without_a_secret_key(self):
+        """A server holding only the webhook secret cannot retrieve the session's
+        subscription, but a fully unlinked deck still gets its customer linked:
+        the follow-up customer.subscription.* events (which self-identify via
+        their stamped metadata) complete the link from their own payloads."""
+        from django.test import override_settings as override
+
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(stripe_customer_id='', stripe_subscription_id='')
+        event = self.make_event('checkout.session.completed', {
+            'client_reference_id': self.tenant.schema_name, 'customer': 'cus_wh', 'subscription': 'sub_wh',
+        })
+        with override(STRIPE_SECRET_KEY=None):
+            _, summary = handle_webhook_event(event)
+        self.assertIn('retrieve skipped', summary)
+        self.assertIn('linked customer', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_wh')
+        self.assertEqual(self.tenant.stripe_subscription_id, '')
 
     def test_sync_helper__skips_retrieve_without_a_secret_key(self):
         """A server holding only the webhook secret cannot retrieve subscriptions;
