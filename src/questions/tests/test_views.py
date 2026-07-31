@@ -273,6 +273,8 @@ class QuestionViewsFeatureDisabledTest(ViewTestUtilsMixin, ByteDeckTenantTestCas
             "questions:update", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
         self.assert404(
             "questions:delete", kwargs={"quest_id": self.quest.id, "pk": self.question.id})
+        self.assert404(
+            "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.question.id, "direction": "up"})
 
     def test_all_question_pages__404_for_anonymous_when_disabled(self):
         """Anonymous users get a 404 (not a login redirect) while the feature is off — the
@@ -280,3 +282,113 @@ class QuestionViewsFeatureDisabledTest(ViewTestUtilsMixin, ByteDeckTenantTestCas
         self.assert404("questions:list", kwargs={"quest_id": self.quest.id})
         self.assert404(
             "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+
+
+class QuestionMoveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for QuestionMoveView: staff-only up/down reordering of a quest's questions."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Enable the feature, plus a teacher, a student, and a quest with three questions at
+        ordinals 1, 2, 3 (and a second quest to test cross-quest URL rejection)."""
+        config = SiteConfig.get()
+        config.enable_submission_questions = True
+        config.save()
+
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.test_student = User.objects.create_user("test_student", password="password")
+
+        cls.quest = baker.make(Quest)
+        cls.other_quest = baker.make(Quest)
+        cls.q1 = baker.make(Question, quest=cls.quest, ordinal=1, instructions="Q1")
+        cls.q2 = baker.make(Question, quest=cls.quest, ordinal=2, instructions="Q2")
+        cls.q3 = baker.make(Question, quest=cls.quest, ordinal=3, instructions="Q3")
+
+    def setUp(self):
+        """Set up a tenant test client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def _move(self, question, direction, quest=None):
+        """POST to move `question` in `direction`, scoped to `quest` (defaults to its own quest)."""
+        quest = quest or self.quest
+        return self.client.post(reverse(
+            "questions:move", kwargs={"quest_id": quest.id, "pk": question.id, "direction": direction}))
+
+    def _ordinals(self):
+        """Return {instructions: ordinal} for the quest's questions, read fresh from the DB."""
+        return {q.instructions: q.ordinal for q in Question.objects.filter(quest=self.quest)}
+
+    def test_move__anonymous_redirected_to_login(self):
+        """Anonymous users are redirected to login and can't reorder questions."""
+        self.assertRedirectsLogin(
+            "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q2.id, "direction": "up"})
+
+    def test_move__student_denied(self):
+        """A student gets a 403 and the ordering is unchanged: reordering is staff-only."""
+        self.client.force_login(self.test_student)
+        response = self._move(self.q2, "up")
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+
+    def test_move__down_swaps_with_next(self):
+        """Moving a question down swaps its ordinal with the next question's, and redirects
+        back to the question list."""
+        self.client.force_login(self.test_teacher)
+        response = self._move(self.q1, "down")
+        self.assertRedirects(response, reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+        self.assertEqual(self._ordinals(), {"Q1": 2, "Q2": 1, "Q3": 3})
+
+    def test_move__up_swaps_with_previous(self):
+        """Moving a question up swaps its ordinal with the previous question's."""
+        self.client.force_login(self.test_teacher)
+        self._move(self.q3, "up")
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 3, "Q3": 2})
+
+    def test_move__up_at_top_is_noop(self):
+        """Moving the first question up does nothing (there is no neighbour above it)."""
+        self.client.force_login(self.test_teacher)
+        response = self._move(self.q1, "up")
+        self.assertRedirects(response, reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+
+    def test_move__down_at_bottom_is_noop(self):
+        """Moving the last question down does nothing (there is no neighbour below it)."""
+        self.client.force_login(self.test_teacher)
+        self._move(self.q3, "down")
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+
+    def test_move__follows_display_order_across_ordinal_gaps(self):
+        """Reordering follows display order, not ordinal arithmetic: a question moves past its
+        nearest neighbour even when ordinals are non-contiguous (e.g. after deletions)."""
+        self.client.force_login(self.test_teacher)
+        # open gaps so ordinals are 1, 5, 9 (as could happen after deleting questions)
+        Question.objects.filter(pk=self.q2.pk).update(ordinal=5)
+        Question.objects.filter(pk=self.q3.pk).update(ordinal=9)
+        # moving Q3 (last, ordinal 9) up swaps it with its nearest neighbour Q2 (ordinal 5)
+        self._move(self.q3, "up")
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 9, "Q3": 5})
+        # the resulting display order is Q1, Q3, Q2
+        ordered = list(Question.objects.filter(quest=self.quest).values_list("instructions", flat=True))
+        self.assertEqual(ordered, ["Q1", "Q3", "Q2"])
+
+    def test_move__invalid_direction_404(self):
+        """A direction other than up/down in the URL is a 404, and nothing is reordered."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse(
+            "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q1.id, "direction": "sideways"}))
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+
+    def test_move__wrong_quest_404(self):
+        """A question can't be moved through another quest's URL; the ordering is unchanged."""
+        self.client.force_login(self.test_teacher)
+        response = self._move(self.q1, "down", quest=self.other_quest)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+
+    def test_move__get_not_allowed(self):
+        """The move endpoint is POST-only; a GET returns 405 Method Not Allowed."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse(
+            "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q1.id, "direction": "up"}))
+        self.assertEqual(response.status_code, 405)

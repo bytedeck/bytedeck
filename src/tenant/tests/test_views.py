@@ -696,25 +696,31 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.student)
         self.assertNotContains(response, 'deck-status-banner')
 
-    def test_banner__suspended_deck_warns_everyone(self):
-        """On a suspended deck, staff get the subscribe call-to-action (with the
-        owner-only sign-in rule and the 365-day deletion countdown), and students
-        are told only the deck owner can sign in (suspension redesign, 2026-07-30)."""
+    def test_banner__suspended_deck_warns_owner_and_visitors(self):
+        """On a suspended deck the banner reaches the two audiences who can still
+        load pages: the deck owner (the staff variant with the owner-only sign-in
+        rule, the 365-day deletion countdown, and the subscribe link) and
+        anonymous visitors on the sign-in page (the everyone-else variant).
+        Signed-in non-owners never see it, because the suspension middleware
+        signs them out first (#1734 redesign)."""
         from datetime import date
+
+        from siteconfig.models import SiteConfig
 
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
 
-        response = self.get_quests_page(self.student)
-        self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, 'Only the deck owner can sign in')
-
-        response = self.get_quests_page(self.staff)
+        response = self.get_quests_page(SiteConfig.get().deck_owner)
         self.assertContains(response, 'This deck is suspended')
         text = ' '.join(response.content.decode().split())  # template line-wraps mid-phrase
         self.assertIn('Only the deck owner can sign in', text)  # owner-only sign-in rule
         self.assertIn('suspended for 365 days', text)  # deletion countdown
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
+
+        self.client.logout()
+        response = self.client.get(reverse('account_login'))
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'Only the deck owner can sign in')
 
     def test_banner__over_limit_warns_staff_from_live_count(self):
         """Staff see the over-limit warning from the LIVE current-student count --
@@ -934,13 +940,17 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
                       'and the 365-day countdown to deck deletion begins)', text)
 
     def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
-        """A suspended deck's status copy states the new suspension rules -- only
+        """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
-        the seats table still shows the ADMIN-SET cap, whatever it is (the field
-        stays authoritative; production find, 2026-07-24)."""
+        the seats table still shows the ADMIN-SET cap, whatever it is (the
+        field stays authoritative; production find, 2026-07-24). Viewed as the
+        deck owner: the suspension middleware signs everyone else out (#1734)."""
         from datetime import date
 
+        from siteconfig.models import SiteConfig
+
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        self.client.force_login(SiteConfig.get().deck_owner)
         response = self.get_page()
         self.assertContains(response, 'only the deck owner can sign in')
         self.assertContains(response, 'suspended for 365 days')

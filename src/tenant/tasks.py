@@ -94,7 +94,7 @@ def deck_status_check():
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
-    from tenant.notices import process_deck_notices, reset_cap_on_new_suspension
+    from tenant.notices import process_deck_notices
 
     # Defensive mirror of the dispatcher's exclusions: the public and shared-library
     # schemas aren't billable decks and SiteConfig.get() returns None on the public
@@ -107,12 +107,8 @@ def deck_status_check():
 
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
-    # enforcement before communication: a fresh suspension reverts the cap to the
-    # trial default exactly once (admin adjustments stick afterwards), so the
-    # suspension notice below reports the cap the deck actually has now
-    cap_summary = reset_cap_on_new_suspension(tenant)
     notices_summary = process_deck_notices(tenant)
     return (
         f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
-        f"cap: {cap_summary}; notices: {notices_summary}"
+        f"notices: {notices_summary}"
     )
