@@ -242,7 +242,7 @@ class SemesterManager(models.Manager):
 
         # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
         # saves each registration as it iterates and raises on a negative-XP student,
-        # which used to leave the students processed before it already finalized.
+        # so without the transaction the students processed before it would stay finalized.
         try:
             with transaction.atomic():
                 # need to calculate all user XP and store in their Course

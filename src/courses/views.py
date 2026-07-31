@@ -478,6 +478,12 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+    """Staff-only confirm-and-delete view for a Semester.
+
+    The active semester can't be deleted (SiteConfig.active_semester protects it with
+    on_delete=PROTECT), so requests targeting it are redirected back to the semester
+    list with an error message instead of crashing on the constraint.
+    """
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
@@ -485,20 +491,29 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
 
     def dispatch(self, request, *args, **kwargs):
-        """The delete button is hidden for the active semester, but the URL used to be
-        unguarded: deleting it raised an unhandled ProtectedError (SiteConfig.active_semester
-        is on_delete=PROTECT) and 500'd. Redirect with an explanation instead."""
+        """Refuse to serve the view at all (GET or POST) for the active semester, since the
+        deletion would be blocked by the PROTECT constraint anyway.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with an error message when the
+            target is the active semester; otherwise the normal DeleteView response.
+        """
         if self.get_object() == SiteConfig.get().active_semester:
             messages.error(request, self.ACTIVE_SEMESTER_ERROR)
             return redirect('courses:semester_list')
         return super().dispatch(request, *args, **kwargs)
 
     def form_valid(self, form):
-        """Perform the deletion, catching the ProtectedError from the delete itself: the
-        dispatch() pre-check can race a concurrent activation (another request making this
-        semester active between the check and the delete), which would otherwise 500 on the
-        PROTECT constraint. The success message is added here, after the delete succeeds,
-        rather than in get_success_url() (which Django calls before deleting)."""
+        """Delete the semester, converting a ProtectedError from the delete itself into the
+        same redirect + error: the dispatch() pre-check can race a concurrent activation
+        (another request making this semester active between the check and the delete).
+        The success message is added here, after the delete succeeds, because Django calls
+        get_success_url() before deleting.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with a success message when the
+            deletion went through or an error message when the PROTECT constraint blocked it.
+        """
         try:
             response = super().form_valid(form)
         except ProtectedError:
@@ -605,8 +620,11 @@ class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     (the SiteConfig.active_semester pointer that registration, XP, and submissions run through)."""
 
     def get(self, request, *args, **kwargs):
-        """Point SiteConfig.active_semester at the semester from the URL and return to the
-        semester list."""
+        """Point SiteConfig.active_semester at the semester whose pk is in the URL.
+
+        Returns:
+            HttpResponse: a redirect to the semester list (404 if the pk doesn't exist).
+        """
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
         siteconfig = SiteConfig.get()
