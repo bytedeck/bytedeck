@@ -27,6 +27,13 @@ class CustomAccountAdapter(DefaultAccountAdapter):
 
         get_current_deck() is None outside deck schemas (public/library), where
         sign-up stays governed by the default behavior.
+
+        Args:
+            request: The current HTTP request.
+
+        Returns:
+            bool: False while the current deck is suspended; otherwise the
+            default allauth decision.
         """
         deck = get_current_deck()
         if deck is not None and deck.is_suspended:

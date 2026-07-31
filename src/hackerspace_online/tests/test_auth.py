@@ -107,8 +107,22 @@ class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             'password1': "password",
             'password2': "password",
         }
-        self.client.post(reverse('account_signup'), form_data)
+        response = self.client.post(reverse('account_signup'), form_data)
+        # the guard, not form validation, must be what blocked the valid payload:
+        # the closed notice renders and no account exists
+        self.assertContains(response, 'Sign-up is currently closed')
+        self.assertContains(response, 'only the deck owner can sign in')
         self.assertFalse(User.objects.filter(username='sneakysignup').exists())
+
+    def test_signup__adapter_defers_to_default_outside_deck_schemas(self):
+        """Where there is no current deck (the public and shared-library schemas),
+        the adapter leaves sign-up governed by the default allauth behavior."""
+        from unittest.mock import patch as mock_patch
+
+        from hackerspace_online.adapter import CustomAccountAdapter
+
+        with mock_patch('hackerspace_online.adapter.get_current_deck', return_value=None):
+            self.assertTrue(CustomAccountAdapter().is_open_for_signup(request=None))
 
     def test_signup__open_on_unsuspended_deck(self):
         """An unsuspended deck's sign-up page still renders the normal form."""
