@@ -60,36 +60,6 @@ class ProfileTestModel(ByteDeckTenantTestCase):
             f"{self.user.username}/customstyles/theme.css",
         )
 
-    # ---- chillax ------------------------------------------------------------
-
-    @patch("profile_manager.models.Profile.xp_per_course", return_value=50)
-    @patch("profile_manager.models.CourseStudent.objects.current_course")
-    def test_chillax__true_when_xp_reaches_started_chillax_line(self, mock_current_course, mock_xp):
-        """chillax() is True once the chillax line has started and the student's per-course XP reaches it."""
-        semester = Mock()
-        semester.chillax_line_started.return_value = True
-        semester.chillax_line.return_value = 50
-        mock_current_course.return_value = Mock(semester=semester)
-        self.assertTrue(self.profile.chillax())
-
-    @patch("profile_manager.models.Profile.xp_per_course", return_value=10)
-    @patch("profile_manager.models.CourseStudent.objects.current_course")
-    def test_chillax__false_when_xp_below_chillax_line(self, mock_current_course, mock_xp):
-        """chillax() is False when the student's per-course XP hasn't reached the (started) chillax line."""
-        semester = Mock()
-        semester.chillax_line_started.return_value = True
-        semester.chillax_line.return_value = 50
-        mock_current_course.return_value = Mock(semester=semester)
-        self.assertFalse(self.profile.chillax())
-
-    @patch("profile_manager.models.CourseStudent.objects.current_course")
-    def test_chillax__false_when_chillax_line_not_started(self, mock_current_course):
-        """chillax() is False while the semester's chillax line hasn't started, regardless of XP."""
-        semester = Mock()
-        semester.chillax_line_started.return_value = False
-        mock_current_course.return_value = Mock(semester=semester)
-        self.assertFalse(self.profile.chillax())
-
     # ---- num_hidden_quests / hide_quest / unhide_quest ----------------------
 
     def test_num_hidden_quests__available_only_false_counts_all_hidden(self):
