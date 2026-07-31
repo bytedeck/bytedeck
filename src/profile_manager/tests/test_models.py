@@ -520,6 +520,3 @@ class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
         """xp_since_last_rank swallows a failed rank lookup and returns 0."""
         with patch.object(Profile, 'rank', side_effect=Exception("boom")):
             self.assertEqual(self.profile.xp_since_last_rank(), 0)
-
-
-
