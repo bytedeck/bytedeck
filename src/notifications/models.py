@@ -192,6 +192,19 @@ class Notification(models.Model):
 
         return str(result) + ("..." if truncated else "")
 
+    def get_sender_display(self):
+        """The actor name rendered at the start of the notification text.
+
+        The deck's ByteDeck support account (settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        displays as "Bytedeck": it sends the automated deck status notices, and its
+        raw username reads like any other user (maintainer request, 2026-07-31).
+        Every other sender keeps its normal string form.
+        """
+        sender = self.sender_object
+        if getattr(sender, 'username', None) == settings.TENANT_DEFAULT_ADMIN_USERNAME:
+            return "Bytedeck"
+        return sender
+
     def __str__(self):
         try:
             target_url = self.target_object.get_absolute_url()
@@ -210,7 +223,7 @@ class Notification(models.Model):
         # absolute url needed for when notifications are sent via email
         root_url = get_root_url()
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,  # notif text
             "target": self.target_object,  # basically quest name
@@ -268,7 +281,7 @@ class Notification(models.Model):
         action = Notification.html_strip(str(self.action_object))
 
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
