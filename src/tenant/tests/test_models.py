@@ -249,13 +249,12 @@ class TenantBillingStatusTest(SimpleTestCase):
 
     def test_effective_max_active_users__always_the_admin_field(self):
         """The enforced cap is ALWAYS the admin-set field, in every billing state --
-        including suspended. Suspension "reverts to trial limits" by WRITING the
-        trial default into the field once (reset_cap_on_new_suspension), after
-        which the admin's value, higher or lower, always wins (maintainer decision
-        on #2178: a suspended deck's cap lowered to 1 was silently overridden back
-        to 5)."""
-        # suspended (trial lapsed): the field, untouched at read time -- both above
-        # and below the trial default (the 80 only drops when the nightly reset runs)
+        including suspended. Suspension never touches the cap (#1734 redesign:
+        owner-only sign-in instead); the admin's value, higher or lower, always
+        wins (maintainer decision on #2178: a suspended deck's cap lowered to 1
+        was silently overridden back to 5)."""
+        # suspended (trial lapsed): the field, untouched -- both above and below
+        # the trial default
         self.assertEqual(
             self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=80).effective_max_active_users, 80,
         )
