@@ -725,10 +725,11 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
         # matches what QuestSubmission.objects.remove_in_progress() will delete
         context['num_in_progress'] = QuestSubmission.objects.all_not_completed(active_semester_only=False).count()
         context['num_awaiting_approval'] = QuestSubmission.objects.all_awaiting_approval().count()
-        # negative final XP comes from a negative xp_cached (final_xp = xp_cached / course count)
+        # negative final XP comes from a negative xp_cached (final_xp = xp_cached / course count);
+        # select_related the profile since the blockers list renders user.profile per row
         context['negative_xp_users'] = User.objects.filter(
             id__in=registrations.values_list('user', flat=True), profile__xp_cached__lt=0,
-        )
+        ).select_related('profile')
         context['num_announcements'] = Announcement.objects.get_queryset().not_archived().not_draft().count()
         context['blocked'] = bool(context['num_awaiting_approval'] or context['negative_xp_users'])
         return context

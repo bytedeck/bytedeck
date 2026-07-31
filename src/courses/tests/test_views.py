@@ -350,6 +350,22 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
         self.assertEqual(response.context['num_awaiting_approval'], 1)
         self.assertIn(negative_student, response.context['negative_xp_users'])
 
+    def test_SemesterArchive__post_blocked_by_pending_approvals(self):
+        """POSTing the archive view while quest submissions still await approval warns
+        and leaves the semester open (the preview shows the blocker, but the POST must
+        also refuse in case the state changed after the preview was rendered)."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, is_completed=True, is_approved=False, semester=active_sem)
+
+        response = self.client.post(reverse('courses:semester_archive'))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+        self.assertIn('awaiting approval', str(self.get_message_list(response)[0]))
+        active_sem.refresh_from_db()
+        self.assertFalse(active_sem.closed)
+
     def test_SemesterArchive__already_archived(self):
         """POSTing the archive view for an already-archived semester warns and takes no action."""
         self.client.force_login(self.test_teacher)
