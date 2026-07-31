@@ -447,7 +447,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
 
-    def test_announcements_archived_after_semester_archive(self):
+    def test_announcements__archived_after_semester_archive(self):
         """ All unarchived (non-draft) announcements should be archived when a semester is
         archived with the archive_announcements box checked """
         announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
