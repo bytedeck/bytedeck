@@ -4008,6 +4008,37 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class QuestSubmissionSummaryTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff teacher and a quest to summarize."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.quest = baker.make(Quest, name="Summary Quest")
+
+    def setUp(self):
+        """Set up a tenant-aware test client and log in the teacher."""
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.teacher)
+
+    def test_summary__with_approved_submission_computes_stats(self):
+        """With an approved submission, the summary reports the latest approval time and percent-returned.
+
+        Exercises the 'has approved submissions' and 'count_total > 0' branches that an
+        empty quest leaves uncovered.
+        """
+        baker.make(
+            QuestSubmission, quest=self.quest, is_approved=True, is_completed=True,
+            semester=SiteConfig.get().active_semester, time_approved=timezone.now(),
+        )
+        response = self.client.get(reverse('quests:summary', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context['latest_submission_time'])
+        self.assertEqual(response.context['count_total'], 1)
+        self.assertEqual(response.context['percent_returned'], 0)  # none returned -> 0%
+
+
 class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
@@ -4189,6 +4220,14 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(response.context['current_teacher_only'])
         self.assertEqual(response.context['quest'], self.quest)
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_approvals__approved_for_quest_all(self):
+        """The 'all' variant shows approvals of this quest across all semesters (past_approvals_all=True)."""
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:approved_for_quest_all', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['quest'], self.quest)
+        self.assertTrue(response.context['past_approvals_all'])
 
     def test_approvals__my_groups_all_button_rendered(self):
         """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""
