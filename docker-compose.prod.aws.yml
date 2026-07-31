@@ -66,10 +66,10 @@ services:
     command:
       - "redis-server"
       - "--maxmemory"
-      # 512mb default (was 256mb): with noeviction, hitting the cap makes redis
-      # refuse ALL writes -- which breaks the celery broker, not just the cache.
-      # 512mb gives headroom for the September submission burst while still
-      # leaving RAM for the app on this shared host. Raise via REDIS_MAXMEMORY.
+      # 512mb default: with noeviction, hitting the cap makes redis refuse ALL
+      # writes -- which breaks the celery broker, not just the cache. 512mb gives
+      # headroom for the September submission burst while still leaving RAM for
+      # the app on this shared host. Raise via REDIS_MAXMEMORY.
       - "${REDIS_MAXMEMORY:-512mb}"
       - "--maxmemory-policy"
       - "noeviction"
