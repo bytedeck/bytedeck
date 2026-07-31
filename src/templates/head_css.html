@@ -2,11 +2,8 @@
 {% get_static_prefix as STATIC_PREFIX %}
 {% load utility_tags %}
 
-<!-- Font Awesome -->
-<!-- <link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet"> -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css"
-      integrity="sha512-SfTiTlX6kk+qitfevl/7LibUOeJWlt9rbyDn92a1DqWOw9vWG2MFoays0sgObmWazO5BQPiFucnnEAjpAB+/Sw=="
-      crossorigin="anonymous">
+<!-- Font Awesome 4.7.0 (vendored locally; see src/static/css/font-awesome.min.css + src/static/fonts/fontawesome-webfont.*) -->
+<link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet">
 
 <!-- Bootstrap 3.4.1 (vendored locally; see src/static/css/bootstrap.min.css) -->
 {% if request.user.profile.dark_theme %}
