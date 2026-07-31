@@ -4514,6 +4514,37 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         # Confirm redirect to archived quests page
         self.assertRedirects(response, reverse('quests:archived'))
 
+    def test_post__skips_submissions_whose_user_has_no_profile(self):
+        """Archiving still completes when an affected user has no Profile.
+
+        The XP-invalidation loop looks up each affected user's Profile. Every user
+        normally has one, but a rare data inconsistency (e.g. the profile-delete
+        signal's own user.delete() being swallowed on a TransactionManagementError,
+        leaving a user with no profile) would make the lookup raise
+        Profile.DoesNotExist. The loop catches that and moves on, so the archive
+        finishes and the quest's submissions are still deleted.
+
+        Profile.objects.get is patched to raise DoesNotExist because the orphaned
+        state cannot be produced directly: deleting a Profile fires a post_delete
+        signal that also deletes the User (and cascade-deletes the submission).
+        """
+        quest_to_archive = self.quest_b
+        user = baker.make(User)
+        submission = baker.make(QuestSubmission, quest=quest_to_archive, user=user)
+
+        url = reverse('quests:quest_archive', args=[quest_to_archive.id])
+        with patch('quest_manager.views.Profile.objects.get', side_effect=Profile.DoesNotExist):
+            response = self.client.post(url)
+
+        # The archive completed despite the affected user's missing Profile.
+        quest_to_archive.refresh_from_db()
+        self.assertTrue(quest_to_archive.archived)
+        self.assertRedirects(response, reverse('quests:archived'))
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission.id).exists(),
+            "submission should still be deleted even though the user had no profile"
+        )
+
     def test_get__already_archived_quest_returns_404(self):
         """The archive confirmation page 404s for an already-archived quest (#1856).
 
