@@ -1,9 +1,16 @@
 <p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
 
 <p>Your deck <strong>{{ deck.name }}</strong> has <strong>{{ count }}</strong> current
-  student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed
-  {% if count >= cap %}&mdash; the limit has been reached, so no more students can register in a course.{% else %}&mdash; you're approaching the limit.{% endif %}</p>
+  student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed{% if count >= cap %}: the limit has been reached, so no more students can register in a course.{% else %}: you're approaching the limit.{% endif %}</p>
+
+{% if deck.subscription_active %}
+<p>Your deck's subscription is paid through <strong>{{ deck.paid_until }}</strong>.</p>
+{% elif deck.is_on_trial %}
+<p>Your deck's free trial ends on <strong>{{ deck.trial_end_date }}</strong>.</p>
+{% endif %}
 
 <p>Only <em>current</em> students (registered in a course in the active semester) count; staff and archived
   students never do. You can <a href="{{ archive_help_url }}">free up seats</a> by ending the semester or
   archiving past students, or <a href="{{ subscribe_url }}">upgrade your subscription</a> for a higher limit.</p>
+
+{% include "tenant/email/_email_footer.html" %}

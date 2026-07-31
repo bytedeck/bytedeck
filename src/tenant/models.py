@@ -40,8 +40,10 @@ def default_trial_end_date():
     return date.today() + timedelta(days=60)
 
 
-# Trial decks -- and suspended decks, which revert to trial limits (#1734) -- are
-# capped at this many active users.
+# The trial/Maintenance reference cap: the default for new (trial) decks, the cap
+# the Maintenance tier's Stripe price carries in its metadata, and the number the
+# status copy quotes. An admin-set `max_active_users` may differ and remains
+# authoritative (see effective_max_active_users).
 TRIAL_MAX_ACTIVE_USERS = 5
 
 # Days of continued paid access after `paid_until` before a deck counts as lapsed.
@@ -206,6 +208,19 @@ class Tenant(TenantMixin):
         return self.subscription_active and localdate() > self.paid_until
 
     @property
+    def grace_days_remaining(self):
+        """Days of paid grace left after `paid_until`; None when not in the grace
+        period. 0 on the final day (the grace period ends today). Drives the
+        expired banner's "grace period ends in N days" copy.
+
+        days_until_expiry is negative throughout the grace window, so the days
+        left until suspension are GRACE_PERIOD_DAYS + days_until_expiry.
+        """
+        if not self.in_grace_period:
+            return None
+        return GRACE_PERIOD_DAYS + self.days_until_expiry
+
+    @property
     def is_on_trial(self):
         """Whether the deck is in trial mode: no active subscription, and a trial
         clock that hasn't run out."""
@@ -229,21 +244,35 @@ class Tenant(TenantMixin):
 
     @property
     def effective_max_active_users(self):
-        """The current-student cap that should be enforced right now.
+        """The current-student cap that should be enforced right now: ALWAYS the
+        admin-set ``max_active_users`` (-1 = unlimited).
 
-        -1 (unlimited, admin-set) passes through unchanged. A SUSPENDED deck
-        reverts to the trial cap ("back to trial mode", #1734). Every other deck
-        -- subscribed, on trial, or managed manually (no dates) -- uses its
-        admin-set ``max_active_users``: new decks are created with the trial
-        default (5), so the trial cap is the default, not an override, and an
-        admin who deliberately raises a trial or comped deck's cap is honored.
-        (Production bug find, 2026-07-22: the old subscription_active-based rule
-        capped comped/managed-manually decks at 5, contradicting their admin-set
-        cap on the banner and subscription page.)
+        Suspension does not affect the cap: a suspended deck is closed to
+        everyone but its owner and the ByteDeck support admin (see
+        ``tenant.middleware.OwnerOnlyWhenSuspendedMiddleware``). The
+        trial-level cap belongs to the Maintenance tier, whose Stripe price
+        metadata writes it here. Whatever the admin sets, higher or lower,
+        always wins (comps and special cases; maintainer decision on #2178).
         """
-        if self.max_active_users == -1:
-            return -1
-        return TRIAL_MAX_ACTIVE_USERS if self.is_suspended else self.max_active_users
+        return self.max_active_users
+
+    @property
+    def is_on_maintenance(self):
+        """Whether the deck's active subscription is a MAINTENANCE subscription:
+        paid -- so the deck never suspends, and can never time out for deletion
+        (deletion requires suspension, #2044) -- but with the cap left at (or
+        below) the trial student limit.
+
+        The low-cost maintenance tier is simply a Stripe price whose metadata
+        cap IS the trial cap, so this is derived rather than stored: any active
+        subscription that doesn't lift the cap above trial limits is, by
+        definition, maintenance. Unlimited (-1) decks are never maintenance.
+        """
+        return (
+            self.subscription_active
+            and self.max_active_users != -1
+            and self.max_active_users <= TRIAL_MAX_ACTIVE_USERS
+        )
 
     @property
     def days_until_expiry(self):
@@ -271,15 +300,19 @@ class Tenant(TenantMixin):
 
     @property
     def is_over_user_limit(self):
-        """Whether the deck's cached current-student count exceeds its effective cap.
+        """Whether the deck's LIVE current-student count exceeds its effective cap.
 
-        Advisory (banner/notification) check against the nightly-refreshed cached
-        count -- enforcement at the registration choke points recounts live.
-        Always False for unlimited (-1) decks.
+        Recounts live (like the registration choke points) rather than reading the
+        nightly-cached ``active_user_count``: the banner this drives renders next
+        to pages that list current students live, so a stale cached count reads as
+        a bug (production find: banner claimed 0 seats used beside a student list
+        showing 1). Only the banner uses this property, and only for staff, so the
+        extra COUNT per staff page load is acceptable. Always False for unlimited
+        (-1) decks. Must be evaluated inside the deck's schema.
         """
         if self.effective_max_active_users == -1:
             return False
-        return self.active_user_count > self.effective_max_active_users
+        return self.get_active_user_count() > self.effective_max_active_users
 
     @property
     def is_expiring_soon(self):

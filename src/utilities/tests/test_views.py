@@ -1,9 +1,11 @@
 import json
 import random
 import string
+from unittest.mock import Mock
 
 from django import forms
 from django.core import signing
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils.encoding import smart_str
@@ -15,8 +17,9 @@ from django.urls import reverse
 from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
-from utilities.models import MenuItem
+from utilities.models import MenuItem, VideoResource
 from utilities.fields import GFKChoiceField
+from utilities.views import QuerySetSequenceAutoResponseView
 from utilities.widgets import GFKSelect2Widget
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
 
@@ -161,6 +164,25 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         url = reverse('utilities:querysetsequence_auto-json')
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 404
+
+    def test_get_model_name__proxy_model_uses_concrete_parents_verbose_name(self):
+        """For a proxy model, get_model_name resolves to the concrete parent's verbose_name.
+
+        No real proxy model exists in the codebase, so the proxy is simulated with a
+        stand-in whose ._meta reports proxy=True and a concrete parent (Group).
+        """
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {Group: object()}
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), Group._meta.verbose_name)
+
+    def test_get_model_name__proxy_without_parents_falls_back_to_own_verbose_name(self):
+        """A proxy model with no parents falls through the IndexError guard and keeps its own verbose_name."""
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {}
+        proxy._meta.verbose_name = "widget thing"
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), "widget thing")
 
 
 class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
@@ -486,3 +508,51 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # page does not exist
         self.assert404URL(absolute_url)
+
+
+class VideosViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """The Video Resources page (utilities:videos) — lists videos and accepts uploads."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir so uploaded videos don't leak into the repo.
+
+        The upload test writes a clip file; without a throwaway MEDIA_ROOT it would land
+        in the project's real media dir and Django would dedupe the filename on reruns.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-utilities-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    def setUp(self):
+        """Build a tenant-aware test client."""
+        self.client = TenantClient(self.tenant)
+
+    def test_videos__get_lists_existing_video_resources(self):
+        """GET renders the videos page and includes existing VideoResources in the context."""
+        video = VideoResource.objects.create(
+            title="Intro Video",
+            video_file=SimpleUploadedFile("intro.mp4", b"fake video bytes", content_type="video/mp4"),
+        )
+        response = self.client.get(reverse('utilities:videos'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'utilities/videos.html')
+        self.assertIn(video, list(response.context['videos']))
+
+    def test_videos__post_valid_form_creates_video_resource(self):
+        """POST with a title and an uploaded file saves a new VideoResource and re-renders the page."""
+        upload = SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'My Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(VideoResource.objects.filter(title='My Clip').exists())

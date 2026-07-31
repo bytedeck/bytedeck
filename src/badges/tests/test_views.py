@@ -120,6 +120,20 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
         self.assertNotContains(response, 'One btn-group keeps every action button')
 
+    def test_badge_detail_all__login_required_and_renders_for_authenticated_users(self):
+        """badge_detail_all (assertions of all students) redirects anonymous users to login and renders for any logged-in user."""
+        b_pk = self.test_badge.pk
+
+        # anonymous -> redirected to login
+        self.assertRedirectsLogin('badges:badge_detail_all', args=[b_pk])
+
+        # students and teachers can both view it (login_required, no staff gate)
+        self.client.force_login(self.test_student1)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
+        self.client.force_login(self.test_teacher)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
     def test_badge_create__creates_badge(self):
         """Posting valid data to the create view creates a new badge and redirects to the list."""
         # log in a teacher

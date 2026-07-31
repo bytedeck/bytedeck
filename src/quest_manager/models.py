@@ -1223,6 +1223,12 @@ class QuestSubmission(models.Model):
         self.is_approved = False
         self.do_not_grant_xp = False
         self.time_returned = timezone.now()
+        # Re-attach the submission to the current semester (issue #1231). A quest completed in a past
+        # (now closed) semester and returned for a redo would otherwise stay linked to the old semester,
+        # so it never appeared in the student's current in-progress list and, once re-approved, granted
+        # its XP in the closed semester. Returning always happens "now", so the redo belongs to the
+        # active semester. When the submission is already in the active semester this is a no-op.
+        self.semester = SiteConfig.get().active_semester
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP
 

@@ -96,7 +96,19 @@ def deck_status_check():
     """
     from tenant.notices import process_deck_notices
 
+    # Defensive mirror of the dispatcher's exclusions: the public and shared-library
+    # schemas aren't billable decks and SiteConfig.get() returns None on the public
+    # schema, so an ad-hoc invocation (e.g. a shell loop over Tenant.objects.all(),
+    # which includes the public tenant) or a mis-routed message must report and
+    # bail, not crash mid-refresh (staging ops find, 2026-07-25).
+    schema_name = connection.schema_name
+    if schema_name in (get_public_schema_name(), get_library_schema_name()):
+        return f"'{schema_name}' is not a billable deck schema; skipped"
+
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
     notices_summary = process_deck_notices(tenant)
-    return f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; notices: {notices_summary}"
+    return (
+        f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
+        f"notices: {notices_summary}"
+    )

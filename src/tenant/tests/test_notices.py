@@ -289,10 +289,11 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
-    def test_process__grace_period_email_states_the_trial_cap(self):
-        """The grace-period expiry email tells the owner what the deck will revert to:
-        the TRIAL cap (5), not the deck's current (still-paid) cap -- during grace the
-        effective cap is the paid one, so the template can't derive this from `cap`."""
+    def test_process__grace_period_email_states_suspension_ahead(self):
+        """The grace-period expiry email tells the owner what follows the grace
+        window: suspension, with only the deck owner able to sign in and the
+        365-day deletion countdown starting (suspension redesign, 2026-07-30) --
+        checked on the plain-text part, which must carry the same message."""
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
             max_active_users=30, active_user_count=0,  # paid cap 30; no limit notice due
@@ -304,4 +305,120 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
         self.assertIn('grace period', body)
-        self.assertIn('max 5 current students', body)
+        self.assertIn('the deck will be suspended', body)
+        self.assertIn('only the deck owner will be able to sign in', body)
+        self.assertIn('365-day countdown to deck deletion', body)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__grace_email_includes_dates_seats_and_logo(self):
+        """The grace-period expiry email states every date the owner needs -- when
+        the subscription expired and how long ago, when the grace period ends and
+        how many days remain -- plus current seat usage and the site logo
+        (maintainer request from staging live testing, 2026-07-25: the old email
+        gave no dates at all)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
+            max_active_users=30, active_user_count=2,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = mail.outbox[0].alternatives[0][0].replace('\n', ' ')
+        self.assertIn('Aug. 10, 2026', html)   # expired on paid_until...
+        self.assertIn('5 days ago', html)      # ...with the relative phrase
+        self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
+        self.assertIn('25 days left', html)    # ...with the countdown
+        self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__comped_deck_limit_email_renders_without_any_dates(self):
+        """A comped/managed-manually deck (both date fields blank, days_until_expiry
+        None) can still hit its student cap; its limit email must render with no
+        expiry dates to lean on -- covering the dateless arms of the new context."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=None, max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('limit', summary)
+        self.assertEqual(len(mail.outbox), 1)
+        html = mail.outbox[0].alternatives[0][0]
+        self.assertIn('limit has been reached', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_states_when_and_why_with_logo(self):
+        """The suspension email says when the suspension began, which clock ran
+        out (trial vs paid + grace), current seat usage, and carries the logo."""
+        from datetime import date
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=date(2026, 8, 1), paid_until=None,  # trial lapsed -> suspended Aug 2
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertIn('suspended', summary)
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        # the bottom line LEADS (maintainer request, 2026-07-30): the scheduled
+        # deletion date (suspension start + 365 days) with the countdown, and the
+        # deck name links to the deck itself
+        self.assertIn('scheduled for deletion on Aug. 2, 2027', html)
+        self.assertIn('352 days from now', html)  # frozen TODAY Aug 15, 2026 -> Aug 2, 2027
+        self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
+        self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
+        self.assertIn('free trial ended on Aug. 1, 2026', html)
+        # the new suspension rules (redesign, 2026-07-30): owner-only sign-in,
+        # data intact, and the Maintenance escape hatch
+        self.assertIn('only the deck owner can sign in', html)
+        self.assertIn('your content and student data are intact', html)
+        self.assertIn('<em>Maintenance</em> subscription', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
+        # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
+        self.assertIn('<p>Bytedeck</p>', html)
+        self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_paid_clock_and_overdue_countdown(self):
+        """A deck suspended after a PAID subscription lapsed explains the paid
+        clock (paid-through and grace-end dates) in its suspension email, with the
+        bottom line carried by the plain-text part too; a deck already suspended
+        past the deletion horizon still shows its (past) scheduled deletion date
+        but drops the "days from now" countdown."""
+        # paid clock: paid through Jul 6, grace ends Aug 5 -> suspended Aug 6, 2026
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=40),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('subscription was paid through July 6, 2026', html)
+        self.assertIn('grace period ended on Aug. 5, 2026', html)
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', html)
+        self.assertIn('356 days from now', html)
+        body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', body)
+
+        # overdue: suspended Aug 11, 2025 -> deletion day Aug 11, 2026 already passed,
+        # so the date still shows but no "days from now" countdown is promised
+        mail.outbox.clear()
+        Tenant.objects.filter(pk=self.tenant.pk).update(paid_until=TODAY - timedelta(days=400))
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('scheduled for deletion on Aug. 11, 2026', html)
+        self.assertNotIn('days from now', html)

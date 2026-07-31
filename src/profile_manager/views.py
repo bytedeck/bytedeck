@@ -17,6 +17,7 @@ from siteconfig.models import SiteConfig
 
 from .models import Profile
 from .forms import ProfileForm, UserForm
+from .tasks import invalidate_profile_xp_cache_on_schema
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent, Block
 from notifications.signals import notify
@@ -478,9 +479,18 @@ def oauth_merge_account(request):
 @non_public_only_view
 @staff_member_required
 def recalculate_current_xp(request):
-    profiles_qs = Profile.objects.all_for_active_semester()
-    for profile in profiles_qs:
-        profile.xp_invalidate_cache()
+    # Recalculating XP for every current student invalidates and recomputes a cache per
+    # profile; on a busy deck that is hundreds of profiles in one request, which has grown a
+    # uwsgi worker large enough to get OOM-killed and time out the page (issue #2081). Hand it
+    # to the existing background task instead -- it does the same all_for_active_semester()
+    # recompute (with per-profile error handling) and, dispatched from this request, runs in
+    # this tenant's schema via tenant-schemas-celery.
+    invalidate_profile_xp_cache_on_schema.apply_async(queue='default')
+    messages.success(
+        request,
+        "Recalculating XP for all current students in the background. "
+        "It may take a minute; refresh the page to see updated totals.",
+    )
     return redirect_to_previous_page(request)
 
 

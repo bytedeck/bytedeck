@@ -175,7 +175,11 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
         # Normalize: valid Postgres schema and subdomain
         name_slug = slugify(form.instance.name)
         schema = name_slug.replace("-", "_")[:63]
-        if not schema or not schema[0].isalpha():
+        # check_tenant_name (the Tenant.name validator, already run by the form) requires the
+        # name to start with a lowercase letter, so the slug -- and thus the schema -- always
+        # does too. This t_ prefix is defensive normalization that can't trigger for validated
+        # input, so it's excluded from coverage.
+        if not schema or not schema[0].isalpha():  # pragma: no cover
             schema = f"t_{schema}"[:63]
         form.instance.schema_name = schema
         current_domain = Site.objects.get_current().domain
@@ -383,6 +387,31 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         return context
 
 
+def _relative_date_phrase(target, style):
+    """Human phrase locating `target` relative to today, for the Dates table on the
+    subscription page (maintainer request: every date shows the time remaining, or
+    how long ago it passed).
+
+    Args:
+        target (date): The date to describe.
+        style (str): 'remaining' for deadline rows ("N days remaining" /
+            "expires today" / "expired N days ago"), 'ends' for the grace-period
+            row ("ends in N days" / "ends today" / "ended N days ago").
+
+    Returns:
+        str: The phrase, ready to drop into the row's parenthetical.
+    """
+    days = (target - timezone.localdate()).days
+    plural = 's' if abs(days) != 1 else ''
+    if style == 'remaining':
+        if days > 0:
+            return f"{days} day{plural} remaining"
+        return "expires today" if days == 0 else f"expired {-days} day{plural} ago"
+    if days > 0:
+        return f"ends in {days} day{plural}"
+    return "ends today" if days == 0 else f"ended {-days} day{plural} ago"
+
+
 class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
     """Staff-facing "Subscription details" page for the current deck (epic #1729 PR 6).
 
@@ -408,16 +437,35 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             effective cap, the billing constants the copy references, whether
             Stripe billing is configured, and the public-subscribe fallback URL.
         """
+        from datetime import timedelta
+
         from .billing import billing_configured
         from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
         from .utils import get_public_subscribe_url
 
         context = super().get_context_data(**kwargs)
         deck = self.request.tenant
+        current_student_count = deck.get_active_user_count()  # live, not cached
+        cap = deck.effective_max_active_users
+        context.update({
+            # relative phrases for the Dates rows ("(100 days remaining)" /
+            # "(expired 24 days ago)"); None when the corresponding date is unset
+            'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
+            'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
+            'grace_end_phrase': (
+                _relative_date_phrase(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS), 'ends')
+                if deck.paid_until else None
+            ),
+        })
         context.update({
             'deck': deck,
-            'current_student_count': deck.get_active_user_count(),  # live, not cached
-            'cap': deck.effective_max_active_users,
+            'current_student_count': current_student_count,
+            'cap': cap,
+            # None for unlimited decks; clamped at 0 when over the limit (the
+            # template's at-limit warning covers the overage)
+            'remaining_seats': None if cap == -1 else max(0, cap - current_student_count),
+            # what a fresh suspension will RESET the cap to -- the grace copy
+            # predicts it, and can't derive it from the deck's current paid cap
             'trial_cap': TRIAL_MAX_ACTIVE_USERS,
             'grace_days': GRACE_PERIOD_DAYS,
             'stripe_configured': billing_configured(),

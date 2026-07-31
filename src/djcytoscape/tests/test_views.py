@@ -247,29 +247,16 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             expected_url=reverse('djcytoscape:primary'),
         )
 
-    def test_regenerate_all__with_bad_map(self):
-        """Regenerating all maps still redirects to primary when a broken map is present."""
-        CytoScape.objects.create(
-            name="bad map",
-            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
-            initial_object_id=99999,  # a non-existant object
-        )
-        self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate_all')),
-            expected_url=reverse('djcytoscape:primary'),
-        )
-
-    def test_regenerate_all__many_maps_processed_in_background(self):
-        """With more than 5 maps, regeneration is offloaded to a background task
-        and the user is warned it is being processed in the background."""
-        for i in range(6):
-            CytoScape.generate_map(baker.make('quest_manager.Quest'), f"Extra Map {i}")
-        self.assertGreater(CytoScape.objects.count(), 5)
-
+    @patch('djcytoscape.views.regenerate_all_maps.apply_async')
+    def test_regenerate_all__always_offloads_to_background_task(self, mock_apply_async):
+        """Regeneration is always offloaded to the celery task (no inline loop / count
+        threshold), and the user is told it's being processed in the background (#2081)."""
         response = self.client.get(reverse('djcytoscape:regenerate_all'), follow=True)
+
+        mock_apply_async.assert_called_once_with(args=[self.staff_user.id], queue='default')
         self.assertTrue(
             any("background" in str(m) for m in response.context['messages']),
-            "expected a 'processed in the background' warning message",
+            "expected a 'processed in the background' message",
         )
 
     def test_quest_map_interlink__existing_map_renders(self):

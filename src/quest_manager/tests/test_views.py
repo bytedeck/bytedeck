@@ -17,6 +17,7 @@ from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
@@ -549,6 +550,42 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[s4_pk]))
         self.assertNotContains(response, 'Submit Quest for Approval')
 
+    def test_submission__unavailable_quest_shows_notice_and_hides_form_for_student(self):
+        """A student viewing a submission of an unpublished quest gets a "no longer available"
+        notice and the (empty, useless) submission form is hidden entirely (issue #798).
+
+        quest3/sub4 is unpublished, so the submission form has no submit button; rather than
+        leave the confusing empty form, the student sees a red notice and no form panel.
+        """
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub4.pk]))
+        self.assertContains(response, 'Quest No Longer Available')
+        self.assertNotContains(response, 'Quest Submission Form')
+
+    def test_submission__available_quest_shows_form_without_notice(self):
+        """A published, non-archived quest still shows the submission form and no notice (issue #798)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+        self.assertContains(response, 'Quest Submission Form')
+        self.assertNotContains(response, 'Quest No Longer Available')
+
+    def test_submission__archived_quest_submission_is_not_viewable(self):
+        """A submission of an archived quest is already not viewable (404), which matches the
+        "no longer viewable" fallback the issue accepts for the archived case (issue #798).
+
+        The QuestSubmission manager excludes archived quests from this view, so there is no empty
+        form to worry about -- the page simply isn't served.
+        """
+        self.client.force_login(self.test_student1)
+
+        self.quest3.archived = True
+        self.quest3.save()
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub4.pk]))
+        self.assertEqual(response.status_code, 404)
+
     def test_submission__drop_button_hidden_when_approved(self):
         """
         Make sure drop button is not visible when quest submission is already approved
@@ -666,6 +703,15 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
 
+    def test_ajax_save_draft__ajax_get_returns_404(self):
+        """An ajax GET (with no POST data) to this view returns 404."""
+        self.client.force_login(self.test_student1)
+        response = self.client.get(
+            reverse('quests:ajax_save_draft'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax_save_draft__has_changes(self):
         """Should save if there are changes in the draft text"""
         # loging required for this view
@@ -764,6 +810,17 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PaginateHelperTest(SimpleTestCase):
+    """Tests for the paginate() helper's page-selection fallbacks."""
+
+    def test_paginate__out_of_range_page_returns_last_page(self):
+        """A page number past the end falls back to the last page (EmptyPage branch)."""
+        from quest_manager.views import paginate
+        object_list = list(range(100))  # 4 pages at the default 30 per page
+        page = paginate(object_list, 9999)
+        self.assertEqual(page.number, page.paginator.num_pages)
+
+
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for view.py :
 
@@ -793,6 +850,29 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # log in the student for all tests here
         self.client.force_login(self.test_student)
+
+    def test_complete__no_comment_and_not_completed_returns_404(self):
+        """POSTing complete for an in-progress submission with no draft comment 404s.
+
+        Without a completion or a draft comment the request did not come from the
+        submission view, so complete() rejects it.
+        """
+        # a distinct quest so this in-progress sub doesn't collide with cls.sub
+        # (only one in-progress submission per quest/semester is allowed, #1345)
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                         semester=self.semester, is_completed=False)
+        self.assertIsNone(sub.draft_comment)
+        response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 404)
+
+    def test_skip__student_not_earning_xp_redirects_to_quests(self):
+        """A non-staff student who is not earning XP can skip their own submission and is sent to the quest list."""
+        profile = self.test_student.profile
+        profile.not_earning_xp = True
+        profile.save()
+
+        response = self.client.get(reverse('quests:skip', args=[self.sub.id]))
+        self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
@@ -2216,6 +2296,93 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn("new-prereq-quest", str(copied_quest.prereqs()))
         self.assertIn("new-prereq-badge", str(copied_quest.prereqs()))
 
+    def test_quest_copy__copies_submission_questions(self):
+        """Copying a quest duplicates its submission questions onto the copy (issue #2161).
+        Each question's fields — including marker_notes and the (shared) solution_file — are
+        carried over, and the source quest keeps its own questions."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from questions.models import Question
+
+        # give the source quest a question of each type, in a specific order
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?", solution_text="Any name",
+            marker_notes="Accept any non-empty name.",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=2, type="long_answer", required=False,
+            instructions="Explain your reasoning.",
+        )
+        Question.objects.create(
+            quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="Attach your work.", allowed_file_type="image",
+            solution_file=SimpleUploadedFile("solution.png", b"file_content", content_type="image/png"),
+        )
+
+        self.client.force_login(self.test_teacher)
+        self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+
+        # the copy has the same questions, in the same order, with the same fields
+        source = list(Question.objects.filter(quest=self.quest).order_by("ordinal"))
+        copied = list(Question.objects.filter(quest=copied_quest).order_by("ordinal"))
+        self.assertEqual(len(copied), 3)
+        for src_q, copy_q in zip(source, copied):
+            self.assertNotEqual(src_q.pk, copy_q.pk)  # a distinct row
+            self.assertEqual(copy_q.ordinal, src_q.ordinal)
+            self.assertEqual(copy_q.type, src_q.type)
+            self.assertEqual(copy_q.required, src_q.required)
+            self.assertEqual(copy_q.instructions, src_q.instructions)
+            self.assertEqual(copy_q.solution_text, src_q.solution_text)
+            self.assertEqual(copy_q.marker_notes, src_q.marker_notes)
+            self.assertEqual(copy_q.allowed_file_type, src_q.allowed_file_type)
+            # the copy references the same solution file as the source (not re-uploaded)
+            self.assertEqual(copy_q.solution_file.name, src_q.solution_file.name)
+        # the source quest still has exactly its own three questions
+        self.assertEqual(Question.objects.filter(quest=self.quest).count(), 3)
+
+    def test_quest_copy__questionless_quest_still_copies(self):
+        """A quest with no submission questions copies as before — the clone step is a no-op."""
+        from questions.models import Question
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(
+            reverse('quests:quest_copy', args=[self.quest.id]),
+            data=self.valid_copy_form_data,
+        )
+        copied_quest = Quest.objects.get(name='Test Quest - COPY')
+        self.assertRedirects(response, copied_quest.get_absolute_url())
+        self.assertEqual(Question.objects.filter(quest=copied_quest).count(), 0)
+
+    def test_quest_copy__question_failure_rolls_back_whole_copy(self):
+        """If duplicating a question fails, the whole copy rolls back — no orphaned quest is
+        left behind (the copy, its prereqs and its questions commit or roll back together)."""
+        from django.core.exceptions import ValidationError
+        from questions.models import Question
+
+        Question.objects.create(
+            quest=self.quest, ordinal=1, type="short_answer", required=True,
+            instructions="What is your name?",
+        )
+
+        quests_before = Quest.objects.count()
+        self.client.force_login(self.test_teacher)
+
+        # force the second step (question duplication) to blow up
+        with patch.object(Question, "full_clean", side_effect=ValidationError("boom")):
+            with self.assertRaises(ValidationError):
+                self.client.post(
+                    reverse('quests:quest_copy', args=[self.quest.id]),
+                    data=self.valid_copy_form_data,
+                )
+
+        # the transaction rolled back: no copied quest, and the quest count is unchanged
+        self.assertFalse(Quest.objects.filter(name='Test Quest - COPY').exists())
+        self.assertEqual(Quest.objects.count(), quests_before)
+
 
 class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
@@ -2879,6 +3046,16 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_ajax_submission_count__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(
+            reverse('quests:ajax_submission_count'),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax_submission_count__student_access_granted(self):
         """ The current behavior is that students can access the view.
         This test acknowledges that behavior."""
@@ -2977,7 +3154,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__returns_json(self):
-        """An ajax POST (with or without a quest id) returns a JsonResponse with a 200 status."""
+        """An ajax POST with a quest id returns a JsonResponse with a 200 status."""
         response = self.client.post(
             reverse('quests:ajax_quest_info', args=[self.quest.id]),
             content_type='application/json',
@@ -2987,15 +3164,19 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(type(response), JsonResponse)
 
-        # Same without a quest ID:
+    def test_ajax_quest_info__no_quest_id_returns_404(self):
+        """An ajax POST without a quest id is rejected (404) rather than rendering every quest.
+
+        The accordion UI always requests one quest by id; the "all quests" branch was an unbounded
+        per-request memory hog with no staff gate that any logged-in user could POST directly
+        (issue #2081), so it now 404s like the view's other invalid requests.
+        """
         response = self.client.post(
             reverse('quests:ajax_quest_all'),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        self.assertEqual(response.status_code, 200)
-
-        self.assertEqual(type(response), JsonResponse)
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_quest_info__can_export_student_false(self):
         """
@@ -3088,7 +3269,7 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_ajax_approval_info__ajax_get_returns_404(self):
         """ This view is only accessible by an ajax POST request """
         response = self.client.get(
-            reverse('quests:ajax_quest_info', args=[self.quest.id]),
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
@@ -3153,6 +3334,15 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             reverse('quests:ajax_info_in_progress', args=[self.submission.id])
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_ajax_submission_info__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        response = self.client.get(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_ajax_submission_info__in_progress(self):
         """An in-progress submission returns JSON with completed and past both False; missing id 404s."""
@@ -3254,6 +3444,49 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
+
+
+class AjaxFlagTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for:
+    def ajax_flag(request)
+
+    via
+
+    url(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user and a submission to flag."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.submission = baker.make(QuestSubmission)
+
+    def setUp(self):
+        """Set up a tenant-aware test client and log in the staff user."""
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.test_teacher)
+
+    def test_ajax_flag__ajax_post_flags_submission(self):
+        """An ajax POST records the requesting staff user as the submission's flagged_by and returns JSON."""
+        self.assertIsNone(self.submission.flagged_by)
+        response = self.client.post(
+            reverse('quests:ajax_flag'),
+            data={'submission_id': self.submission.id},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(type(response), JsonResponse)
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.flagged_by, self.test_teacher)
+
+    def test_ajax_flag__ajax_get_returns_404(self):
+        """An ajax GET (rather than POST) to this view returns 404."""
+        response = self.client.get(
+            reverse('quests:ajax_flag'),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):

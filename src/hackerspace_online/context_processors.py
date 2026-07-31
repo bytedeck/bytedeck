@@ -38,9 +38,16 @@ def deck_status(request):
     """
     from django.urls import reverse
 
+    from tenant.models import TRIAL_MAX_ACTIVE_USERS
     from tenant.utils import get_current_deck
 
     deck = get_current_deck()
     if deck is None:
         return {"current_deck": None}
-    return {"current_deck": deck, "deck_subscribe_url": reverse('decks:subscription')}
+    return {
+        "current_deck": deck,
+        "deck_subscribe_url": reverse('decks:subscription'),
+        # the trial/Maintenance student cap, for banner copy that references it
+        # (the deck's own cap can differ, e.g. a paid cap during grace)
+        "trial_cap": TRIAL_MAX_ACTIVE_USERS,
+    }
