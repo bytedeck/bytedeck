@@ -142,6 +142,35 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.max_active_users, 80)
 
+    def test_deck_status_check__closes_semester_on_fresh_suspension(self):
+        """The nightly task closes a freshly suspended deck's open semester
+        (enforcement: runs even with notices report-only) and refreshes the
+        cached counts afterwards, so the deck comes out of the run with its
+        post-suspension state: semester closed, zero current students."""
+        from datetime import timedelta
+
+        from django.contrib.auth import get_user_model
+        from django.utils.timezone import localdate
+        from model_bakery import baker
+        from siteconfig.models import SiteConfig
+        from tenant.models import Tenant
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            trial_end_date=localdate() - timedelta(days=1), paid_until=None,
+        )
+
+        result = tasks.deck_status_check.apply()
+        self.assertTrue(result.successful())
+        self.assertIn('closed semester', result.result)
+
+        self.assertTrue(SiteConfig.get().active_semester.closed)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.active_user_count, 0)  # refreshed AFTER the close
+
     def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
         """The dispatcher schedules one per-schema check per deck, skipping the
         public schema and the shared-library tenant."""

@@ -228,8 +228,13 @@ class SemesterManager(models.Manager):
         else:
             return SiteConfig.get().active_semester
 
-    def complete_active_semester(self):
+    def complete_active_semester(self, clamp_negative_xp=False):
+        """Close the active semester, or return a Semester error sentinel.
 
+        clamp_negative_xp: record a negative final XP as zero instead of refusing
+        to close (the deck-suspension auto-close uses this, #1734 redesign B2;
+        the staff-driven close keeps the refusal so a teacher can investigate).
+        """
         active_sem = self.get_current()
 
         # This semester has already been closed
@@ -242,7 +247,7 @@ class SemesterManager(models.Manager):
 
         # need to calculate all user XP and store in their Course
         try:
-            CourseStudent.objects.calc_semester_grades(active_sem)
+            CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
 
@@ -537,20 +542,33 @@ class CourseStudentManager(models.Manager):
                 xp += studentcourse.xp_adjustment
         return xp
 
-    def calc_semester_grades(self, semester):
+    def calc_semester_grades(self, semester, clamp_negative_xp=False):
+        """Record every registration's final XP and deactivate it.
+
+        clamp_negative_xp: record a negative XP as zero instead of raising (used
+        by the suspension auto-close, where there is no teacher around to fix
+        the balance first).
+        """
         coursestudents = self.get_queryset().get_semester(semester)
         for coursestudent in coursestudents:
             coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
             if coursestudent.final_xp < 0:
-                raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                 f"Fix it before closing the semester")
+                if not clamp_negative_xp:
+                    raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                     f"Fix it before closing the semester")
+                coursestudent.final_xp = 0
             coursestudent.active = False
             coursestudent.save()
 
-    def all_for_semester(self, semester, students_only=False):
+    def all_for_semester(self, semester, students_only=False, active_only=False):
+        """All registrations for `semester`; optionally students only, and
+        optionally only registrations still active (a closed semester deactivates
+        its registrations, so active_only excludes them: #1734 redesign B2)."""
         qs = self.get_queryset().get_semester(semester)
         if students_only:
             qs = qs.get_students_only()
+        if active_only:
+            qs = qs.filter(active=True)
         return qs
 
     # pick one of the courses...for now
@@ -560,12 +578,15 @@ class CourseStudentManager(models.Manager):
     def current_courses(self, user):
         return self.all_for_user(user).get_semester(SiteConfig.get().active_semester)
 
-    def all_users_for_active_semester(self, students_only=False):
+    def all_users_for_active_semester(self, students_only=False, active_only=False):
         """
         :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
+
+        active_only limits enrollment to registrations still active, so a closed
+        (e.g. suspension-closed) semester contributes no users.
         """
         try:
-            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
+            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only, active_only=active_only)
             user_list = courses.values_list('user', flat=True)
             user_list = set(user_list)  # removes doubles
             return User.objects.filter(id__in=user_list, is_active=True)

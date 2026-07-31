@@ -169,6 +169,25 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         )
         self.assertEqual(Semester.objects.complete_active_semester(), Semester.QUEST_AWAITING_APPROVAL)
 
+    def test_complete_active_semester__clamp_records_negative_xp_as_zero(self):
+        """With clamp_negative_xp on (the deck-suspension auto-close, #1734 B2), a
+        student's negative balance is recorded as zero final XP and the semester
+        closes; without it the STUDENTS_WITH_NEGATIVE_XP refusal stands."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+            self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+            result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+
+        self.assertEqual(result, SiteConfig.get().active_semester)
+        self.assertTrue(result.closed)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
+
 
 class SemesterModelTest(ByteDeckTenantTestCase):
 

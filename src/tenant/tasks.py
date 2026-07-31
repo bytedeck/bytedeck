@@ -94,7 +94,7 @@ def deck_status_check():
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
-    from tenant.notices import process_deck_notices
+    from tenant.notices import close_semester_on_new_suspension, process_deck_notices
 
     # Defensive mirror of the dispatcher's exclusions: the public and shared-library
     # schemas aren't billable decks and SiteConfig.get() returns None on the public
@@ -107,8 +107,13 @@ def deck_status_check():
 
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
+    # enforcement before communication (#1734 redesign B2): a fresh suspension
+    # closes the open semester exactly once, so the suspended notice below (and
+    # the refreshed counts) describe the deck's actual post-suspension state
+    semester_summary = close_semester_on_new_suspension(tenant)
+    tenant.update_cached_fields()  # the close empties the current-student count
     notices_summary = process_deck_notices(tenant)
     return (
         f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
-        f"notices: {notices_summary}"
+        f"semester: {semester_summary}; notices: {notices_summary}"
     )
