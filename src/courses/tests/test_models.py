@@ -169,6 +169,36 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         )
         self.assertEqual(Semester.objects.complete_active_semester(), Semester.QUEST_AWAITING_APPROVAL)
 
+    def test_complete_active_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
+        """A negative-XP student aborts the close atomically: registrations finalized before
+        the bad student was reached are rolled back and the semester stays open. Regression
+        test for the pre-transaction behavior, where those students kept their recorded
+        final_xp and active=False while the close itself failed."""
+        active_semester = SiteConfig.get().active_semester
+        course = baker.make(Course)
+
+        # calc_semester_grades() processes registrations in block-name order (CourseStudent
+        # Meta.ordering follows Block.Meta.ordering = ['name']), so the fine student in
+        # block "A" is finalized before the negative-XP student in block "B" raises.
+        fine_registration = baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='A'), semester=active_semester,
+        )
+        baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='B'), semester=active_semester,
+            xp_adjustment=-10,  # makes this student's XP negative
+        )
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+
+        # the fine student's registration must be untouched, and the semester still open
+        fine_registration.refresh_from_db()
+        self.assertTrue(fine_registration.active)
+        self.assertIsNone(fine_registration.final_xp)
+        active_semester.refresh_from_db()
+        self.assertFalse(active_semester.closed)
+
 
 class SemesterModelTest(ByteDeckTenantTestCase):
 
