@@ -4,7 +4,12 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
-from questions.forms import QuestionForm, QuestionSubmissionForm, QuestionSubmissionFormsetFactory
+from questions.forms import (
+    SHORT_ANSWER_MAX_LENGTH,
+    QuestionForm,
+    QuestionSubmissionForm,
+    QuestionSubmissionFormsetFactory,
+)
 from questions.models import Question, QuestionSubmission
 
 
@@ -34,6 +39,17 @@ class QuestionFormTest(ByteDeckTenantTestCase):
             QuestionForm(question_type="not_a_type")
         with self.assertRaises(ValueError):
             QuestionForm()  # question_type kwarg missing entirely
+
+    def test_init__short_answer_shows_character_limit_help(self):
+        """The add-Short-Answer form tells the teacher the response is a single line capped at
+        255 characters (so they can pick Long Answer for longer responses); Long Answer and
+        File Upload show no such note."""
+        from crispy_forms.utils import render_crispy_form
+        short_html = render_crispy_form(QuestionForm(question_type="short_answer"))
+        self.assertIn(f"{SHORT_ANSWER_MAX_LENGTH} characters", short_html)
+        for other_type in ("long_answer", "file_upload"):
+            other_html = render_crispy_form(QuestionForm(question_type=other_type))
+            self.assertNotIn(f"{SHORT_ANSWER_MAX_LENGTH} characters", other_html)
 
     def test_valid_data__creates_question(self):
         """The form validates and saves a well-formed short_answer question."""
@@ -86,11 +102,13 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         )
 
     def test_init__short_answer_field(self):
-        """Short answer forms get a 200-char text field and no file field."""
+        """Short answer forms get a length-capped text field (and matching widget maxlength) and
+        no file field."""
         form = QuestionSubmissionForm(instance=self.short_answer)
         self.assertIn("response_text", form.fields)
         self.assertNotIn("response_file", form.fields)
-        self.assertEqual(form.fields["response_text"].max_length, 200)
+        self.assertEqual(form.fields["response_text"].max_length, SHORT_ANSWER_MAX_LENGTH)
+        self.assertEqual(form.fields["response_text"].widget.attrs["maxlength"], str(SHORT_ANSWER_MAX_LENGTH))
         self.assertTrue(form.fields["response_text"].required)
 
     def test_init__long_answer_field(self):
@@ -152,10 +170,16 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": "An answer"}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_clean__short_answer_over_200_chars_is_invalid(self):
-        """The 200-character short answer limit is enforced server-side, not just by the widget."""
-        form = QuestionSubmissionForm(data={"response_text": "x" * 201}, instance=self.short_answer)
-        self.assertFalse(form.is_valid())
+    def test_clean__short_answer_length_limit_enforced_server_side(self):
+        """The short answer character limit is enforced server-side, not just by the widget's
+        maxlength: exactly the limit is accepted, one character over is rejected."""
+        at_limit = QuestionSubmissionForm(
+            data={"response_text": "x" * SHORT_ANSWER_MAX_LENGTH}, instance=self.short_answer)
+        self.assertTrue(at_limit.is_valid(), at_limit.errors)
+
+        over_limit = QuestionSubmissionForm(
+            data={"response_text": "x" * (SHORT_ANSWER_MAX_LENGTH + 1)}, instance=self.short_answer)
+        self.assertFalse(over_limit.is_valid())
 
     def test_clean__required_file_missing_is_invalid(self):
         """A required file question rejects a POST with no file, and accepts an allowed one."""

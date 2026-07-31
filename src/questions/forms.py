@@ -14,6 +14,12 @@ from .models import Question, QuestionSubmission, QuestionType
 # 16 MiB, the maximum size of a student's file response.
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
 
+# Maximum length of a student's short-answer response. A short answer is a single line, so it's
+# capped; a Long Answer question is the option for a longer, formatted response. Enforced
+# server-side by the CharField below (not just the input's maxlength), and shown to teachers in
+# the add-question help text so they can choose the right question type.
+SHORT_ANSWER_MAX_LENGTH = 255
+
 
 class QuestionForm(forms.ModelForm):
     """Displayed to the teacher when they are creating or editing a Question.
@@ -60,7 +66,20 @@ class QuestionForm(forms.ModelForm):
         if question_type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
             del self.fields['solution_file']
             del self.fields['allowed_file_type']
-            solution_fields = Div('solution_text')
+            if question_type == QuestionType.SHORT_ANSWER:
+                # Tell the teacher a short answer is a single capped-length line, so they can pick
+                # a Long Answer question instead when they want a longer, formatted response.
+                solution_fields = Div(
+                    HTML(
+                        f'<p class="help-block"><i class="fa fa-info-circle"></i> '
+                        f'A short answer is a single line of plain text, limited to '
+                        f'{SHORT_ANSWER_MAX_LENGTH} characters. For a longer or formatted '
+                        f'response, use a Long Answer question instead.</p>'
+                    ),
+                    'solution_text',
+                )
+            else:
+                solution_fields = Div('solution_text')
         elif question_type == QuestionType.FILE_UPLOAD:
             del self.fields['solution_text']
 
@@ -148,8 +167,8 @@ class QuestionSubmissionForm(forms.ModelForm):
         form_fields = Div("response_text")
         if self.question.type == QuestionType.SHORT_ANSWER:
             del self.fields["response_file"]
-            # replace the model's TextField default with a CharField so the 200-character
-            # limit is enforced server-side, not just by the widget's maxlength attribute.
+            # replace the model's TextField default with a CharField so the character limit
+            # is enforced server-side, not just by the widget's maxlength attribute.
             # A short answer is a single line, so use a text input (not a textarea).
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); a distinct aria-label per question keeps each
@@ -157,8 +176,8 @@ class QuestionSubmissionForm(forms.ModelForm):
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,
-                max_length=200,
-                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': self._response_aria_label()}),
+                max_length=SHORT_ANSWER_MAX_LENGTH,
+                widget=forms.TextInput(attrs={'maxlength': str(SHORT_ANSWER_MAX_LENGTH), 'aria-label': self._response_aria_label()}),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
