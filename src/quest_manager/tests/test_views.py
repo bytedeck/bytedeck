@@ -1365,18 +1365,26 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(response.context['bulk_edit_mode'])
 
     def test_bulk_update_quests__saves_extra_update_fields(self):
-        """bulk_update_quests persists fields listed in extra_update_fields alongside the updates."""
+        """bulk_update_quests threads extra_update_fields into each quest's save(update_fields=...).
+
+        The method only mutates the field_updates keys, so extra_update_fields has no
+        observable persistence side-effect on its own; asserting it lands in update_fields
+        is what makes the test fail if that handling is removed.
+        """
         from quest_manager.views import QuestBulkEditView
 
         quests = Quest.objects.filter(id__in=[self.quest1.id, self.quest2.id])
-        count = QuestBulkEditView.bulk_update_quests(
-            quests,
-            field_updates={'published': True},
-            extra_update_fields=['xp'],
-        )
+        with patch.object(Quest, 'save', autospec=True) as mock_save:
+            count = QuestBulkEditView.bulk_update_quests(
+                quests,
+                field_updates={'published': True},
+                extra_update_fields=['xp'],
+            )
         self.assertEqual(count, 2)
-        self.assertTrue(Quest.objects.get(id=self.quest1.id).published)
-        self.assertTrue(Quest.objects.get(id=self.quest2.id).published)
+        self.assertEqual(mock_save.call_count, 2)
+        for call in mock_save.call_args_list:
+            self.assertIn('published', call.kwargs['update_fields'])  # the field_updates key
+            self.assertIn('xp', call.kwargs['update_fields'])  # the extra_update_fields entry
 
     def test_bulk_edit__redirects_if_no_ids(self):
         """
