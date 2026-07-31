@@ -637,6 +637,63 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
             self.assertEqual(result, expected)
 
 
+class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
+    """Targeted tests for previously-uncovered CytoScape map-generation branches."""
+
+    def test_generate_map__repeatable_reliant_quest_gets_repeat_edge_label(self):
+        """A repeatable reliant quest (max_repeats > 0) gets a circular 'x<n>' repeat edge."""
+        start = baker.make(Quest, name="Start")
+        repeatable = baker.make(Quest, name="Repeatable", max_repeats=3)
+        repeatable.add_simple_prereqs([start])
+
+        scape = CytoScape.generate_map(start, "repeat-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, label='x3', classes='repeat-edge').exists()
+        )
+
+    def test_generate_map__child_map_links_back_to_parent_scape(self):
+        """A map generated with a parent_scape gets a node linking back to the parent map."""
+        parent_quest = baker.make(Quest, name="ParentInit")
+        parent_scape = CytoScape.generate_map(parent_quest, "Parent Map")
+
+        child_quest = baker.make(Quest, name="ChildInit")
+        child_scape = CytoScape.generate_map(child_quest, "Child Map", parent_scape=parent_scape)
+
+        self.assertTrue(
+            CytoElement.objects.filter(
+                scape=child_scape,
+                label=f"{parent_scape.name} Quest Map",
+                classes__contains='parent-map',
+            ).exists()
+        )
+
+    def test_get_temp_campaign__returns_none_when_id_not_found(self):
+        """get_temp_campaign returns None when no TempCampaign matches the given node id."""
+        scape = bake_scape(name="temp-campaign-test")
+        scape.init_temp_campaign_list()
+        self.assertIsNone(scape.get_temp_campaign(999999))
+
+    def test_generate_map__campaign_as_prerequisite_adds_campaign_reliant(self):
+        """A quest whose prerequisite is a Campaign (Category) exercises the campaign-reliant path.
+
+        The campaign node is a compound/parent node, and a quest that relies on the whole
+        campaign is registered as a campaign-reliant during the recursive edge build, so map
+        generation completes and both quests are represented.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Test Campaign")
+        in_campaign = baker.make(Quest, name="InCampaign", campaign=campaign)
+        in_campaign.add_simple_prereqs([start])
+        reliant_on_campaign = baker.make(Quest, name="ReliantOnCampaign")
+        reliant_on_campaign.add_simple_prereqs([campaign])
+
+        scape = CytoScape.generate_map(start, "campaign-reliant-test")
+
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="InCampaign").exists())
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="ReliantOnCampaign").exists())
+
+
 class CampaignMapOrderTest(ByteDeckTenantTestCase):
     """Campaigns are placed left-to-right on the quest map in Category.map_order (issue #1977,
     the ordering half). dagre orders same-rank nodes by crossing-minimization and ignores input

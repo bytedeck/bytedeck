@@ -40,8 +40,10 @@ def default_trial_end_date():
     return date.today() + timedelta(days=60)
 
 
-# Trial decks -- and suspended decks, which revert to trial limits (#1734) -- are
-# capped at this many active users.
+# The trial/Maintenance reference cap: the default for new (trial) decks, the cap
+# the Maintenance tier's Stripe price carries in its metadata, and the number the
+# status copy quotes. An admin-set `max_active_users` may differ and remains
+# authoritative (see effective_max_active_users).
 TRIAL_MAX_ACTIVE_USERS = 5
 
 # Days of continued paid access after `paid_until` before a deck counts as lapsed.
@@ -245,14 +247,12 @@ class Tenant(TenantMixin):
         """The current-student cap that should be enforced right now: ALWAYS the
         admin-set ``max_active_users`` (-1 = unlimited).
 
-        Suspension does NOT override the cap at read time. Instead, when a
-        deck's suspension episode begins, the nightly ``deck_status_check``
-        writes the trial default (TRIAL_MAX_ACTIVE_USERS) into the field once
-        ("revert to trial limits", #1734; see
-        ``tenant.notices.reset_cap_on_new_suspension``) -- after that, whatever
-        the admin sets, higher or lower, always wins (comps and special cases;
-        maintainer decision on #2178 after a production find where a lowered
-        cap of 1 was silently overridden back to 5).
+        Suspension does not affect the cap: a suspended deck is closed to
+        everyone but its owner and the ByteDeck support admin (see
+        ``tenant.middleware.OwnerOnlyWhenSuspendedMiddleware``). The
+        trial-level cap belongs to the Maintenance tier, whose Stripe price
+        metadata writes it here. Whatever the admin sets, higher or lower,
+        always wins (comps and special cases; maintainer decision on #2178).
         """
         return self.max_active_users
 

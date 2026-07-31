@@ -96,7 +96,7 @@ def deck_status_check():
     """
     import stripe as stripe_lib
 
-    from tenant.notices import process_deck_notices, reset_cap_on_new_suspension
+    from tenant.notices import process_deck_notices
 
     # Defensive mirror of the dispatcher's exclusions: the public and shared-library
     # schemas aren't billable decks and SiteConfig.get() returns None on the public
@@ -113,9 +113,10 @@ def deck_status_check():
     # Nightly Stripe reconcile (plan §5.3, PR 7): webhooks are an optimization,
     # not the source of truth -- re-fetching every linked deck's subscription
     # means a webhook outage shorter than the 30-day grace can never suspend a
-    # paying deck. Stripe errors are reported, not raised: the cap reset and
-    # notices below must still run. Runs BEFORE the cap reset so a renewal
-    # Stripe knows about can lift the deck out of suspension first.
+    # paying deck. Stripe errors are reported, not raised: the notices below
+    # must still run. Runs BEFORE the notices so a renewal Stripe knows about
+    # lifts the deck out of suspension first (no cap reset anymore: #2210
+    # removed it, suspension never touches the admin-set cap).
     stripe_summary = 'not linked'
     if tenant.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
         from tenant.billing import _sync_deck_from_subscription_id
@@ -124,12 +125,8 @@ def deck_status_check():
         except stripe_lib.StripeError as e:
             stripe_summary = f'stripe error: {e}'
 
-    # enforcement before communication: a fresh suspension reverts the cap to the
-    # trial default exactly once (admin adjustments stick afterwards), so the
-    # suspension notice below reports the cap the deck actually has now
-    cap_summary = reset_cap_on_new_suspension(tenant)
     notices_summary = process_deck_notices(tenant)
     return (
         f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
-        f"stripe: {stripe_summary}; cap: {cap_summary}; notices: {notices_summary}"
+        f"stripe: {stripe_summary}; notices: {notices_summary}"
     )

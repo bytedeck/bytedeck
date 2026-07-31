@@ -17,6 +17,7 @@ from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
@@ -809,6 +810,17 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class PaginateHelperTest(SimpleTestCase):
+    """Tests for the paginate() helper's page-selection fallbacks."""
+
+    def test_paginate__out_of_range_page_returns_last_page(self):
+        """A page number past the end falls back to the last page (EmptyPage branch)."""
+        from quest_manager.views import paginate
+        object_list = list(range(100))  # 4 pages at the default 30 per page
+        page = paginate(object_list, 9999)
+        self.assertEqual(page.number, page.paginator.num_pages)
+
+
 class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for view.py :
 
@@ -838,6 +850,29 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # log in the student for all tests here
         self.client.force_login(self.test_student)
+
+    def test_complete__no_comment_and_not_completed_returns_404(self):
+        """POSTing complete for an in-progress submission with no draft comment 404s.
+
+        Without a completion or a draft comment the request did not come from the
+        submission view, so complete() rejects it.
+        """
+        # a distinct quest so this in-progress sub doesn't collide with cls.sub
+        # (only one in-progress submission per quest/semester is allowed, #1345)
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                         semester=self.semester, is_completed=False)
+        self.assertIsNone(sub.draft_comment)
+        response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
+        self.assertEqual(response.status_code, 404)
+
+    def test_skip__student_not_earning_xp_redirects_to_quests(self):
+        """A non-staff student who is not earning XP can skip their own submission and is sent to the quest list."""
+        profile = self.test_student.profile
+        profile.not_earning_xp = True
+        profile.save()
+
+        response = self.client.get(reverse('quests:skip', args=[self.sub.id]))
+        self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
 
     def post_complete(self, button='complete', submission_comment="test comment", teachers_list=None):
         """ Convenience method for posting the complete() view.
