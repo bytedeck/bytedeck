@@ -29,7 +29,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
 import numpy
@@ -482,14 +482,30 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
 
+    ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
+
     def dispatch(self, request, *args, **kwargs):
         """The delete button is hidden for the active semester, but the URL used to be
         unguarded: deleting it raised an unhandled ProtectedError (SiteConfig.active_semester
         is on_delete=PROTECT) and 500'd. Redirect with an explanation instead."""
         if self.get_object() == SiteConfig.get().active_semester:
-            messages.error(request, "The active semester can't be deleted. Activate a different semester first.")
+            messages.error(request, self.ACTIVE_SEMESTER_ERROR)
             return redirect('courses:semester_list')
         return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        """Perform the deletion, catching the ProtectedError from the delete itself: the
+        dispatch() pre-check can race a concurrent activation (another request making this
+        semester active between the check and the delete), which would otherwise 500 on the
+        PROTECT constraint. The success message is added here, after the delete succeeds,
+        rather than in get_success_url() (which Django calls before deleting)."""
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(self.request, self.ACTIVE_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        messages.success(self.request, self.success_message)
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -497,13 +513,6 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
         registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
         context["registrations"] = registrations
         return context
-
-    def get_success_url(self) -> str:
-        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
-        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
-        """
-        messages.success(self.request, self.success_message)
-        return super().get_success_url()
 
 
 class SemesterCreateUpdateFormsetMixin:
@@ -592,8 +601,12 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
+    """Staff-only endpoint that makes the given semester the deck's active semester
+    (the SiteConfig.active_semester pointer that registration, XP, and submissions run through)."""
 
     def get(self, request, *args, **kwargs):
+        """Point SiteConfig.active_semester at the semester from the URL and return to the
+        semester list."""
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
         siteconfig = SiteConfig.get()

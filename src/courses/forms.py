@@ -129,7 +129,13 @@ class SemesterForm(forms.ModelForm):
 
     def clean(self):
         """Reject semesters whose last day falls before their first day; the date-math
-        methods (num_days, get_date, ...) assume a forward date range."""
+        methods (num_days, get_date, ...) assume a forward date range.
+
+        Adds a validation error on the last_day field when it precedes first_day.
+
+        Returns:
+            dict: the form's cleaned_data.
+        """
         cleaned_data = super().clean()
         first_day = cleaned_data.get('first_day')
         last_day = cleaned_data.get('last_day')

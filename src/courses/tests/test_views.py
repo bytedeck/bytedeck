@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -999,6 +999,24 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.post(reverse('courses:semester_delete', args=[active_semester.pk]))
 
         self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
+
+    def test_SemesterDelete_view__concurrent_activation_still_blocked(self):
+        """If the semester becomes active between dispatch's pre-check and the deletion
+        (a concurrent activation request), the PROTECT constraint error from the delete
+        itself is caught and turned into the same redirect + error message, not a 500."""
+        self.client.force_login(self.test_teacher)
+        active_semester = SiteConfig.get().active_semester
+
+        # Simulate the race: the dispatch pre-check sees a different semester as active,
+        # while the database still protects the truly active one.
+        mock_config = MagicMock()
+        mock_config.active_semester = baker.make(Semester)
+        with patch('courses.views.SiteConfig.get', return_value=mock_config):
+            response = self.client.post(reverse('courses:semester_delete', args=[active_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'), fetch_redirect_response=False)
         self.assertErrorMessage(response)
         self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
 

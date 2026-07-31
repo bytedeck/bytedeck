@@ -3,6 +3,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 
 class SemesterFormTest(ByteDeckTenantTestCase):
+    """Validation tests for SemesterForm (the staff create/update semester form)."""
 
     def test_clean__last_day_before_first_day(self):
         """A semester whose last day falls before its first day is rejected with an error
