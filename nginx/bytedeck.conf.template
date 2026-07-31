@@ -35,8 +35,9 @@ server {
     # hardcoded /media/ URLs and adds a redundant hop -- remove when practical,
     # see production/SERVER-README.md). The CDN host comes from the ${CDN_static}
     # build arg (wired to the CDN_static .env value via docker-compose.prod.aws.yml
-    # and substituted by envsubst in nginx/Dockerfile) so the real distribution
-    # is not hardcoded here. If CDN_static is unset the block is inert.
+    # and substituted by envsubst in nginx/Dockerfile). CDN_static is required:
+    # nginx/Dockerfile fails the build when it is empty, so this never renders an
+    # invalid empty host (https:///public_media/$1).
     location ~ /media/(.*)$ {
         return 301  https://${CDN_static}/public_media/$1;
     }

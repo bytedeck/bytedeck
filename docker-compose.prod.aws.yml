@@ -87,7 +87,8 @@ services:
         DOMAIN: $ROOT_DOMAIN
         # S3/CloudFront domain for the legacy /media/ redirect in the template,
         # reused from the app's CDN_static .env value so the real distribution
-        # isn't hardcoded in the repo. Optional: if unset the redirect is inert.
+        # isn't hardcoded in the repo. Required: the nginx build fails if it is
+        # empty (an empty value renders the redirect with an invalid host).
         CDN_static: $CDN_static
     volumes:
         - /etc/letsencrypt:/etc/letsencrypt
