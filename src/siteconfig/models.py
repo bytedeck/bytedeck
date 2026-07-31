@@ -159,7 +159,6 @@ class SiteConfig(models.Model):
         help_text="Your currently active semester.  New semesters can be created from the admin menu."
     )
 
-    # hs_chillax_line_active
     color_headers_by_mark = models.BooleanField(
         verbose_name="Activate Header Colors by Mark", default=False,
         help_text="Set up at least one Mark Range in admin for this to do anything."
