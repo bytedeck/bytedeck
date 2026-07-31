@@ -518,3 +518,17 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         registration.refresh_from_db()
         self.assertEqual(registration.final_xp, 0)
         self.assertFalse(registration.active)
+
+    def test_close__failed_close_rolls_back_the_episode_ledger(self):
+        """If the close unexpectedly refuses (the defensive sentinel path), the
+        episode's ledger row rolls back with it, so the next nightly run retries
+        instead of recording a close that never happened."""
+        from unittest.mock import patch
+
+        from courses.models import Semester
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+            with self.assertRaises(RuntimeError):
+                self.close()
+        self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())
