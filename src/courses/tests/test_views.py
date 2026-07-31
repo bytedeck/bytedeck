@@ -989,6 +989,19 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertFalse(Semester.objects.filter(pk=semester.pk).exists())
 
+    def test_SemesterDelete_view__active_semester_is_blocked(self):
+        """Deleting the active semester redirects with an error message and leaves it in
+        place. The delete button is hidden in the template, but the URL used to be
+        unguarded and a direct request 500'd on the SiteConfig PROTECT constraint."""
+        self.client.force_login(self.test_teacher)
+        active_semester = SiteConfig.get().active_semester
+
+        response = self.client.post(reverse('courses:semester_delete', args=[active_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
+
     def test_SemesterDelete_view__lists_registrations_in_context(self):
         """The delete confirmation page lists the students registered in the semester."""
         self.client.force_login(self.test_teacher)

@@ -482,6 +482,15 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
 
+    def dispatch(self, request, *args, **kwargs):
+        """The delete button is hidden for the active semester, but the URL used to be
+        unguarded: deleting it raised an unhandled ProtectedError (SiteConfig.active_semester
+        is on_delete=PROTECT) and 500'd. Redirect with an explanation instead."""
+        if self.get_object() == SiteConfig.get().active_semester:
+            messages.error(request, "The active semester can't be deleted. Activate a different semester first.")
+            return redirect('courses:semester_list')
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
 
@@ -582,7 +591,7 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterActivate(View):
+class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
 
     def get(self, request, *args, **kwargs):
         semester_pk = self.kwargs['pk']

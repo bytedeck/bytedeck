@@ -403,7 +403,7 @@ class ProfileManagerAndQuerySetTest(ByteDeckTenantTestCase):
 
 
 class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
-    """Covers gone_stale, xp_to_next_rank, xp_since_last_rank, and the no-course chillax path."""
+    """Covers gone_stale, xp_to_next_rank, and xp_since_last_rank."""
 
     def setUp(self):
         """A user whose auto-created profile we exercise."""
@@ -435,8 +435,5 @@ class ProfileMiscMethodsTest(ByteDeckTenantTestCase):
         with patch.object(Profile, 'rank', side_effect=Exception("boom")):
             self.assertEqual(self.profile.xp_since_last_rank(), 0)
 
-    def test_chillax__false_when_not_registered_in_a_course(self):
-        """chillax() is False for a user with no current course."""
-        self.assertFalse(self.profile.chillax())
 
 

@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -240,16 +240,20 @@ class SemesterManager(models.Manager):
         if QuestSubmission.objects.all_awaiting_approval():
             return Semester.QUEST_AWAITING_APPROVAL
 
-        # need to calculate all user XP and store in their Course
+        # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
+        # saves each registration as it iterates and raises on a negative-XP student,
+        # which used to leave the students processed before it already finalized.
         try:
-            CourseStudent.objects.calc_semester_grades(active_sem)
+            with transaction.atomic():
+                # need to calculate all user XP and store in their Course
+                CourseStudent.objects.calc_semester_grades(active_sem)
+
+                QuestSubmission.objects.remove_in_progress()
+
+                active_sem.closed = True
+                active_sem.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
-
-        QuestSubmission.objects.remove_in_progress()
-
-        active_sem.closed = True
-        active_sem.save()
 
         return active_sem
 
