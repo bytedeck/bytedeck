@@ -19,6 +19,8 @@
         {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
         <strong>{{ forloop.counter }}.</strong>
         {% if answer.question %}
+          {# a small type icon (text cursor / paragraph / paperclip) right after the number, so the answer's shape reads at a glance #}
+          <i class="fa fa-fw {{ answer.question.type|question_type_icon }} text-muted" title="{{ answer.question.get_type_display }}"></i>
           {{ answer.question.instructions|unwrap_p }}
           {% if request.user.is_staff %}
             {% if answer.question.solution_text %}

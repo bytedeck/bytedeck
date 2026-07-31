@@ -336,6 +336,9 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertLess(content.index("<strong>1.</strong>"), content.index("What is your website URL?"))
         self.assertLess(content.index("What is your website URL?"), content.index("<strong>2.</strong>"))
         self.assertLess(content.index("<strong>2.</strong>"), content.index("Describe your process."))
+        # each answer carries its question-type icon (short answer = text cursor, long answer = paragraph)
+        self.assertContains(response, "fa-i-cursor")
+        self.assertContains(response, "fa-align-left")
 
     def test_display__staff_see_answers_with_marker_notes(self):
         """Markers see the answers plus the question's solution and marker notes."""

@@ -3,7 +3,24 @@ import re
 from django import template
 from django.utils.safestring import mark_safe
 
+from questions.models import QuestionType
+
 register = template.Library()
+
+# Font Awesome (4.7) icon class for each question type, shown beside a numbered answer so a
+# marker can tell an answer's shape at a glance: a text cursor for a single-line short answer,
+# paragraph lines for a long answer, a paperclip for a file upload.
+_TYPE_ICONS = {
+    QuestionType.SHORT_ANSWER: "fa-i-cursor",
+    QuestionType.LONG_ANSWER: "fa-align-left",
+    QuestionType.FILE_UPLOAD: "fa-paperclip",
+}
+
+
+@register.filter
+def question_type_icon(question_type):
+    """Return the Font Awesome icon class for a question's ``type`` (empty string if unknown)."""
+    return _TYPE_ICONS.get(question_type, "")
 
 # Matches content that is a single wrapping <p>...</p> (optionally with attributes and
 # surrounding whitespace). The inner group is only unwrapped when it contains no further
