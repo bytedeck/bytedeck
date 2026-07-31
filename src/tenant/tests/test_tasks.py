@@ -123,10 +123,11 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
             self.assertTrue(result.successful())
             self.assertIn('skipped', result.result)
 
-    def test_deck_status_check__resets_cap_on_fresh_suspension(self):
-        """The nightly task applies the once-per-episode cap reset (#2178): a deck
-        whose trial lapsed yesterday comes out of the run at the trial default,
-        even with the notices rollout flag off (the reset is enforcement)."""
+    def test_deck_status_check__never_touches_the_admin_cap(self):
+        """The nightly task leaves ``max_active_users`` alone even for a freshly
+        suspended deck: suspension means owner-only sign-in (the middleware), not
+        a cap change, so an admin-set cap survives every run (#1734 redesign
+        replacing the #2178 cap reset)."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
@@ -139,7 +140,7 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
 
         self.assertTrue(tasks.deck_status_check.apply().successful())
         self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
+        self.assertEqual(self.tenant.max_active_users, 80)
 
     def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
         """The dispatcher schedules one per-schema check per deck, skipping the
