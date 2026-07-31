@@ -5,6 +5,7 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Div, HTML
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget, ByteDeckSummernoteSafeInplaceWidget
+from comments.sanitize import sanitize_comment_html
 from quest_manager.models import QuestSubmission
 from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
 
@@ -132,6 +133,9 @@ class QuestionSubmissionForm(forms.ModelForm):
         self.helper = FormHelper()
         self.helper.form_tag = False
         self.helper.disable_csrf = True
+        # the formset machinery adds a hidden 'id' (pk) field to each form; it must be
+        # rendered so a POST can match each answer back to its row
+        self.helper.render_hidden_fields = True
 
         if self.question is None:
             # Degraded stub (question deleted or instance missing): no response fields,
@@ -145,12 +149,16 @@ class QuestionSubmissionForm(forms.ModelForm):
         if self.question.type == QuestionType.SHORT_ANSWER:
             del self.fields["response_file"]
             # replace the model's TextField default with a CharField so the 200-character
-            # limit is enforced server-side, not just by the widget's maxlength attribute
+            # limit is enforced server-side, not just by the widget's maxlength attribute.
+            # A short answer is a single line, so use a text input (not a textarea).
+            # no visible label (the question's instructions directly above serve as the label,
+            # matching the long answer field); a distinct aria-label per question keeps each
+            # input tellable apart for screen-reader users when a page has several short answers.
             self.fields["response_text"] = forms.CharField(
-                label="Response text",
+                label="",
                 required=self.question.required,
                 max_length=200,
-                widget=forms.Textarea(attrs={'maxlength': '200', 'rows': '2'}),
+                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': self._response_aria_label()}),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
@@ -191,15 +199,41 @@ class QuestionSubmissionForm(forms.ModelForm):
 
         form_fields.css_class = 'form-group'
 
-        # The question's instructions (teacher-authored summernote HTML) shown above the response field
-        instructions_label = HTML(
-            "<p><strong>Instructions</strong>: {{ form.question.instructions|safe|default:'-'}}</p>"
-        )
-
+        # The question's instructions (teacher-authored summernote HTML) are rendered by the
+        # including template (submission.html) on the same line as the "Question N" heading, so
+        # the layout here is just the answer field.
         self.helper.layout = Layout(
-            instructions_label,
             form_fields,
         )
+
+    def _response_aria_label(self):
+        """Return a per-question aria-label for the short-answer input.
+
+        Several short-answer inputs on one page would otherwise all announce the identical
+        "Response", so screen-reader users couldn't tell them apart. The form's formset prefix
+        is "question_submissions-<i>" (0-based); i + 1 matches the visible "Question N:" heading
+        rendered just above the input in submission.html. Falls back to "Response" if the form
+        isn't in a formset (no numeric prefix, e.g. the formset's empty_form placeholder).
+
+        Returns:
+            str: the aria-label for this input, e.g. "Response to question 2".
+        """
+        try:
+            position = int(self.prefix.rsplit("-", 1)[-1]) + 1
+        except (AttributeError, ValueError):
+            return "Response"
+        return f"Response to question {position}"
+
+    def clean_response_text(self):
+        """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).
+
+        Answers are rendered with |safe in the marking display, and neither input path is
+        safe on its own: the plain short answer textarea accepts anything, and the "safe"
+        summernote widget filters tags but allows every attribute (so onclick etc. survive).
+        Sanitizing here keeps legitimate formatting while stripping script vectors, matching
+        how comment text is handled.
+        """
+        return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 
     def clean(self):
         """Enforce required answers per question type, and fail cleanly on stale rows."""

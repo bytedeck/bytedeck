@@ -29,7 +29,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
-from django.db.models import Q
+from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
 import numpy
@@ -478,9 +478,49 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+    """Staff-only confirm-and-delete view for a Semester.
+
+    The active semester can't be deleted (SiteConfig.active_semester protects it with
+    on_delete=PROTECT), so requests targeting it are redirected back to the semester
+    list with an error message instead of crashing on the constraint.
+    """
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
+
+    ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
+
+    def dispatch(self, request, *args, **kwargs):
+        """Refuse to serve the view at all (GET or POST) for the active semester, since the
+        deletion would be blocked by the PROTECT constraint anyway.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with an error message when the
+            target is the active semester; otherwise the normal DeleteView response.
+        """
+        if self.get_object() == SiteConfig.get().active_semester:
+            messages.error(request, self.ACTIVE_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        return super().dispatch(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        """Delete the semester, converting a ProtectedError from the delete itself into the
+        same redirect + error: the dispatch() pre-check can race a concurrent activation
+        (another request making this semester active between the check and the delete).
+        The success message is added here, after the delete succeeds, because Django calls
+        get_success_url() before deleting.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with a success message when the
+            deletion went through or an error message when the PROTECT constraint blocked it.
+        """
+        try:
+            response = super().form_valid(form)
+        except ProtectedError:
+            messages.error(self.request, self.ACTIVE_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        messages.success(self.request, self.success_message)
+        return response
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -488,13 +528,6 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
         registrations = CourseStudent.objects.all_for_semester(self.object, students_only=True)
         context["registrations"] = registrations
         return context
-
-    def get_success_url(self) -> str:
-        """Overridden to inject success message since SuccessMessageMixin doesn't work with DeleteView
-        https://stackoverflow.com/questions/24822509/success-message-in-deleteview-not-shown
-        """
-        messages.success(self.request, self.success_message)
-        return super().get_success_url()
 
 
 class SemesterCreateUpdateFormsetMixin:
@@ -582,9 +615,16 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterActivate(View):
+class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
+    """Staff-only endpoint that makes the given semester the deck's active semester
+    (the SiteConfig.active_semester pointer that registration, XP, and submissions run through)."""
 
     def get(self, request, *args, **kwargs):
+        """Point SiteConfig.active_semester at the semester whose pk is in the URL.
+
+        Returns:
+            HttpResponse: a redirect to the semester list (404 if the pk doesn't exist).
+        """
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
         siteconfig = SiteConfig.get()

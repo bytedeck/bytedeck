@@ -1,4 +1,5 @@
 import json
+import re
 import uuid
 
 from django.utils.decorators import method_decorator
@@ -26,6 +27,10 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
+from comments.sanitize import sanitize_comment_html
+from questions.forms import QuestionSubmissionFormsetFactory
+from questions.models import QuestionSubmission, QuestionType
+from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import from_library_schema_first
 from notifications.signals import notify
@@ -1701,30 +1706,73 @@ def complete(request, submission_id):
     else:
         form = SubmissionQuickReplyFormStudent(request.POST)
 
-    if not form.is_valid():
-        # This should occur if a student tries to use the quick reply form on a quest that
-        # has `xp_can_be_entered_by_student`, it will  thenrender the full form on submission.html so they can enter XP.
+    # The quest's questions, bound to this POST as an answer formset over the submission's
+    # draft rows. Only the "complete" action on a not-yet-completed submission involves the
+    # formset: commenting ("comment" button) never does, and a duplicate "complete" POST
+    # (browser back button) must not spawn fresh draft rows on a completed submission.
+    question_formset = None
+    if "complete" in request.POST and not submission.is_completed and submission.quest.question_set.exists():
+        draft_rows = sync_draft_question_submissions(submission)
+        question_formset = QuestionSubmissionFormsetFactory(
+            request.POST, request.FILES,
+            instance=submission, queryset=draft_rows,
+        )
+
+        # The management form is client-controlled: a tampered TOTAL_FORMS/INITIAL_FORMS (or a
+        # stale page from before the quest's questions changed) can present fewer answer forms
+        # than the quest has questions. Without this guard those omitted questions are never
+        # validated yet still published (the blanket publish below), so required questions
+        # could be bypassed — completing/auto-approving a quest with nothing answered. Require
+        # the POST to cover exactly the quest's current questions; otherwise bounce back to a
+        # freshly-built page that shows them all.
+        expected_ids = set(draft_rows.values_list("pk", flat=True))
+        posted_ids = {f.instance.pk for f in question_formset.forms if f.instance.pk}
+        if posted_ids != expected_ids:
+            messages.error(
+                request,
+                "This quest's questions have changed since you opened this page. "
+                "Please review and answer them, then submit again.",
+            )
+            return redirect(origin_path)
+
+    if not form.is_valid() or (question_formset and not question_formset.is_valid()):
+        # The main form path should only occur if a student tries to use the quick reply form
+        # on a quest that has `xp_can_be_entered_by_student`; re-rendering shows the full form
+        # so they can enter XP. The formset path re-renders with each question's errors visible.
         context = {
             "heading": submission.quest.name,
             "submission": submission,
             "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
             "submission_form": form,
+            "question_formset": question_formset,
             "anchor": "submission-form-" + str(submission.quest.id),
         }
         return render(request, "quest_manager/submission.html", context)
 
-    # else form is valid:
+    # else form (and answer formset, if any) is valid:
 
     comment_text = form.cleaned_data.get("comment_text")
+
+    # Whether the student actually answered at least one question (a BaseFormSet is always
+    # truthy, so `if question_formset:` alone would treat a set of only-blank optional
+    # answers as content and wrongly bypass the verification-required check below).
+    answered_a_question = bool(question_formset) and any(
+        f.cleaned_data.get("response_text") or f.cleaned_data.get("response_file")
+        for f in question_formset.forms
+    )
 
     # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
     # then need to check if we should bother handling this form submission
     if not comment_text or comment_text == "<p><br></p>":
 
+        # If the student answered at least one question, those answers are the submission's
+        # content, so don't demand an additional comment or attachment on top of them.
+        if answered_a_question:
+            comment_text = "(submitted without comment)"
         # If the `verification_required` flag is set, then the teacher is expecting either
         # a comment or a file (something to check).  We already know there isn't a comment
         # so check for files.
-        if submission.quest.verification_required and not request.FILES:
+        elif submission.quest.verification_required and not request.FILES:
             messages.error(
                 request,
                 "Please read the Submission Instructions more carefully.  "
@@ -1785,6 +1833,14 @@ def complete(request, submission_id):
     # Two possibilities, the student is either completing the quest ("complete" button) or commenting on an already
     # completed quest ("comment" button).
     if "complete" in request.POST:
+        if question_formset:
+            # Persist the answers, then publish them with the completion comment. Rows whose
+            # question was deleted stay unpublished (and invisible) rather than blocking.
+            question_formset.save()
+            QuestionSubmission.objects.filter(
+                quest_submission=submission, comment__isnull=True, question__isnull=False
+            ).update(comment=draft_comment)
+
         note_verb = "completed"
         msg_text = "Quest completed"
 
@@ -2010,6 +2066,56 @@ def ajax_save_draft(request):
             response_data["result"] = "Draft saved"
             draft_comment.save()
 
+        # Autosave draft answers to the quest's questions (text answers only; file answers
+        # upload when the quest is submitted). Sent as a JSON object of the formset's field
+        # names, pairing each row's hidden id with its response_text.
+        answers_json = request.POST.get("answers")
+        if answers_json and sub.user == request.user and sub.quest.question_set.exists():
+            try:
+                answers = json.loads(answers_json)
+            except ValueError:
+                answers = {}
+            # the payload is client-controlled: a valid-JSON scalar/list (e.g. "5" or [])
+            # would blow up on .items() below, so coerce anything but an object to empty.
+            if not isinstance(answers, dict):
+                answers = {}
+
+            rows = {}  # formset index -> {'id': ..., 'response_text': ...}
+            for key, value in answers.items():
+                match = re.match(r"^question_submissions-(\d+)-(id|response_text)$", key)
+                if match:
+                    rows.setdefault(match.group(1), {})[match.group(2)] = value
+
+            for row_data in rows.values():
+                text = row_data.get("response_text")
+                if text is None:
+                    continue
+                # the id is also client-supplied; a non-integer would make the pk lookup
+                # below raise ValueError (a 500), so skip rows without a usable integer id.
+                try:
+                    row_id = int(row_data["id"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                # only this submission's own unpublished rows can be draft-saved.
+                # Sanitize on write: this raw draft is published verbatim on completion
+                # (the blanket publish below doesn't re-clean unchanged rows) and rendered
+                # with |safe in the marking display, so an unsanitized draft would be
+                # stored XSS against the marker (issues #1343 / #2113).
+                text = sanitize_comment_html(text)
+                # Only text-answer rows autosave: a crafted request could otherwise stash
+                # response_text on a file-upload row, which completion would then count as
+                # submission content, letting a student bypass the "attach or comment" gate
+                # without actually uploading the required file.
+                row = QuestionSubmission.objects.filter(
+                    pk=row_id, quest_submission=sub, comment__isnull=True,
+                    question__type__in=(QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER),
+                ).first()
+                if row and row.response_text != text:
+                    row.response_text = text
+                    row.full_clean()
+                    row.save()
+                    response_data["result"] = "Draft saved"
+
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
     else:
@@ -2057,6 +2163,8 @@ def submission(request, submission_id=None, quest_id=None):
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
 
+    question_formset = None
+
     if request.user.is_staff:
         # Staff form has additional fields such as award granting.
         main_comment_form = SubmissionFormStaff()
@@ -2084,11 +2192,20 @@ def submission(request, submission_id=None, quest_id=None):
         else:
             main_comment_form = SubmissionForm(initial=initial)
 
+        # The quest's questions, as an answer formset over this submission's draft rows.
+        # Only while the submission can still be worked on; answers on completed/approved
+        # submissions are published and shown with their comment instead.
+        if not sub.is_completed and not sub.is_approved and sub.quest.question_set.exists():
+            question_formset = QuestionSubmissionFormsetFactory(
+                instance=sub, queryset=sync_draft_question_submissions(sub)
+            )
+
     context = {
         "heading": sub.quest_name(),
         "submission": sub,
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         "submission_form": main_comment_form,
+        "question_formset": question_formset,
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         # A quest can become unpublished (drafted) after a student has already submitted it.

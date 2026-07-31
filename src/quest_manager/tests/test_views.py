@@ -3663,6 +3663,29 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
 
+    def test_approve__invalid_form_renders_submission_page(self):
+        """A non-ajax POST with an invalid awards value re-renders the submission page (form_invalid)."""
+        # An 'awards' value routes to SubmissionFormStaff, and an id that is not a
+        # manually-granted badge fails the ModelMultipleChoiceField validation.
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'quest_manager/submission.html')
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_approved)  # the invalid submission did nothing
+
+    def test_approve__invalid_form_ajax_returns_400(self):
+        """An ajax POST with an invalid awards value returns a 400 JsonResponse (form_invalid)."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {'error': 'Bad Request'})
+
     def test_approve__with_comment_quick_reply_form(self):
         """Approving via the quick reply form approves the submission, adds the comment, and notifies the student."""
         comment_text = "Lorum Ipsum"
