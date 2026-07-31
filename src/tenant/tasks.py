@@ -87,9 +87,13 @@ def deck_status_check():
     was an acknowledged N+1 across all decks). Later phases of epic #1729 extend
     this task with the expiry-reminder cadence and limit warnings (#1733).
 
-    After the refresh, runs the deck reminder engine (#1733): expiry cadence,
-    current-student limit warnings, and the suspension notice -- report-only
-    until settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
+    After the refresh, a fresh suspension closes the deck's open semester
+    exactly once per episode (#1734 redesign B2, see
+    tenant.notices.close_semester_on_new_suspension): enforcement, not
+    communication, so it is NOT gated by DECK_NOTICES_ENABLED. Then the deck
+    reminder engine (#1733) runs: expiry cadence, current-student limit
+    warnings, and the suspension notice -- report-only until
+    settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
 
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.

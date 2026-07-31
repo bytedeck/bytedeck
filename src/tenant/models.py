@@ -436,6 +436,10 @@ class Tenant(TenantMixin):
         is_active=True (so archived/inactive students stop counting, #1733);
         superusers are excluded explicitly since a superuser isn't necessarily
         staff.
+
+        active_only=True further excludes registrations deactivated by a semester
+        close (e.g. the suspension auto-close, #1734 redesign B2), so a closed
+        semester contributes zero current students.
         """
         CourseStudent = apps.get_model('courses', 'CourseStudent')
         return (

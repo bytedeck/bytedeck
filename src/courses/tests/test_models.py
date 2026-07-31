@@ -189,6 +189,24 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         self.assertFalse(registration.active)
 
 
+    def test_calc_semester_grades__refusal_rolls_back_all_registrations(self):
+        """A negative-XP refusal (clamp off) rolls back every registration
+        deactivated earlier in the same call: no student is left deactivated
+        while the semester stays open."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        students = [baker.make(User) for _ in range(2)]
+        for student in students:
+            baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
+
+        with patch('profile_manager.models.Profile.xp_per_course', side_effect=[10, -50, 10, -50]):
+            with self.assertRaises(ValueError):
+                CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertFalse(
+            CourseStudent.objects.filter(semester=SiteConfig.get().active_semester, active=False).exists())
+
+
 class SemesterModelTest(ByteDeckTenantTestCase):
 
     @classmethod

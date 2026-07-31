@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -550,15 +550,19 @@ class CourseStudentManager(models.Manager):
         the balance first).
         """
         coursestudents = self.get_queryset().get_semester(semester)
-        for coursestudent in coursestudents:
-            coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
-            if coursestudent.final_xp < 0:
-                if not clamp_negative_xp:
-                    raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                     f"Fix it before closing the semester")
-                coursestudent.final_xp = 0
-            coursestudent.active = False
-            coursestudent.save()
+        # atomic: a negative-XP refusal mid-loop must roll back the registrations
+        # already deactivated in this call, or they'd sit deactivated while the
+        # semester stays open (CodeRabbit find on the #1734 B2 review)
+        with transaction.atomic():
+            for coursestudent in coursestudents:
+                coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+                if coursestudent.final_xp < 0:
+                    if not clamp_negative_xp:
+                        raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                         f"Fix it before closing the semester")
+                    coursestudent.final_xp = 0
+                coursestudent.active = False
+                coursestudent.save()
 
     def all_for_semester(self, semester, students_only=False, active_only=False):
         """All registrations for `semester`; optionally students only, and
