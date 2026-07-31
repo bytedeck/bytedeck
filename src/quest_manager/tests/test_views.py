@@ -1358,6 +1358,34 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
+    def test_bulk_edit__get_renders_with_bulk_edit_mode(self):
+        """A staff GET with ?bulk_edit renders the available-quests tab in bulk-edit mode."""
+        response = self.client.get(self.url, {'bulk_edit': '1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['bulk_edit_mode'])
+
+    def test_bulk_update_quests__saves_extra_update_fields(self):
+        """bulk_update_quests threads extra_update_fields into each quest's save(update_fields=...).
+
+        The method only mutates the field_updates keys, so extra_update_fields has no
+        observable persistence side-effect on its own; asserting it lands in update_fields
+        is what makes the test fail if that handling is removed.
+        """
+        from quest_manager.views import QuestBulkEditView
+
+        quests = Quest.objects.filter(id__in=[self.quest1.id, self.quest2.id])
+        with patch.object(Quest, 'save', autospec=True) as mock_save:
+            count = QuestBulkEditView.bulk_update_quests(
+                quests,
+                field_updates={'published': True},
+                extra_update_fields=['xp'],
+            )
+        self.assertEqual(count, 2)
+        self.assertEqual(mock_save.call_count, 2)
+        for call in mock_save.call_args_list:
+            self.assertIn('published', call.kwargs['update_fields'])  # the field_updates key
+            self.assertIn('xp', call.kwargs['update_fields'])  # the extra_update_fields entry
+
     def test_bulk_edit__redirects_if_no_ids(self):
         """
         Should redirect with a warning if no quest IDs are provided.
@@ -1833,6 +1861,14 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         other_quest = baker.make(Quest)
         response = self.client.post(reverse('quests:quest_delete', args=[other_quest.id]))
         self.assertEqual(response.status_code, 403)
+
+    def test_quest_update__archived_quest_success_url_is_quest_list(self):
+        """After updating an archived quest, get_success_url points at the quest list (not the hidden quest)."""
+        from quest_manager.views import QuestUpdate
+
+        view = QuestUpdate()
+        view.object = baker.make(Quest, archived=True)
+        self.assertEqual(view.get_success_url(), reverse("quests:quests"))
 
     def test_quest_update__teacher_can_update(self):
         """Teachers can access the update view and save changes to any quest."""
