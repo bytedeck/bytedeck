@@ -204,10 +204,22 @@ def _deliver(deck, kind):
         last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
     # is_suspended requires at least one date field, so the list is never empty here
     suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
-    # the scheduled deletion day under the suspension policy -- INACTIVE_DELETE_DAYS
-    # after the suspension began; the suspended email LEADS with it (maintainer
-    # request, 2026-07-30: put the bottom line up front)
-    deletion_date = suspended_since + timedelta(days=INACTIVE_DELETE_DAYS) if suspended_since else None
+    # The scheduled deletion day under the suspension policy: INACTIVE_DELETE_DAYS
+    # after the deletion CLOCK starts; the suspended email LEADS with it (maintainer
+    # request, 2026-07-30: put the bottom line up front). The clock never starts
+    # before the deck was actually WARNED (maintainer decision, 2026-07-31): a
+    # legacy deck whose dates lapsed long before this machinery went live gets its
+    # full year measured from its first suspended notice (this episode's ledger
+    # row, written moments before delivery; sent-today fallback covers a
+    # not-yet-committed row), never from a backdated lapse date.
+    deletion_date = None
+    if suspended_since:
+        first_warned_row = DeckNotice.objects.filter(
+            tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
+            period_key=str(max(last_covered_days)),
+        ).order_by('sent_on').first()
+        warned_on = first_warned_row.sent_on if first_warned_row else localdate()
+        deletion_date = max(suspended_since, warned_on) + timedelta(days=INACTIVE_DELETE_DAYS)
     context = {
         'deck': deck,
         'config': config,
