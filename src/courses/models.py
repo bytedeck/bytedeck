@@ -245,16 +245,20 @@ class SemesterManager(models.Manager):
         if QuestSubmission.objects.all_awaiting_approval():
             return Semester.QUEST_AWAITING_APPROVAL
 
-        # need to calculate all user XP and store in their Course
+        # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
+        # saves each registration as it iterates and raises on a negative-XP student,
+        # so without the transaction the students processed before it would stay finalized.
         try:
-            CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
+            with transaction.atomic():
+                # need to calculate all user XP and store in their Course
+                CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
+
+                QuestSubmission.objects.remove_in_progress()
+
+                active_sem.closed = True
+                active_sem.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
-
-        QuestSubmission.objects.remove_in_progress()
-
-        active_sem.closed = True
-        active_sem.save()
 
         return active_sem
 
