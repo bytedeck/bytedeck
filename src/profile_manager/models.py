@@ -37,9 +37,6 @@ class ProfileQuerySet(models.query.QuerySet):
     def visible(self):
         return self.filter(visible_to_other_students=True)
 
-    def get_semester(self, semester):
-        return self.filter(active_in_current_semester=semester)
-
     def students_only(self):
         return self.filter(user__is_staff=False, is_test_account=False)
 
@@ -265,9 +262,9 @@ class Profile(models.Model):
         If available_only is True, then it will not count quests that the student wouldn't be able to see normally
         in there available quests list
         """
-        hidden_quest_ids = self.get_hidden_quests_as_list()
-        # convert list of ids as strings to integers so we can use intersection with the conditions_met list
-        hidden_quest_ids = map(int, hidden_quest_ids)
+        # materialize to a list of ints: it's both intersected below and measured with len(),
+        # and a bare map() would be exhausted by the first and has no length for the second
+        hidden_quest_ids = list(map(int, self.get_hidden_quests_as_list()))
         if available_only:
             # remove hidden otherwise there will be nothing left to intersect wtih
             available_quest_ids = Quest.objects.get_available(self.user, remove_hidden=False).values_list('id', flat=True)

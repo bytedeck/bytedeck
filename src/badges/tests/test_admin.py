@@ -6,9 +6,13 @@ from django.contrib.auth import get_user_model
 import tablib
 from model_bakery import baker
 
-from badges.admin import BadgeAdmin, BadgeResource
+from badges.admin import (
+    BadgeAdmin,
+    BadgeAdminExportResource,
+    BadgeResource,
+)
 from badges.models import Badge, BadgeType
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_messages
 from prerequisites.models import Prereq
 from quest_manager.models import Category, Quest
 
@@ -205,3 +209,34 @@ class BadgeAdminFormatsTest(ByteDeckTenantTestCase):
         modeladmin = BadgeAdmin(Badge, django_admin.site)
         formats = modeladmin.get_export_formats()
         self.assertEqual([fmt().get_title() for fmt in formats], ['csv'])
+
+
+class BadgeAdminExportResourceTest(ByteDeckTenantTestCase):
+    """The admin Export button drops the bulky HTML columns to bound per-request memory
+    (#2081); the full BadgeResource (import / Shared Library) keeps them."""
+
+    def test_admin_export_resource__omits_bulky_html_columns(self):
+        """BadgeAdminExportResource's export has no short_description column."""
+        badge = baker.make(Badge, short_description='<p>lots of html</p>')
+
+        headers = BadgeAdminExportResource().export([badge]).headers
+
+        # Assert the bulky column explicitly (not by iterating the constant) so an
+        # incorrect or incomplete BADGE_EXPORT_EXCLUDED_HTML_FIELDS is caught here too.
+        self.assertNotIn('short_description', headers)
+        # Identifying/lightweight columns are still exported.
+        self.assertIn('name', headers)
+
+    def test_full_resource__still_exports_short_description(self):
+        """The full BadgeResource still carries the HTML field for import / sharing."""
+        badge = baker.make(Badge, short_description='<p>keep me</p>')
+
+        self.assertIn('short_description', BadgeResource().export([badge]).headers)
+
+    def test_badge_admin__export_uses_slim_resource_import_uses_full(self):
+        """BadgeAdmin exports with the slim resource but imports with the full one."""
+        modeladmin = BadgeAdmin(Badge, django_admin.site)
+        request = request_with_messages()
+
+        self.assertEqual(modeladmin.get_export_resource_classes(request), [BadgeAdminExportResource])
+        self.assertEqual(modeladmin.get_import_resource_classes(request), [BadgeResource])

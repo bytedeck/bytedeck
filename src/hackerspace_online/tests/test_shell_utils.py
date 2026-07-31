@@ -1,8 +1,11 @@
+import io
+from contextlib import redirect_stdout
+
 from django.contrib.auth import get_user_model
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
-from hackerspace_online.shell_utils import generate_quests, generate_students
+from hackerspace_online.shell_utils import generate_content, generate_quests, generate_students
 from quest_manager.models import Quest, Category
 
 # from django_tenants.test.client import TenantClient
@@ -46,3 +49,44 @@ class ShellUtilsTest(ByteDeckTenantTestCase):
         quest_qs = Quest.objects.order_by('-pk')[:num_quest * num_campaigns]
         campaign_ids = set(quest_qs.values_list('campaign_id', flat=True))
         self.assertEqual(len(campaign_ids), num_campaigns)
+
+    def test_generate_students__not_quiet_prints_progress(self):
+        """With the default quiet=False, generate_students prints its progress and still creates the students."""
+        before = User.objects.filter(is_staff=False).count()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_students(2)
+        output = buf.getvalue()
+        self.assertIn("Generating 2 students", output)
+        self.assertIn("2 students generated", output)
+        self.assertEqual(User.objects.filter(is_staff=False).count(), before + 2)
+
+    def test_generate_quests__not_quiet_prints_progress(self):
+        """With the default quiet=False, generate_quests prints campaign/quest progress and its summary."""
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_quests(num_quest_per_campaign=2, num_campaigns=1)
+        output = buf.getvalue()
+        self.assertIn("Generating content...", output)
+        self.assertIn("2 Quests generated in 1 campaigns", output)
+
+    def test_generate_content__not_quiet_generates_quests_and_students(self):
+        """generate_content (quiet=False) runs both generators and prints the blank separator between them."""
+        quests_before = Quest.objects.count()
+        students_before = User.objects.filter(is_staff=False).count()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_content(num_quest_per_campaign=1, num_campaigns=1, num_students=1)
+        self.assertEqual(Quest.objects.count(), quests_before + 1)
+        self.assertEqual(User.objects.filter(is_staff=False).count(), students_before + 1)
+        # non-quiet run emits the blank separator between the two generators
+        self.assertIn("\n", buf.getvalue())
+
+    def test_generate_content__quiet_suppresses_the_separator(self):
+        """generate_content(quiet=True) still generates content but prints nothing (no separator)."""
+        quests_before = Quest.objects.count()
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            generate_content(num_quest_per_campaign=1, num_campaigns=1, num_students=1, quiet=True)
+        self.assertEqual(Quest.objects.count(), quests_before + 1)
+        self.assertEqual(buf.getvalue(), "")

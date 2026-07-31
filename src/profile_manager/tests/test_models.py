@@ -1,10 +1,13 @@
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ObjectDoesNotExist
 from django.test import SimpleTestCase
 from django.utils import timezone
 
+from allauth.socialaccount.models import SocialAccount
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
@@ -15,7 +18,14 @@ from comments.models import Comment
 from courses.models import CourseStudent, Semester
 from notifications.models import Notification
 from portfolios.models import Portfolio
-from profile_manager.models import Profile, smart_list
+from profile_manager.models import (
+    Profile,
+    email_confirmed_handler,
+    post_delete_user,
+    smart_list,
+    user_directory_path,
+    user_logged_out_handler,
+)
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 
@@ -40,6 +50,112 @@ class ProfileTestModel(ByteDeckTenantTestCase):
 
     def create_active_course_registration(self):
         return baker.make('courses.CourseStudent', user=self.user, semester=self.active_sem, course=baker.make('courses.Course'))
+
+    # ---- user_directory_path ------------------------------------------------
+
+    def test_user_directory_path__nests_under_username_customstyles(self):
+        """user_directory_path builds '<username>/customstyles/<filename>' for custom-style uploads."""
+        self.assertEqual(
+            user_directory_path(self.profile, "theme.css"),
+            f"{self.user.username}/customstyles/theme.css",
+        )
+
+    # ---- chillax ------------------------------------------------------------
+
+    @patch("profile_manager.models.Profile.xp_per_course", return_value=50)
+    @patch("profile_manager.models.CourseStudent.objects.current_course")
+    def test_chillax__true_when_xp_reaches_started_chillax_line(self, mock_current_course, mock_xp):
+        """chillax() is True once the chillax line has started and the student's per-course XP reaches it."""
+        semester = Mock()
+        semester.chillax_line_started.return_value = True
+        semester.chillax_line.return_value = 50
+        mock_current_course.return_value = Mock(semester=semester)
+        self.assertTrue(self.profile.chillax())
+
+    @patch("profile_manager.models.Profile.xp_per_course", return_value=10)
+    @patch("profile_manager.models.CourseStudent.objects.current_course")
+    def test_chillax__false_when_xp_below_chillax_line(self, mock_current_course, mock_xp):
+        """chillax() is False when the student's per-course XP hasn't reached the (started) chillax line."""
+        semester = Mock()
+        semester.chillax_line_started.return_value = True
+        semester.chillax_line.return_value = 50
+        mock_current_course.return_value = Mock(semester=semester)
+        self.assertFalse(self.profile.chillax())
+
+    @patch("profile_manager.models.CourseStudent.objects.current_course")
+    def test_chillax__false_when_chillax_line_not_started(self, mock_current_course):
+        """chillax() is False while the semester's chillax line hasn't started, regardless of XP."""
+        semester = Mock()
+        semester.chillax_line_started.return_value = False
+        mock_current_course.return_value = Mock(semester=semester)
+        self.assertFalse(self.profile.chillax())
+
+    # ---- num_hidden_quests / hide_quest / unhide_quest ----------------------
+
+    def test_num_hidden_quests__available_only_false_counts_all_hidden(self):
+        """num_hidden_quests(available_only=False) counts every hidden quest without filtering to available ones."""
+        self.profile.hidden_quests = "1,2,3"
+        self.assertEqual(self.profile.num_hidden_quests(available_only=False), 3)
+
+    def test_hide_quest__already_hidden_is_noop(self):
+        """Hiding a quest that's already in the hidden list doesn't duplicate it."""
+        self.profile.hidden_quests = "5"
+        self.profile.save()
+        self.profile.hide_quest(5)
+        self.assertEqual(self.profile.get_hidden_quests_as_list(), ["5"])
+
+    def test_unhide_quest__not_hidden_is_noop(self):
+        """Unhiding a quest that isn't hidden leaves the hidden list unchanged."""
+        self.profile.hidden_quests = "5"
+        self.profile.save()
+        self.profile.unhide_quest(9)
+        self.assertEqual(self.profile.get_hidden_quests_as_list(), ["5"])
+
+    # ---- post_delete_user signal -------------------------------------------
+
+    def test_post_delete_user__deletes_associated_user(self):
+        """Deleting a Profile cascades to delete its associated User."""
+        user = baker.make(User)
+        user_pk = user.pk
+        user.profile.delete()
+        self.assertFalse(User.objects.filter(pk=user_pk).exists())
+
+    def test_post_delete_user__swallows_error_when_user_already_gone(self):
+        """If the cascade user delete raises (already deleted / mid-delete), post_delete_user swallows it."""
+        user = baker.make(User)
+        profile = user.profile
+        with patch.object(User, "delete", side_effect=ObjectDoesNotExist):
+            profile.delete()  # must not propagate the error
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+
+    def test_post_delete_user__no_user_is_a_noop(self):
+        """post_delete_user does nothing when the deleted profile has no associated user."""
+        instance = Mock(user=None)
+        post_delete_user(sender=Profile, instance=instance)  # must not raise
+
+    # ---- login/logout signal handlers --------------------------------------
+
+    def test_user_logged_out_handler__clears_recently_signed_up_flag(self):
+        """Logging out removes the recently_signed_up_with_email flag from the request when present."""
+        request = SimpleNamespace(recently_signed_up_with_email=True)
+        user_logged_out_handler(request=request, user=self.user)
+        self.assertFalse(hasattr(request, "recently_signed_up_with_email"))
+
+    # ---- email_confirmed_handler -------------------------------------------
+
+    def test_email_confirmed_handler__deletes_other_emails_ignoring_emailless_social(self):
+        """Confirming an email promotes it to primary and deletes the user's other non-primary emails;
+        a social account whose extra_data carries no email contributes nothing to the exclusion set."""
+        user = baker.make(User)
+        # a social account with no 'email' in extra_data -> not added to the social-email exclusion set
+        SocialAccount.objects.create(user=user, provider="google", extra_data={})
+        keep = user.emailaddress_set.create(email="new@example.com", verified=True, primary=False)
+        drop = user.emailaddress_set.create(email="old@example.com", verified=True, primary=False)
+
+        email_confirmed_handler(email_address=keep)
+
+        self.assertTrue(user.emailaddress_set.filter(pk=keep.pk, primary=True).exists())
+        self.assertFalse(user.emailaddress_set.filter(pk=drop.pk).exists())
 
     def test_mark_cached__stores_marks_above_999_9(self):
         """A profile mark above the old 999.9 ceiling saves and round-trips instead

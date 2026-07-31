@@ -175,7 +175,11 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
         # Normalize: valid Postgres schema and subdomain
         name_slug = slugify(form.instance.name)
         schema = name_slug.replace("-", "_")[:63]
-        if not schema or not schema[0].isalpha():
+        # check_tenant_name (the Tenant.name validator, already run by the form) requires the
+        # name to start with a lowercase letter, so the slug -- and thus the schema -- always
+        # does too. This t_ prefix is defensive normalization that can't trigger for validated
+        # input, so it's excluded from coverage.
+        if not schema or not schema[0].isalpha():  # pragma: no cover
             schema = f"t_{schema}"[:63]
         form.instance.schema_name = schema
         current_domain = Site.objects.get_current().domain
@@ -460,6 +464,8 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # None for unlimited decks; clamped at 0 when over the limit (the
             # template's at-limit warning covers the overage)
             'remaining_seats': None if cap == -1 else max(0, cap - current_student_count),
+            # what a fresh suspension will RESET the cap to -- the grace copy
+            # predicts it, and can't derive it from the deck's current paid cap
             'trial_cap': TRIAL_MAX_ACTIVE_USERS,
             'grace_days': GRACE_PERIOD_DAYS,
             'stripe_configured': billing_configured(),

@@ -324,6 +324,33 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
 
     @patch("tenant.models.Tenant.full_clean")
+    @patch("tenant.views.EmailAddress.objects.get_or_create")
+    def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
+        """When the owner already has an EmailAddress, form_valid marks that record verified+primary
+        (the get_or_create 'not created' branch) instead of relying on the create-time defaults."""
+        existing_email = Mock()
+        mock_get_or_create.return_value = (existing_email, False)
+
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+        request = self.factory.post(reverse("tenant:new"), data=self.form_data)
+        request.user = AnonymousUser()
+        request.session = {"verified_deck_request": {**self.form_data, "nonce": nonce}}
+
+        view = TenantCreate()
+        view.setup(request)
+
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with tenant_context(self.public_tenant):
+            view.form_valid(form)
+
+        self.assertTrue(existing_email.verified)
+        self.assertTrue(existing_email.primary)
+        existing_email.full_clean.assert_called_once()
+        existing_email.save.assert_called_once()
+
+    @patch("tenant.models.Tenant.full_clean")
     def test_form_valid__verification_nonce_is_single_use(self, mock_full_clean):
         """A verification nonce provisions at most one deck: a successful creation
         consumes it, and a second attempt with the same nonce is rejected
@@ -560,6 +587,20 @@ class EmailVerificationRequiredMixinTest(TestCase):
         response = self.view(request)
         self.assertEqual(response.status_code, 403)
 
+    @patch("tenant.views.render")  # patch render to avoid template DB queries
+    def test_dispatch__verified_request_without_timestamp_is_cleared_and_denied(self, mock_render):
+        """A verified_deck_request carrying no verified_at is treated as malformed: it's dropped from the session and access is denied (403)."""
+        mock_render.side_effect = lambda request, template_name, context=None, status=None: HttpResponse(status=status or 200)
+
+        request = self.factory.get("/dummy/")
+        request.user = self.user
+        request.session = {"verified_deck_request": {"email": "john.doe@example.com"}}  # no verified_at
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("verified_deck_request", request.session)
+
 
 class DeckStatusBannerTest(ByteDeckTenantTestCase):
     """Rendering tests for the deck status banner in base.html (epic #1729 PR 3;
@@ -655,21 +696,31 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.student)
         self.assertNotContains(response, 'deck-status-banner')
 
-    def test_banner__suspended_deck_warns_everyone(self):
-        """On a suspended deck, staff get the subscribe call-to-action and students
-        get the 'let your teacher know' variant."""
+    def test_banner__suspended_deck_warns_owner_and_visitors(self):
+        """On a suspended deck the banner reaches the two audiences who can still
+        load pages: the deck owner (the staff variant with the owner-only sign-in
+        rule, the 365-day deletion countdown, and the subscribe link) and
+        anonymous visitors on the sign-in page (the everyone-else variant).
+        Signed-in non-owners never see it, because the suspension middleware
+        signs them out first (#1734 redesign)."""
         from datetime import date
+
+        from siteconfig.models import SiteConfig
 
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
 
-        response = self.get_quests_page(self.student)
+        response = self.get_quests_page(SiteConfig.get().deck_owner)
         self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, 'let your teacher know')
-
-        response = self.get_quests_page(self.staff)
-        self.assertContains(response, 'This deck is suspended')
+        text = ' '.join(response.content.decode().split())  # template line-wraps mid-phrase
+        self.assertIn('Only the deck owner can sign in', text)  # owner-only sign-in rule
+        self.assertIn('suspended for 365 days', text)  # deletion countdown
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
+
+        self.client.logout()
+        response = self.client.get(reverse('account_login'))
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'Only the deck owner can sign in')
 
     def test_banner__over_limit_warns_staff_from_live_count(self):
         """Staff see the over-limit warning from the LIVE current-student count --
@@ -707,13 +758,11 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
     def test_banner__expired_grace_deck_gets_danger_styling_and_grace_copy(self):
         """A deck past paid_until (in grace) gets the DANGER (red) banner -- not the
         approaching-deadline warning style -- and the copy states when the grace
-        period ends and that the deck then reverts to the trial cap (maintainer
-        requests from staging live testing)."""
+        period ends and that the deck will then be suspended with only the owner
+        able to sign in (suspension redesign, 2026-07-30)."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
-
-        from tenant.models import TRIAL_MAX_ACTIVE_USERS
 
         self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=10))
         response = self.get_quests_page(self.staff)
@@ -722,7 +771,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'fa-exclamation-triangle')  # banner level icon (review request)
         text = ' '.join(response.content.decode().split())
         self.assertIn('which ends in 20 days', text)
-        self.assertIn(f'revert to trial limits (max {TRIAL_MAX_ACTIVE_USERS} current students)', text)
+        self.assertIn('the deck will then be suspended (only the deck owner will be able to sign in)', text)
         # the approaching-deadline variants keep the warning style
         self.set_deck(paid_until=localdate() + timedelta(days=3))
         self.assertContains(self.get_quests_page(self.staff), 'alert-warning')
@@ -872,10 +921,11 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1)
         self.assertIsNone(self.get_page().context['remaining_seats'])
 
-    def test_page__grace_period_states_trial_cap(self):
+    def test_page__grace_period_states_suspension_ahead(self):
         """A deck in its paid grace window gets its own DANGER "Grace period" label --
         never the green "Subscribed" badge (maintainer review find) -- and explains
-        the trial cap it will revert to (5), not its current paid cap."""
+        what follows: suspension, with only the deck owner able to sign in and the
+        deletion countdown starting (suspension redesign, 2026-07-30)."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
@@ -885,8 +935,63 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Grace period</span>')
         self.assertContains(response, 'label-danger')
         self.assertNotContains(response, 'Subscribed')
-        self.assertContains(response, 'grace period')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
+                      'and the 365-day countdown to deck deletion begins)', text)
+
+    def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
+        """A suspended deck's status copy states the suspension rules -- only
+        the deck owner can sign in, and the 365-day deletion countdown -- while
+        the seats table still shows the ADMIN-SET cap, whatever it is (the
+        field stays authoritative; production find, 2026-07-24). Viewed as the
+        deck owner: the suspension middleware signs everyone else out (#1734)."""
+        from datetime import date
+
+        from siteconfig.models import SiteConfig
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        self.client.force_login(SiteConfig.get().deck_owner)
+        response = self.get_page()
+        self.assertContains(response, 'only the deck owner can sign in')
+        self.assertContains(response, 'suspended for 365 days')
+        # page status copy specifically (the banner says similar things): data intact + how to restore
+        self.assertContains(response, 'Nothing has been deleted yet')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
+
+    def test_page__lifecycle_overview_lists_every_stage(self):
+        """The "How subscriptions work" section walks the owner through the whole
+        lifecycle -- valid subscription, grace period, suspension (owner-only
+        sign-in + deletion countdown), deletion -- and pitches the Maintenance
+        subscription as the keep-it-safe option (maintainer request, 2026-07-30)."""
+        response = self.get_page()
+        self.assertContains(response, 'How subscriptions work')
+        self.assertContains(response, 'Valid subscription')
+        self.assertContains(response, 'Grace period')
+        self.assertContains(response, 'Suspension')
+        self.assertContains(response, 'Deletion')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('Only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
+        self.assertIn('max 5 current students', text)  # the Maintenance pitch states the trial cap
+
+    def test_page__maintenance_subscription_gets_its_own_status(self):
+        """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
+        status label and copy (kept alive, capped, upgradable) instead of the
+        plain green Subscribed badge -- while a paid deck with a higher cap keeps
+        the Subscribed status."""
+        self.set_deck(max_active_users=5)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'Maintenance</span>')  # the status label itself
+        self.assertContains(response, 'maintenance subscription')
+        self.assertContains(response, 'capped at the trial limit')
         self.assertContains(response, 'max 5 current students')
+        self.assertNotContains(response, '>Subscribed</span>')
+
+        self.set_deck(max_active_users=30)
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        # the lifecycle overview always PITCHES Maintenance, so pin the status label only
+        self.assertNotContains(response, 'Maintenance</span>')
 
     def test_page__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""

@@ -63,6 +63,12 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
         return f'{ContentType.objects.get_for_model(obj).pk}-{obj.pk}'
 
+    def test_filter_choices_to_render__single_empty_selection_renders_no_choices(self):
+        """A lone empty selected value is treated as no selection, so the widget renders no choices."""
+        widget = CustomGFKSelect2Widget()
+        widget.filter_choices_to_render([''])
+        self.assertEqual(list(widget.choices), [])
+
     def test_widget__renders_initial_data(self):
         """Widget renders the initial GFK value's string in the form output."""
         group = self.groups[0]

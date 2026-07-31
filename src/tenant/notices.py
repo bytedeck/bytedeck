@@ -29,7 +29,7 @@ from django.utils.timezone import localdate
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import TRIAL_MAX_ACTIVE_USERS, DeckNotice
+from tenant.models import DeckNotice, TRIAL_MAX_ACTIVE_USERS
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -38,7 +38,6 @@ from tenant.models import TRIAL_MAX_ACTIVE_USERS, DeckNotice
 EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
 
 LIMIT_WARNING_FRACTION = 0.8
-
 
 def _unfired(deck, kind, threshold, period_key):
     """Whether this exact notice hasn't been recorded yet."""
@@ -128,18 +127,46 @@ def process_deck_notices(deck):
 
 def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
+    from django.utils.timezone import timedelta
+
+    from tenant.models import GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS
+
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
+    days = deck.days_until_expiry
+    # the day the deck's suspension began (or would begin): the day after its LAST
+    # covered day -- trials end at trial_end_date, paid access after the grace window
+    last_covered_days = []
+    if deck.trial_end_date:
+        last_covered_days.append(deck.trial_end_date)
+    if deck.paid_until:
+        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
+    # is_suspended requires at least one date field, so the list is never empty here
+    suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
+    # the scheduled deletion day under the suspension policy -- INACTIVE_DELETE_DAYS
+    # after the suspension began; the suspended email LEADS with it (maintainer
+    # request, 2026-07-30: put the bottom line up front)
+    deletion_date = suspended_since + timedelta(days=INACTIVE_DELETE_DAYS) if suspended_since else None
     context = {
         'deck': deck,
         'config': config,
-        'days': deck.days_until_expiry,
+        'days': days,
         'cap': deck.effective_max_active_users,
-        # what a lapsed deck reverts to -- during the paid grace period the effective
-        # cap is still the paid cap, so the grace email can't derive this from `cap`
+        # the trial/Maintenance student cap, for email copy that references it
+        # (the deck's own `cap` can differ, e.g. a paid cap during grace)
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
+        # every date the owner could want (maintainer request, 2026-07-25): when the
+        # paid period ended/ends, how long ago, when the grace window closes, and --
+        # for suspended decks -- the day the suspension began. None when not applicable.
+        'grace_days': GRACE_PERIOD_DAYS,
+        'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
+        'grace_days_left': deck.grace_days_remaining,
+        'expired_days_ago': -days if days is not None and days < 0 else None,
+        'suspended_since': suspended_since,
+        'deletion_date': deletion_date,
+        'deletion_days_left': (deletion_date - localdate()).days if deletion_date else None,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe
         # flatpage when Stripe isn't configured
