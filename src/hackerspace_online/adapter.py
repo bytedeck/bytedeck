@@ -10,10 +10,28 @@ from allauth.utils import build_absolute_uri
 from allauth.socialaccount.adapter import DefaultSocialAccountAdapter
 from django_tenants.utils import get_tenant_model
 
+from tenant.utils import get_current_deck
+
 User = get_user_model()
 
 
 class CustomAccountAdapter(DefaultAccountAdapter):
+
+    def is_open_for_signup(self, request):
+        """No new sign-ups on a suspended deck (#1734 redesign): a suspended deck is
+        owner-only, so a brand-new account registering (and landing in a signed-in
+        session) contradicts the suspension. allauth renders
+        account/signup_closed.html when this returns False, and the social-account
+        adapter delegates its own is_open_for_signup here, so this single guard
+        covers both the sign-up form and Google sign-ups.
+
+        get_current_deck() is None outside deck schemas (public/library), where
+        sign-up stays governed by the default behavior.
+        """
+        deck = get_current_deck()
+        if deck is not None and deck.is_suspended:
+            return False
+        return super().is_open_for_signup(request)
 
     def clean_username(self, username, shallow=False):
         username = super().clean_username(username, shallow)

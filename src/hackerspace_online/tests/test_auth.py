@@ -63,6 +63,60 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('account_reset_password_from_key_done')  # ok
 
 
+class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Sign-up is closed on a suspended deck (#1734 redesign): a suspended deck is
+    owner-only, so brand-new accounts must not be able to register and land in a
+    signed-in session (maintainer find on staging, 2026-07-31)."""
+
+    def setUp(self):
+        """Use a tenant-aware client and start from an unsuspended
+        (far-future-trial) deck with a clean deck cache."""
+        from django.core.cache import cache
+
+        from tenant.models import Tenant
+        from tenant.utils import deck_cache_key
+
+        self.client = TenantClient(self.tenant)
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.set_deck = lambda **fields: (
+            Tenant.objects.filter(pk=self.tenant.pk).update(**fields),
+            cache.delete(deck_cache_key(self.tenant.schema_name)),
+        )
+
+    def suspend_deck(self):
+        """Lapse the deck's trial far past the grace window."""
+        from datetime import date
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
+
+    def test_signup__closed_on_suspended_deck(self):
+        """On a suspended deck the sign-up page renders the closed notice (with the
+        owner-only explanation) instead of the form, and a POST creates no user."""
+        self.suspend_deck()
+
+        response = self.client.get(reverse('account_signup'))
+        self.assertTemplateUsed(response, 'account/signup_closed.html')
+        self.assertContains(response, 'Sign-up is currently closed')
+        self.assertContains(response, 'only the deck owner can sign in')
+
+        form_data = {
+            'username': "sneakysignup",
+            'first_name': "Sneaky",
+            'last_name': "Signup",
+            'access_code': "314159",
+            'password1': "password",
+            'password2': "password",
+        }
+        self.client.post(reverse('account_signup'), form_data)
+        self.assertFalse(User.objects.filter(username='sneakysignup').exists())
+
+    def test_signup__open_on_unsuspended_deck(self):
+        """An unsuspended deck's sign-up page still renders the normal form."""
+        response = self.client.get(reverse('account_signup'))
+        self.assertTemplateUsed(response, 'account/signup.html')
+        self.assertNotContains(response, 'Sign-up is currently closed')
+
+
 class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     @classmethod

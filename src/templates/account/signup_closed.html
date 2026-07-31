@@ -1,0 +1,15 @@
+{% extends "base_no_sidebar.html" %}
+
+{% load i18n %}
+
+{% block head_title %}{% trans "Sign Up Closed" %} | {% endblock %}
+
+{% block heading %}{% trans "Sign Up Closed" %}<i class="pull-right fa fa-ban"></i>{% endblock %}
+
+{% block content %}
+  <p><strong>Sign-up is currently closed on this deck.</strong></p>
+  {% if current_deck.is_suspended %}
+    {# the only closed-signup case today: keep this conditional so future closed states don't inherit suspension copy #}
+    <p>This deck is suspended: only the deck owner can sign in until the deck has a valid subscription.</p>
+  {% endif %}
+{% endblock %}
