@@ -16,6 +16,8 @@ User = get_user_model()
 
 
 class CustomAccountAdapter(DefaultAccountAdapter):
+    """Customizes allauth account behavior for the current deck: sign-up gating,
+    lowercase usernames, and tenant-aware email confirmation URLs."""
 
     def is_open_for_signup(self, request):
         """No new sign-ups on a suspended deck (#1734 redesign): a suspended deck is

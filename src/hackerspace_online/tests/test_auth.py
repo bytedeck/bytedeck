@@ -66,7 +66,7 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Sign-up is closed on a suspended deck (#1734 redesign): a suspended deck is
     owner-only, so brand-new accounts must not be able to register and land in a
-    signed-in session (maintainer find on staging, 2026-07-31)."""
+    signed-in session."""
 
     def setUp(self):
         """Use a tenant-aware client and start from an unsuspended
