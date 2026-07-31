@@ -1199,3 +1199,19 @@ table[data-toggle="table"].bt-reveal {
 .user-content ul ul ul {
     list-style-type: square;
 }
+
+/* Answer tables (questions/snippets/comment_answers.html): keep a long unbroken answer or URL
+   from widening its column and overflowing the panel. table-layout: fixed pins the
+   Question / answer columns to their set widths so content wraps to fit, and pre blocks wrap
+   long code lines instead of overflowing. */
+.question-answers {
+    table-layout: fixed;
+}
+.question-answers th,
+.question-answers td {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.question-answers pre {
+    white-space: pre-wrap;
+}
