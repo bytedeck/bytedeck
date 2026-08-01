@@ -825,6 +825,84 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(MarkRange.objects.filter(id=1).exists())
 
 
+class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """The staff-only semester status banner rendered on every page via base.html
+    (semester_status_banner.html): nudges archiving an ended active semester (#2157)
+    and warns when no semester is open for students to join (#1177)."""
+
+    BANNER_ID = 'semester-status-banner'
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a student for checking who sees the banner."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+    def setUp(self):
+        """Set up a tenant client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def test_semester_status_banner__hidden_while_active_semester_is_running(self):
+        """No banner renders while the active semester is open and within its dates."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+        self.assertNotContains(response, self.BANNER_ID)
+
+    def test_semester_status_banner__active_semester_ended(self):
+        """Once the active semester's last day has passed, staff see the archive nudge
+        with a link to the archive confirmation page."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.first_day = datetime.date.today() - datetime.timedelta(days=100)
+        active_sem.last_day = datetime.date.today() - datetime.timedelta(days=10)
+        active_sem.save()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.BANNER_ID)
+        self.assertContains(response, 'ended on')
+        self.assertContains(response, reverse('courses:semester_archive'))
+
+    def test_semester_status_banner__no_open_semester(self):
+        """When the active semester is archived (the no-open-semester state, #1177),
+        staff see the students-can't-join warning linking to the semester list."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.closed = True
+        active_sem.save()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.BANNER_ID)
+        self.assertContains(response, 'No semester is open')
+
+    def test_semester_status_banner__hidden_from_students(self):
+        """Students never see the semester status banner, even in the states that show
+        it to staff."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.closed = True
+        active_sem.save()
+
+        self.client.force_login(self.test_student)
+        # any student-accessible page renders base.html; the quest list is the landing page
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.BANNER_ID)
+
+    def test_semester_status_banner__hidden_when_no_config(self):
+        """On schemas without a SiteConfig (the config context processor supplies None on
+        the public tenant), the banner renders nothing even for a staff user."""
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+
+        request = RequestFactory().get('/')
+        request.user = self.test_teacher
+        html = render_to_string('semester_status_banner.html', {'config': None, 'request': request})
+
+        self.assertNotIn(self.BANNER_ID, html)
+
+
 class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def generate_dates(quantity, dates=None):
