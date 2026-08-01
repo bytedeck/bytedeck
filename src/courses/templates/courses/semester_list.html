@@ -50,7 +50,7 @@
         <span class="label label-default">Archived</span>
         {% elif object == config.active_semester %}
           {% if object.has_ended %}
-          <span class="label label-warning" title="This semester's last day has passed. Archive it to record final marks and free up student seats.">Active - ended {{ object.last_day }}</span>
+          <span class="label label-success" title="This semester's last day has passed. Archive it to record final marks and free up student seats.">Active - ended</span>
           {% else %}
           <span class="label label-success">Active</span>
           {% endif %}
