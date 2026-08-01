@@ -204,3 +204,33 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertIn('clue@example.com', line)
         self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
         self.assertIn('1 with no owner email', output)
+
+    def test_backfill__existing_unverified_row_is_marked_not_duplicated(self):
+        """--apply promotes an existing unverified, non-primary EmailAddress row for
+        the owner's address in place: no duplicate row is created."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        EmailAddress.objects.create(user=owner, email='legacy.owner@example.com', verified=False, primary=False)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        rows = EmailAddress.objects.filter(user=owner)
+        self.assertEqual(rows.count(), 1)
+        self.assertTrue(rows[0].verified)
+        self.assertTrue(rows[0].primary)
+
+    def test_backfill__broken_schema_reported_as_error_line(self):
+        """A Tenant row whose schema doesn't exist is reported as an ERROR line (and
+        counted in the summary) without aborting the run for the remaining decks."""
+        with schema_context(get_public_schema_name()):
+            broken = Tenant(name='brokendeck', schema_name='brokendeck')
+            broken.auto_create_schema = False
+            broken.full_clean()
+            broken.save()
+
+        output = self.run_command()
+        broken_line = [line for line in output.splitlines() if line.startswith('brokendeck')]
+        self.assertEqual(len(broken_line), 1)
+        self.assertIn('ERROR', broken_line[0])
+        self.assertIn('1 with errors', output)
+        # the healthy test deck was still processed after the broken one
+        self.deck_line(output)
