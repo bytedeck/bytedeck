@@ -131,7 +131,7 @@
         {% if question_formset %}
           {# with per-question answer fields above, the general comment box needs its own heading #}
           {# so students know it's for anything beyond their answers #}
-          <p><strong>Additional Submission Comments</strong></p>
+          <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
         {% endif %}
         <div id="main-comment-form">
           {{ submission_form | crispy }}

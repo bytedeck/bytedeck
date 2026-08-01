@@ -575,6 +575,13 @@ iframe.summernotewidget.form-control {
     margin-right: 15px;
 }
 
+/* The "Additional Submission Comments" heading sits directly inside the padding-less
+   .panel-summernote, so it needs the same 15px left inset as the summernote form fields to line
+   up with the question labels above it instead of jamming against the panel's left edge. */
+.submission-comments-heading {
+    margin-left: 15px;
+}
+
 .multifileinput {
     border: none;
     box-shadow: none !important;
