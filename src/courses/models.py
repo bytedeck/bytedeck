@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -240,16 +240,20 @@ class SemesterManager(models.Manager):
         if QuestSubmission.objects.all_awaiting_approval():
             return Semester.QUEST_AWAITING_APPROVAL
 
-        # need to calculate all user XP and store in their Course
+        # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
+        # saves each registration as it iterates and raises on a negative-XP student,
+        # so without the transaction the students processed before it would stay finalized.
         try:
-            CourseStudent.objects.calc_semester_grades(active_sem)
+            with transaction.atomic():
+                # need to calculate all user XP and store in their Course
+                CourseStudent.objects.calc_semester_grades(active_sem)
+
+                QuestSubmission.objects.remove_in_progress()
+
+                active_sem.closed = True
+                active_sem.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
-
-        QuestSubmission.objects.remove_in_progress()
-
-        active_sem.closed = True
-        active_sem.save()
 
         return active_sem
 
@@ -299,6 +303,16 @@ class Semester(models.Model):
         # don't use timezone.now().date() because it uses UTC, and might not be the same as
         # the current local date.  Use current local date with date.today()
         return self.first_day <= date.today() <= self.last_day
+
+    def has_ended(self):
+        """Whether the semester's last day is in the past (local date, consistent with
+        is_open()). Used by the semester list to flag an active semester that has run
+        past its end date and is probably due to be archived.
+
+        Returns:
+            bool: True when last_day is set and before today.
+        """
+        return self.last_day is not None and self.last_day < date.today()
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date

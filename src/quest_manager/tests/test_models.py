@@ -34,6 +34,11 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
+    def test_get_icon_url__returns_category_icon_when_set(self):
+        """Category.get_icon_url returns the campaign's own icon url when it has one."""
+        self.category.icon = 'icons/campaign.png'
+        self.assertEqual(self.category.get_icon_url(), self.category.icon.url)
+
     def test_condition_met_as_prerequisite__all_unique_quests_completed(self):
         """ Test that all unique quests in a campaign are completed before the campaign is considered completed
         for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
@@ -171,6 +176,35 @@ class QuestTestModel(ByteDeckTenantTestCase):
         self.quest.icon = ''
         self.quest.campaign = baker.make('quest_manager.Category', icon='icons/campaign.png')
         self.assertEqual(self.quest.get_icon_url(), self.quest.campaign.icon.url)
+
+    def test_icon_url__returns_icon_url_when_set(self):
+        """XPItem.icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.icon_url(), self.quest.icon.url)
+
+    def test_icon_url__returns_none_when_no_icon(self):
+        """XPItem.icon_url returns None when the quest has no icon (used by templates via default_if_none)."""
+        self.quest.icon = ''
+        self.assertIsNone(self.quest.icon_url())
+
+    def test_is_repeatable__reflects_max_repeats(self):
+        """XPItem.is_repeatable is True when max_repeats is non-zero (a finite or unlimited cap), False when 0."""
+        self.quest.max_repeats = 0
+        self.assertFalse(self.quest.is_repeatable())
+        self.quest.max_repeats = 3
+        self.assertTrue(self.quest.is_repeatable())
+        self.quest.max_repeats = -1  # unlimited repeats
+        self.assertTrue(self.quest.is_repeatable())
+
+    def test_is_repeat_available__false_during_cooldown(self):
+        """is_repeat_available is False when a repeatable quest has been completed but its
+        hours_between_repeats cooldown has not yet elapsed (issue #57)."""
+        student = baker.make(User)
+        quest = baker.make(Quest, max_repeats=-1, hours_between_repeats=24)
+        sub = QuestSubmission.objects.create_submission(student, quest)
+        sub.mark_completed()
+        # Completed just now, so fewer than 24 hours have passed: still on cooldown.
+        self.assertFalse(quest.is_repeat_available(student))
 
     def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """

@@ -625,20 +625,6 @@ class CytoScape(models.Model):
         title = title.replace('"', '\\"')
         return title + post
 
-    def get_last_node_in_campaign(self, parent_node, offset=0):
-        """
-        :param offset: offset from last node by this (i.e. 1 --> second last node)
-        :param parent_node: the compound node/parent, i.e. campaign
-        :return: the most recent node added to the campaign (added to the compound/parent node) by using the highest id
-        """
-        try:
-            # latest normally used with dates, but actually works with other fields too!
-            # return CytoElement.objects.all_for_campaign(self, parent_node).latest('id')
-            qs = CytoElement.objects.all_for_campaign(self, parent_node).order_by('-id')
-            return qs[offset]
-        except self.DoesNotExist:
-            return None
-
     def create_first_node(self, obj):
         """ Creates the first node from `obj`, then if this map has a parent, creates an aditiona node to link back to back to the parent scape/map.
         Returns the first node."""
@@ -666,43 +652,15 @@ class CytoScape(models.Model):
 
         return first_node
 
-    def create_child_map_node(self, obj, data_source):
-        """ If this obj is a transition node (to a new map, make a node to link to the next map"""
-        ct = ContentType.objects.get_for_model(obj)
-        # obj = ct.get_object_for_this_type(id=obj.id)
-
-        child_map_qs = CytoScape.objects.filter(initial_content_type=ct.id, initial_object_id=obj.id)
-        if child_map_qs.exists():
-            child_map = child_map_qs[0]
-            label = f"{child_map.name} Map"
-        else:
-            label = "The Void"
-
-        child_map_node, _ = CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.NODES,
-            label=label,
-            href=reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
-            classes="link child-map",
-        )
-
-        # link them together with an edge
-        CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.EDGES,
-            data_source=data_source,
-            data_target=child_map_node,
-        )
-
-        return child_map_node
-
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
         # check for an icon
         if hasattr(obj, 'get_icon_url'):
             img_url = obj.get_icon_url()
-        else:
+        # Defensive fallback: every object that reaches map generation (Quest, Badge) defines
+        # get_icon_url, so this branch is never taken in practice -- excluded from coverage.
+        else:  # pragma: no cover
             img_url = "none"
 
         # check for map transition
@@ -737,11 +695,8 @@ class CytoScape(models.Model):
 
     def get_temp_campaign(self, campaign_id) -> TempCampaign:
         for campaign in self.campaign_list:
-            try:
-                if campaign.node_id == campaign_id:
-                    return campaign
-            except ValueError:
-                pass
+            if campaign.node_id == campaign_id:
+                return campaign
         return None
 
     def add_to_campaign(self, obj, target_node, source_node):

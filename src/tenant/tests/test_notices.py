@@ -18,76 +18,6 @@ NOW = "2026-08-15 20:00:00"
 
 
 @freeze_time(NOW)
-@override_settings(DECK_NOTICES_ENABLED=False)  # the reset is enforcement: NOT gated by the notices rollout flag
-class SuspensionCapResetTest(ByteDeckTenantTestCase):
-    """Tests for reset_cap_on_new_suspension (#2178): when a suspension episode
-    begins, the cap is written back to the trial default exactly once, and any
-    admin adjustment afterwards -- lower or higher -- sticks."""
-
-    def setUp(self):
-        """Clear the cached deck row so each test reads its own billing state."""
-        cache.delete(deck_cache_key(self.tenant.schema_name))
-
-    def set_deck(self, **fields):
-        """Persist billing fields via update() + refresh (the reset reads the instance)."""
-        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
-        self.tenant.refresh_from_db()
-
-    def reset(self):
-        """Shorthand: run the reset for this deck and return its log summary."""
-        from tenant.notices import reset_cap_on_new_suspension
-        return reset_cap_on_new_suspension(self.tenant)
-
-    def test_reset__fresh_suspension_reverts_cap_once_then_admin_wins(self):
-        """A deck whose trial lapsed yesterday gets its cap written back to the
-        trial default exactly once; an admin adjustment made afterwards (e.g.
-        lowering to 1 for a wind-down, or raising for a comp) is never clobbered
-        by later runs of the same episode."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None, max_active_users=80)
-        self.assertEqual(self.reset(), 'cap reset 80 -> 5')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
-
-        self.set_deck(max_active_users=1)  # admin wind-down after the reset
-        self.assertEqual(self.reset(), 'cap already reset this episode')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 1)
-
-    def test_reset__paid_deck_episode_starts_after_the_grace_window(self):
-        """A paid deck's suspension episode begins the day after its grace window
-        ends (paid_until + 30 + 1), so the reset fires on the task's first run
-        after that day -- and -1 unlimited decks revert like any other."""
-        self.set_deck(trial_end_date=None, paid_until=TODAY - timedelta(days=31), max_active_users=-1)
-        self.assertEqual(self.reset(), 'cap reset -1 -> 5')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-
-    def test_reset__old_episodes_are_grandfathered(self):
-        """A deck already suspended for longer than the catch-up window keeps its
-        cap (its admin may have hand-set it since -- the production case that
-        motivated #2178); the episode is recorded so it is never revisited."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=60), paid_until=None, max_active_users=1)
-        self.assertIn('cap left alone', self.reset())
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 1)
-        self.assertEqual(self.reset(), 'cap already reset this episode')
-
-    def test_reset__no_op_paths(self):
-        """Unsuspended decks are untouched (no ledger row), and a fresh suspension
-        whose cap is already the trial default records the episode without a write."""
-        self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None, max_active_users=80)
-        self.assertEqual(self.reset(), 'not suspended')
-        self.assertFalse(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
-
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), max_active_users=5)
-        self.assertEqual(self.reset(), 'cap already at the trial default')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
-
-
-@freeze_time(NOW)
 @override_settings(DECK_NOTICES_ENABLED=True)
 class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
     """Tests for the reminder cadence engine (epic #1729 PR 5, #1733)."""
@@ -359,10 +289,11 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
-    def test_process__grace_period_email_states_the_trial_cap(self):
-        """The grace-period expiry email tells the owner what the deck will revert to:
-        the TRIAL cap (5), not the deck's current (still-paid) cap -- during grace the
-        effective cap is the paid one, so the template can't derive this from `cap`."""
+    def test_process__grace_period_email_states_suspension_ahead(self):
+        """The grace-period expiry email tells the owner what follows the grace
+        window: suspension, with only the deck owner able to sign in and the
+        365-day deletion countdown starting (suspension redesign, 2026-07-30) --
+        checked on the plain-text part, which must carry the same message."""
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
             max_active_users=30, active_user_count=0,  # paid cap 30; no limit notice due
@@ -374,7 +305,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
         self.assertIn('grace period', body)
-        self.assertIn('max 5 current students', body)
+        self.assertIn('the deck will be suspended', body)
+        self.assertIn('only the deck owner will be able to sign in', body)
+        self.assertIn('365-day countdown to deck deletion', body)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__grace_email_includes_dates_seats_and_logo(self):
@@ -397,6 +330,8 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
         self.assertIn('25 days left', html)    # ...with the countdown
         self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
@@ -413,6 +348,8 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1)
         html = mail.outbox[0].alternatives[0][0]
         self.assertIn('limit has been reached', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
@@ -431,6 +368,57 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('suspended', summary)
         self.assertEqual(len(mail.outbox), 1, summary)
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        # the bottom line LEADS (maintainer request, 2026-07-30): the scheduled
+        # deletion date (suspension start + 365 days) with the countdown, and the
+        # deck name links to the deck itself
+        self.assertIn('scheduled for deletion on Aug. 2, 2027', html)
+        self.assertIn('352 days from now', html)  # frozen TODAY Aug 15, 2026 -> Aug 2, 2027
+        self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
         self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
         self.assertIn('free trial ended on Aug. 1, 2026', html)
+        # the new suspension rules (redesign, 2026-07-30): owner-only sign-in,
+        # data intact, and the Maintenance escape hatch
+        self.assertIn('only the deck owner can sign in', html)
+        self.assertIn('your content and student data are intact', html)
+        self.assertIn('<em>Maintenance</em> subscription', html)
+        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
+        # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
+        self.assertIn('<p>Bytedeck</p>', html)
         self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_paid_clock_and_overdue_countdown(self):
+        """A deck suspended after a PAID subscription lapsed explains the paid
+        clock (paid-through and grace-end dates) in its suspension email, with the
+        bottom line carried by the plain-text part too; a deck already suspended
+        past the deletion horizon still shows its (past) scheduled deletion date
+        but drops the "days from now" countdown."""
+        # paid clock: paid through Jul 6, grace ends Aug 5 -> suspended Aug 6, 2026
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=40),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('subscription was paid through July 6, 2026', html)
+        self.assertIn('grace period ended on Aug. 5, 2026', html)
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', html)
+        self.assertIn('356 days from now', html)
+        body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
+        self.assertIn('scheduled for deletion on Aug. 6, 2027', body)
+
+        # overdue: suspended Aug 11, 2025 -> deletion day Aug 11, 2026 already passed,
+        # so the date still shows but no "days from now" countdown is promised
+        mail.outbox.clear()
+        Tenant.objects.filter(pk=self.tenant.pk).update(paid_until=TODAY - timedelta(days=400))
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('scheduled for deletion on Aug. 11, 2026', html)
+        self.assertNotIn('days from now', html)

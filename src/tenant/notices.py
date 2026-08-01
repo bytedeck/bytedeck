@@ -39,69 +39,9 @@ EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
 
 LIMIT_WARNING_FRACTION = 0.8
 
-# How far back a suspension episode may have begun and still get its one-time
-# cap reset when the nightly task first sees it: covers multi-day beat outages
-# without rewriting caps on decks that were already suspended long before (whose
-# admins may have hand-adjusted the cap since -- exactly what the reset must
-# never clobber).
-CAP_RESET_CATCHUP_DAYS = 7
-
-
 def _unfired(deck, kind, threshold, period_key):
     """Whether this exact notice hasn't been recorded yet."""
     return not DeckNotice.objects.filter(tenant=deck, kind=kind, threshold=threshold, period_key=period_key).exists()
-
-
-def reset_cap_on_new_suspension(deck):
-    """Once per suspension episode, write the trial default back into the deck's
-    ``max_active_users`` -- the "revert to trial limits" moment (#1734).
-
-    Enforcement, not communication: unlike the notices below this is NOT gated
-    by ``settings.DECK_NOTICES_ENABLED``. The cap is applied exactly once per
-    episode (a `DeckNotice` ledger row with threshold 'cap-reset' keyed to the
-    episode's first suspended day), so an admin adjustment made afterwards --
-    lower for a wind-down, higher for a comp -- always sticks
-    (maintainer decision on #2178). Episodes that began more than
-    CAP_RESET_CATCHUP_DAYS ago are recorded but NOT reset: they predate this
-    feature (or a long beat outage), and their caps may already be deliberate.
-
-    Runs inside the deck's tenant context via ``deck_status_check``. Returns a
-    short summary string for the worker log.
-    """
-    from django.utils.timezone import timedelta
-
-    from tenant.models import GRACE_PERIOD_DAYS, Tenant
-    from tenant.utils import invalidate_current_deck_cache
-
-    if not deck.is_suspended:
-        return 'not suspended'
-
-    # First day of this suspension episode: the day after the LAST clock lapsed
-    # (trials end at trial_end_date; paid access ends after the grace window).
-    last_covered_days = []
-    if deck.trial_end_date:
-        last_covered_days.append(deck.trial_end_date)
-    if deck.paid_until:
-        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
-    episode_start = max(last_covered_days) + timedelta(days=1)
-
-    _, created = DeckNotice.objects.get_or_create(
-        tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='cap-reset', period_key=str(episode_start),
-    )
-    if not created:
-        return 'cap already reset this episode'
-    if localdate() - episode_start > timedelta(days=CAP_RESET_CATCHUP_DAYS):
-        return f'episode began {episode_start}, before the catch-up window; cap left alone'
-    if deck.max_active_users == TRIAL_MAX_ACTIVE_USERS:
-        return 'cap already at the trial default'
-
-    old_cap = deck.max_active_users
-    # targeted update (not save()) so a concurrent admin edit to another column
-    # can't be clobbered by this stale instance
-    Tenant.objects.filter(pk=deck.pk).update(max_active_users=TRIAL_MAX_ACTIVE_USERS)
-    deck.max_active_users = TRIAL_MAX_ACTIVE_USERS
-    invalidate_current_deck_cache(deck.schema_name)
-    return f'cap reset {old_cap} -> {TRIAL_MAX_ACTIVE_USERS}'
 
 
 def evaluate_deck_notices(deck):
@@ -189,7 +129,7 @@ def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
     from django.utils.timezone import timedelta
 
-    from tenant.models import GRACE_PERIOD_DAYS
+    from tenant.models import GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS
 
     from tenant.tasks import send_email_message
 
@@ -202,14 +142,19 @@ def _deliver(deck, kind):
         last_covered_days.append(deck.trial_end_date)
     if deck.paid_until:
         last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
+    # is_suspended requires at least one date field, so the list is never empty here
+    suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
+    # the scheduled deletion day under the suspension policy -- INACTIVE_DELETE_DAYS
+    # after the suspension began; the suspended email LEADS with it (maintainer
+    # request, 2026-07-30: put the bottom line up front)
+    deletion_date = suspended_since + timedelta(days=INACTIVE_DELETE_DAYS) if suspended_since else None
     context = {
         'deck': deck,
         'config': config,
         'days': days,
         'cap': deck.effective_max_active_users,
-        # what a fresh suspension will RESET the cap to (reset_cap_on_new_suspension)
-        # -- the grace email predicts it, and can't derive it from `cap`, which is
-        # still the paid cap during grace
+        # the trial/Maintenance student cap, for email copy that references it
+        # (the deck's own `cap` can differ, e.g. a paid cap during grace)
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
         # every date the owner could want (maintainer request, 2026-07-25): when the
@@ -219,8 +164,9 @@ def _deliver(deck, kind):
         'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
-        # is_suspended requires at least one date field, so the list is never empty here
-        'suspended_since': max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None,
+        'suspended_since': suspended_since,
+        'deletion_date': deletion_date,
+        'deletion_days_left': (deletion_date - localdate()).days if deletion_date else None,
         # the deck's own staff-facing subscription page (PR 6) -- emails go to the
         # deck owner, who is staff; the page falls back to the public subscribe
         # flatpage when Stripe isn't configured

@@ -575,6 +575,13 @@ iframe.summernotewidget.form-control {
     margin-right: 15px;
 }
 
+/* The "Additional Submission Comments" heading sits directly inside the padding-less
+   .panel-summernote, so it needs the same 15px left inset as the summernote form fields to line
+   up with the question labels above it instead of jamming against the panel's left edge. */
+.submission-comments-heading {
+    margin-left: 15px;
+}
+
 .multifileinput {
     border: none;
     box-shadow: none !important;
@@ -1198,4 +1205,28 @@ table[data-toggle="table"].bt-reveal {
 }
 .user-content ul ul ul {
     list-style-type: square;
+}
+
+/* Answer tables (questions/snippets/comment_answers.html): keep a long unbroken answer or URL
+   from widening its column and overflowing the panel. table-layout: fixed pins the
+   Question / answer columns to their set widths so content wraps to fit, and pre blocks wrap
+   long code lines instead of overflowing. */
+.question-answers {
+    table-layout: fixed;
+}
+.question-answers th,
+.question-answers td {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.question-answers pre {
+    white-space: pre-wrap;
+}
+
+/* Submission question blocks (quest_manager/submission.html) render as a Bootstrap list-group, so
+   the questions read as one connected list (single hairline borders between items, no inter-item
+   gaps) rather than separate padded .well cards. Trim the answer field's trailing form-group
+   margin so each item closes up right after the field instead of carrying a tall empty band. */
+.question-submission-form .form-group {
+    margin-bottom: 0;
 }

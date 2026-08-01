@@ -1,9 +1,11 @@
 {% extends "quest_manager/base.html" %}
 {% load static %}
 {% load crispy_forms_tags %}
+{% load question_tags %}
 
 {% block head %}
     {{ submission_form.media }}
+    {% if question_formset %}{{ question_formset.media }}{% endif %}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap.min.css' %}">
 {% endblock %}
 
@@ -99,7 +101,41 @@
       {% endif %}
 
         {% csrf_token %}
-        {{ submission_form | crispy }}
+        {% if question_formset %}
+          {{ question_formset.management_form }}
+          {% if question_formset.non_form_errors %}
+            <div class="alert alert-danger">{{ question_formset.non_form_errors }}</div>
+          {% endif %}
+          {% comment %} Each question is a list-group item, so the questions read as one connected
+             list (single hairline borders between them, no inter-item gaps) rather than a stack of
+             separate padded cards. {% endcomment %}
+          <div class="list-group question-submission-list">
+          {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
+          {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
+          {% for form in question_formset %}
+            <div class="list-group-item question-submission-form">
+              {# question number and the teacher's instructions on one line to save space; unwrap_p strips #}
+              {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label. #}
+              {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
+              {# would be invalid nested inside a <p> (the browser auto-closes the outer <p> early). #}
+              <div>
+                <strong>Question {{ forloop.counter }}{% if not form.question.required %} <small>(optional)</small>{% endif %}:</strong>
+                {{ form.question.instructions|unwrap_p }}
+              </div>
+              {% crispy form %}
+            </div>
+          {% endfor %}
+          </div>
+          <hr>
+        {% endif %}
+        {% if question_formset %}
+          {# with per-question answer fields above, the general comment box needs its own heading #}
+          {# so students know it's for anything beyond their answers #}
+          <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
+        {% endif %}
+        <div id="main-comment-form">
+          {{ submission_form | crispy }}
+        </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
           {% with submission as s %}
@@ -156,9 +192,10 @@
             {% endif %}
 
             // Copied from quest_approvals.html
+            // scoped to the main comment form: question answers add their own editors
             $('[id^=btn_quick_text]').on('click', function () {
                 var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('div.note-editable');
+                var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)
                 else
@@ -193,9 +230,27 @@
         });
 
         function save_draft() {
-            $summernoteEditor = $('div.note-editable') // should probably use a more robust selector here?
+            // scoped to the main comment form: question answers add their own summernote editors
+            $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
             xpRequested = $('#id_xp_requested').val()
+
+            // Collect draft answers to the quest's questions (text answers only; files
+            // upload on submit). Pairs each row's hidden id with its response text.
+            var answers = {};
+            $('.question-submission-form [name^="question_submissions-"]').each(function() {
+                var name = $(this).attr('name');
+                if (/-id$/.test(name)) {
+                    answers[name] = $(this).val();
+                } else if (/-response_text$/.test(name)) {
+                    // summernote-backed textareas need the API to get current content
+                    if ($(this).next('.note-editor').length) {
+                        answers[name] = $(this).summernote('code');
+                    } else {
+                        answers[name] = $(this).val();
+                    }
+                }
+            });
 
             $draftSaveBtn = $('#save-draft-btn')
             old_text = $draftSaveBtn.html()
@@ -220,7 +275,8 @@
                       csrfmiddlewaretoken: "{{ csrf_token }}",
                       comment: draftComment,
                       submission_id: {{ submission.id }},
-                      xp_requested: xpRequested
+                      xp_requested: xpRequested,
+                      answers: JSON.stringify(answers)
                     }, // data sent with the post request
 
                     // handle a successful response
