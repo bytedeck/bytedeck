@@ -137,19 +137,41 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
     """Tests for the `backfill_owner_emails` management command (#1729 rollout)."""
 
     def run_command(self, *args):
-        """Run the command and return its full stdout."""
+        """Run backfill_owner_emails and capture its report.
+
+        Args:
+            *args: Extra command arguments (e.g. '--apply'); none means dry run.
+
+        Returns:
+            str: The command's full stdout.
+        """
         out = StringIO()
         call_command('backfill_owner_emails', *args, stdout=out)
         return out.getvalue()
 
     def deck_line(self, output):
-        """Return this test deck's audit line, or fail if it's absent."""
+        """Extract this test deck's audit line from a command report.
+
+        Args:
+            output (str): The command's full stdout.
+
+        Returns:
+            str: The single report line for this test's deck (fails the test if
+            the line is absent or duplicated).
+        """
         matches = [line for line in output.splitlines() if line.startswith(self.tenant.schema_name)]
         self.assertEqual(len(matches), 1, f"expected exactly one audit line for {self.tenant.schema_name}:\n{output}")
         return matches[0]
 
     def set_owner(self, **user_fields):
-        """Make a fresh staff user the deck owner and return it."""
+        """Make a fresh staff user the deck owner.
+
+        Args:
+            **user_fields: Field overrides forwarded to the User baker (e.g. email).
+
+        Returns:
+            User: The newly created owner now set as SiteConfig.deck_owner.
+        """
         owner = baker.make(User, is_staff=True, **user_fields)
         config = SiteConfig.get()
         config.deck_owner = owner
@@ -234,3 +256,21 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertIn('1 with errors', output)
         # the healthy test deck was still processed after the broken one
         self.deck_line(output)
+
+    def test_backfill__case_variant_primary_demoted_in_favor_of_exact_match(self):
+        """When a case-variant duplicate of the owner's address holds primary, --apply
+        demotes it (by pk, before the promote saves: the DB's unique_primary_email
+        constraint allows only one primary per user) and promotes the exact-case
+        row, leaving exactly one verified primary."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        exact = EmailAddress.objects.create(user=owner, email='legacy.owner@example.com', verified=False, primary=False)
+        variant = EmailAddress.objects.create(user=owner, email='Legacy.Owner@example.com', verified=False, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        exact.refresh_from_db()
+        variant.refresh_from_db()
+        self.assertTrue(exact.primary)
+        self.assertTrue(exact.verified)
+        self.assertFalse(variant.primary)
+        self.assertEqual(EmailAddress.objects.filter(user=owner, primary=True).count(), 1)

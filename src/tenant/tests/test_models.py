@@ -380,7 +380,14 @@ class OwnerEmailResolutionTest(ByteDeckTenantTestCase):
     """
 
     def set_owner(self, **user_fields):
-        """Make a fresh staff user the deck owner and return it."""
+        """Make a fresh staff user the deck owner.
+
+        Args:
+            **user_fields: Field overrides forwarded to the User baker (e.g. email).
+
+        Returns:
+            User: The newly created owner now set as SiteConfig.deck_owner.
+        """
         owner = baker.make(User, is_staff=True, **user_fields)
         config = SiteConfig.get()
         config.deck_owner = owner

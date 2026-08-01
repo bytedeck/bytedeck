@@ -41,7 +41,12 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
-        """Register the --apply flag (without it the command only reports)."""
+        """Register the --apply flag (without it the command only reports).
+
+        Args:
+            parser (argparse.ArgumentParser): The command's argument parser,
+                mutated in place. Returns nothing.
+        """
         parser.add_argument(
             '--apply', action='store_true',
             help="Write the EmailAddress fixes and refresh each fixed deck's cached fields. "
@@ -94,10 +99,20 @@ class Command(BaseCommand):
     def _process_deck(self, tenant, apply_changes):
         """Audit (and in apply mode normalize) one deck's owner email bookkeeping.
 
-        Must run inside the deck's tenant context. Returns
-        ``(status, owner_name, email, notes)`` where status is ``ok`` (nothing to
-        do), ``fixed`` (bookkeeping created or corrected), or ``no-email`` (needs
-        a human).
+        Must run inside the deck's tenant context.
+
+        Args:
+            tenant (Tenant): The deck being processed (its public-schema row).
+            apply_changes (bool): When True, write the EmailAddress fixes and
+                refresh the deck's cached fields; when False, only report.
+
+        Returns:
+            tuple: ``(status, owner_name, email, notes)`` where ``status`` is
+            ``ok`` (nothing to do), ``fixed`` (bookkeeping created or corrected;
+            in dry-run mode this means it WOULD be), or ``no-email`` (needs a
+            human); ``owner_name`` is the owner's username; ``email`` is the
+            owner's address or None; ``notes`` is the semicolon-joined audit
+            remarks for the report line.
         """
         from siteconfig.models import SiteConfig
 
@@ -116,7 +131,10 @@ class Command(BaseCommand):
         if not owner.email:
             return 'no-email', owner.username, None, '; '.join(notes)
 
-        email_address = EmailAddress.objects.filter(user=owner, email__iexact=owner.email).first()
+        # deterministic target row: prefer the exact-case match, else the oldest
+        # case-variant duplicate (legacy data can hold several case variants)
+        matches = list(EmailAddress.objects.filter(user=owner, email__iexact=owner.email).order_by('pk'))
+        email_address = next((row for row in matches if row.email == owner.email), matches[0] if matches else None)
         already_ok = (
             email_address is not None and email_address.verified and email_address.primary
             and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
@@ -126,13 +144,17 @@ class Command(BaseCommand):
 
         if apply_changes:
             # mirror TenantCreate.form_valid: the owner's address exists, verified
-            # and primary; plus demote any other primary rows so there is one
-            EmailAddress.objects.filter(user=owner, primary=True).exclude(email__iexact=owner.email).update(primary=False)
+            # and primary. Every OTHER primary row is demoted BEFORE the target
+            # saves: the DB allows at most one primary per user
+            # (unique_primary_email), so the demote must come first, and excluding
+            # by pk (a brand-new target has none, so nothing is spared) also
+            # demotes a case-variant duplicate of the owner's own address.
             if email_address is None:
                 email_address = EmailAddress(user=owner, email=owner.email, verified=True, primary=True)
             else:
                 email_address.verified = True
                 email_address.primary = True
+            EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).update(primary=False)
             email_address.full_clean()
             email_address.save()
             # land owner_email_cached now; the notice engine and the Stripe
