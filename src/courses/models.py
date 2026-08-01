@@ -309,6 +309,16 @@ class Semester(models.Model):
         # the current local date.  Use current local date with date.today()
         return self.first_day <= date.today() <= self.last_day
 
+    def has_ended(self):
+        """Whether the semester's last day is in the past (local date, consistent with
+        is_open()). Used by the semester list to flag an active semester that has run
+        past its end date and is probably due to be archived.
+
+        Returns:
+            bool: True when last_day is set and before today.
+        """
+        return self.last_day is not None and self.last_day < date.today()
+
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
         excluding weekends and ExcludedDates). '''
