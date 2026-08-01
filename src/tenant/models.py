@@ -361,8 +361,10 @@ class Tenant(TenantMixin):
 
     def get_owner_email_cached(self):
         """
-        Returns the deck owner's email address (SiteConfig().deck_owner), or None
-        when the owner has no email set.
+        Returns the deck owner's email address (SiteConfig().deck_owner) in
+        allauth's canonical lowercase form (``user_email`` lowercases, matching
+        how ``EmailAddress`` rows are stored), or None when the owner has no
+        email set.
 
         The owner's plain ``User.email`` is the operational contact address for
         the deck: notice emails, checkout prefill, and the Stripe backfill

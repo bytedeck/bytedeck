@@ -240,6 +240,63 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertTrue(rows[0].verified)
         self.assertTrue(rows[0].primary)
 
+    def test_backfill__mixed_case_owner_email_normalizes_the_lowercase_row(self):
+        """When the owner's User.email is mixed case and both the lowercase row and an
+        exact-case duplicate exist, --apply targets the lowercase row (the form
+        EmailAddress.clean() stores) and demotes the duplicate's primary, instead of
+        lowercasing the duplicate into a unique (user, email) collision with its
+        sibling. The cache lands allauth's canonical lowercase form."""
+        owner = self.set_owner(email='Mixed.Case@Example.com')
+        variant = EmailAddress.objects.create(user=owner, email='Mixed.Case@Example.com', verified=False, primary=True)
+        canonical = EmailAddress.objects.create(user=owner, email='mixed.case@example.com', verified=False, primary=False)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        canonical.refresh_from_db()
+        variant.refresh_from_db()
+        self.assertTrue(canonical.verified)
+        self.assertTrue(canonical.primary)
+        self.assertFalse(variant.primary)
+        self.assertEqual(EmailAddress.objects.filter(user=owner, primary=True).count(), 1)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'mixed.case@example.com')
+
+    def test_backfill__mixed_case_owner_email_creates_lowercase_row_idempotently(self):
+        """With no existing rows and a mixed-case User.email, --apply stores the new row
+        lowercase (EmailAddress.clean() lowercases on save), the cache lands allauth's
+        canonical lowercase form, and a second run still reports the deck as ok."""
+        owner = self.set_owner(email='Mixed.Case@Example.com')
+
+        self.assertIn(' fixed', self.deck_line(self.run_command('--apply')))
+        row = EmailAddress.objects.get(user=owner)
+        self.assertEqual(row.email, 'mixed.case@example.com')
+        self.assertTrue(row.verified)
+        self.assertTrue(row.primary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'mixed.case@example.com')
+
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
+    def test_backfill__skips_when_another_account_verified_the_address(self):
+        """When a different account on the deck already holds the owner's address
+        verified (the DB allows one verified row per address), both dry run and
+        --apply report the deck as skipped for a human and write nothing: the
+        command must not guess which account is really the owner's."""
+        owner = self.set_owner(email='Shared@Example.com')
+        other_row = EmailAddress.objects.create(user=baker.make(User), email='shared@example.com', verified=True, primary=True)
+
+        dry_line = self.deck_line(self.run_command())
+        self.assertIn('skipped', dry_line)
+        self.assertIn('verified by another account', dry_line)
+
+        output = self.run_command('--apply')
+        self.assertIn('skipped', self.deck_line(output))
+        self.assertIn('1 skipped', output)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+        other_row.refresh_from_db()
+        self.assertTrue(other_row.verified)
+        self.assertTrue(other_row.primary)
+
     def test_backfill__broken_schema_reported_as_error_line(self):
         """A Tenant row whose schema doesn't exist is reported as an ERROR line (and
         counted in the summary) without aborting the run for the remaining decks."""

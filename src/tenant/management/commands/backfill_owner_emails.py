@@ -28,16 +28,19 @@ class Command(BaseCommand):
     without waiting for the nightly task.
 
     Every run also audits the owners that need a human: owners with no email at
-    all, and owners still on the initial heuristic default account (the deck
-    never chose a real owner). Where the deprecated public-tenant
-    ``Tenant.owner_email`` disagrees with the owner's address, the line says so:
-    it is often the best clue to who the owner should be.
+    all, owners whose address is already verified by a different account on the
+    deck (the DB allows one verified row per address, so which account is really
+    the owner's is a human call), and owners still on the initial heuristic
+    default account (the deck never chose a real owner). Where the deprecated
+    public-tenant ``Tenant.owner_email`` disagrees with the owner's address, the
+    line says so: it is often the best clue to who the owner should be.
     """
 
     help = (
         "Normalize every deck owner's allauth EmailAddress to verified+primary, matching "
         "what deck creation sets up. Dry-run by default; pass --apply to write. Also "
-        "audits owners with no email and decks still on the heuristic default owner."
+        "audits owners with no email, addresses already verified by another account, "
+        "and decks still on the heuristic default owner."
     )
 
     def add_arguments(self, parser):
@@ -64,7 +67,7 @@ class Command(BaseCommand):
         self.stdout.write(header)
         self.stdout.write("-" * len(header))
 
-        counts = {'ok': 0, 'fixed': 0, 'no-email': 0, 'error': 0}
+        counts = {'ok': 0, 'fixed': 0, 'no-email': 0, 'skipped': 0, 'error': 0}
         default_owner_decks = 0
         for tenant in tenants:
             try:
@@ -88,6 +91,8 @@ class Command(BaseCommand):
             f"{counts['fixed']} {'fixed' if apply_changes else 'would be fixed'}, "
             f"{counts['no-email']} with no owner email (fix by hand in the SiteConfig admin)"
         )
+        if counts['skipped']:
+            summary += f"; {counts['skipped']} skipped (address verified by another account: fix by hand)"
         if default_owner_decks:
             summary += f"; {default_owner_decks} still on the default owner account"
         if counts['error']:
@@ -109,10 +114,11 @@ class Command(BaseCommand):
         Returns:
             tuple: ``(status, owner_name, email, notes)`` where ``status`` is
             ``ok`` (nothing to do), ``fixed`` (bookkeeping created or corrected;
-            in dry-run mode this means it WOULD be), or ``no-email`` (needs a
-            human); ``owner_name`` is the owner's username; ``email`` is the
-            owner's address or None; ``notes`` is the semicolon-joined audit
-            remarks for the report line.
+            in dry-run mode this means it WOULD be), ``no-email`` (needs a
+            human), or ``skipped`` (a different account already verified the
+            address, so no write can succeed: needs a human); ``owner_name`` is
+            the owner's username; ``email`` is the owner's address or None;
+            ``notes`` is the semicolon-joined audit remarks for the report line.
         """
         from siteconfig.models import SiteConfig
 
@@ -131,16 +137,32 @@ class Command(BaseCommand):
         if not owner.email:
             return 'no-email', owner.username, None, '; '.join(notes)
 
-        # deterministic target row: prefer the exact-case match, else the oldest
-        # case-variant duplicate (legacy data can hold several case variants)
+        # deterministic target row, preferring the form a save lands on:
+        # EmailAddress.clean() lowercases the address, so normalizing any other
+        # row rewrites it to the lowercase form; targeting the lowercase row
+        # first means that rewrite can never collide with a case-variant sibling
+        # under the unique (user, email) constraint. Fall back to the exact-case
+        # match, then the oldest case-variant duplicate.
+        canonical = owner.email.lower()
         matches = list(EmailAddress.objects.filter(user=owner, email__iexact=owner.email).order_by('pk'))
-        email_address = next((row for row in matches if row.email == owner.email), matches[0] if matches else None)
+        email_address = next(
+            (row for row in matches if row.email == canonical),
+            next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
+        )
         already_ok = (
             email_address is not None and email_address.verified and email_address.primary
             and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
         )
         if already_ok:
             return 'ok', owner.username, owner.email, '; '.join(notes)
+
+        # the DB allows one VERIFIED row per address across the whole schema
+        # (unique_verified_email, from ACCOUNT_UNIQUE_EMAIL): if a different
+        # account already verified this address, no write can succeed, and which
+        # account is really the owner's is a human call. Report and leave it.
+        if EmailAddress.objects.exclude(user=owner).filter(email=canonical, verified=True).exists():
+            notes.append("address already verified by another account on this deck")
+            return 'skipped', owner.username, owner.email, '; '.join(notes)
 
         if apply_changes:
             # mirror TenantCreate.form_valid: the owner's address exists, verified

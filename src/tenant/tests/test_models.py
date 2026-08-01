@@ -370,6 +370,8 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         # subscribed deck uses its own (tier) cap, not the trial cap
         self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
         self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
+
+
 class OwnerEmailResolutionTest(ByteDeckTenantTestCase):
     """Tests for Tenant.get_owner_email_cached() owner-email resolution (#1729 rollout).
 
@@ -400,6 +402,13 @@ class OwnerEmailResolutionTest(ByteDeckTenantTestCase):
         disable every owner email for a legacy deck."""
         self.set_owner(email='legacy.owner@example.com')
         self.assertEqual(self.tenant.get_owner_email_cached(), 'legacy.owner@example.com')
+
+    def test_get_owner_email_cached__returns_allauth_canonical_lowercase(self):
+        """A mixed-case User.email resolves to allauth's canonical lowercase form
+        (user_email lowercases), matching how EmailAddress rows are stored, so
+        every consumer of the cache sees one consistent spelling."""
+        self.set_owner(email='Mixed.Case@Example.com')
+        self.assertEqual(self.tenant.get_owner_email_cached(), 'mixed.case@example.com')
 
     def test_get_owner_email_cached__none_when_owner_has_no_email(self):
         """An owner with no email at all resolves to None: the notice engine then
