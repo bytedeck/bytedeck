@@ -80,13 +80,13 @@ class QuerySetSequenceFieldMixin:
         content_type = ContentType.objects.get_for_id(content_type_id)
 
         for queryset in self.queryset.get_querysets():
-            if queryset.model.__name__ == 'QuerySequenceModel':
-                # django-queryset-sequence 0.7 support dynamically created
-                # QuerySequenceModel which replaces the original model when it
-                # patches the queryset since 6394e19
-                model = queryset.model.__bases__[0]
-            else:
-                model = queryset.model
+            model = queryset.model
+            # django-queryset-sequence <0.8 dynamically created a QuerySequenceModel that
+            # replaced the component model, so it had to be unwrapped to the real base model.
+            # The pinned version (>=0.18) never creates QuerySequenceModel, so this guard is a
+            # no-op safeguard for older library versions and cannot be exercised by the suite.
+            if model.__name__ == 'QuerySequenceModel':  # pragma: no cover
+                model = model.__bases__[0]
 
             if model == content_type.model_class():
                 return queryset
