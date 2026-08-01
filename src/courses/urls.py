@@ -11,7 +11,7 @@ urlpatterns = [
     path('semesters/add/', views.SemesterCreate.as_view(), name='semester_create'),
     path('semesters/<pk>/edit/', views.SemesterUpdate.as_view(), name='semester_update'),
     path('semesters/<pk>/delete/', views.SemesterDelete.as_view(), name='semester_delete'),
-    path('semesters/close/', views.end_active_semester, name='end_active_semester'),
+    path('semesters/archive/', views.SemesterArchive.as_view(), name='semester_archive'),
     path('semesters/<pk>/activate/', views.SemesterActivate.as_view(), name='semester_activate'),
 
     # Blocks

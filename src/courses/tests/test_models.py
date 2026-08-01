@@ -269,6 +269,18 @@ class SemesterModelTest(ByteDeckTenantTestCase):
 
         # Timezone problems?
 
+    def test_has_ended__only_after_last_day(self):
+        """has_ended() is True only once the last day is in the past, and False when the
+        semester has no last day at all."""
+        with freeze_time(self.semester_end, tz_offset=0):
+            self.assertFalse(self.semester.has_ended())
+
+        with freeze_time(self.semester_end + timedelta(days=1), tz_offset=0):
+            self.assertTrue(self.semester.has_ended())
+
+        dateless_semester = baker.make(Semester, name='dateless', first_day=None, last_day=None)
+        self.assertFalse(dateless_semester.has_ended())
+
     def test_active_by_date__true_inside_padded_window_false_outside(self):
         """active_by_date() is True from 20 days before the first day to 5 days after the last day,
         a padded window wider than is_open()."""
