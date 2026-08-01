@@ -842,13 +842,13 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """Set up a tenant client for each test."""
         self.client = TenantClient(self.tenant)
 
-    def test_banner__hidden_while_active_semester_is_running(self):
+    def test_semester_status_banner__hidden_while_active_semester_is_running(self):
         """No banner renders while the active semester is open and within its dates."""
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:semester_list'))
         self.assertNotContains(response, self.BANNER_ID)
 
-    def test_banner__active_semester_ended(self):
+    def test_semester_status_banner__active_semester_ended(self):
         """Once the active semester's last day has passed, staff see the archive nudge
         with a link to the archive confirmation page."""
         active_sem = SiteConfig.get().active_semester
@@ -863,7 +863,7 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'ended on')
         self.assertContains(response, reverse('courses:semester_archive'))
 
-    def test_banner__no_open_semester(self):
+    def test_semester_status_banner__no_open_semester(self):
         """When the active semester is archived (the no-open-semester state, #1177),
         staff see the students-can't-join warning linking to the semester list."""
         active_sem = SiteConfig.get().active_semester
@@ -876,7 +876,7 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, self.BANNER_ID)
         self.assertContains(response, 'No semester is open')
 
-    def test_banner__hidden_from_students(self):
+    def test_semester_status_banner__hidden_from_students(self):
         """Students never see the semester status banner, even in the states that show
         it to staff."""
         active_sem = SiteConfig.get().active_semester
@@ -889,6 +889,18 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.BANNER_ID)
+
+    def test_semester_status_banner__hidden_when_no_config(self):
+        """On schemas without a SiteConfig (the config context processor supplies None on
+        the public tenant), the banner renders nothing even for a staff user."""
+        from django.template.loader import render_to_string
+        from django.test import RequestFactory
+
+        request = RequestFactory().get('/')
+        request.user = self.test_teacher
+        html = render_to_string('semester_status_banner.html', {'config': None, 'request': request})
+
+        self.assertNotIn(self.BANNER_ID, html)
 
 
 class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
