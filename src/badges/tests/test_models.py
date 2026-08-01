@@ -7,6 +7,7 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -111,6 +112,27 @@ class BadgeTestModel(ByteDeckTenantTestCase):
     def test_badge_url__absolute_url_returns_200(self):
         """The badge's absolute url is reachable and returns 200."""
         self.assertEqual(self.client.get(self.badge.get_absolute_url(), follow=True).status_code, 200)
+
+    def test_get_type__returns_only_badges_of_that_type(self):
+        """BadgeQuerySet.get_type filters the queryset to badges of the given badge type."""
+        badge_type = baker.make(BadgeType)
+        matching = baker.make(Badge, badge_type=badge_type)
+        other = baker.make(Badge, badge_type=baker.make(BadgeType))
+        qs = Badge.objects.all().get_type(badge_type)
+        self.assertIn(matching, qs)
+        self.assertNotIn(other, qs)
+
+    def test_fraction_of_active_users_granted_this__returns_zero_when_no_active_users(self):
+        """fraction_of_active_users_granted_this() returns 0 (no division by zero) when the
+        active-user count is zero."""
+        from django.core.cache import cache
+        from django.db import connection
+        # Prime the active-user-count cache to 0 so the guard short-circuits before dividing.
+        # Clean it up so the cached zero (60s TTL) can't leak into later tests in this process.
+        cache_key = f'{connection.schema_name}-active-user-count'
+        self.addCleanup(cache.delete, cache_key)
+        cache.set(cache_key, 0, 60)
+        self.assertEqual(self.badge.fraction_of_active_users_granted_this(), 0)
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
     def test_get_rarity_icon__without_rarity(self, mock_get_rarity):
@@ -371,6 +393,26 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
             baker.make(Badge),
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
+
+    def test_create_assertion__uses_explicit_active_semester(self):
+        """create_assertion() honours a passed active_semester instead of the SiteConfig default."""
+        # A semester distinct from the SiteConfig default (self.sem) so this proves the passed
+        # active_semester is used rather than the default (which would pass either way).
+        explicit_semester = baker.make(Semester)
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher, active_semester=explicit_semester.id
+        )
+        self.assertEqual(new_assertion.semester_id, explicit_semester.id)
+
+    def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
+        """The granted notification uses the badge type's own fa_icon when it has one, rather
+        than the default fa-certificate (the non-default branch of post_save_receiver)."""
+        badge_type = baker.make(BadgeType, fa_icon='fa-trophy')
+        badge = baker.make(Badge, badge_type=badge_type)
+        # Creating the assertion fires post_save_receiver, which builds the notification icon.
+        BadgeAssertion.objects.create_assertion(self.student, badge, issued_by=self.teacher)
+        notification = Notification.objects.all_for_user(self.student).last()
+        self.assertIn('fa-trophy', notification.font_icon)
 
     def test_calculate_xp_to_date__sums_granted_badge_xp(self):
         """calculate_xp_to_date() totals the XP of the badges granted to the user by a date."""
