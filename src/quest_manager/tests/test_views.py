@@ -4008,6 +4008,37 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class QuestSubmissionSummaryTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff teacher and a quest to summarize."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.quest = baker.make(Quest, name="Summary Quest")
+
+    def setUp(self):
+        """Set up a tenant-aware test client and log in the teacher."""
+        self.client = TenantClient(self.tenant)
+        self.client.force_login(self.teacher)
+
+    def test_summary__with_approved_submission_computes_stats(self):
+        """With an approved submission, the summary reports the latest approval time and percent-returned.
+
+        Exercises the 'has approved submissions' and 'count_total > 0' branches that an
+        empty quest leaves uncovered.
+        """
+        baker.make(
+            QuestSubmission, quest=self.quest, is_approved=True, is_completed=True,
+            semester=SiteConfig.get().active_semester, time_approved=timezone.now(),
+        )
+        response = self.client.get(reverse('quests:summary', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNotNone(response.context['latest_submission_time'])
+        self.assertEqual(response.context['count_total'], 1)
+        self.assertEqual(response.context['percent_returned'], 0)  # none returned -> 0%
+
+
 class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """ Tests for:
 
@@ -4189,6 +4220,14 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(response.context['current_teacher_only'])
         self.assertEqual(response.context['quest'], self.quest)
         self.assertURLEqual(response.context['tab_list'][2]['url'], reverse('quests:approved'))
+
+    def test_approvals__approved_for_quest_all(self):
+        """The 'all' variant shows approvals of this quest across all semesters (past_approvals_all=True)."""
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+            response = self.client.get(reverse('quests:approved_for_quest_all', args=[self.quest.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['quest'], self.quest)
+        self.assertTrue(response.context['past_approvals_all'])
 
     def test_approvals__my_groups_all_button_rendered(self):
         """My groups/all button SHOULD NOT be rendered when there is only one user with assigned blocks AND that user is the current user"""
@@ -4474,6 +4513,37 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
         # Confirm redirect to archived quests page
         self.assertRedirects(response, reverse('quests:archived'))
+
+    def test_post__skips_submissions_whose_user_has_no_profile(self):
+        """Archiving still completes when an affected user has no Profile.
+
+        The XP-invalidation loop looks up each affected user's Profile. Every user
+        normally has one, but a rare data inconsistency (e.g. the profile-delete
+        signal's own user.delete() being swallowed on a TransactionManagementError,
+        leaving a user with no profile) would make the lookup raise
+        Profile.DoesNotExist. The loop catches that and moves on, so the archive
+        finishes and the quest's submissions are still deleted.
+
+        Profile.objects.get is patched to raise DoesNotExist because the orphaned
+        state cannot be produced directly: deleting a Profile fires a post_delete
+        signal that also deletes the User (and cascade-deletes the submission).
+        """
+        quest_to_archive = self.quest_b
+        user = baker.make(User)
+        submission = baker.make(QuestSubmission, quest=quest_to_archive, user=user)
+
+        url = reverse('quests:quest_archive', args=[quest_to_archive.id])
+        with patch('quest_manager.views.Profile.objects.get', side_effect=Profile.DoesNotExist):
+            response = self.client.post(url)
+
+        # The archive completed despite the affected user's missing Profile.
+        quest_to_archive.refresh_from_db()
+        self.assertTrue(quest_to_archive.archived)
+        self.assertRedirects(response, reverse('quests:archived'))
+        self.assertFalse(
+            QuestSubmission._base_manager.filter(id=submission.id).exists(),
+            "submission should still be deleted even though the user had no profile"
+        )
 
     def test_get__already_archived_quest_returns_404(self):
         """The archive confirmation page 404s for an already-archived quest (#1856).

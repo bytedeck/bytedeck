@@ -2026,17 +2026,9 @@ def skipped(request, quest_id):
     regardless, and do_not_grant_xp = True
     """
     quest = get_object_or_404(Quest, pk=quest_id)
-    new_sub = QuestSubmission.objects.create_submission(request.user, quest)
-    if new_sub is None:  # might be because quest was already started
-        # so try to get the started Quest
-        submission = QuestSubmission.objects.all_for_user_quest(
-            request.user, quest, True
-        ).last()
-        if submission is None:
-            raise Http404
-    else:
-        submission = new_sub
-
+    # create_submission always returns a submission: a new in-progress one, or the
+    # existing in-progress submission when the quest was already started (issue #1345).
+    submission = QuestSubmission.objects.create_submission(request.user, quest)
     return skip(request, submission.id)
 
 
