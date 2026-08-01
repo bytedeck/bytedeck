@@ -8,7 +8,6 @@ from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
 from allauth.account.utils import user_email
-from allauth.account.models import EmailAddress
 from django_tenants.models import DomainMixin, TenantMixin
 
 from hackerspace_online import settings
@@ -362,18 +361,24 @@ class Tenant(TenantMixin):
 
     def get_owner_email_cached(self):
         """
-        Returns all known email addresses (verified or not) from SiteConfig().deck_owner object.
+        Returns the deck owner's email address (SiteConfig().deck_owner) in
+        allauth's canonical lowercase form (``user_email`` lowercases, matching
+        how ``EmailAddress`` rows are stored), or None when the owner has no
+        email set.
+
+        The owner's plain ``User.email`` is the operational contact address for
+        the deck: notice emails, checkout prefill, and the Stripe backfill
+        report's matching all ride on it. It is deliberately NOT gated on allauth
+        ``EmailAddress`` bookkeeping: owners of decks created before the current
+        sign-up flow often have a ``User.email`` but no ``EmailAddress`` row at
+        all, and requiring one silently disabled every owner email for exactly
+        the legacy decks that most need warning (maintainer decision,
+        2026-08-01; the ``backfill_owner_emails`` command normalizes the missing
+        rows so legacy owners match what deck creation sets up today).
         """
         SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
         owner = SiteConfig.get().deck_owner
-
-        email = None
-        # get all known email addresses, verified or not
-        for email_address in EmailAddress.objects.filter(user=owner):
-            # make sure it's primary email for real
-            if email_address.email == user_email(owner):
-                email = owner.email
-        return email
+        return user_email(owner) or None
 
     def get_google_signon_enabled(self):
         """

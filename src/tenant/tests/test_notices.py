@@ -384,13 +384,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__owner_without_email_still_gets_in_app_notification(self):
-        """A deck whose owner has no known email skips the email channel but still
+        """A deck whose owner has no email at all skips the email channel but still
         records the notice and creates the in-app notification."""
-        from allauth.account.models import EmailAddress
+        from django.contrib.auth import get_user_model
         from siteconfig.models import SiteConfig
 
         owner = SiteConfig.get().deck_owner
-        EmailAddress.objects.filter(user=owner).delete()
+        get_user_model().objects.filter(pk=owner.pk).update(email='')
         self.assertIsNone(self.tenant.get_owner_email_cached())
 
         summary = self.run_engine_with_inline_email()
