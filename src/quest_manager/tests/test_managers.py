@@ -755,30 +755,54 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.count(), 7)
 
     def test_get_queryset__include_related_false_skips_select_related(self):
-        """get_queryset(include_related=False) returns the same rows but without the
-        select_related/prefetch_related joins that the default (True) path adds."""
+        """get_queryset(include_related=False) returns the same rows but skips both related-loading
+        mechanisms (select_related and prefetch_related) that the default (True) path adds."""
         qs_with = QuestSubmission.objects.get_queryset(include_related=True)
         qs_without = QuestSubmission.objects.get_queryset(include_related=False)
 
         # Same rows either way.
         self.assertQuerySetEqual(qs_without, list(qs_with), ordered=False)
-        # The default path requests related objects; the include_related=False path does not.
+        # The default path requests select_related joins; the include_related=False path does not.
         self.assertTrue(qs_with.query.select_related)
         self.assertFalse(qs_without.query.select_related)
+        # ...and it requests a prefetch_related lookup (quest__tags) which the False path omits.
+        self.assertIn('quest__tags', qs_with._prefetch_related_lookups)
+        self.assertEqual(qs_without._prefetch_related_lookups, ())
 
     def test_all_completed__no_user_returns_all_students_completed(self):
-        """all_completed() with no user returns every completed submission in the active semester."""
-        self.sub1.mark_completed()
+        """all_completed() with no user returns completed submissions in the active semester and
+        excludes those still in progress."""
+        quest = baker.make(Quest, published=True, archived=False)
+        completed = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
+        completed.mark_completed()
+        # A different user's in-progress submission of the same quest must not appear.
+        in_progress = baker.make(QuestSubmission, user=self.teacher, quest=quest, semester=self.active_semester)
+
         qs = QuestSubmission.objects.all_completed()
-        self.assertIn(self.sub1, qs)
+        self.assertIn(completed, qs)
+        self.assertNotIn(in_progress, qs)
 
     def test_all_awaiting_approval__with_user_returns_that_users_unapproved_completions(self):
-        """all_awaiting_approval(user=...) returns the user's completed-but-not-yet-approved submissions."""
-        self.sub1.user = self.student
-        self.sub1.save()
-        self.sub1.mark_completed()
+        """all_awaiting_approval(user=...) returns that user's completed-but-not-yet-approved
+        submissions, excluding already-approved ones and other users' submissions."""
+        quest = baker.make(Quest, published=True, archived=False)
+        awaiting = baker.make(QuestSubmission, user=self.student, quest=quest, semester=self.active_semester)
+        awaiting.mark_completed()  # completed, not yet approved
+
+        # Already approved -> no longer awaiting approval.
+        approved = baker.make(QuestSubmission, user=self.student,
+                              quest=baker.make(Quest, published=True, archived=False), semester=self.active_semester)
+        approved.mark_completed()
+        approved.mark_approved()
+
+        # Belongs to a different user -> filtered out by get_user.
+        other_users = baker.make(QuestSubmission, user=self.teacher, quest=quest, semester=self.active_semester)
+        other_users.mark_completed()
+
         qs = QuestSubmission.objects.all_awaiting_approval(user=self.student)
-        self.assertIn(self.sub1, qs)
+        self.assertIn(awaiting, qs)
+        self.assertNotIn(approved, qs)
+        self.assertNotIn(other_users, qs)
 
     def test_all_for_user_quest__returns_active_semester_submissions(self):
         """
