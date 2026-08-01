@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import SimpleTestCase
 
+from allauth.account.models import EmailAddress
 from django_tenants.utils import get_public_schema_name, schema_context
 from freezegun import freeze_time
 from model_bakery import baker
@@ -130,3 +131,76 @@ class BillingStatusLabelTest(SimpleTestCase):
             'suspended',
         )
         self.assertEqual(Command.billing_status(Tenant(trial_end_date=None, paid_until=None)), 'unmanaged')
+
+
+class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
+    """Tests for the `backfill_owner_emails` management command (#1729 rollout)."""
+
+    def run_command(self, *args):
+        """Run the command and return its full stdout."""
+        out = StringIO()
+        call_command('backfill_owner_emails', *args, stdout=out)
+        return out.getvalue()
+
+    def deck_line(self, output):
+        """Return this test deck's audit line, or fail if it's absent."""
+        matches = [line for line in output.splitlines() if line.startswith(self.tenant.schema_name)]
+        self.assertEqual(len(matches), 1, f"expected exactly one audit line for {self.tenant.schema_name}:\n{output}")
+        return matches[0]
+
+    def set_owner(self, **user_fields):
+        """Make a fresh staff user the deck owner and return it."""
+        owner = baker.make(User, is_staff=True, **user_fields)
+        config = SiteConfig.get()
+        config.deck_owner = owner
+        config.save()
+        return owner
+
+    def test_backfill__dry_run_reports_and_writes_nothing(self):
+        """Without --apply the command reports the fix it would make, but writes no
+        EmailAddress row and leaves the cached owner email untouched."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        output = self.run_command()
+        self.assertIn('would-fix', self.deck_line(output))
+        self.assertIn('Dry run: no changes were written', output)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+
+    def test_backfill__apply_normalizes_bookkeeping_and_refreshes_cache(self):
+        """--apply creates the owner's EmailAddress verified+primary, demotes any
+        other primary address, lands owner_email_cached immediately, and a second
+        run reports the deck as already ok (idempotent)."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        stale_primary = EmailAddress.objects.create(user=owner, email='old.address@example.com', verified=False, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        address = EmailAddress.objects.get(user=owner, email='legacy.owner@example.com')
+        self.assertTrue(address.verified)
+        self.assertTrue(address.primary)
+        stale_primary.refresh_from_db()
+        self.assertFalse(stale_primary.primary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'legacy.owner@example.com')
+
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
+    def test_backfill__flags_owners_needing_a_human(self):
+        """An owner with no email is reported with nothing written, the deprecated
+        public-tenant owner_email is surfaced as a clue, and a deck still on the
+        heuristic default owner account is flagged."""
+        from django.conf import settings
+
+        # move the seeded default-owner username out of the way so the fresh owner
+        # can carry it (usernames are unique per schema)
+        User.objects.filter(username=settings.TENANT_DEFAULT_OWNER_USERNAME).update(username='renamed-for-test')
+        owner = self.set_owner(email='')
+        User.objects.filter(pk=owner.pk).update(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email='clue@example.com')
+
+        output = self.run_command('--apply')
+        line = self.deck_line(output)
+        self.assertIn('no-email', line)
+        self.assertIn('default owner account', line)
+        self.assertIn('clue@example.com', line)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+        self.assertIn('1 with no owner email', output)

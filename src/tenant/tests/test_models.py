@@ -370,6 +370,38 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         # subscribed deck uses its own (tier) cap, not the trial cap
         self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
         self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
+class OwnerEmailResolutionTest(ByteDeckTenantTestCase):
+    """Tests for Tenant.get_owner_email_cached() owner-email resolution (#1729 rollout).
+
+    Legacy deck owners often predate the allauth sign-up flows, so they have a
+    User.email but no EmailAddress bookkeeping row; the resolver must still
+    surface their address, because the notice engine, checkout prefill, and the
+    Stripe backfill report's matching all ride on it.
+    """
+
+    def set_owner(self, **user_fields):
+        """Make a fresh staff user the deck owner and return it."""
+        owner = baker.make(User, is_staff=True, **user_fields)
+        config = SiteConfig.get()
+        config.deck_owner = owner
+        config.save()
+        return owner
+
+    def test_get_owner_email_cached__resolves_without_an_emailaddress_row(self):
+        """An owner with a plain User.email but no allauth EmailAddress row still
+        resolves to that address: a missing bookkeeping row must not silently
+        disable every owner email for a legacy deck."""
+        self.set_owner(email='legacy.owner@example.com')
+        self.assertEqual(self.tenant.get_owner_email_cached(), 'legacy.owner@example.com')
+
+    def test_get_owner_email_cached__none_when_owner_has_no_email(self):
+        """An owner with no email at all resolves to None: the notice engine then
+        skips the email leg, and the backfill command reports the deck for a
+        human to fix in the SiteConfig admin."""
+        self.set_owner(email='')
+        self.assertIsNone(self.tenant.get_owner_email_cached())
+
+
 class DefaultTrialEndDateTest(SimpleTestCase):
     """Tests for the default demo/trial expiry date on new tenants (Issue #1146).
 
