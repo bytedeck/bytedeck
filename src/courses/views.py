@@ -18,6 +18,7 @@ from django.http import JsonResponse
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from announcements.models import Announcement
+from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 from tags.models import get_user_tags_and_xp, get_quest_submission_by_tag, get_badge_assertion_by_tags
 from djcytoscape.models import CytoScape
@@ -617,9 +618,14 @@ class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     """Staff-only endpoint that makes the given semester the deck's active semester
-    (the SiteConfig.active_semester pointer that registration, XP, and submissions run through)."""
+    (the SiteConfig.active_semester pointer that registration, XP, and submissions run through).
 
-    def get(self, request, *args, **kwargs):
+    POST only: a deck-wide state change must not be triggerable by a prefetched link or a
+    cross-site GET (Django's CSRF protection only covers unsafe methods), so GET returns 405.
+    """
+    http_method_names = ['post']
+
+    def post(self, request, *args, **kwargs):
         """Point SiteConfig.active_semester at the semester whose pk is in the URL.
 
         Returns:
@@ -630,6 +636,7 @@ class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
         siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
         siteconfig.save()
+        messages.success(request, f'Semester {semester} is now the active semester.')
 
         return redirect('courses:semester_list')
 
@@ -689,28 +696,77 @@ class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
         return context
 
 
-@non_public_only_view
-@staff_member_required
-def end_active_semester(request):
-    sem = Semester.objects.complete_active_semester()
-    semester_warnings = {
-        Semester.CLOSED: 'Semester is already closed, no action taken.',
-        Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. Can't close the Semester until they are approved or returned",
-        Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't close the Semester until it is fixed.",
-        'success': f'Semester {sem} has been closed: student XP has been recorded and reset to 0, in-progress quests have been deleted, and \
-        announcements have been archived.',
-    }
+@method_decorator(staff_member_required, name='dispatch')
+class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
+    """Staff-only two-step archive (close) of the active semester.
 
-    if sem not in (Semester.CLOSED, Semester.QUEST_AWAITING_APPROVAL,
-                   Semester.STUDENTS_WITH_NEGATIVE_XP):
+    GET renders a preview of everything archiving will do: how many course registrations
+    get their final XP recorded (freeing those students' deck seats), how many in-progress
+    quest submissions are deleted, and whether announcements will be archived, along with
+    any blockers (submissions still awaiting approval, students with negative XP). POST
+    performs the archive via Semester.objects.complete_active_semester().
+    """
+    template_name = 'courses/semester_archive.html'
+
+    def get_context_data(self, **kwargs):
+        """Assemble the preview counts and blockers for archiving the active semester.
+
+        Returns:
+            dict: template context with the active semester, the counts previewed above,
+            the negative-XP users queryset, and a `blocked` flag when archiving would be
+            refused (pending approvals or negative XP).
+        """
+        context = super().get_context_data(**kwargs)
+        semester = SiteConfig.get().active_semester
+        registrations = CourseStudent.objects.all_for_semester(semester)
+        context['semester'] = semester
+        context['num_registrations'] = registrations.count()
+        context['num_seats_freed'] = registrations.get_students_only().count()
+        # matches what QuestSubmission.objects.remove_in_progress() will delete
+        context['num_in_progress'] = QuestSubmission.objects.all_not_completed(active_semester_only=False).count()
+        context['num_awaiting_approval'] = QuestSubmission.objects.all_awaiting_approval().count()
+        # negative final XP comes from a negative xp_cached (final_xp = xp_cached / course count);
+        # select_related the profile since the blockers list renders user.profile per row
+        context['negative_xp_users'] = User.objects.filter(
+            id__in=registrations.values_list('user', flat=True), profile__xp_cached__lt=0,
+        ).select_related('profile')
+        context['num_announcements'] = Announcement.objects.get_queryset().not_archived().not_draft().count()
+        context['blocked'] = bool(context['num_awaiting_approval'] or context['negative_xp_users'])
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Archive the active semester: record final XP, deactivate registrations, delete
+        in-progress submissions, and (unless opted out via the archive_announcements
+        checkbox) archive announcements.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with a success message, or a
+            warning message when archiving was refused (already archived, submissions
+            awaiting approval, or students with negative XP).
+        """
+        sem = Semester.objects.complete_active_semester()
+        semester_warnings = {
+            Semester.CLOSED: 'Semester is already archived, no action taken.',
+            Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. "
+                                              "Can't archive the semester until they are approved or returned.",
+            Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't archive the semester until it is fixed.",
+        }
+        if sem in semester_warnings:
+            messages.warning(request, semester_warnings[sem])
+            return redirect('courses:semester_list')
+
         sem.reset_students_xp_cached()
-        Announcement.objects.archive_announcements()
-
-    messages.warning(
-        request,
-        semester_warnings.get(sem, semester_warnings['success']))
-
-    return redirect('courses:semester_list')
+        if request.POST.get('archive_announcements'):
+            Announcement.objects.archive_announcements()
+            announcements_note = ', and announcements have been archived'
+        else:
+            announcements_note = ''
+        messages.success(
+            request,
+            f'Semester {sem} has been archived: student XP has been recorded and reset to 0, '
+            f'in-progress quest submissions have been deleted{announcements_note}.'
+        )
+        return redirect('courses:semester_list')
 
 
 @xml_http_request_required

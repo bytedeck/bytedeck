@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
@@ -68,6 +70,44 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
         self.assertEqual(f.clean(self._ct_pk(self.user2)).get_full_name(), "Jane Doe")
         self.assertEqual(f.clean(self._ct_pk(self.group1)).name, "Editors")
 
+    def test_GFKChoiceField__empty_label_none_omits_blank_choice(self):
+        """With empty_label=None the iterator does not yield the leading blank ('', label) choice."""
+        f = GFKChoiceField(
+            queryset=QuerySetSequence(User.objects.filter(pk=self.user1.pk)),
+            empty_label=None,
+        )
+        choices = list(f.choices)
+        # No leading ('', ...) blank option; the first (and only) group is the users group.
+        self.assertNotIn('', [value for value, _ in choices])
+        self.assertEqual(choices[0][0], 'user')
+
+    def test_GFKChoiceField__clean_content_type_absent_from_queryset(self):
+        """A value whose content type is valid but absent from the field's queryset is rejected.
+
+        get_queryset_for_content_type finds no matching component queryset and returns None,
+        so to_python raises invalid_choice rather than resolving an out-of-scope object.
+        """
+        # Field only offers Users; a Group value is a real ct-pk pair but out of scope.
+        f = GFKChoiceField(queryset=QuerySetSequence(User.objects.filter(pk=self.user1.pk)))
+        with self.assertRaises(ValidationError):
+            f.clean(self._ct_pk(self.group1))
+
+    def test_GFKChoiceField__clean_nonexistent_object_pk(self):
+        """A value with an in-scope content type but a nonexistent object pk is rejected.
+
+        The queryset.get(pk=...) lookup raises DoesNotExist, which to_python catches and
+        re-raises as invalid_choice."""
+        f = GFKChoiceField(queryset=QuerySetSequence(User.objects.filter(pk=self.user1.pk)))
+        user_ct = ContentType.objects.get_for_model(User)
+        with self.assertRaises(ValidationError):
+            f.clean(f"{user_ct.pk}-9999999")
+
+    def test_GFKChoiceField__prepare_value_passes_through_strings(self):
+        """prepare_value returns a string value unchanged (Django passes both objects and
+        already-prepared 'ctpk-objpk' strings through this method)."""
+        f = GFKChoiceField(queryset=QuerySetSequence(User.objects.filter(pk=self.user1.pk)))
+        self.assertEqual(f.prepare_value('3-5'), '3-5')
+
 
 class RestrictedFileFieldTest(ByteDeckTenantTestCase):
     @classmethod
@@ -101,6 +141,13 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
 
         # ensure content type is set correctly
         self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
+
+    def test_validate_file__raises_when_over_max_size(self):
+        """validate_file rejects an acceptable-type file whose size exceeds max_upload_size."""
+        field = RestrictedFileFormField(content_types=['image/png'], max_upload_size=10)
+        oversized = SimpleNamespace(content_type='image/png', size=11)
+        with self.assertRaises(ValidationError):
+            field.validate_file(oversized)
 
 
 class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
