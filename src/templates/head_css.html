@@ -14,10 +14,8 @@
 
 <!-- bootstrap-table CSS is loaded per-page, only where the widget is used (see quest_manager/base, profile_list, badges/detail, tags/list) -->
 
-<!-- KaTeX for math rendering -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css"
-      integrity="sha512-qcHPGCptLWeJ7IFKmYe3ep1Zh/qfC5/h0r6hXQ82tJO89niMBx/4OUcYT7NJi6POUUXZUTyJtrCmpKP1u3I/HQ=="
-      crossorigin="anonymous" />
+<!-- KaTeX 0.18.1 for math rendering (vendored locally; see src/static/katex/) -->
+<link rel="stylesheet" href="{% static 'katex/katex.min.css' %}" />
 
 
 <!-- Custom site-wide styles -->
