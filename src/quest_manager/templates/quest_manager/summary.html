@@ -1,4 +1,5 @@
 {% extends "quest_manager/base.html" %}
+{% load static %}
 {% load crispy_forms_tags %}
 
 {% block heading_inner %}Quest Summary <span class="text-danger">EXPERIMENTAL!</span>{% endblock %}
@@ -101,7 +102,7 @@
 
 {% block js %}
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@2/dist/Chart.min.js"></script>
+<script src="{% static 'js/Chart.min.js' %}"></script>
 <script>
 
 function updateChart() {
