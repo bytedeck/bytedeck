@@ -7,6 +7,7 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 
 from badges.models import Badge, BadgeAssertion, BadgeRarity, BadgeSeries, BadgeType
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -127,7 +128,10 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         from django.core.cache import cache
         from django.db import connection
         # Prime the active-user-count cache to 0 so the guard short-circuits before dividing.
-        cache.set(f'{connection.schema_name}-active-user-count', 0, 60)
+        # Clean it up so the cached zero (60s TTL) can't leak into later tests in this process.
+        cache_key = f'{connection.schema_name}-active-user-count'
+        self.addCleanup(cache.delete, cache_key)
+        cache.set(cache_key, 0, 60)
         self.assertEqual(self.badge.fraction_of_active_users_granted_this(), 0)
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
@@ -392,10 +396,13 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
     def test_create_assertion__uses_explicit_active_semester(self):
         """create_assertion() honours a passed active_semester instead of the SiteConfig default."""
+        # A semester distinct from the SiteConfig default (self.sem) so this proves the passed
+        # active_semester is used rather than the default (which would pass either way).
+        explicit_semester = baker.make(Semester)
         new_assertion = BadgeAssertion.objects.create_assertion(
-            self.student, baker.make(Badge), issued_by=self.teacher, active_semester=self.sem.id
+            self.student, baker.make(Badge), issued_by=self.teacher, active_semester=explicit_semester.id
         )
-        self.assertEqual(new_assertion.semester_id, self.sem.id)
+        self.assertEqual(new_assertion.semester_id, explicit_semester.id)
 
     def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
         """The granted notification uses the badge type's own fa_icon when it has one, rather
