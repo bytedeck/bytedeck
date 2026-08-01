@@ -196,7 +196,7 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
         self.assertRedirectsLogin('courses:ranks')
         self.assertRedirectsLogin('courses:my_marks')
         self.assertRedirectsLogin('courses:marks', args=[1])
-        self.assertRedirectsLogin('courses:end_active_semester')
+        self.assertRedirectsLogin('courses:semester_archive')
 
         self.assertRedirectsLogin('courses:markranges')
         self.assertRedirectsLogin('courses:markrange_create')
@@ -233,7 +233,7 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
 
         # Staff access only
         self.assert403('courses:join', args=[self.test_student1.id])
-        self.assert403('courses:end_active_semester')
+        self.assert403('courses:semester_archive')
         self.assert403('courses:coursestudent_delete', args=[1])
 
         self.assert403('courses:markranges')
@@ -265,8 +265,7 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
         # Staff access only
         self.assert200('courses:join', args=[self.test_student1.id])
 
-        # Redirects, has own test
-        # self.assert200('courses:end_active_semester')
+        self.assert200('courses:semester_archive')
 
         self.assert200('courses:markranges')
         self.assert200('courses:markrange_create')
@@ -304,26 +303,113 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
         self.assert200('courses:update', args=[course_student.id])
         self.client.logout()
 
-    def test_end_active_semester__staff(self):
-        ''' End_active_semester view should redirect to semester list view '''
+    def test_SemesterArchive__staff_post_archives(self):
+        """POSTing the archive view closes the active semester and redirects to the semester list."""
         self.client.force_login(self.test_teacher)
         active_sem = SiteConfig.get().active_semester
         self.assertFalse(active_sem.closed)
         self.assertRedirects(
-            response=self.client.get(reverse('courses:end_active_semester')),
+            response=self.client.post(reverse('courses:semester_archive')),
             expected_url=reverse('courses:semester_list'),
         )
         active_sem.refresh_from_db()
         self.assertTrue(active_sem.closed)
 
+    def test_SemesterArchive__get_is_a_preview_and_does_not_archive(self):
+        """GET on the archive view renders the confirmation/preview page (with the counts of
+        what archiving will do) without changing anything."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=active_sem)
+
+        response = self.client.get(reverse('courses:semester_archive'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['semester'], active_sem)
+        self.assertEqual(response.context['num_registrations'], 1)
+        self.assertEqual(response.context['num_seats_freed'], 1)
+        self.assertFalse(response.context['blocked'])
+        active_sem.refresh_from_db()
+        self.assertFalse(active_sem.closed)
+
+    def test_SemesterArchive__get_shows_blockers(self):
+        """The archive preview lists blockers: submissions awaiting approval and students
+        with negative XP, with the form replaced by a link back to the semester list."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, is_completed=True, is_approved=False, semester=active_sem)
+        negative_student = baker.make(User)
+        baker.make(CourseStudent, user=negative_student, course=baker.make(Course),
+                   semester=active_sem, xp_adjustment=-10)
+
+        response = self.client.get(reverse('courses:semester_archive'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['blocked'])
+        self.assertEqual(response.context['num_awaiting_approval'], 1)
+        self.assertIn(negative_student, response.context['negative_xp_users'])
+
+    def test_SemesterArchive__post_blocked_by_pending_approvals(self):
+        """POSTing the archive view while quest submissions still await approval warns
+        and leaves the semester open (the preview shows the blocker, but the POST must
+        also refuse in case the state changed after the preview was rendered)."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        baker.make(QuestSubmission, is_completed=True, is_approved=False, semester=active_sem)
+
+        response = self.client.post(reverse('courses:semester_archive'))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+        self.assertIn('awaiting approval', str(self.get_message_list(response)[0]))
+        active_sem.refresh_from_db()
+        self.assertFalse(active_sem.closed)
+
+    def test_SemesterArchive__already_archived(self):
+        """POSTing the archive view for an already-archived semester warns and takes no action."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+        active_sem.closed = True
+        active_sem.save()
+
+        response = self.client.post(reverse('courses:semester_archive'))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+
+    def test_SemesterArchive__announcements_opt_out(self):
+        """Archiving without the archive_announcements checkbox leaves announcements alone."""
+        from announcements.models import Announcement
+        announcement = baker.make(Announcement, archived=False, draft=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('courses:semester_archive'))  # no checkbox in POST data
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertSuccessMessage(response)
+        announcement.refresh_from_db()
+        self.assertFalse(announcement.archived)
+
     def test_SemesterActivate__changes_active_semester(self):
-        """When this view is accessed, the siteconfig's active semester should be changed
-        and the view should redirect tot he semester_list """
+        """POSTing the activate view changes the siteconfig's active semester and
+        redirects to the semester_list."""
         self.client.force_login(self.test_teacher)
         new_semester = baker.make('courses.semester')
-        response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
+        response = self.client.post(reverse('courses:semester_activate', args=[new_semester.pk]))
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
+
+    def test_SemesterActivate__get_not_allowed(self):
+        """GET must not change the active semester (deck-wide state changes are POST-only,
+        so they can't be triggered by link prefetching or a cross-site GET): it returns
+        405 Method Not Allowed and leaves the active semester untouched."""
+        self.client.force_login(self.test_teacher)
+        original_active = SiteConfig.get().active_semester
+        new_semester = baker.make('courses.semester')
+        response = self.client.get(reverse('courses:semester_activate', args=[new_semester.pk]))
+        self.assertEqual(response.status_code, 405)
+        self.assertEqual(SiteConfig.get().active_semester, original_active)
 
     def test_CourseList_view__staff_can_view(self):
         """ Admin should be able to view course list """
@@ -948,9 +1034,9 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(ExcludedDate.objects.exists())
 
     @patch('profile_manager.models.Profile.xp_per_course')
-    def test_SemesterDCloses__student_with_negative_xp__view(self, xp_per_course):
+    def test_SemesterArchive__student_with_negative_xp__view(self, xp_per_course):
         """
-            Test if SemesterClose returns a warning when there is a course student with
+            Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
         xp_per_course.return_value = -10
@@ -969,7 +1055,7 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         course = baker.make(Course)
         baker.make(CourseStudent, user=student, course=course, semester=semester)
 
-        response = self.client.post(reverse('courses:end_active_semester'))
+        response = self.client.post(reverse('courses:semester_archive'))
         self.assertWarningMessage(response)
         self.assertRedirects(response, reverse('courses:semester_list'))
         message = self.get_message_list(response)[0]
