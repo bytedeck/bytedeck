@@ -566,41 +566,99 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(len(response.context['object_list']), 2)
 
     def test_profile_list__search_filters_across_all_students(self):
-        """The ?q= search runs server-side against every student (case-insensitive, partial),
-        not just the current page, and reports the term back to the template."""
+        """The ?q= search runs server-side across every SEARCH_FIELDS column (case-insensitive,
+        partial) and before pagination, so a uniquely-matching student is found even when it would
+        otherwise fall beyond the first page; a non-match returns nothing."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
         User = get_user_model()
-        # distinctive student that shouldn't collide with the seeded ones
-        target = User.objects.create_user('zzz_target', first_name='Zebediah')
+
+        # Fill a whole page with students whose first name sorts ahead of the first-name target
+        # below, so that target is pushed onto a later page under the default (first-name) ordering.
+        baker.make(User, first_name='AAAA', _quantity=per_page)
+
+        # One target per searchable column, each carrying a value that collides with nothing else.
+        first_target = User.objects.create_user('zzz_first', first_name='Zebediah')
+        last_target = User.objects.create_user('zzz_last', last_name='Qwlastname')
+        pref_target = User.objects.create_user('zzz_pref')
+        pref_target.profile.preferred_name = 'Qwpreferred'
+        pref_target.profile.save()
+        alias_target = User.objects.create_user('zzz_alias')
+        alias_target.profile.alias = 'Qwaliasname'
+        alias_target.profile.save()
+        cpf_target = User.objects.create_user('zzz_cpf')
+        cpf_target.profile.custom_profile_field = 'Qwcustomfield'
+        cpf_target.profile.save()
+
         self.client.force_login(self.test_teacher)
 
+        # The first-name target sorts last, so an unfiltered page one does not contain it...
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertNotIn(first_target.profile.pk, {p.pk for p in response.context['object_list']})
+        # ...yet a search still finds it, proving the filter runs across the whole set before paginating.
         response = self.client.get(reverse("profiles:profile_list"), {'q': 'zebed'})
         self.assertEqual(response.context['search_query'], 'zebed')
         self.assertEqual(response.context['paginator'].count, 1)
-        self.assertEqual(list(response.context['object_list'])[0].pk, target.profile.pk)
+        self.assertEqual(list(response.context['object_list'])[0].pk, first_target.profile.pk)
 
-        # searching a username works too, and a non-match returns nothing
-        response = self.client.get(reverse("profiles:profile_list"), {'q': 'zzz_target'})
-        self.assertEqual(response.context['paginator'].count, 1)
+        # Every configured search column matches (partial, case-insensitive): last/preferred/alias/
+        # custom-profile-field, plus username.
+        for term, target in [
+            ('qwlastn', last_target),      # last name
+            ('qwprefer', pref_target),     # preferred name
+            ('qwaliasn', alias_target),    # alias
+            ('qwcustomf', cpf_target),     # custom profile field
+            ('zzz_last', last_target),     # username
+        ]:
+            response = self.client.get(reverse("profiles:profile_list"), {'q': term})
+            self.assertEqual(response.context['paginator'].count, 1, msg=f'q={term!r}')
+            self.assertEqual(list(response.context['object_list'])[0].pk, target.profile.pk, msg=f'q={term!r}')
+
+        # a non-match returns nothing
         response = self.client.get(reverse("profiles:profile_list"), {'q': 'no-such-student'})
         self.assertEqual(response.context['paginator'].count, 0)
 
     def test_profile_list__sort_orders_across_all_students(self):
-        """The ?sort=/?order= params reorder the whole queryset server-side; an unknown sort or
-        order falls back to the defaults."""
+        """The ?sort=/?order= params reorder the whole queryset server-side and before pagination,
+        so the sort extreme lands on the correct page (not merely reordering the current one); an
+        unknown sort or order falls back to the defaults."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # A full page of mid-XP students, so a single XP extreme must cross the page boundary.
+        for filler in baker.make(User, _quantity=per_page):
+            filler.profile.xp_cached = 50
+            filler.profile.save()
         p1 = self.test_student1.profile
         p1.xp_cached = 5
         p1.save()
         p2 = self.test_student2.profile
         p2.xp_cached = 99
         p2.save()
+        # The unique maximum: it must appear on page one when sorting XP descending and be pushed to
+        # the last page when ascending -- only possible if sorting happens before pagination.
+        top = User.objects.create_user('mmm_top').profile
+        top.xp_cached = 1000
+        top.save()
+
         self.client.force_login(self.test_teacher)
 
+        # Descending: the maximum leads page one, and the page itself is ordered high-to-low.
         response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'desc'})
         self.assertEqual(response.context['current_sort'], 'xp')
         self.assertEqual(response.context['current_order'], 'desc')
-        xps = [profile.xp_cached for profile in response.context['object_list']]
+        page_one = list(response.context['object_list'])
+        self.assertEqual(page_one[0].pk, top.pk)
+        xps = [profile.xp_cached for profile in page_one]
         self.assertEqual(xps, sorted(xps, reverse=True))
-        self.assertEqual(list(response.context['object_list'])[0].pk, p2.pk)
+        num_pages = response.context['paginator'].num_pages
+
+        # Ascending: the maximum is no longer on page one -- it has moved to the last page.
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc'})
+        self.assertNotIn(top.pk, {profile.pk for profile in response.context['object_list']})
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc', 'page': num_pages})
+        self.assertIn(top.pk, {profile.pk for profile in response.context['object_list']})
 
         # an invalid sort/order silently falls back to the defaults
         response = self.client.get(reverse("profiles:profile_list"), {'sort': 'not-a-field', 'order': 'sideways'})
