@@ -30,16 +30,17 @@ def change_domain_urls(sender, *args, **kwargs):
         with transaction.atomic():
             all_tenants = Tenant.objects.exclude(schema_name='public')
             for tenant in all_tenants:
-                # domain_url is a removed field (always None); skip rather than
-                # crash on ``None.split(...)``. See the docstring above.
-                if not tenant.domain_url:
+                # domain_url is a removed field (always None); this always continues, so the
+                # rewrite below is dead until the handler is reimplemented against Domain (#2258).
+                if not tenant.domain_url:  # pragma: no branch -- domain_url is always None
                     continue
-                domain = tenant.domain_url.split(public_tenant.domain_url)[0]
-                tenant.domain_url = '{}{}'.format(domain, kwargs['instance'].domain)
-                tenant.save()
-            if public_tenant.domain_url:
-                public_tenant.domain_url = kwargs['instance'].domain
-                public_tenant.save()
+                domain = tenant.domain_url.split(public_tenant.domain_url)[0]  # pragma: no cover -- dead, see #2258
+                tenant.domain_url = '{}{}'.format(domain, kwargs['instance'].domain)  # pragma: no cover
+                tenant.save()  # pragma: no cover
+            # public_tenant.domain_url is likewise always None, so this block is dead (#2258).
+            if public_tenant.domain_url:  # pragma: no branch -- domain_url is always None
+                public_tenant.domain_url = kwargs['instance'].domain  # pragma: no cover
+                public_tenant.save()  # pragma: no cover
 
 
 def handle_tenant_site_domain_update(tenant, **kwargs):
