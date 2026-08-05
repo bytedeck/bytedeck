@@ -17,7 +17,7 @@ from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.test import SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
@@ -3688,6 +3688,24 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_approve__get_returns_404(self):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
+
+    def test_get_notification_kwargs__approver_already_a_teacher_not_re_added(self):
+        """When the approving staff member is already one of the student's current_teachers,
+        get_notification_kwargs leaves affected_users as just the student rather than re-adding
+        the teachers (the not-in-teachers_list branch is skipped)."""
+        from quest_manager.views import ApproveView
+
+        view = ApproveView()
+        view.submission = self.sub
+        request = RequestFactory().post(reverse('quests:approve', args=[self.sub.id]))
+        request.user = self.test_teacher
+        view.request = request
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            kwargs = view.get_notification_kwargs()
+
+        # The approver is already a teacher, so affected_users is not extended with teachers_list.
+        self.assertEqual(kwargs['affected_users'], [self.sub.user])
 
     def test_approve__invalid_form_renders_submission_page(self):
         """A non-ajax POST with an invalid awards value re-renders the submission page (form_invalid)."""
