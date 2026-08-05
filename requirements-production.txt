@@ -26,7 +26,7 @@ django-summernote>=0.8.20.0,<0.9
 django-taggit>=6.1.0,<7.0
 django-tenants>=3.10.2,<3.11  # compat cap: multitenancy core, tracks Django closely -- hold at the tested minor
 django-url-or-relative-url-field>=0.2.0,<0.3.0
-tenant-schemas-celery>=4.0.3,<5.0
+tenant-schemas-celery>=5.0.0,<6.0
 
 # non django
 beautifulsoup4>=4.15.0,<5.0
