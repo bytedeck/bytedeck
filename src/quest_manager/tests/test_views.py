@@ -17,7 +17,7 @@ from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
-from django.test import RequestFactory, SimpleTestCase
+from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.http import JsonResponse
@@ -3689,23 +3689,23 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
 
-    def test_get_notification_kwargs__approver_already_a_teacher_not_re_added(self):
+    def test_approve__approver_who_is_a_teacher_not_re_added_to_affected_users(self):
         """When the approving staff member is already one of the student's current_teachers,
-        get_notification_kwargs leaves affected_users as just the student rather than re-adding
-        the teachers (the not-in-teachers_list branch is skipped)."""
-        from quest_manager.views import ApproveView
+        the approval notification's affected_users stays just the student rather than re-adding
+        the teachers (the not-in-teachers_list branch of get_notification_kwargs is skipped)."""
+        # current_teachers returns the approver, so the "extend affected_users" branch is skipped.
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]), \
+                patch('quest_manager.views.notify.send') as mock_notify:
+            response = self.client.post(
+                reverse('quests:approve', args=[self.sub.id]),
+                data={'comment_text': 'Nice work', 'approve_button': True},
+            )
+        self.assertEqual(response.status_code, 302)
 
-        view = ApproveView()
-        view.submission = self.sub
-        request = RequestFactory().post(reverse('quests:approve', args=[self.sub.id]))
-        request.user = self.test_teacher
-        view.request = request
-
-        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
-            kwargs = view.get_notification_kwargs()
-
-        # The approver is already a teacher, so affected_users is not extended with teachers_list.
-        self.assertEqual(kwargs['affected_users'], [self.sub.user])
+        # Isolate the approval notification (a badge grant could fire its own notify.send).
+        approval_calls = [c for c in mock_notify.call_args_list if c.kwargs.get('verb') == 'approved']
+        self.assertEqual(len(approval_calls), 1)
+        self.assertEqual(approval_calls[0].kwargs['affected_users'], [self.sub.user])
 
     def test_approve__invalid_form_renders_submission_page(self):
         """A non-ajax POST with an invalid awards value re-renders the submission page (form_invalid)."""
