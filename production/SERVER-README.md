@@ -56,7 +56,7 @@ Services started in production:
 
 | Service       | What it does                                                                 |
 | ------------- | --------------------------------------------------------------------------- |
-| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared`, `migrate_schemas --executor=multiprocessing`, and `collectstatic`. |
+| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared`, `migrate_schemas --executor=multiprocessing`, and `collectstatic`. The port is **not** published to the host: nginx reaches it over the internal `frontend-network`, so TLS and the host check can't be bypassed. |
 | `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
 | `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
 | `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
@@ -65,6 +65,18 @@ Services started in production:
 Postgres runs on **AWS RDS** (not a compose service), reached via the
 `POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
 above, reached via `REDIS_HOST` / `REDIS_PORT`.
+
+Two networks separate the tiers: `frontend-network` carries traffic between
+nginx and `web`, and `backend-network` carries everything internal (the app
+services and redis). Only `web` sits on both, so nginx has no route to redis.
+
+**Production runs the code baked into the image.** `server-update.sh` rebuilds
+the image from the deployed commit on every deploy, and the app services mount
+no source volume, so what runs is what was built and tested rather than
+whatever happens to be in the host checkout. Editing files under
+`/home/ubuntu/bytedeck` therefore changes nothing until the next deploy. The
+app services also run as the image's unprivileged `app` user; only nginx sets
+an explicit `user:`, because it reads the host's Let's Encrypt certificates.
 
 The shared service config lives in `docker-compose.yml`; the AWS file layers
 production concerns on top. In production every service additionally has
