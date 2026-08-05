@@ -2,20 +2,20 @@
 {% get_static_prefix as STATIC_PREFIX %}
 {% load utility_tags %}
 
-<!-- Font Awesome 4.7.0 (vendored locally; see src/static/css/font-awesome.min.css + src/static/fonts/fontawesome-webfont.*) -->
-<link href="{% static 'css/font-awesome.min.css' %}" rel="stylesheet">
+<!-- Font Awesome 4.7.0 (vendored locally; see src/static/css/font-awesome-4.7.0.min.css + src/static/fonts/fontawesome-webfont.*) -->
+<link href="{% static 'css/font-awesome-4.7.0.min.css' %}" rel="stylesheet">
 
-<!-- Bootstrap 3.4.1 (vendored locally; see src/static/css/bootstrap.min.css) -->
+<!-- Bootstrap 3.4.1 (vendored locally; see src/static/css/bootstrap-3.4.1.min.css) -->
 {% if request.user.profile.dark_theme %}
-<link href="{% static 'css/bootstrap_slate.min.css' %}" rel="stylesheet">
+<link href="{% static 'css/bootstrap_slate-3.4.1.min.css' %}" rel="stylesheet">
 {% else %}
-<link href="{% static 'css/bootstrap.min.css' %}" rel="stylesheet">
+<link href="{% static 'css/bootstrap-3.4.1.min.css' %}" rel="stylesheet">
 {% endif %}
 
 <!-- bootstrap-table CSS is loaded per-page, only where the widget is used (see quest_manager/base, profile_list, badges/detail, tags/list) -->
 
 <!-- KaTeX 0.18.1 for math rendering (vendored locally; see src/static/katex/) -->
-<link rel="stylesheet" href="{% static 'katex/katex.min.css' %}" />
+<link rel="stylesheet" href="{% static 'katex/katex-0.18.1.min.css' %}" />
 
 
 <!-- Custom site-wide styles -->
