@@ -94,6 +94,25 @@ visible, not quietly loop-restart. **Healthchecks** are shared (defined in
   beat silently stops all periodic tasks.
 - `redis`: `redis-cli ping`.
 
+### Checking this configuration
+
+The normal test suite runs the development overlay, so it never sees any of the
+above. Two checks under `production/tests/` cover it instead, wired up in
+`.github/workflows/production_config.yml` and runnable by hand from the repo
+root:
+
+```bash
+python production/tests/check_prod_compose.py   # renders the prod config, asserts its invariants
+bash production/tests/check_prod_topology.sh    # boots the stack, asserts who can reach whom
+```
+
+The first needs no Docker daemon and takes seconds. The second boots the real
+production overlay against throwaway certificates, substituting a trivial server
+for the application image, so it tests the topology rather than the app. Between
+them they assert that nothing but nginx is published to the host, that the app
+services mount no source volume, that nginx can reach `web` but not `redis`, and
+that a foreign `Host` header is still dropped.
+
 Check health at a glance with `docker compose ps` (the STATUS column shows
 `(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
 container that turns *unhealthy* — the healthcheck is a monitoring signal, while

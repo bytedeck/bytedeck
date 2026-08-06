@@ -1,0 +1,66 @@
+name: Production Config
+
+# The Build and Test workflow only ever renders docker-compose.yml plus
+# docker-compose.override.yml, so nothing there looks at the production overlay.
+# A production-only regression (the application port published straight to the
+# host, say) therefore reaches a deploy without any check having seen it. These
+# jobs close that gap.
+#
+# Scoped to the files that can actually affect the production topology, so the
+# usual application PR does not pay for them, plus pushes to the long-lived
+# branches as a backstop for anything that slips through the path filter.
+# (The path list is repeated rather than shared through a YAML anchor because
+# the workflow parser does not support anchors. Keep the two copies in step.)
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'nginx/**'
+      - 'production/tests/**'
+      - '.env.example*'
+      - '.github/workflows/production_config.yml'
+  push:
+    branches: [develop, staging, master]
+    paths:
+      - 'Dockerfile'
+      - 'docker-compose*.yml'
+      - 'nginx/**'
+      - 'production/tests/**'
+      - '.env.example*'
+      - '.github/workflows/production_config.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  config-contract:
+    name: Production config contract
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Copy sample environment variables
+        # `docker compose config` refuses to render while an env_file is
+        # missing, so the sample stands in for the real deployment .env.
+        run: cp .env.example .env
+      - name: Install PyYAML
+        run: pip install pyyaml
+      - name: Assert the production compose contract
+        run: python production/tests/check_prod_compose.py
+
+  topology:
+    name: Production topology
+    runs-on: ubuntu-22.04
+    # Nothing here is worth running while the cheaper static check is failing.
+    needs: config-contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Copy sample environment variables
+        run: cp .env.example .env
+      - name: Boot the production topology and assert reachability
+        run: bash production/tests/check_prod_topology.sh
