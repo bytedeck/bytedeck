@@ -369,10 +369,12 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 1, summary)
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
         # the bottom line LEADS (maintainer request, 2026-07-30): the scheduled
-        # deletion date (suspension start + 365 days) with the countdown, and the
-        # deck name links to the deck itself
-        self.assertIn('scheduled for deletion on Aug. 2, 2027', html)
-        self.assertIn('352 days from now', html)  # frozen TODAY Aug 15, 2026 -> Aug 2, 2027
+        # deletion date with the countdown, and the deck name links to the deck
+        # itself. The deletion clock starts at the FIRST WARNING (this email,
+        # sent on frozen TODAY Aug 15), never at the earlier lapse date
+        # (maintainer decision, 2026-07-31; Tenant.deletion_date).
+        self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
+        self.assertIn('365 days from now', html)
         self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
         self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
         self.assertIn('free trial ended on Aug. 1, 2026', html)
@@ -388,13 +390,15 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
-    def test_process__suspended_email_paid_clock_and_overdue_countdown(self):
+    def test_process__suspended_email_paid_clock_and_legacy_full_year(self):
         """A deck suspended after a PAID subscription lapsed explains the paid
         clock (paid-through and grace-end dates) in its suspension email, with the
-        bottom line carried by the plain-text part too; a deck already suspended
-        past the deletion horizon still shows its (past) scheduled deletion date
-        but drops the "days from now" countdown."""
-        # paid clock: paid through Jul 6, grace ends Aug 5 -> suspended Aug 6, 2026
+        bottom line carried by the plain-text part too. A LEGACY deck whose dates
+        lapsed long before the notice machinery existed gets its full year from
+        its first warning: no email can ever carry an already-passed deletion
+        date (maintainer decision, 2026-07-31)."""
+        # paid clock: paid through Jul 6, grace ends Aug 5 -> suspended Aug 6, 2026;
+        # first warned on frozen TODAY (Aug 15) -> deletion Aug 15, 2027
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=40),
             max_active_users=5, active_user_count=0,
@@ -406,13 +410,14 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
         self.assertIn('subscription was paid through July 6, 2026', html)
         self.assertIn('grace period ended on Aug. 5, 2026', html)
-        self.assertIn('scheduled for deletion on Aug. 6, 2027', html)
-        self.assertIn('356 days from now', html)
+        self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
+        self.assertIn('365 days from now', html)
         body = mail.outbox[0].body.replace('\n', ' ')  # textify hard-wraps lines
-        self.assertIn('scheduled for deletion on Aug. 6, 2027', body)
+        self.assertIn('scheduled for deletion on Aug. 15, 2027', body)
 
-        # overdue: suspended Aug 11, 2025 -> deletion day Aug 11, 2026 already passed,
-        # so the date still shows but no "days from now" countdown is promised
+        # legacy: suspended Aug 11, 2025 (400 days ago). Unclamped this deck's
+        # deletion day would already be past; the warned-on clamp grants the full
+        # year from today's first warning instead.
         mail.outbox.clear()
         Tenant.objects.filter(pk=self.tenant.pk).update(paid_until=TODAY - timedelta(days=400))
         self.tenant.refresh_from_db()
@@ -420,8 +425,54 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         summary = self.run_engine_with_inline_email()
         self.assertEqual(len(mail.outbox), 1, summary)
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
-        self.assertIn('scheduled for deletion on Aug. 11, 2026', html)
-        self.assertNotIn('days from now', html)
+        self.assertIn('since <strong>Aug. 11, 2025</strong>', html)  # the suspension date stays honest
+        self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
+        self.assertIn('365 days from now', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__deletion_clock_runs_from_the_episodes_first_warning(self):
+        """The deletion clock runs from the episode's FIRST warning: the suspended
+        notice's ledger row is the durable warned-on record, so a deck warned days
+        ago keeps that original clock, and with no ledger row yet the deck counts
+        as warned today."""
+        from datetime import date
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        inline_email = patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        )
+
+        # suspended Aug 6 (paid through Jul 6 + 30-day grace), warned Aug 10. The
+        # planted row carries the key the engine really writes: the lapsed
+        # deadline itself (str(paid_until)), not the grace window's end.
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=TODAY - timedelta(days=40),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+        row = DeckNotice.objects.create(
+            tenant=self.tenant, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
+            period_key=str(TODAY - timedelta(days=40)),
+        )
+        # backdate past auto_now_add: the row records the warning sent on Aug 10
+        DeckNotice.objects.filter(pk=row.pk).update(sent_on=date(2026, 8, 10))
+
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('scheduled for deletion on Aug. 10, 2027', html)
+
+        # no ledger row for the episode: treated as warned today (frozen Aug 15)
+        mail.outbox.clear()
+        DeckNotice.objects.all().delete()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
 
 
 @freeze_time(NOW)

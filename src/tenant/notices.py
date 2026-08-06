@@ -180,25 +180,20 @@ def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
     from django.utils.timezone import timedelta
 
-    from tenant.models import GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS
+    from tenant.models import GRACE_PERIOD_DAYS
 
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
     days = deck.days_until_expiry
-    # the day the deck's suspension began (or would begin): the day after its LAST
-    # covered day -- trials end at trial_end_date, paid access after the grace window
-    last_covered_days = []
-    if deck.trial_end_date:
-        last_covered_days.append(deck.trial_end_date)
-    if deck.paid_until:
-        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
-    # is_suspended requires at least one date field, so the list is never empty here
-    suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
-    # the scheduled deletion day under the suspension policy -- INACTIVE_DELETE_DAYS
-    # after the suspension began; the suspended email LEADS with it (maintainer
-    # request, 2026-07-30: put the bottom line up front)
-    deletion_date = suspended_since + timedelta(days=INACTIVE_DELETE_DAYS) if suspended_since else None
+    # the deck's scheduled deletion day (Tenant.deletion_date: a year of
+    # suspension, never counted from before the episode's first suspended
+    # notice); the suspended email LEADS with it (maintainer request,
+    # 2026-07-30: put the bottom line up front). The suspended notice's own
+    # ledger row is written moments before delivery in the same transaction, so
+    # the first send already reads its real warned-on day.
+    suspended_since = deck.suspended_since
+    deletion_date = deck.deletion_date
     context = {
         'deck': deck,
         'config': config,
