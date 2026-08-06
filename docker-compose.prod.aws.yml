@@ -28,7 +28,7 @@ services:
                       python manage.py migrate_schemas --shared &&
                       python manage.py migrate_schemas --executor=multiprocessing &&
                       python manage.py collectstatic --noinput &&
-                      uwsgi --ini uwsgi.aws.ini ${UWSGI_EXTRA_ARGS:-}"
+                      uwsgi --ini uwsgi.aws.ini"
     volumes:
       - .:/app
       # - static_data:/app/src/static  # use static dir as a fallback for hardcoded urls hitting app directly
@@ -67,9 +67,9 @@ services:
       - "redis-server"
       - "--maxmemory"
       # 512mb default: with noeviction, hitting the cap makes redis refuse ALL
-      # writes -- which breaks the celery broker, not just the cache. 512mb gives
-      # headroom for the September submission burst while still leaving RAM for
-      # the app on this shared host. Raise via REDIS_MAXMEMORY.
+      # writes -- which breaks the celery broker, not just the cache. 512mb
+      # leaves headroom for a traffic burst while still leaving RAM for the app
+      # on this shared host. Raise via REDIS_MAXMEMORY.
       - "${REDIS_MAXMEMORY:-512mb}"
       - "--maxmemory-policy"
       - "noeviction"
