@@ -87,14 +87,18 @@ def deck_status_check():
     was an acknowledged N+1 across all decks). Later phases of epic #1729 extend
     this task with the expiry-reminder cadence and limit warnings (#1733).
 
-    After the refresh, runs the deck reminder engine (#1733): expiry cadence,
-    current-student limit warnings, and the suspension notice -- report-only
-    until settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
+    After the refresh, a fresh suspension closes the deck's open semester
+    exactly once per episode (#1734 redesign B2, see
+    tenant.notices.close_semester_on_new_suspension): enforcement, not
+    communication, so it is NOT gated by DECK_NOTICES_ENABLED. Then the deck
+    reminder engine (#1733) runs: expiry cadence, current-student limit
+    warnings, and the suspension notice -- report-only until
+    settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
 
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
-    from tenant.notices import process_deck_notices
+    from tenant.notices import close_semester_on_new_suspension, process_deck_notices
 
     # Defensive mirror of the dispatcher's exclusions: the public and shared-library
     # schemas aren't billable decks and SiteConfig.get() returns None on the public
@@ -107,8 +111,13 @@ def deck_status_check():
 
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
+    # enforcement before communication (#1734 redesign B2): a fresh suspension
+    # closes the open semester exactly once, so the suspended notice below (and
+    # the refreshed counts) describe the deck's actual post-suspension state
+    semester_summary = close_semester_on_new_suspension(tenant)
+    tenant.update_cached_fields()  # the close empties the current-student count
     notices_summary = process_deck_notices(tenant)
     return (
         f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
-        f"notices: {notices_summary}"
+        f"semester: {semester_summary}; notices: {notices_summary}"
     )

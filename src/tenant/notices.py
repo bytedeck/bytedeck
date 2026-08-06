@@ -44,6 +44,57 @@ def _unfired(deck, kind, threshold, period_key):
     return not DeckNotice.objects.filter(tenant=deck, kind=kind, threshold=threshold, period_key=period_key).exists()
 
 
+def close_semester_on_new_suspension(deck):
+    """Once per suspension episode, close the deck's open semester (#1734 redesign
+    B2): the suspension moment ends the school term, so current students drop to
+    zero. Every submission awaiting approval is returned first (maintainer
+    decision, 2026-07-30: nothing stays stuck in a teacher's queue, and the
+    normal close then works as-is), and a student's negative XP balance is
+    recorded as zero rather than blocking the close.
+
+    Enforcement, not communication: like the owner-only middleware (#2210) this
+    is NOT gated by ``settings.DECK_NOTICES_ENABLED``. It runs exactly once per
+    suspension episode (a DeckNotice ledger row with threshold
+    'semester-close', keyed like the suspended notice to the episode's lapsed
+    deadline), so an owner who deliberately opens a new semester while still
+    suspended is not fought with. The ledger row and the close commit
+    atomically: a crash rolls both back and the next nightly run retries.
+
+    Runs inside the deck's tenant context; returns a short summary string for
+    the worker log.
+    """
+    from courses.models import Semester
+    from quest_manager.models import QuestSubmission
+
+    if not deck.is_suspended:
+        return 'not suspended'
+
+    lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
+    period_key = str(max(lapsed_clocks))
+    with transaction.atomic():
+        _, created = DeckNotice.objects.get_or_create(
+            tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='semester-close', period_key=period_key,
+        )
+        if not created:
+            return 'semester close already handled this episode'
+
+        returned = 0
+        for submission in QuestSubmission.objects.all_awaiting_approval():
+            submission.mark_returned()
+            returned += 1
+
+        result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+        if result == Semester.CLOSED:
+            # nothing was open; the episode is recorded so this isn't re-checked
+            return 'semester was already closed'
+        if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
+            # can't happen (submissions were just returned; negative XP is clamped),
+            # but if it ever does, roll everything back and retry next run instead
+            # of recording a close that didn't happen
+            raise RuntimeError(f'semester close failed with sentinel {result}')
+    return f'closed semester "{result}" (returned {returned} awaiting-approval submission(s))'
+
+
 def evaluate_deck_notices(deck):
     """Return the notices due for `deck` today, as (kind, threshold, period_key) tuples.
 
