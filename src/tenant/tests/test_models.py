@@ -370,6 +370,19 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         student.save()
         self.assertEqual(self.tenant.get_active_user_count(), baseline)
 
+    def test_get_active_user_count__deactivated_registrations_excluded(self):
+        """A registration deactivated by a semester close (CourseStudent.active
+        False; e.g. the suspension auto-close, #1734 B2) stops counting, so a
+        closed semester contributes zero current students."""
+        from courses.models import CourseStudent
+
+        baseline = self.tenant.get_active_user_count()
+        student = baker.make(User)
+        registration = baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        self.assertEqual(self.tenant.get_active_user_count(), baseline + 1)
+        CourseStudent.objects.filter(pk=registration.pk).update(active=False)
+        self.assertEqual(self.tenant.get_active_user_count(), baseline)
+
     def test_update_cached_fields__does_not_clobber_concurrent_edits(self):
         """A stale instance running update_cached_fields must not overwrite a concurrent
         edit to a non-cached column such as paid_until."""

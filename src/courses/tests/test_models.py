@@ -169,6 +169,43 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         )
         self.assertEqual(Semester.objects.complete_active_semester(), Semester.QUEST_AWAITING_APPROVAL)
 
+    def test_complete_active_semester__clamp_records_negative_xp_as_zero(self):
+        """With clamp_negative_xp on (the deck-suspension auto-close, #1734 B2), a
+        student's negative balance is recorded as zero final XP and the semester
+        closes; without it the STUDENTS_WITH_NEGATIVE_XP refusal stands."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+            self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+            result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+
+        self.assertEqual(result, SiteConfig.get().active_semester)
+        self.assertTrue(result.closed)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
+
+
+    def test_calc_semester_grades__refusal_rolls_back_all_registrations(self):
+        """A negative-XP refusal (clamp off) rolls back every registration
+        deactivated earlier in the same call: no student is left deactivated
+        while the semester stays open."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        students = [baker.make(User) for _ in range(2)]
+        for student in students:
+            baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
+
+        with patch('profile_manager.models.Profile.xp_per_course', side_effect=[10, -50, 10, -50]):
+            with self.assertRaises(ValueError):
+                CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertFalse(
+            CourseStudent.objects.filter(semester=SiteConfig.get().active_semester, active=False).exists())
+
     def test_complete_active_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
         """A negative-XP student aborts the close atomically: registrations finalized before
         the bad student was reached are rolled back and the semester stays open. Regression
