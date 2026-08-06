@@ -422,3 +422,113 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
         self.assertIn('scheduled for deletion on Aug. 11, 2026', html)
         self.assertNotIn('days from now', html)
+
+
+@freeze_time(NOW)
+@override_settings(DECK_NOTICES_ENABLED=False)  # the close is enforcement: NOT gated by the notices rollout flag
+class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
+    """Tests for close_semester_on_new_suspension (#1734 redesign B2): a fresh
+    suspension closes the deck's open semester exactly once per episode, returning
+    awaiting-approval submissions first and clamping negative XP, so current
+    students drop to zero."""
+
+    def setUp(self):
+        """Clear the cached deck row so each test reads its own billing state."""
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+
+    def set_deck(self, **fields):
+        """Persist billing fields via update() + refresh (the close reads the instance)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def close(self):
+        """Shorthand: run the semester close for this deck and return its log summary."""
+        from tenant.notices import close_semester_on_new_suspension
+        return close_semester_on_new_suspension(self.tenant)
+
+    def test_close__fresh_suspension_closes_semester_once(self):
+        """A fresh suspension returns the awaiting-approval submission (unblocking
+        the close, which then sweeps it with the rest of the in-progress work, as
+        any semester close does), closes the semester, and drops the
+        current-student count to zero -- all with the notices flag off. The
+        episode is recorded, so a second run is a no-op."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from quest_manager.models import QuestSubmission
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        submission = baker.make(
+            QuestSubmission, user=student, is_completed=True, is_approved=False,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertGreater(self.tenant.get_active_user_count(), 0)
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        summary = self.close()
+        self.assertIn('closed semester', summary)
+        self.assertIn('returned 1 awaiting-approval submission(s)', summary)
+
+        self.assertTrue(SiteConfig.get().active_semester.closed)
+        self.assertEqual(self.tenant.get_active_user_count(), 0)
+        # the returned submission was then swept by the close's normal
+        # in-progress cleanup: nothing stays stuck in a teacher's queue
+        self.assertFalse(QuestSubmission.objects.filter(pk=submission.pk).exists())
+
+        self.assertEqual(self.close(), 'semester close already handled this episode')
+
+    def test_close__no_op_paths(self):
+        """Unsuspended decks are untouched (no ledger row); a suspended deck whose
+        semester is already closed records the episode without changes."""
+        from siteconfig.models import SiteConfig
+
+        self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None)
+        self.assertEqual(self.close(), 'not suspended')
+        self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())
+
+        sem = SiteConfig.get().active_semester
+        sem.closed = True
+        sem.save()
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1))
+        self.assertEqual(self.close(), 'semester was already closed')
+        self.assertEqual(self.close(), 'semester close already handled this episode')
+
+    def test_close__clamps_negative_xp_to_zero(self):
+        """A student with a negative XP balance doesn't block the auto-close: the
+        final XP is recorded as zero (maintainer decision, 2026-07-30)."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from courses.models import CourseStudent
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+            summary = self.close()
+        self.assertIn('closed semester', summary)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
+
+    def test_close__failed_close_rolls_back_the_episode_ledger(self):
+        """If the close unexpectedly refuses (the defensive sentinel path), the
+        episode's ledger row rolls back with it, so the next nightly run retries
+        instead of recording a close that never happened."""
+        from unittest.mock import patch
+
+        from courses.models import Semester
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+            with self.assertRaises(RuntimeError):
+                self.close()
+        self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())
