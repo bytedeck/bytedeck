@@ -46,9 +46,11 @@ def default_trial_end_date():
 # authoritative (see effective_max_active_users).
 TRIAL_MAX_ACTIVE_USERS = 5
 
-# Days of continued paid access after `paid_until` before a deck counts as lapsed.
-# Codifies the 0-30-day "gold band" the tenant admin changelist has always shown
-# for recently expired decks (#1494).
+# Days of continued access after the deck's LATEST deadline (trial end or
+# `paid_until`) before it counts as lapsed: every deck, trial or paid, falls back
+# on the same grace window before suspension (#1734 B4: a trial is treated as
+# just another kind of subscription). Codifies the 0-30-day "gold band" the
+# tenant admin changelist has always shown for recently expired decks (#1494).
 GRACE_PERIOD_DAYS = 30
 
 # The status banner starts warning staff when the governing deadline (trial end or
@@ -208,13 +210,17 @@ class Tenant(TenantMixin):
 
     @property
     def in_grace_period(self):
-        """Whether the deck is past `paid_until` but still within the grace period
-        (access retained, expiry warnings due)."""
-        return self.subscription_active and localdate() > self.paid_until
+        """Whether the deck is past its latest deadline (trial end or `paid_until`)
+        but still within the unified grace window (access retained, expiry
+        warnings due). Trial and paid clocks get the same grace (#1734 B4)."""
+        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        if not clocks:
+            return False
+        return max(clocks) < localdate() <= max(clocks) + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
     def grace_days_remaining(self):
-        """Days of paid grace left after `paid_until`; None when not in the grace
+        """Days of grace left after the latest deadline; None when not in the grace
         period. 0 on the final day (the grace period ends today). Drives the
         expired banner's "grace period ends in N days" copy.
 
@@ -237,15 +243,20 @@ class Tenant(TenantMixin):
 
     @property
     def is_suspended(self):
-        """Whether every clock this deck was ever given (trial and/or paid) has lapsed.
+        """Whether every clock this deck was ever given (trial and/or paid) has
+        lapsed AND the unified grace window after the LATEST one has closed: every
+        deck, trial or paid, keeps access for GRACE_PERIOD_DAYS past its latest
+        deadline before suspension (#1734 B4: a trial is treated as just another
+        kind of subscription, with a single latest-clock deadline).
 
         A deck with BOTH dates blank is never suspended: that is the escape hatch for
         comped/legacy decks managed outside the subscription lifecycle, reached by
         clearing both date fields on the deck in the public-tenant admin.
         """
-        if self.subscription_active or self.is_on_trial:
+        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        if not clocks:
             return False
-        return self.paid_until is not None or self.trial_end_date is not None
+        return localdate() > max(clocks) + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
     def effective_max_active_users(self):
@@ -281,9 +292,9 @@ class Tenant(TenantMixin):
 
     @property
     def days_until_expiry(self):
-        """Days until the governing deadline: `paid_until` while a subscription is
-        active, `trial_end_date` while on trial, otherwise (suspended) the LATEST
-        lapsed clock.
+        """Days until the deck's governing deadline: the LATEST of its set clocks
+        (trial end and/or `paid_until`), the single deadline the unified grace
+        window and suspension are measured from (#1734 B4).
 
         The latest-clock rule matters because trial_end_date is set at creation and
         never cleared when a deck subscribes: a lapsed subscriber should read as
@@ -292,16 +303,10 @@ class Tenant(TenantMixin):
         through the grace window); None when the deck has no dates at all
         (comped/legacy decks).
         """
-        if self.subscription_active:
-            deadline = self.paid_until
-        elif self.is_on_trial:
-            deadline = self.trial_end_date
-        else:
-            lapsed_clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
-            deadline = max(lapsed_clocks) if lapsed_clocks else None
-        if deadline is None:
+        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        if not clocks:
             return None
-        return (deadline - localdate()).days
+        return (max(clocks) - localdate()).days
 
     @property
     def is_over_user_limit(self):
@@ -336,20 +341,16 @@ class Tenant(TenantMixin):
     @property
     def suspended_since(self):
         """The first day of the current suspension episode: the day after the deck's
-        LAST covered day (a trial covers through `trial_end_date`; paid access covers
-        through `paid_until` plus the grace window). None while the deck is not
+        LAST covered day. A trial and a paid period alike cover through their
+        deadline plus the unified grace window (#1734 B4), so this is the day
+        after the latest clock's grace closes. None while the deck is not
         suspended. is_suspended requires at least one date field, so a suspended
         deck always has at least one covered day to count from.
         """
         if not self.is_suspended:
             return None
-        last_covered_days = [
-            d for d in (
-                self.trial_end_date,
-                self.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if self.paid_until else None,
-            ) if d is not None
-        ]
-        return max(last_covered_days) + timedelta(days=1)
+        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        return max(clocks) + timedelta(days=GRACE_PERIOD_DAYS + 1)
 
     @property
     def deletion_date(self):

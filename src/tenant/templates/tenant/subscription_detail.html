@@ -15,8 +15,10 @@
 {% elif deck.in_grace_period %}
   {# grace gets its own DANGER label -- a green "Subscribed" badge on an expired deck reads as a bug (maintainer review find) #}
   <p><span class="label label-danger">Grace period</span>
-    The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
-    {{ grace_days }}-day grace period: renew to keep full access; otherwise the deck will be
+    {% if deck.paid_until %}The paid period ended on <strong>{{ deck.paid_until }}</strong>{% else %}The
+    free trial ended on <strong>{{ deck.trial_end_date }}</strong>{% endif %} and the deck is in its
+    {{ grace_days }}-day grace period: {% if deck.paid_until %}renew{% else %}subscribe{% endif %} to
+    keep full access; otherwise the deck will be
     suspended (only the deck owner will be able to sign in, and the 365-day countdown to deck
     deletion begins).</p>
 {% elif deck.is_on_maintenance %}
@@ -48,6 +50,7 @@
     <tr><th>Grace period</th><td>extends {{ grace_days }} days after your subscription ends ({{ grace_end_phrase }})</td></tr>
   {% elif deck.trial_end_date %}
     <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
+    <tr><th>Grace period</th><td>extends {{ grace_days }} days after your trial ends ({{ grace_end_phrase }})</td></tr>
   {% else %}
     <tr><th>Expires</th><td>Never (this deck is managed manually)</td></tr>
   {% endif %}
@@ -82,9 +85,9 @@
 {# the full lifecycle, so an owner always knows what happens next (maintainer request, 2026-07-30) #}
 <ol>
   <li><strong>Valid subscription:</strong> full use of the deck at your subscription level.</li>
-  <li><strong>Grace period:</strong> when a subscription expires, everything keeps working as
-    before for {{ grace_days }} more days while you renew.</li>
-  <li><strong>Suspension:</strong> after the grace period (or when a free trial ends), the deck
+  <li><strong>Grace period:</strong> when a trial or subscription expires, everything keeps working as
+    before for {{ grace_days }} more days while you subscribe or renew.</li>
+  <li><strong>Suspension:</strong> after the grace period, the deck
     is suspended. Only the deck owner can sign in, and the 365-day countdown to deck deletion begins.
     Content and student data stay intact.</li>
   <li><strong>Deletion:</strong> a deck with no valid subscription for 365 days may be

@@ -10,7 +10,8 @@
   since <strong>{{ suspended_since }}</strong>{% endif %}
   {% if deck.paid_until %}(its subscription was paid through {{ deck.paid_until }}, and the
   {{ grace_days }}-day grace period ended on {{ grace_end_date }}){% elif deck.trial_end_date %}(its
-  free trial ended on {{ deck.trial_end_date }}){% endif %}: only the deck owner can sign in until the
+  free trial ended on {{ deck.trial_end_date }}, and the {{ grace_days }}-day grace period ended on
+  {{ grace_end_date }}){% endif %}: only the deck owner can sign in until the
   deck has a valid subscription. Nothing has been deleted yet: your content and student data
   are intact until the deletion date above.</p>
 

@@ -179,15 +179,31 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertIsNone(self.make_tenant().grace_days_remaining)  # unmanaged
 
     def test_in_grace_period__only_between_paid_until_and_grace_end(self):
-        """in_grace_period is True strictly after paid_until and only while subscription_active."""
+        """in_grace_period is True strictly after paid_until and only until the grace window closes."""
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY).in_grace_period)
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
 
+    def test_in_grace_period__lapsed_trial_gets_the_same_grace(self):
+        """A lapsed trial enters the SAME grace window a lapsed subscription gets
+        (#1734 B4: a trial is just another kind of subscription): grace starts the
+        day after trial_end_date, runs GRACE_PERIOD_DAYS, then closes."""
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY).in_grace_period)  # still on trial
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).in_grace_period)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
+
+    def test_grace_days_remaining__lapsed_trial_counts_down_too(self):
+        """The grace countdown works identically for a lapsed trial (#1734 B4)."""
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=10)).grace_days_remaining, GRACE_PERIOD_DAYS - 10)
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).grace_days_remaining, 0)
+
     def test_suspended_since__day_after_the_last_covered_day(self):
-        """suspended_since is the day after the deck's last covered day: the trial's
-        end for a trial-only deck, the grace window's close for a paid deck, and
-        the LATER of the two when both dates exist; None while not suspended."""
+        """suspended_since is the day after the deck's last covered day: the close of
+        the unified grace window after the LATEST clock, trial or paid alike
+        (#1734 B4); None while not suspended."""
         lapsed_trial = FROZEN_TODAY - timedelta(days=100)
         lapsed_paid = FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 10)
 
@@ -195,7 +211,9 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertIsNone(self.make_tenant(trial_end_date=FROZEN_TODAY).suspended_since)  # on trial
         self.assertIsNone(self.make_tenant().suspended_since)  # managed manually
 
-        self.assertEqual(self.make_tenant(trial_end_date=lapsed_trial).suspended_since, lapsed_trial + timedelta(days=1))
+        self.assertEqual(
+            self.make_tenant(trial_end_date=lapsed_trial).suspended_since,
+            lapsed_trial + timedelta(days=GRACE_PERIOD_DAYS + 1))
         self.assertEqual(
             self.make_tenant(paid_until=lapsed_paid).suspended_since,
             lapsed_paid + timedelta(days=GRACE_PERIOD_DAYS + 1))
@@ -216,8 +234,12 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertFalse(self.make_tenant().is_on_trial)
 
     def test_is_suspended__true_when_all_given_clocks_lapsed(self):
-        """A deck whose trial and/or paid clocks have all run out (past grace) is suspended."""
-        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_suspended)
+        """A deck whose trial and/or paid clocks have all run out past the unified
+        grace window is suspended; a just-lapsed trial is still in grace (#1734 B4)."""
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).is_suspended)
+        # a lapsed trial inside its grace window is NOT yet suspended
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_suspended)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS)).is_suspended)
         # trial date cleared by an admin, paid_until lapsed beyond grace: still suspended
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).is_suspended)
         self.assertTrue(
@@ -243,13 +265,17 @@ class TenantBillingStatusTest(SimpleTestCase):
         owner-only sign-in instead); the admin's value, higher or lower, always
         wins (maintainer decision on #2178: a suspended deck's cap lowered to 1
         was silently overridden back to 5)."""
-        # suspended (trial lapsed): the field, untouched -- both above and below
-        # the trial default
+        # suspended (trial lapsed past grace): the field, untouched -- both above
+        # and below the trial default
         self.assertEqual(
-            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=80).effective_max_active_users, 80,
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), max_active_users=80,
+            ).effective_max_active_users, 80,
         )
         self.assertEqual(
-            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=1).effective_max_active_users, 1,
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), max_active_users=1,
+            ).effective_max_active_users, 1,
         )
         # on trial with an admin-raised cap: the admin grant is honored
         self.assertEqual(
@@ -271,8 +297,8 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=-1).is_on_maintenance)
         self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY, max_active_users=5).is_on_maintenance)  # trial
         self.assertFalse(self.make_tenant(max_active_users=5).is_on_maintenance)  # managed manually
-        self.assertFalse(  # suspended
-            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1), max_active_users=5).is_on_maintenance
+        self.assertFalse(  # suspended (trial lapsed past grace)
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), max_active_users=5).is_on_maintenance
         )
 
     def test_effective_max_active_users__unlimited_passthrough(self):
@@ -537,17 +563,19 @@ class TenantBannerStatusTest(SimpleTestCase):
 
     def test_is_expiring_soon__within_warning_window_or_grace(self):
         """Warns within EXPIRY_WARNING_DAYS of the governing deadline, and through the
-        paid grace window (negative days); quiet before the window."""
+        grace window (negative days), paid or trial alike; quiet before the window."""
         self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=EXPIRY_WARNING_DAYS)).is_expiring_soon)
         self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=EXPIRY_WARNING_DAYS + 1)).is_expiring_soon)
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=3)).is_expiring_soon)
-        # in the paid grace window: expired but still subscription_active
+        # in the grace window: expired but not yet suspended (#1734 B4 gives
+        # trials the same window)
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=5)).is_expiring_soon)
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=5)).is_expiring_soon)
 
     def test_is_expiring_soon__false_for_suspended_and_unmanaged_decks(self):
         """Suspended decks get the suspension banner instead, and dateless (comped)
         decks have no deadline to warn about."""
-        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).is_expiring_soon)
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).is_expiring_soon)
         self.assertFalse(self.make_tenant().is_expiring_soon)
 
 

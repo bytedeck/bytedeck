@@ -8,7 +8,7 @@ from freezegun import freeze_time
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
-from tenant.models import DeckNotice, Tenant
+from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
 from tenant.notices import evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
 
@@ -114,13 +114,26 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
 
     def test_evaluate__suspension_notice_once_per_episode(self):
         """A suspended deck gets exactly one suspension notice (keyed to the lapsed deadline),
-        and no expiry cadence."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
-        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(TODAY - timedelta(days=1)))])
+        and no expiry cadence. The trial must be lapsed past the unified grace
+        window (#1734 B4) to be suspended at all."""
+        lapsed = TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)
+        self.set_deck(trial_end_date=lapsed, paid_until=None)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(lapsed))])
         process_deck_notices(self.tenant)
         self.assertEqual(self.due(), [])
         with freeze_time("2026-09-15 20:00:00"):
             self.assertEqual(self.due(), [])  # still just the one
+
+    def test_evaluate__lapsed_trial_stays_on_expiry_cadence_through_grace(self):
+        """A lapsed trial inside its grace window is NOT suspended: it stays on the
+        expiry-reminder cadence (daily after the milestone), exactly like a lapsed
+        paid deck (#1734 B4)."""
+        lapsed = TODAY - timedelta(days=10)
+        self.set_deck(trial_end_date=lapsed, paid_until=None)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(lapsed))])  # no suspension notice
+        process_deck_notices(self.tenant)
+        with freeze_time("2026-08-16 20:00:00"):
+            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(lapsed))])
 
 
 @freeze_time(NOW)
@@ -355,11 +368,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_states_when_and_why_with_logo(self):
         """The suspension email says when the suspension began, which clock ran
-        out (trial vs paid + grace), current seat usage, and carries the logo."""
+        out (trial or paid, plus the unified grace window, #1734 B4), current
+        seat usage, and carries the logo."""
         from datetime import date
 
         Tenant.objects.filter(pk=self.tenant.pk).update(
-            trial_end_date=date(2026, 8, 1), paid_until=None,  # trial lapsed -> suspended Aug 2
+            # trial ended Jul 1 + 30-day grace ended Jul 31 -> suspended Aug 1
+            trial_end_date=date(2026, 7, 1), paid_until=None,
             max_active_users=5, active_user_count=0,
         )
         self.tenant.refresh_from_db()
@@ -376,8 +391,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
         self.assertIn('365 days from now', html)
         self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
-        self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
-        self.assertIn('free trial ended on Aug. 1, 2026', html)
+        self.assertIn('since <strong>Aug. 1, 2026</strong>', html)
+        self.assertIn('free trial ended on July 1, 2026', html)
+        self.assertIn('grace period ended on July 31, 2026', html)
         # the new suspension rules (redesign, 2026-07-30): owner-only sign-in,
         # data intact, and the Maintenance escape hatch
         self.assertIn('only the deck owner can sign in', html)
@@ -517,7 +533,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         )
         self.assertGreater(self.tenant.get_active_user_count(), 0)
 
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
         summary = self.close()
         self.assertIn('closed semester', summary)
         self.assertIn('returned 1 awaiting-approval submission(s)', summary)
@@ -542,7 +558,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         sem = SiteConfig.get().active_semester
         sem.closed = True
         sem.save()
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1))
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
         self.assertEqual(self.close(), 'semester was already closed')
         self.assertEqual(self.close(), 'semester close already handled this episode')
 
@@ -561,7 +577,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         student = baker.make(User)
         registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
         with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
             summary = self.close()
         self.assertIn('closed semester', summary)
@@ -577,7 +593,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
 
         from courses.models import Semester
 
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
         with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
             with self.assertRaises(RuntimeError):
                 self.close()

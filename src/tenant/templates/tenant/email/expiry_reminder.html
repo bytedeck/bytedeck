@@ -5,13 +5,14 @@
   {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
   on <strong>{% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}</strong>
   (<strong>{{ days }} day{{ days|pluralize }}</strong> from now).
-  {% if deck.is_on_trial %}When the trial ends, the deck is suspended: only the deck owner can sign in,
-  and the 365-day countdown to deck deletion begins.{% else %}After that, a {{ grace_days }}-day grace
-  period keeps full access until <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
-  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.{% endif %}</p>
+  After that, a {{ grace_days }}-day grace period keeps full access until
+  <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
+  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.</p>
 {% else %}
-<p>Your deck <strong>{{ deck.name }}</strong>'s subscription expired on
-  <strong>{{ deck.paid_until }}</strong> ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
+<p>Your deck <strong>{{ deck.name }}</strong>'s
+  {% if deck.paid_until %}subscription expired on <strong>{{ deck.paid_until }}</strong>{% else %}free
+  trial ended on <strong>{{ deck.trial_end_date }}</strong>{% endif %}
+  ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
   and is in its {{ grace_days }}-day grace period, which ends on <strong>{{ grace_end_date }}</strong>
   ({{ grace_days_left }} day{{ grace_days_left|pluralize }} left). When the grace period ends, the deck
   will be suspended: only the deck owner will be able to sign in, and the 365-day countdown to deck

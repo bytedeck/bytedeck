@@ -132,10 +132,10 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
 
         from django.utils.timezone import localdate
 
-        from tenant.models import Tenant
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
 
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
-            trial_end_date=localdate() - timedelta(days=1), paid_until=None, max_active_users=80,
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None, max_active_users=80,
         )
 
         self.assertTrue(tasks.deck_status_check.apply().successful())
@@ -153,14 +153,14 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         from django.utils.timezone import localdate
         from model_bakery import baker
         from siteconfig.models import SiteConfig
-        from tenant.models import Tenant
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
 
         User = get_user_model()
         baker.make(User, is_staff=True)  # a teacher must exist before students
         student = baker.make(User)
         baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
-            trial_end_date=localdate() - timedelta(days=1), paid_until=None,
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
         )
 
         result = tasks.deck_status_check.apply()

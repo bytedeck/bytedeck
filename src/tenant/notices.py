@@ -207,7 +207,12 @@ def _deliver(deck, kind):
         # paid period ended/ends, how long ago, when the grace window closes, and --
         # for suspended decks -- the day the suspension began. None when not applicable.
         'grace_days': GRACE_PERIOD_DAYS,
-        'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
+        # the unified grace window closes GRACE_PERIOD_DAYS after the deck's
+        # LATEST deadline, trial and paid clocks alike (#1734 B4)
+        'grace_end_date': (
+            max(d for d in (deck.trial_end_date, deck.paid_until) if d is not None) + timedelta(days=GRACE_PERIOD_DAYS)
+            if (deck.trial_end_date or deck.paid_until) else None
+        ),
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
         'suspended_since': suspended_since,

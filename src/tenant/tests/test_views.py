@@ -939,6 +939,24 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
                       'and the 365-day countdown to deck deletion begins)', text)
 
+    def test_page__lapsed_trial_gets_the_same_grace_status(self):
+        """A lapsed trial lands in the SAME grace state (#1734 B4): the danger
+        "Grace period" label, trial-specific wording ("free trial ended",
+        subscribe rather than renew), and the trial Dates rows with the grace
+        row's countdown."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('free trial ended on', text)
+        self.assertIn('subscribe to keep full access', text)
+        self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
+
     def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
         """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
