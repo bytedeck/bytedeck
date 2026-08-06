@@ -50,26 +50,30 @@ services:
     restart: unless-stopped
 
   # Production/staging additions to the shared redis service (image, healthcheck,
-  # network — see docker-compose.yml). Self-hosted on this EC2 host, replacing
+  # network: see docker-compose.yml). Self-hosted on this EC2 host, replacing
   # AWS ElastiCache: reachable ONLY on the internal backend-network with no
   # published port, so it needs no password in this single-host setup.
   redis:
     logging: *default-logging
     restart: unless-stopped
-    # - maxmemory caps RAM so Redis can't OOM the shared app host (override with
-    #   REDIS_MAXMEMORY in .env; size it to the instance and working set).
+    # - maxmemory bounds the dataset so Redis can't starve the shared app host.
+    #   The process itself sits a bit above this figure (allocator overhead and
+    #   fragmentation), so leave headroom rather than reading it as an exact RSS
+    #   cap. Override with REDIS_MAXMEMORY in .env; size it to the instance and
+    #   working set.
     # - noeviction: never drop keys under memory pressure, so queued Celery/beat
     #   tasks are never silently lost. (If cache churn makes the cap tight,
-    #   raise REDIS_MAXMEMORY, or switch to volatile-lru — cache entries carry a
+    #   raise REDIS_MAXMEMORY, or switch to volatile-lru: cache entries carry a
     #   TTL and broker keys do not, so only cache keys would be evicted.)
     # - persistence disabled: the broker queue and cache are both disposable.
     command:
       - "redis-server"
       - "--maxmemory"
-      # 512mb default: with noeviction, hitting the cap makes redis refuse ALL
-      # writes -- which breaks the celery broker, not just the cache. 512mb
-      # leaves headroom for a traffic burst while still leaving RAM for the app
-      # on this shared host. Raise via REDIS_MAXMEMORY.
+      # 512mb default: at the cap, noeviction makes redis reject every command
+      # that needs more memory, so celery publishes fail too, not just cache
+      # writes (reads and memory-freeing commands still work). 512mb leaves
+      # headroom for a traffic burst while still leaving RAM for the app on this
+      # shared host. Raise via REDIS_MAXMEMORY.
       - "${REDIS_MAXMEMORY:-512mb}"
       - "--maxmemory-policy"
       - "noeviction"
