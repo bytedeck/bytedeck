@@ -115,7 +115,9 @@ class Tenant(TenantMixin):
 
     can_delete = models.BooleanField(
         default=False,
-        help_text="Arms this deck for deletion (#2044): deletion from the admin is refused until an "
+        # the #2044 retirement policy; the help text stays free of issue numbers
+        # (they mean nothing to an admin reading the form)
+        help_text="Arms this deck for deletion: deletion from the admin is refused until an "
                   "admin deliberately turns this on -- and even then only a deck that has been suspended "
                   "for over a year, counted from when its owner was first sent the suspension notice, "
                   "can actually be deleted."
