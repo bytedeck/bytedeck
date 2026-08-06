@@ -435,7 +435,6 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         notice's ledger row is the durable warned-on record, so a deck warned days
         ago keeps that original clock, and with no ledger row yet the deck counts
         as warned today."""
-        from datetime import date
         from unittest.mock import patch
 
         from tenant import tasks
