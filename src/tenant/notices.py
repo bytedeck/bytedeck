@@ -112,8 +112,10 @@ def evaluate_deck_notices(deck):
         # --- expiry cadence (not for suspended decks; their deadline is history) --
         days = deck.days_until_expiry
         if days is not None and days <= EXPIRY_THRESHOLDS[-1][1]:
-            deadline = deck.paid_until if deck.subscription_active else deck.trial_end_date
-            period_key = str(deadline)
+            # keyed to the GOVERNING deadline (the one days_until_expiry counts to
+            # and the email reports), so a stale paid key can never suppress
+            # reminders for a later governing trial date (#1734 B4)
+            period_key = str(deck.governing_deadline)
             # the first (most specific) milestone whose window we're inside governs --
             # broader milestones are superseded, never fired late. The guard above
             # guarantees at least the broadest window matches.

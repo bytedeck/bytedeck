@@ -112,6 +112,20 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1, paid_until=TODAY + timedelta(days=90), active_user_count=999)
         self.assertEqual(self.due(), [])
 
+    def test_evaluate__expiry_key_uses_the_governing_trial_deadline(self):
+        """With an in-grace paid date and a LATER governing trial date, the expiry
+        notice is keyed to the governing trial deadline (the one the email
+        reports), so milestones recorded under the stale paid key can never
+        suppress reminders for the clock that actually governs (#1734 B4
+        review find)."""
+        trial = TODAY + timedelta(days=20)
+        self.set_deck(trial_end_date=trial, paid_until=TODAY - timedelta(days=10))
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd30', str(trial))])
+        process_deck_notices(self.tenant)
+        self.assertTrue(DeckNotice.objects.filter(
+            tenant=self.tenant, kind=DeckNotice.KIND_EXPIRY, threshold='d30', period_key=str(trial)).exists())
+        self.assertEqual(self.due(), [])  # recorded under the governing key: nothing more due
+
     def test_evaluate__suspension_notice_once_per_episode(self):
         """A suspended deck gets exactly one suspension notice (keyed to the lapsed deadline),
         and no expiry cadence. The trial must be lapsed past the unified grace
