@@ -52,10 +52,13 @@ class SignalTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_change_domain_urls__is_a_noop_on_create(self):
         """change_domain_urls only acts on Site updates; a create (created=True) returns
-        immediately without querying tenants."""
+        immediately, before even looking up the public tenant."""
         with schema_context(get_public_schema_name()):
             site = Site.objects.first()
-            self.assertIsNone(change_domain_urls(sender=Site, instance=site, created=True))
+            with patch.object(Tenant.objects, 'get') as mock_get:
+                self.assertIsNone(change_domain_urls(sender=Site, instance=site, created=True))
+            # The guard returns before the tenant lookup, so get() is never reached.
+            mock_get.assert_not_called()
 
     def test_change_domain_urls__returns_when_public_tenant_missing(self):
         """If the public tenant lookup fails, the handler returns quietly rather than raising."""
