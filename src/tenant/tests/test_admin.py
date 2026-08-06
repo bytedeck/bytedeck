@@ -34,7 +34,7 @@ from hackerspace_online.celery import app
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin, TenantAdmin, TenantAdminForm, TenantDomainInline
-from tenant.models import Tenant
+from tenant.models import DeckNotice, Tenant
 
 User = get_user_model()
 
@@ -655,14 +655,20 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
                 name="extra",
             )
             cls.extra_tenant.save()
-            # armed for deletion, suspended (lapsed trial), and abandoned for over a
-            # year, so the deletion tests clear every #2044 guard and keep
+            # armed for deletion, suspended (lapsed trial), and first warned over a
+            # year ago (the episode's suspended DeckNotice starts the deletion
+            # clock), so the deletion tests clear every #2044 guard and keep
             # exercising the Django perms and confirmation mechanics
             Tenant.objects.filter(pk=cls.extra_tenant.pk).update(
                 can_delete=True,
-                trial_end_date=date(2020, 1, 1),
-                last_staff_login=timezone.now() - timezone.timedelta(days=366))
+                trial_end_date=date(2020, 1, 1))
             cls.extra_tenant.refresh_from_db()
+            cls.suspended_warning = DeckNotice.objects.create(
+                tenant=cls.extra_tenant, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
+                period_key=str(date(2020, 1, 1)))
+            # backdate past auto_now_add: warned over a year ago, so the clock has run out
+            DeckNotice.objects.filter(pk=cls.suspended_warning.pk).update(
+                sent_on=timezone.localdate() - timezone.timedelta(days=366))
 
         # We need to check if library tenant exist
         # Since library is created elsewhere it will fail only if full tests are ran
@@ -777,12 +783,12 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         self.assertFalse(schema_exists("extra"))
 
     @override_settings(ROOT_URLCONF=__name__)
-    def test_delete_view__refused_for_recently_active_deck(self):
-        """A deck with a staff sign-in inside the last year cannot be deleted, even
-        by a user holding the Django delete permission: the change form hides the
+    def test_delete_view__refused_while_the_warned_year_is_still_running(self):
+        """A deck first warned less than a year ago cannot be deleted, even by a
+        user holding the Django delete permission: the change form hides the
         delete route and the delete view 403s on GET and POST (#2044 guard)."""
-        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
-            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        DeckNotice.objects.filter(pk=self.suspended_warning.pk).update(
+            sent_on=timezone.localdate() - timezone.timedelta(days=10))
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
         self.client.get(delete_url)  # anonymous first: move client to public schema
         self.client.force_login(self.deleteuser)
@@ -793,10 +799,11 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         self.assertTrue(schema_exists("extra"))
 
     @override_settings(ROOT_URLCONF=__name__)
-    def test_delete_view__refused_without_last_staff_login_on_record(self):
-        """A deck whose cached last_staff_login is blank cannot be deleted -- blank
-        means "no login on record", which can't prove a year of abandonment."""
-        Tenant.objects.filter(pk=self.extra_tenant.pk).update(last_staff_login=None)
+    def test_delete_view__refused_while_never_warned(self):
+        """A suspended deck with no suspended notice on record cannot be deleted:
+        its deletion clock has not started, so however long ago its dates lapsed,
+        the year the warning email promises has never begun."""
+        DeckNotice.objects.filter(pk=self.suspended_warning.pk).delete()
         delete_url = reverse("admin:tenant_tenant_delete", args=(self.extra_tenant.pk,))
         self.client.get(delete_url)  # anonymous first: move client to public schema
         self.client.force_login(self.deleteuser)
@@ -838,8 +845,8 @@ class TenantAdminViewPermissionsTest(ByteDeckTenantTestCase):
         drops are unrecoverable, so any future code path must fail closed too)."""
         from django.core.exceptions import PermissionDenied
 
-        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
-            last_staff_login=timezone.now() - timezone.timedelta(days=10))
+        DeckNotice.objects.filter(pk=self.suspended_warning.pk).update(
+            sent_on=timezone.localdate() - timezone.timedelta(days=10))
         self.extra_tenant.refresh_from_db()
         with self.assertRaises(PermissionDenied):
             TenantAdmin(model=Tenant, admin_site=AdminSite()).delete_model(None, self.extra_tenant)
