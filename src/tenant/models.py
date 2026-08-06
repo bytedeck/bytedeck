@@ -55,9 +55,11 @@ GRACE_PERIOD_DAYS = 30
 # paid_until) is this many days away or closer (#1733's "2 week notice").
 EXPIRY_WARNING_DAYS = 14
 
-# A deck may be DELETED from the admin only once no staff member has signed in
-# for this long (#2044 retirement policy): a year of staff silence means the
-# deck is abandoned, not merely dormant over a summer or a leave.
+# A deck may be DELETED from the admin only after this long on the deletion
+# clock (#2044 retirement policy): a year measured from the later of the
+# suspension start and the episode's first suspended notice (see
+# Tenant.deletion_date), so a deck is never deleted before it has had the full
+# warned year to come back.
 INACTIVE_DELETE_DAYS = 365
 
 
@@ -115,9 +117,12 @@ class Tenant(TenantMixin):
 
     can_delete = models.BooleanField(
         default=False,
-        help_text="Arms this deck for deletion (#2044): deletion from the admin is refused until an "
-                  "admin deliberately turns this on -- and even then only a suspended deck whose staff "
-                  "have been silent for over a year can actually be deleted."
+        # the #2044 retirement policy; the help text stays free of issue numbers
+        # (they mean nothing to an admin reading the form)
+        help_text="Arms this deck for deletion: deletion from the admin is refused until an "
+                  "admin deliberately turns this on -- and even then only a deck that has been suspended "
+                  "for over a year, counted from when its owner was first sent the suspension notice, "
+                  "can actually be deleted."
     )
 
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
@@ -329,6 +334,53 @@ class Tenant(TenantMixin):
         return days is not None and days <= EXPIRY_WARNING_DAYS
 
     @property
+    def suspended_since(self):
+        """The first day of the current suspension episode: the day after the deck's
+        LAST covered day (a trial covers through `trial_end_date`; paid access covers
+        through `paid_until` plus the grace window). None while the deck is not
+        suspended. is_suspended requires at least one date field, so a suspended
+        deck always has at least one covered day to count from.
+        """
+        if not self.is_suspended:
+            return None
+        last_covered_days = [
+            d for d in (
+                self.trial_end_date,
+                self.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if self.paid_until else None,
+            ) if d is not None
+        ]
+        return max(last_covered_days) + timedelta(days=1)
+
+    @property
+    def deletion_date(self):
+        """The day this deck becomes eligible for deletion under the retirement
+        policy (#2044): INACTIVE_DELETE_DAYS after the deletion clock starts. None
+        while the deck is not suspended.
+
+        The clock starts at the LATER of the suspension itself and the day the deck
+        was first WARNED (the suspension episode's 'suspended' DeckNotice ledger
+        row): a legacy deck whose dates lapsed long before the notice machinery
+        went live gets its full year measured from its first suspended notice,
+        never from a backdated lapse (maintainer decision, 2026-07-31). A deck
+        never warned at all reads as warned today, so its clock has not started.
+
+        Must be read on a saved Tenant row (the ledger lookup filters on this
+        instance); the early Nones for non-suspended decks need no lookup.
+        """
+        since = self.suspended_since
+        if since is None:
+            return None
+        # the episode key mirrors the suspended notice's period_key (the latest
+        # lapsed deadline), so this finds exactly this episode's first warning
+        lapsed_clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        first_warned_row = DeckNotice.objects.filter(
+            tenant=self, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
+            period_key=str(max(lapsed_clocks)),
+        ).order_by('sent_on').first()
+        warned_on = first_warned_row.sent_on if first_warned_row else localdate()
+        return max(since, warned_on) + timedelta(days=INACTIVE_DELETE_DAYS)
+
+    @property
     def is_deletable(self):
         """Whether the admin may delete this deck (and drop its schema) -- the
         #2044 retirement policy. ALL of these must hold:
@@ -336,9 +388,11 @@ class Tenant(TenantMixin):
         * ``can_delete`` was deliberately armed by an admin (default False);
         * the deck is SUSPENDED -- an active subscription, a running trial, or a
           managed-manually deck (both dates blank) is never deletable;
-        * no staff sign-in for more than INACTIVE_DELETE_DAYS, with a login
-          actually on record -- a blank ``last_staff_login`` cannot PROVE a year
-          of silence the way an old timestamp can;
+        * the deck's ``deletion_date`` has arrived: a year of suspension, measured
+          from the later of the suspension start and the episode's first suspended
+          notice, so deletion can never outrun the year the warning email
+          promised. A deck that was never warned is never deletable (its clock
+          has not started);
         * never the public schema (deleting it would take down the installation).
         """
         from django_tenants.utils import get_public_schema_name
@@ -349,10 +403,7 @@ class Tenant(TenantMixin):
             return False
         if not self.is_suspended:  # active sub, on trial, or managed manually
             return False
-        return (
-            self.last_staff_login is not None
-            and now() - self.last_staff_login > timedelta(days=INACTIVE_DELETE_DAYS)
-        )
+        return localdate() >= self.deletion_date
 
     # END BILLING / LIFECYCLE STATUS ##################################
 
