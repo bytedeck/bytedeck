@@ -55,9 +55,11 @@ GRACE_PERIOD_DAYS = 30
 # paid_until) is this many days away or closer (#1733's "2 week notice").
 EXPIRY_WARNING_DAYS = 14
 
-# A deck may be DELETED from the admin only once no staff member has signed in
-# for this long (#2044 retirement policy): a year of staff silence means the
-# deck is abandoned, not merely dormant over a summer or a leave.
+# A deck may be DELETED from the admin only after this long on the deletion
+# clock (#2044 retirement policy): a year measured from the later of the
+# suspension start and the episode's first suspended notice (see
+# Tenant.deletion_date), so a deck is never deleted before it has had the full
+# warned year to come back.
 INACTIVE_DELETE_DAYS = 365
 
 
