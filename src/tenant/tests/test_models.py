@@ -12,7 +12,8 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 from tenant.models import (
-    EXPIRY_WARNING_DAYS, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, DeckNotice, Tenant, check_tenant_name, default_trial_end_date,
+    EXPIRY_WARNING_DAYS, GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS, TRIAL_MAX_ACTIVE_USERS, DeckNotice, Tenant, check_tenant_name,
+    default_trial_end_date,
 )
 
 User = get_user_model()
@@ -183,37 +184,26 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertTrue(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1)).in_grace_period)
         self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).in_grace_period)
 
-    def test_is_deletable__requires_arming_suspension_and_a_year_of_staff_silence(self):
-        """A deck is deletable only when ALL protections clear (#2044): can_delete
-        deliberately armed, the deck SUSPENDED (an active subscription, a running
-        trial, or a managed-manually deck with both dates blank is never
-        deletable), a recorded last_staff_login more than INACTIVE_DELETE_DAYS
-        ago (never blank), and never the public schema."""
-        from django.utils.timezone import now
+    def test_suspended_since__day_after_the_last_covered_day(self):
+        """suspended_since is the day after the deck's last covered day: the trial's
+        end for a trial-only deck, the grace window's close for a paid deck, and
+        the LATER of the two when both dates exist; None while not suspended."""
+        lapsed_trial = FROZEN_TODAY - timedelta(days=100)
+        lapsed_paid = FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 10)
 
-        from tenant.models import INACTIVE_DELETE_DAYS
+        self.assertIsNone(self.make_tenant(paid_until=FROZEN_TODAY).suspended_since)  # subscribed
+        self.assertIsNone(self.make_tenant(trial_end_date=FROZEN_TODAY).suspended_since)  # on trial
+        self.assertIsNone(self.make_tenant().suspended_since)  # managed manually
 
-        old_login = now() - timedelta(days=INACTIVE_DELETE_DAYS + 1)
-        lapsed_trial = FROZEN_TODAY - timedelta(days=30)  # suspended: trial long over, no paid date
-
-        def deck(schema_name='statustest', trial_end_date=lapsed_trial, paid_until=None,
-                 can_delete=True, last_staff_login=old_login):
-            return Tenant(name='statustest', schema_name=schema_name, trial_end_date=trial_end_date,
-                          paid_until=paid_until, can_delete=can_delete, last_staff_login=last_staff_login)
-
-        self.assertTrue(deck().is_deletable)  # armed + suspended + year of silence
-
-        # not armed: the default protects every deck until an admin flips can_delete
-        self.assertFalse(deck(can_delete=False).is_deletable)
-        # billing state protects: active subscription, running trial, or managed manually
-        self.assertFalse(deck(paid_until=FROZEN_TODAY + timedelta(days=30)).is_deletable)
-        self.assertFalse(deck(trial_end_date=FROZEN_TODAY + timedelta(days=30)).is_deletable)
-        self.assertFalse(deck(trial_end_date=None, paid_until=None).is_deletable)
-        # staff-activity protections
-        self.assertFalse(deck(last_staff_login=now() - timedelta(days=10)).is_deletable)
-        self.assertFalse(deck(last_staff_login=None).is_deletable)  # blank: no login on record
-        # the public schema is never deletable
-        self.assertFalse(deck(schema_name='public').is_deletable)
+        self.assertEqual(self.make_tenant(trial_end_date=lapsed_trial).suspended_since, lapsed_trial + timedelta(days=1))
+        self.assertEqual(
+            self.make_tenant(paid_until=lapsed_paid).suspended_since,
+            lapsed_paid + timedelta(days=GRACE_PERIOD_DAYS + 1))
+        # both dates: the LATER covered day governs (an ancient trial date must not
+        # backdate a lapsed subscriber's suspension)
+        self.assertEqual(
+            self.make_tenant(trial_end_date=lapsed_trial, paid_until=lapsed_paid).suspended_since,
+            lapsed_paid + timedelta(days=GRACE_PERIOD_DAYS + 1))
 
     def test_is_on_trial__true_through_trial_end_date(self):
         """A deck with no subscription is on trial through its trial_end_date."""
@@ -319,6 +309,99 @@ class TenantBillingStatusTest(SimpleTestCase):
         )
         self.assertTrue(tenant.is_suspended)
         self.assertEqual(tenant.days_until_expiry, -(GRACE_PERIOD_DAYS + 5))
+
+
+@freeze_time(FROZEN_NOW)
+class TenantDeletionClockTest(ByteDeckTenantTestCase):
+    """Tests for the suspension-keyed deletion clock (#1734 B3): Tenant.deletion_date
+    and the is_deletable guard it drives.
+
+    The deletion day is INACTIVE_DELETE_DAYS after the LATER of the suspension
+    start and the episode's first suspended notice, so a legacy deck suspended
+    long before the notice machinery went live still gets the full year the
+    warning email promised. Needs the database: the first-warned lookup reads
+    the DeckNotice ledger, so these run on the saved test tenant.
+    """
+
+    LAPSED_TRIAL = FROZEN_TODAY - timedelta(days=800)  # suspended long ago; no paid date
+
+    def deck(self, **overrides):
+        """Return this test's Tenant row re-fetched with the given field values applied.
+
+        Args:
+            **overrides: Tenant field values; defaults make the deck suspended via
+                a long-lapsed trial and armed for deletion.
+
+        Returns:
+            Tenant: A fresh instance reflecting the applied fields.
+        """
+        fields = {'trial_end_date': self.LAPSED_TRIAL, 'paid_until': None, 'can_delete': True}
+        fields.update(overrides)
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        return Tenant.objects.get(pk=self.tenant.pk)
+
+    def warn(self, days_ago, period_key=None):
+        """Record the deck's suspended notice as sent `days_ago` days ago.
+
+        Args:
+            days_ago (int): How many days before the frozen today the warning went out.
+            period_key (str): Ledger episode key; defaults to this test's lapsed
+                trial date, the key the notice engine writes for that episode.
+
+        Returns:
+            DeckNotice: The (backdated) ledger row.
+        """
+        notice = DeckNotice.objects.create(
+            tenant=self.tenant, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
+            period_key=period_key or str(self.LAPSED_TRIAL))
+        # backdate past auto_now_add: the ledger records when the warning really went out
+        DeckNotice.objects.filter(pk=notice.pk).update(sent_on=FROZEN_TODAY - timedelta(days=days_ago))
+        return notice
+
+    def test_deletion_date__none_while_not_suspended(self):
+        """An active, on-trial, or managed-manually deck has no deletion date."""
+        self.assertIsNone(self.deck(trial_end_date=FROZEN_TODAY + timedelta(days=10)).deletion_date)
+        self.assertIsNone(self.deck(trial_end_date=None).deletion_date)  # managed manually
+
+    def test_deletion_date__clock_unstarted_while_never_warned(self):
+        """A suspended deck with no suspended notice on record reads as warned today:
+        its deletion date sits the full year out, and it is not deletable no matter
+        how long ago its dates lapsed (the legacy-deck protection)."""
+        deck = self.deck()
+        self.assertEqual(deck.deletion_date, FROZEN_TODAY + timedelta(days=INACTIVE_DELETE_DAYS))
+        self.assertFalse(deck.is_deletable)
+
+    def test_deletion_date__counts_from_the_episodes_first_warning(self):
+        """A deck suspended long before it was warned counts its year from the first
+        suspended notice, never from the backdated lapse."""
+        self.warn(days_ago=10)
+        deck = self.deck()
+        self.assertEqual(deck.deletion_date, FROZEN_TODAY - timedelta(days=10) + timedelta(days=INACTIVE_DELETE_DAYS))
+        self.assertFalse(deck.is_deletable)
+
+    def test_deletion_date__old_episodes_warning_does_not_count(self):
+        """A suspended notice from a PREVIOUS episode (different period key) does not
+        start this episode's clock: a deck that re-subscribed and lapsed again gets
+        a fresh year from its new warning."""
+        self.warn(days_ago=INACTIVE_DELETE_DAYS + 100, period_key='2020-06-30')
+        deck = self.deck()
+        self.assertEqual(deck.deletion_date, FROZEN_TODAY + timedelta(days=INACTIVE_DELETE_DAYS))
+        self.assertFalse(deck.is_deletable)
+
+    def test_is_deletable__true_once_armed_and_a_year_past_the_first_warning(self):
+        """Armed + suspended + the promised year elapsed since the first suspended
+        notice: the deck is deletable, starting exactly on its deletion date."""
+        self.warn(days_ago=INACTIVE_DELETE_DAYS)
+        self.assertTrue(self.deck().is_deletable)
+
+    def test_is_deletable__remaining_protections_still_refuse(self):
+        """The other #2044 protections still hold with the clock elapsed: not armed,
+        not suspended, and never the public schema."""
+        self.warn(days_ago=INACTIVE_DELETE_DAYS + 5)
+        self.assertFalse(self.deck(can_delete=False).is_deletable)
+        self.assertFalse(self.deck(paid_until=FROZEN_TODAY + timedelta(days=30)).is_deletable)
+        # the public schema is never deletable (guarded before any clock math)
+        self.assertFalse(Tenant(schema_name='public', can_delete=True).is_deletable)
 
 
 class TenantCountingAndCachingTest(ByteDeckTenantTestCase):

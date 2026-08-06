@@ -272,10 +272,11 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """Deletion is gated on the deck being abandoned (#2044 retirement policy).
 
         Per object, the Django delete permission must hold AND the deck must be
-        deletable (no staff sign-in for over a year -- ``Tenant.is_deletable``);
-        this both hides the change form's Delete button and 403s the delete view
-        for protected decks. With no object (module/changelist level) the default
-        applies, so the model itself stays visible to authorized admins.
+        deletable (suspended for over a year, counted from its first suspended
+        notice -- ``Tenant.is_deletable``); this both hides the change form's
+        Delete button and 403s the delete view for protected decks. With no
+        object (module/changelist level) the default applies, so the model
+        itself stays visible to authorized admins.
         """
         allowed = super().has_delete_permission(request, obj)
         if obj is None:
@@ -294,7 +295,8 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """
         if not obj.is_deletable:
             raise PermissionDenied(
-                "Only decks with no staff sign-in for over a year can be deleted."
+                "Only decks that have been suspended for over a year (counted from "
+                "their first suspension notice) can be deleted."
             )
         obj.delete(force_drop=True)  # delete the row AND drop the schema
 
