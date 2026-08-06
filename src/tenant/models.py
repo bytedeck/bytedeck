@@ -209,14 +209,38 @@ class Tenant(TenantMixin):
         return self.paid_until is not None and localdate() <= self.paid_until + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
-    def in_grace_period(self):
-        """Whether the deck is past its latest deadline (trial end or `paid_until`)
-        but still within the unified grace window (access retained, expiry
-        warnings due). Trial and paid clocks get the same grace (#1734 B4)."""
+    def governing_deadline(self):
+        """The single deadline the deck's lifecycle runs on: the LATEST of its set
+        clocks (trial end and/or `paid_until`), or None for a comped/managed-manually
+        deck with both dates blank. Expiry, the unified grace window, and suspension
+        are all measured from this one date (#1734 B4: a trial is just another kind
+        of subscription)."""
         clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
-        if not clocks:
+        return max(clocks) if clocks else None
+
+    @property
+    def governing_clock_is_trial(self):
+        """Whether the governing deadline comes from the TRIAL clock, so status
+        copy should say "trial ended" rather than "subscription expired". False
+        when the paid clock governs, when the dates tie (subscription language
+        wins), and when the deck has no dates at all. Presentation must key off
+        this rather than `paid_until` existing: trial_end_date is never cleared,
+        and an admin can extend a trial past an old lapsed paid date, making the
+        trial the clock the lifecycle actually runs on."""
+        return (
+            self.trial_end_date is not None
+            and (self.paid_until is None or self.trial_end_date > self.paid_until)
+        )
+
+    @property
+    def in_grace_period(self):
+        """Whether the deck is past its governing deadline but still within the
+        unified grace window (access retained, expiry warnings due). Trial and
+        paid clocks get the same grace (#1734 B4)."""
+        deadline = self.governing_deadline
+        if deadline is None:
             return False
-        return max(clocks) < localdate() <= max(clocks) + timedelta(days=GRACE_PERIOD_DAYS)
+        return deadline < localdate() <= deadline + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
     def grace_days_remaining(self):
@@ -253,10 +277,10 @@ class Tenant(TenantMixin):
         comped/legacy decks managed outside the subscription lifecycle, reached by
         clearing both date fields on the deck in the public-tenant admin.
         """
-        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
-        if not clocks:
+        deadline = self.governing_deadline
+        if deadline is None:
             return False
-        return localdate() > max(clocks) + timedelta(days=GRACE_PERIOD_DAYS)
+        return localdate() > deadline + timedelta(days=GRACE_PERIOD_DAYS)
 
     @property
     def effective_max_active_users(self):
@@ -303,10 +327,10 @@ class Tenant(TenantMixin):
         through the grace window); None when the deck has no dates at all
         (comped/legacy decks).
         """
-        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
-        if not clocks:
+        deadline = self.governing_deadline
+        if deadline is None:
             return None
-        return (max(clocks) - localdate()).days
+        return (deadline - localdate()).days
 
     @property
     def is_over_user_limit(self):
@@ -349,8 +373,7 @@ class Tenant(TenantMixin):
         """
         if not self.is_suspended:
             return None
-        clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
-        return max(clocks) + timedelta(days=GRACE_PERIOD_DAYS + 1)
+        return self.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS + 1)
 
     @property
     def deletion_date(self):
@@ -371,12 +394,11 @@ class Tenant(TenantMixin):
         since = self.suspended_since
         if since is None:
             return None
-        # the episode key mirrors the suspended notice's period_key (the latest
-        # lapsed deadline), so this finds exactly this episode's first warning
-        lapsed_clocks = [d for d in (self.trial_end_date, self.paid_until) if d is not None]
+        # the episode key mirrors the suspended notice's period_key (the lapsed
+        # governing deadline), so this finds exactly this episode's first warning
         first_warned_row = DeckNotice.objects.filter(
             tenant=self, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
-            period_key=str(max(lapsed_clocks)),
+            period_key=str(self.governing_deadline),
         ).order_by('sent_on').first()
         warned_on = first_warned_row.sent_on if first_warned_row else localdate()
         return max(since, warned_on) + timedelta(days=INACTIVE_DELETE_DAYS)

@@ -69,8 +69,7 @@ def close_semester_on_new_suspension(deck):
     if not deck.is_suspended:
         return 'not suspended'
 
-    lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
-    period_key = str(max(lapsed_clocks))
+    period_key = str(deck.governing_deadline)
     with transaction.atomic():
         _, created = DeckNotice.objects.get_or_create(
             tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='semester-close', period_key=period_key,
@@ -106,8 +105,7 @@ def evaluate_deck_notices(deck):
 
     # --- suspension: once per suspension episode ---------------------------------
     if deck.is_suspended:
-        lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
-        period_key = str(max(lapsed_clocks))
+        period_key = str(deck.governing_deadline)
         if _unfired(deck, DeckNotice.KIND_SUSPENDED, 'suspended', period_key):
             due.append((DeckNotice.KIND_SUSPENDED, 'suspended', period_key))
     else:
@@ -208,10 +206,12 @@ def _deliver(deck, kind):
         # for suspended decks -- the day the suspension began. None when not applicable.
         'grace_days': GRACE_PERIOD_DAYS,
         # the unified grace window closes GRACE_PERIOD_DAYS after the deck's
-        # LATEST deadline, trial and paid clocks alike (#1734 B4)
+        # governing (latest) deadline, trial and paid clocks alike (#1734 B4);
+        # templates read the deadline and its origin from the deck itself
+        # (governing_deadline / governing_clock_is_trial)
         'grace_end_date': (
-            max(d for d in (deck.trial_end_date, deck.paid_until) if d is not None) + timedelta(days=GRACE_PERIOD_DAYS)
-            if (deck.trial_end_date or deck.paid_until) else None
+            deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS)
+            if deck.governing_deadline else None
         ),
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,

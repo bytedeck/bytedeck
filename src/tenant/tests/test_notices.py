@@ -406,6 +406,55 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_follows_the_governing_trial_clock(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed earlier), the suspension email
+        explains the TRIAL clock: the governing deadline picks the wording, not
+        whether a paid date exists (#1734 B4 review find)."""
+        from datetime import date
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            # paid lapsed May 1; trial extended to Jul 1 -> grace ended Jul 31 -> suspended Aug 1
+            trial_end_date=date(2026, 7, 1), paid_until=date(2026, 5, 1),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('since <strong>Aug. 1, 2026</strong>', html)
+        self.assertIn('free trial ended on July 1, 2026', html)
+        self.assertIn('grace period ended on July 31, 2026', html)
+        self.assertNotIn('paid through', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__expiry_email_follows_the_governing_trial_clock(self):
+        """With BOTH dates set and the trial the LATER clock, the expiry
+        reminder's grace-window variant reports the TRIAL date and wording
+        (#1734 B4 review find)."""
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=5), paid_until=TODAY - timedelta(days=100),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        with patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('free trial ended on <strong>Aug. 10, 2026</strong>', html)
+        self.assertIn('(5 days ago)', html)
+        self.assertNotIn('subscription expired', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_paid_clock_and_legacy_full_year(self):
         """A deck suspended after a PAID subscription lapsed explains the paid
         clock (paid-through and grace-end dates) in its suspension email, with the

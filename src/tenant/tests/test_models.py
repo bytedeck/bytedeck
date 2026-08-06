@@ -223,6 +223,29 @@ class TenantBillingStatusTest(SimpleTestCase):
             self.make_tenant(trial_end_date=lapsed_trial, paid_until=lapsed_paid).suspended_since,
             lapsed_paid + timedelta(days=GRACE_PERIOD_DAYS + 1))
 
+    def test_governing_deadline_and_origin__latest_clock_wins(self):
+        """governing_deadline is the LATEST set clock (None for dateless decks) and
+        governing_clock_is_trial says which clock it is, preferring subscription
+        language on a tie: presentation keys its trial-vs-paid wording off these
+        rather than off paid_until existing (#1734 B4 review find: an
+        admin-extended trial can outlast an old lapsed paid date)."""
+        trial_later = self.make_tenant(
+            trial_end_date=FROZEN_TODAY - timedelta(days=5), paid_until=FROZEN_TODAY - timedelta(days=100))
+        self.assertEqual(trial_later.governing_deadline, FROZEN_TODAY - timedelta(days=5))
+        self.assertTrue(trial_later.governing_clock_is_trial)
+
+        paid_later = self.make_tenant(
+            trial_end_date=FROZEN_TODAY - timedelta(days=100), paid_until=FROZEN_TODAY + timedelta(days=5))
+        self.assertEqual(paid_later.governing_deadline, FROZEN_TODAY + timedelta(days=5))
+        self.assertFalse(paid_later.governing_clock_is_trial)
+
+        # a tie speaks subscription language
+        self.assertFalse(self.make_tenant(trial_end_date=FROZEN_TODAY, paid_until=FROZEN_TODAY).governing_clock_is_trial)
+
+        self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY).governing_clock_is_trial)  # trial-only
+        self.assertIsNone(self.make_tenant().governing_deadline)  # managed manually
+        self.assertFalse(self.make_tenant().governing_clock_is_trial)
+
     def test_is_on_trial__true_through_trial_end_date(self):
         """A deck with no subscription is on trial through its trial_end_date."""
         self.assertTrue(self.make_tenant(trial_end_date=FROZEN_TODAY).is_on_trial)
