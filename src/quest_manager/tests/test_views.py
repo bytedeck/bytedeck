@@ -630,6 +630,18 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertFalse(Comment.objects.filter(id=draft_comment_id).exists())
         self.assertFalse(QuestSubmission.objects.filter(id=sub_id).exists())
 
+    def test_drop__deletes_submission_without_draft_comment(self):
+        """Dropping a submission that has no draft comment skips the comment-deletion branch
+        and still deletes the submission and redirects."""
+        self.client.force_login(self.test_student1)
+
+        sub = baker.make(QuestSubmission, user=self.test_student1)
+        self.assertIsNone(sub.draft_comment)
+
+        response = self.client.post(reverse('quests:drop', args=[sub.id]))
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(QuestSubmission.objects.filter(id=sub.id).exists())
+
     def test_all_submission_pages__teacher_access_codes(self):
         """Teachers can view, flag, unflag, and skip submissions, with 404s for nonexistent ones."""
         # log in a teacher
@@ -1394,6 +1406,20 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         messages = [m.message for m in get_messages(response.wsgi_request)]
         self.assertIn("No quests selected.", messages[0])
+
+    def test_bulk_edit__unrecognized_action_redirects_without_change(self):
+        """A POST with selected quests but an action matching none of the handled actions
+        falls through to a plain redirect: no message and no change to the quests."""
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "not_a_real_action",
+        })
+        self.assertRedirects(response, reverse("quests:quests"), fetch_redirect_response=False)
+        # No branch matched, so no success/warning message was queued...
+        self.assertEqual([m.message for m in get_messages(response.wsgi_request)], [])
+        # ...and the unpublished quest was left untouched.
+        self.quest1.refresh_from_db()
+        self.assertFalse(self.quest1.published)
 
     def test_bulk_edit__publishes_unpublished_quests(self):
         """
@@ -3662,6 +3688,24 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_approve__get_returns_404(self):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
+
+    def test_approve__approver_who_is_a_teacher_not_re_added_to_affected_users(self):
+        """When the approving staff member is already one of the student's current_teachers,
+        the approval notification's affected_users stays just the student rather than re-adding
+        the teachers (the not-in-teachers_list branch of get_notification_kwargs is skipped)."""
+        # current_teachers returns the approver, so the "extend affected_users" branch is skipped.
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]), \
+                patch('quest_manager.views.notify.send') as mock_notify:
+            response = self.client.post(
+                reverse('quests:approve', args=[self.sub.id]),
+                data={'comment_text': 'Nice work', 'approve_button': True},
+            )
+        self.assertEqual(response.status_code, 302)
+
+        # Isolate the approval notification (a badge grant could fire its own notify.send).
+        approval_calls = [c for c in mock_notify.call_args_list if c.kwargs.get('verb') == 'approved']
+        self.assertEqual(len(approval_calls), 1)
+        self.assertEqual(approval_calls[0].kwargs['affected_users'], [self.sub.user])
 
     def test_approve__invalid_form_renders_submission_page(self):
         """A non-ajax POST with an invalid awards value re-renders the submission page (form_invalid)."""

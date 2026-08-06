@@ -35,7 +35,9 @@ DEBUG = env('DEBUG')
 ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
-if not ALLOWED_HOSTS:
+# ALLOWED_HOSTS is unset under the test harness, so the fallback always runs; the
+# "already provided via env" arc is only taken in real deployments.
+if not ALLOWED_HOSTS:  # pragma: no branch
     ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
@@ -365,7 +367,7 @@ LOGGING = {
 # default). Augments the base LOGGING above rather than replacing it.
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
 
-if DB_LOGS_ENABLED:
+if DB_LOGS_ENABLED:  # pragma: no cover -- opt-in dev query tracer, disabled (env default) under the test harness
     MIDDLEWARE.insert(0, 'hackerspace_online.middleware.ForceDebugCursorMiddleware')
     LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
 
@@ -567,7 +569,7 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 
 # SERVER ERRORS EMAIL
 admins_raw = env('ADMINS', default=[])
-if admins_raw:
+if admins_raw:  # pragma: no cover -- ADMINS env unset under the test harness
     # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
     ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')]
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
@@ -581,7 +583,7 @@ MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
 USE_S3 = env('USE_S3', default='0') == '1'
-if USE_S3:
+if USE_S3:  # pragma: no cover -- production S3 storage config, disabled (env default) under the test harness
 
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
@@ -730,7 +732,7 @@ if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is c
 # RECAPTCHA #######################################################
 
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
-if recaptcha_keys_available:
+if recaptcha_keys_available:  # pragma: no cover -- real reCAPTCHA keys env unset under the test harness (test keys used)
     RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
     RECAPTCHA_PRIVATE_KEY = env('RECAPTCHA_PRIVATE_KEY')
 else:
@@ -1014,7 +1016,7 @@ TAGGIT_CASE_INSENSITIVE = True
 # TESTING ##################################################
 
 TESTING = 'test' in sys.argv
-if TESTING:
+if TESTING:  # pragma: no branch -- always true under the test runner ('test' in sys.argv)
     # Custom runner installs a model_bakery patch so baker.make(Prereq) builds
     # valid GenericForeignKey targets instead of random dangling ones (which
     # made the prerequisites signal tests intermittently crash). See
@@ -1043,7 +1045,7 @@ if TESTING:
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
-if DEBUG and not TESTING:
+if DEBUG and not TESTING:  # pragma: no cover -- dev-only debug toolbar setup, never runs under the test harness
 
     import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']
