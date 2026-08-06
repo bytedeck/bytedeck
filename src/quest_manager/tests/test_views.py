@@ -3689,6 +3689,24 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """ This view is only accessible via POST """
         self.assert404('quests:approve', args=[self.sub.id])
 
+    def test_approve__approver_who_is_a_teacher_not_re_added_to_affected_users(self):
+        """When the approving staff member is already one of the student's current_teachers,
+        the approval notification's affected_users stays just the student rather than re-adding
+        the teachers (the not-in-teachers_list branch of get_notification_kwargs is skipped)."""
+        # current_teachers returns the approver, so the "extend affected_users" branch is skipped.
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]), \
+                patch('quest_manager.views.notify.send') as mock_notify:
+            response = self.client.post(
+                reverse('quests:approve', args=[self.sub.id]),
+                data={'comment_text': 'Nice work', 'approve_button': True},
+            )
+        self.assertEqual(response.status_code, 302)
+
+        # Isolate the approval notification (a badge grant could fire its own notify.send).
+        approval_calls = [c for c in mock_notify.call_args_list if c.kwargs.get('verb') == 'approved']
+        self.assertEqual(len(approval_calls), 1)
+        self.assertEqual(approval_calls[0].kwargs['affected_users'], [self.sub.user])
+
     def test_approve__invalid_form_renders_submission_page(self):
         """A non-ajax POST with an invalid awards value re-renders the submission page (form_invalid)."""
         # An 'awards' value routes to SubmissionFormStaff, and an id that is not a
