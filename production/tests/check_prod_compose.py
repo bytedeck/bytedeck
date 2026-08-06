@@ -16,7 +16,13 @@ APP_SERVICES = ("web", "celery", "celery-beat")
 
 
 def render():
-    """Return the merged production config as a dict."""
+    """Render the merged production configuration.
+
+    The interpolated variables are supplied here rather than read from the
+    environment so the result is the same wherever this runs. Returns the parsed
+    configuration as a dict. Exits non-zero rather than returning if the config
+    fails to render at all, since every assertion below would be meaningless.
+    """
     out = subprocess.run(
         ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.aws.yml", "config"],
         capture_output=True, text=True,
@@ -28,11 +34,21 @@ def render():
 
 
 def main():
-    """Check every invariant, reporting all failures rather than only the first."""
+    """Assert every production invariant and report the outcome of each.
+
+    Deliberately evaluates all of them instead of stopping at the first failure,
+    so one run tells you everything that drifted. Returns the process exit
+    status: 1 if any assertion failed, 0 otherwise.
+    """
     services = render().get("services", {})
     failures = []
 
     def check(ok, msg):
+        """Record one assertion, where `ok` is its result and `msg` describes it.
+
+        Prints the outcome and appends `msg` to the enclosing `failures` list
+        when `ok` is false, which is what determines the exit status.
+        """
         print(f"  {'PASS' if ok else 'FAIL'}  {msg}")
         if not ok:
             failures.append(msg)
