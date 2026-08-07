@@ -148,16 +148,6 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # nothing was recomputed synchronously in the request
         self.assertFalse(mock_invalidate.called)
 
-    def test_tour_complete__marks_completed_and_redirects_to_quests(self):
-        """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
-        self.client.force_login(self.test_student1)
-
-        response = self.client.get(reverse('profiles:tour_complete'))
-
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.test_student1.profile.refresh_from_db()
-        self.assertTrue(self.test_student1.profile.intro_tour_completed)
-
     def test_profile_edit_own__resolves_to_logged_in_users_own_profile(self):
         """profile_edit_own (ProfileUpdateOwn.get_object) loads the logged-in user's own profile form."""
         self.client.force_login(self.test_student1)

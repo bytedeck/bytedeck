@@ -141,7 +141,6 @@ class Profile(models.Model):
                                           help_text="A test account that won't show up in student lists",
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
-    intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
 
