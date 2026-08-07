@@ -142,6 +142,10 @@ class InitDbTest(TestCase, CommandMixin):
             out = self.call_command()
 
         self.assertIn('A schema with the name `public` already existed', out)
+        # the re-run reuses the existing homepage instead of adding a duplicate
+        self.assertEqual(
+            FlatPage.objects.filter(url='/home/', sites__domain=settings.ROOT_DOMAIN).count(), 1
+        )
 
 
 class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
