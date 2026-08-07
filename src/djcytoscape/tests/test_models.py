@@ -74,9 +74,11 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         self.assertValidJSON(clean_JSON('{"key": true,}'))
 
     def test_clean_JSON__already_valid_braced_object_unchanged(self):
-        """A string that is already a braced object with no trailing comma is returned as
-        valid JSON, exercising the branch where the closing brace is already present."""
-        self.assertValidJSON(clean_JSON('{"key": true}'))
+        """A string that is already a braced object with no trailing comma is returned
+        unchanged, exercising the branch where the closing brace is already present."""
+        value = '{"key": true}'
+        self.assertEqual(clean_JSON(value), value)
+        self.assertValidJSON(clean_JSON(value))
 
     def test_clean_JSON__unquoted_key(self):
         """An unquoted key is quoted so the result is valid JSON."""
@@ -734,6 +736,62 @@ class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
         scape = CytoScape.generate_map(start, "nonseq-test")
 
         for name in ("Concurrent1", "Concurrent2", "Concurrent3"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
+
+        def node_id_for(obj):
+            return scape.cytoelement_set.get(
+                group=CytoElement.NODES, selector_id=CytoElement.generate_selector_id(obj)
+            ).id
+
+        start_node_id = node_id_for(start)
+        campaign_node_id = node_id_for(campaign)
+
+        def visible_edge_exists(source_id, target_id):
+            """A non-hidden (styled) edge from source to target."""
+            return scape.cytoelement_set.filter(
+                group=CytoElement.EDGES, data_source_id=source_id, data_target_id=target_id
+            ).exclude(classes__contains='hidden').exists()
+
+        # step 3: the shared Start prerequisite edge is moved onto the compound campaign node
+        self.assertTrue(visible_edge_exists(start_node_id, campaign_node_id))
+        # step 2: the direct visible Start -> member prerequisite edges are removed (a hidden
+        # structural edge to the campaign's first node may be re-added in step 4, but no visible one)
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q1)))
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q2)))
+        # step 1: hidden campaign-layout edges are added to join the members
+        self.assertTrue(
+            scape.cytoelement_set.filter(group=CytoElement.EDGES, classes__contains='hidden').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_with_internal_reliant_keeps_common_reliant_edge(self):
+        """The deprecated common-reliant cleanup handles a non-sequential campaign that also has a
+        common reliant where one member holds it only via an internal reliant (not directly).
+
+        A common reliant can be shared by the whole campaign through has_internal_reliant() even
+        for a member that does not directly depend on it; for that member there is no direct
+        member -> reliant edge to remove, so the membership check's false arc is exercised. The
+        map still generates and represents every quest.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Reliant Campaign")
+        r1 = baker.make(Quest, name="Reliant1", campaign=campaign)
+        r2 = baker.make(Quest, name="Reliant2", campaign=campaign)
+        r3 = baker.make(Quest, name="Reliant3", campaign=campaign)
+        r1.add_simple_prereqs([start])
+        r2.add_simple_prereqs([start])
+        # r3 depends internally on r1, so r1 gains an internal reliant (r3)
+        r3.add_simple_prereqs([r1])
+        # an external quest depends on r2 and r3 (not r1): it is a reliant common to the campaign,
+        # but r1 holds it only through its internal reliant r3, not directly
+        external = baker.make(Quest, name="ExternalReliant")
+        external.add_simple_prereqs([r2, r3])
+
+        scape = CytoScape.generate_map(start, "reliant-internal-test")
+
+        for name in ("Reliant1", "Reliant2", "Reliant3", "ExternalReliant"):
             self.assertTrue(
                 CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
                 f"{name} should be represented on the map",

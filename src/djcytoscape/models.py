@@ -588,6 +588,18 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
+        """Build the node label shown on the map for a mappable object.
+
+        Supports the object types that can appear on a quest map: a Quest, a Badge, or a
+        Rank (all of which have an ``xp`` attribute), and a Category (campaign). The label is
+        ``"<prefix><name> (<xp/points>)"``: a Badge/Rank name is prefixed with ``"Badge: "`` /
+        ``"Rank: "``, the name is truncated with an ellipsis past a max length that shrinks as
+        the xp value grows, and the parenthetical suffix is the object's xp (a ``+`` marks
+        student-enterable xp) or, for a Category, its total xp sum.
+
+        :param obj: the Quest/Badge/Rank/Category the node represents.
+        :return: the display label string for the node.
+        """
         # set max label length in characters
         # object labels with large xp values require a shorter name length so all values when combined comply with max label length
         if hasattr(obj, 'xp'):
@@ -819,11 +831,9 @@ class CytoScape(models.Model):
                         # 5 remove edges between quests and common reliants
                         for quest_node in campaign.nodes:
                             # we already know all quests have this reliant node in common, so the edges should all exist
-                            # unless it has an internal reliant...
-                            # This is part of the deprecated common-reliant cleanup (steps 5-7 above);
-                            # the "internal reliant" fall-through would need a non-sequential campaign
-                            # that also shares a common reliant with a member holding an internal reliant
-                            # instead, a topology normal maps don't produce, so only the true arc is exercised.
+                            # unless it has an internal reliant (a common reliant can be shared by the campaign
+                            # via has_internal_reliant() even for a member that doesn't directly hold it), in
+                            # which case there is no direct edge to remove.
                             if reliant_node_id in quest_node.reliant_node_ids:  # pragma: no branch
                                 edge_node = get_object_or_404(CytoElement,
                                                               data_source_id=quest_node.id,
