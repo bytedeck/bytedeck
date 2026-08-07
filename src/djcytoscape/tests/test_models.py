@@ -73,6 +73,11 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         """A braced object with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('{"key": true,}'))
 
+    def test_clean_JSON__already_valid_braced_object_unchanged(self):
+        """A string that is already a braced object with no trailing comma is returned as
+        valid JSON, exercising the branch where the closing brace is already present."""
+        self.assertValidJSON(clean_JSON('{"key": true}'))
+
     def test_clean_JSON__unquoted_key(self):
         """An unquoted key is quoted so the result is valid JSON."""
         self.assertValidJSON(clean_JSON('key: true'))
@@ -281,6 +286,24 @@ class TempCampaignTest(ByteDeckTenantTestCase):
         # node 11's reliant is an external id -> not internal
         tc.add_reliant(node_id=11, reliant_node_id=999)
         self.assertFalse(tc.has_internal_reliant(tc.get_node(11)))
+
+    def test_get_common_reliant_node_ids__only_returns_reliants_shared_by_every_node(self):
+        """A reliant depended on by every campaign node is 'common'; a reliant of only some
+        nodes is excluded.
+
+        Covers both directions of the per-node membership check and the count == len(nodes)
+        check in get_common_reliant_node_ids.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # 500 is a reliant of BOTH nodes -> common to the whole campaign
+        tc.add_reliant(node_id=10, reliant_node_id=500)
+        tc.add_reliant(node_id=11, reliant_node_id=500)
+        # 600 is a reliant of node 10 only -> not shared, so not common
+        tc.add_reliant(node_id=10, reliant_node_id=600)
+
+        self.assertEqual(set(tc.get_common_reliant_node_ids()), {500})
 
     def test_is_non_sequential__always_false_due_to_is_true_comparison(self):
         """is_non_sequential runs over a campaign whose nodes share a common prereq.
@@ -673,6 +696,48 @@ class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
         scape = bake_scape(name="temp-campaign-test")
         scape.init_temp_campaign_list()
         self.assertIsNone(scape.get_temp_campaign(999999))
+
+    def test_generate_map__quest_with_or_prereq_gets_complicated_prereqs_edge(self):
+        """An edge to a reliant quest that has an OR (alternate) prerequisite is tagged with the
+        'complicated-prereqs' class so the map can style alternate-prereq edges differently."""
+        start = baker.make(Quest, name="Start")
+        child = baker.make(Quest, name="Child")
+        alt = baker.make(Quest, name="Alt")
+        # child is unlocked by (start OR alt): it relies on start, and carries an OR prereq
+        Prereq.objects.create(parent_object=child, prereq_object=start, or_prereq_object=alt)
+
+        scape = CytoScape.generate_map(start, "or-prereq-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, classes__contains='complicated-prereqs').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_rewrites_common_prereq_edges(self):
+        """A campaign whose members are concurrently available (they share a common external
+        prerequisite) is non-sequential: fix_nonsequential_campaign_edges joins the members with
+        hidden edges and moves the shared-prereq edge onto the compound campaign node.
+
+        A member with an internal prerequisite (relying on another member rather than the shared
+        Start) still counts toward the common prereq but has no direct Start edge to remove, so
+        that member exercises the 'unless quest has internal prereq' branch of step 2.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Concurrent Campaign")
+        q1 = baker.make(Quest, name="Concurrent1", campaign=campaign)
+        q2 = baker.make(Quest, name="Concurrent2", campaign=campaign)
+        q3 = baker.make(Quest, name="Concurrent3", campaign=campaign)
+        q1.add_simple_prereqs([start])
+        q2.add_simple_prereqs([start])
+        # q3's only prereq is internal to the campaign (q1), so it holds no direct Start edge
+        q3.add_simple_prereqs([q1])
+
+        scape = CytoScape.generate_map(start, "nonseq-test")
+
+        for name in ("Concurrent1", "Concurrent2", "Concurrent3"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
 
     def test_generate_map__campaign_as_prerequisite_adds_campaign_reliant(self):
         """A quest whose prerequisite is a Campaign (Category) exercises the campaign-reliant path.

@@ -613,7 +613,10 @@ class CytoScape(models.Model):
             else:
                 plus = ""
             post = f" ({str(obj.xp)}{plus})"
-        elif type(obj) is Category:
+        # Every object placed on a map is a Quest, Badge, or Rank (all of which have an
+        # ``xp`` attribute, handled above) or a Category, so this elif always matches when
+        # reached; the implicit "neither" fall-through never happens in practice.
+        elif type(obj) is Category:  # pragma: no branch
             post = f" ({str(obj.xp_sum())} XP)"
 
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
@@ -817,7 +820,11 @@ class CytoScape(models.Model):
                         for quest_node in campaign.nodes:
                             # we already know all quests have this reliant node in common, so the edges should all exist
                             # unless it has an internal reliant...
-                            if reliant_node_id in quest_node.reliant_node_ids:
+                            # This is part of the deprecated common-reliant cleanup (steps 5-7 above);
+                            # the "internal reliant" fall-through would need a non-sequential campaign
+                            # that also shares a common reliant with a member holding an internal reliant
+                            # instead, a topology normal maps don't produce, so only the true arc is exercised.
+                            if reliant_node_id in quest_node.reliant_node_ids:  # pragma: no branch
                                 edge_node = get_object_or_404(CytoElement,
                                                               data_source_id=quest_node.id,
                                                               data_target_id=reliant_node_id)
