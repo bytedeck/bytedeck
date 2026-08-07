@@ -439,7 +439,7 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         from datetime import timedelta
 
-        from .billing import billing_configured
+        from .billing import billing_configured, checkout_trial_end
         from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
         from .utils import get_public_subscribe_url
 
@@ -474,6 +474,10 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             'manually_subscribed': bool(
                 deck.subscription_active and not deck.in_grace_period and not deck.stripe_customer_id
             ),
+            # set (the Stripe trial's end moment) when checkout would preserve the
+            # deck's remaining free trial; drives the "card isn't charged until
+            # your trial ends" note beside the subscribe button
+            'checkout_trial_end': checkout_trial_end(deck),
             'public_subscribe_url': get_public_subscribe_url(),
         })
         return context
