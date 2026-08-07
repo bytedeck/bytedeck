@@ -102,9 +102,13 @@ def create_checkout_session(deck):
         success_url=deck.get_root_url() + reverse('decks:subscription_activating') + '?session_id={CHECKOUT_SESSION_ID}',
         cancel_url=_subscription_page_url(deck),
         # Stripe rejects a reused idempotency key whose parameters changed, so the
-        # trial variant carries its own marker (a same-day retry that crosses the
-        # trial-end cutoff would otherwise collide with the earlier key)
-        idempotency_key=f'deck-checkout-{deck.schema_name}-{localdate()}' + ('-trial' if trial_end else ''),
+        # trial variant carries the trial-end timestamp: a same-day retry after the
+        # cutoff passed, or after an admin moved trial_end_date, gets a fresh key
+        # while an identical retry still reuses the session
+        idempotency_key=(
+            f'deck-checkout-{deck.schema_name}-{localdate()}'
+            + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
+        ),
     )
     return session.url
 

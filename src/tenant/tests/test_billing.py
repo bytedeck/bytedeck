@@ -107,14 +107,16 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
 
     def test_create_checkout_session__mid_trial_passes_trial_end(self):
         """A mid-trial deck's checkout carries subscription_data.trial_end (the
-        deck's remaining free time as a unix timestamp) and marks the
-        idempotency key, since the parameters differ from a bill-now session."""
+        deck's remaining free time as a unix timestamp) and stamps that same
+        timestamp into the idempotency key: the parameters differ from a
+        bill-now session, and from a session built for a different trial end,
+        so neither retry shape can collide with a stale key."""
         Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=date(2026, 9, 14), paid_until=None)
         self.tenant.refresh_from_db()
         kwargs = self.create_session()
         expected = int(timezone.make_aware(datetime(2026, 9, 15, 0, 0)).timestamp())
         self.assertEqual(kwargs['subscription_data'], {'trial_end': expected})
-        self.assertTrue(kwargs['idempotency_key'].endswith('-trial'))
+        self.assertTrue(kwargs['idempotency_key'].endswith(f'-trial-{expected}'))
 
     def test_create_checkout_session__no_trial_end_when_not_applicable(self):
         """A deck with no trial time to keep (here: trial lapsed) gets a plain
@@ -123,7 +125,7 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         kwargs = self.create_session()
         self.assertNotIn('subscription_data', kwargs)
-        self.assertFalse(kwargs['idempotency_key'].endswith('-trial'))
+        self.assertNotIn('-trial', kwargs['idempotency_key'])
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
