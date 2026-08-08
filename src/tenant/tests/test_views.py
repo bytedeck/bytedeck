@@ -1067,6 +1067,26 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1)
         self.assertContains(self.get_page(), 'Unlimited')
 
+    def test_page__mid_trial_checkout_note_promises_no_lost_trial_time(self):
+        """While the deck is on trial (with enough trial left for checkout to
+        preserve it), the subscribe button's help text says the card isn't
+        charged until the trial ends; a paid deck gets the plain portal/checkout
+        copy with no trial note (maintainer decision, 2026-08-06)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123'):
+            self.set_deck(trial_end_date=localdate() + timedelta(days=30), paid_until=None)
+            text = ' '.join(self.get_page().content.decode().split())
+            self.assertIn("won't cut your free trial short", text)
+            self.assertIn('renews automatically', text)
+
+            # subscribed deck: no trial note
+            self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100))
+            text = ' '.join(self.get_page().content.decode().split())
+            self.assertNotIn("won't cut your free trial short", text)
+
     def test_page__not_configured_falls_back_to_public_subscribe_page(self):
         """Without Stripe keys the page says billing isn't configured and links the
         public subscribe page instead of rendering the checkout form."""

@@ -119,6 +119,11 @@
       Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
     {% else %}
       Opens Stripe's secure checkout to start a subscription for this deck.
+      {% if checkout_trial_end %}
+        Subscribing now won't cut your free trial short: your card is charged for the first time
+        when the trial ends on <strong>{{ deck.trial_end_date }}</strong>, and the subscription
+        renews automatically from then on.
+      {% endif %}
     {% endif %}
   </p>
   {% endif %}
