@@ -44,10 +44,10 @@
             href="{% url 'profiles:profile_archive' object.id %}"
             role="button"><i class="fa fa-archive"></i></a>
         {% else %}
-          {# Archived (deactivated) student: restore (archive + up arrow) reactivates, and delete is now available here. #}
+          {# Archived student: restore (archive + up-arrow combo, kept 1em via fa-stack-inline) reactivates; delete is available here too. #}
           <a class="btn btn-success" title="Restore this student (reactivates their account)"
             href="{% url 'profiles:profile_restore' object.id %}"
-            role="button"><i class="fa fa-archive"></i><sup><i class="fa fa-arrow-up"></i></sup></a>
+            role="button"><span class="fa-stack fa-stack-inline"><i class="fa fa-archive fa-stack-1x"></i><i class="fa fa-arrow-up fa-stack-1x"></i></span></a>
 
           <a class="btn btn-danger" title="Delete this User permanently"
             href="{% url 'profiles:profile_delete' object.id %}"

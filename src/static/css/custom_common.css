@@ -1230,3 +1230,20 @@ table[data-toggle="table"].bt-reveal {
 .question-submission-form .form-group {
     margin-bottom: 0;
 }
+
+/* Inline stacked icon: renders a two-glyph fa-stack (e.g. the archive + up-arrow
+   "restore from archive" button) at the same 1em footprint as the single-glyph
+   icons beside it, instead of the default 2em fa-stack that would make its button
+   taller and wider than its neighbours. Both stacked glyphs stay at fa-stack-1x. */
+.fa-stack.fa-stack-inline {
+    width: 1em;
+    height: 1em;
+    line-height: 1em;
+    vertical-align: -0.075em;
+}
+/* Lift the top glyph a touch so a same-colour stacked pair (e.g. an up arrow over
+   the archive box) stays legible: the arrowhead clears the box edge instead of
+   merging into it. Both glyphs remain fa-stack-1x. */
+.fa-stack.fa-stack-inline .fa-stack-1x:last-child {
+    top: -0.28em;
+}
