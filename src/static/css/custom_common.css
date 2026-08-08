@@ -1241,9 +1241,15 @@ table[data-toggle="table"].bt-reveal {
     line-height: 1em;
     vertical-align: -0.075em;
 }
-/* Lift the top glyph a touch so a same-colour stacked pair (e.g. an up arrow over
-   the archive box) stays legible: the arrowhead clears the box edge instead of
-   merging into it. Both glyphs remain fa-stack-1x. */
+/* "Restore from archive" icon: a dark up arrow sits inside the white archive box
+   so restore is visibly distinct from a plain archive icon. FontAwesome's archive
+   glyph is a solid lid over a hollow (outlined) box body, so the box interior is
+   just the button colour showing through; a dark arrow reads clearly against both
+   the white lid and the coloured interior (a same-colour arrow would disappear).
+   Shrunk and nudged down so the arrow sits within the box. Both glyphs stay
+   fa-stack-1x. */
 .fa-stack.fa-stack-inline .fa-stack-1x:last-child {
-    top: -0.28em;
+    color: #1a1a1a;
+    font-size: 0.7em;
+    top: 0.12em;
 }
