@@ -270,8 +270,9 @@ class Notification(models.Model):
 
                 if 'commented on' in self.verb:
                     target_url += f'#comment-{self.action_object_id}'
-            except:  # noqa
-                # TODO make this except explicit, don't remember what it's doing
+            except Exception:
+                # no target object, or one without a resolvable page (AttributeError /
+                # NoReverseMatch): fall back to the notifications list
                 target_url = reverse('notifications:list')
 
         context = {
