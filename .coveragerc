@@ -6,6 +6,32 @@ omit =
    tests.py
    */test*.py
    wsgi.py
+   # Migrations are generated/one-off schema history, not application logic we
+   # unit-test (they also run during every test-DB setup, so "coverage" of them
+   # is incidental and misleading). Excluded like the linter already excludes them.
+   */migrations/*
+
+[report]
+# The goal is 100% of the code we INTEND to test -- not 100% of every line.
+# Lines we deliberately don't cover are excluded two ways, so the percentage
+# stays honest:
+#   1. Whole categories below (exclude_also) -- code that is never meaningfully
+#      unit-testable.
+#   2. Case by case -- an inline `# pragma: no cover` on the specific line or
+#      block, ALWAYS with a short comment saying why (see CLAUDE.md > "Test
+#      coverage"). e.g. the production-only security block in settings.py.
+# exclude_also ADDS to coverage.py's built-in defaults (which already exclude
+# `# pragma: no cover`), so inline pragmas keep working.
+show_missing = True
+exclude_also =
+   # Abstract base-class methods a subclass is required to implement
+   raise NotImplementedError
+   # Imports/blocks only evaluated by static type checkers, never at runtime
+   if TYPE_CHECKING:
+   # Module CLI entrypoints (e.g. manage.py) aren't exercised by the test suite
+   if __name__ == .__main__.:
+   # Abstract methods have no runnable body to cover
+   @(abc\.)?abstractmethod
 
 [paths]
 source =

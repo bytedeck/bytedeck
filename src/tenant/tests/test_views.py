@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.shortcuts import reverse
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 
 from django_tenants.test.client import TenantClient
@@ -522,3 +522,642 @@ class EmailVerificationRequiredMixinTest(TestCase):
         request = make_request(stale_ts)
         response = self.view(request)
         self.assertEqual(response.status_code, 403)
+
+
+class DeckStatusBannerTest(ByteDeckTenantTestCase):
+    """Rendering tests for the deck status banner in base.html (epic #1729 PR 3;
+    closes the Trial Mode banner checkbox of #1730)."""
+
+    def setUp(self):
+        """Log in per-role users and clear the cached deck row (the cache backend
+        outlives each test's transaction)."""
+        from django.core.cache import cache
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck via save() so the cache invalidates."""
+        for name, value in fields.items():
+            setattr(self.tenant, name, value)
+        self.tenant.save()
+
+    def get_quests_page(self, user):
+        """Return the quest-list page (which extends base.html) as the given user."""
+        self.client.force_login(user)
+        response = self.client.get(reverse('quests:quests'))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_banner__renders_inside_messages_container(self):
+        """The banner renders INSIDE #messages-container so it inherits the exact
+        same alert styling (margins) as django messages -- outside it, the
+        container-scoped rules in custom_common.css don't apply and the banner
+        sits flush against the navbar with a mismatched gap below (#2132)."""
+        response = self.get_quests_page(self.staff)
+        content = response.content.decode()
+        # before the fix the banner rendered above (before) the container, so the
+        # container's opening tag appearing first is exactly what the fix changes
+        self.assertLess(content.index('id="messages-container"'), content.index('id="deck-status-banner"'))
+
+    def test_banner__trial_mode_shown_to_staff_with_subscribe_link(self):
+        """Staff on a trial deck see the Trial Mode banner linking to the deck's own
+        subscription page (PR 6; previously the public subscribe flatpage)."""
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial Mode')
+        self.assertContains(response, 'fa-info-circle')  # banner level icon (review request)
+        self.assertContains(response, reverse('decks:subscription'))
+
+    def test_banner__trial_mode_shows_days_remaining_and_live_seat_usage(self):
+        """The trial banner's one-line copy shows the short date, the time remaining,
+        and the LIVE seats-used count -- a student registered moments ago counts even
+        though the nightly-cached field still says 0 (production find: banner claimed
+        0 seats used beside a student list showing 1)."""
+        from datetime import timedelta
+
+        from django.template.defaultfilters import date as date_filter
+        from django.utils.timezone import localdate
+
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        end = localdate() + timedelta(days=52)
+        # cached count deliberately left at 0: the live count must win
+        self.set_deck(trial_end_date=end, active_user_count=0, max_active_users=5)
+        baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                   semester=SiteConfig.get().active_semester)
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, f'until {date_filter(end, "j M Y")}')
+        self.assertContains(response, '52 days remain')
+        # template whitespace collapses in HTML; normalize before asserting the sentence
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('You are using 1 out of max 5 current students.', text)
+        self.assertContains(response, 'Subscription details')
+
+    def test_banner__trial_mode_unlimited_deck_shows_no_seat_limit(self):
+        """A trial deck with the -1 unlimited cap says "unlimited" instead of
+        "max -1"."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=52), max_active_users=-1)
+        response = self.get_quests_page(self.staff)
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('You are using 0 out of unlimited current students.', text)
+        self.assertNotIn('max -1', text)
+
+    def test_banner__not_shown_to_students_on_trial_deck(self):
+        """Students never see the trial banner (it's staff-facing nagware)."""
+        response = self.get_quests_page(self.student)
+        self.assertNotContains(response, 'deck-status-banner')
+
+    def test_banner__suspended_deck_warns_everyone(self):
+        """On a suspended deck, staff get the subscribe call-to-action (with the
+        owner-only sign-in rule and the 365-day deletion countdown), and students
+        are told only the deck owner can sign in (suspension redesign, 2026-07-30)."""
+        from datetime import date
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
+
+        response = self.get_quests_page(self.student)
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'Only the deck owner can sign in')
+
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'This deck is suspended')
+        text = ' '.join(response.content.decode().split())  # template line-wraps mid-phrase
+        self.assertIn('Only the deck owner can sign in', text)  # owner-only sign-in rule
+        self.assertIn('suspended for 365 days', text)  # deletion countdown
+        self.assertContains(response, 'fa-ban')  # danger-level banner icon
+        self.assertContains(response, reverse('decks:subscription'))
+
+    def test_banner__over_limit_warns_staff_from_live_count(self):
+        """Staff see the over-limit warning from the LIVE current-student count --
+        a stale cached count (still 0 here) neither hides a real overage nor keeps
+        the warning up after students were archived."""
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        self.set_deck(active_user_count=0, max_active_users=1)
+        for _ in range(2):
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
+
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Current-student limit exceeded')
+        self.assertContains(response, 'this deck has 2')
+        self.assertContains(response, 'fa-exclamation-triangle')  # warning-level banner icon
+
+    def test_banner__expiring_soon_warns_staff(self):
+        """Staff see the expiring-soon warning inside the two-week window, for both
+        trial and subscribed decks."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=3))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial ending soon')
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=3))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Subscription expiring')
+
+    def test_banner__expired_grace_deck_gets_danger_styling_and_grace_copy(self):
+        """A deck past paid_until (in grace) gets the DANGER (red) banner -- not the
+        approaching-deadline warning style -- and the copy states when the grace
+        period ends and that the deck will then be suspended with only the owner
+        able to sign in (suspension redesign, 2026-07-30)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=10))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Subscription expired')
+        self.assertContains(response, 'alert-danger')
+        self.assertContains(response, 'fa-exclamation-triangle')  # banner level icon (review request)
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('which ends in 20 days', text)
+        self.assertIn('the deck will then be suspended (only the deck owner will be able to sign in)', text)
+        # the approaching-deadline variants keep the warning style
+        self.set_deck(paid_until=localdate() + timedelta(days=3))
+        self.assertContains(self.get_quests_page(self.staff), 'alert-warning')
+        # self.tenant is shared across the class in memory and set_deck saves the
+        # whole object, so clear the paid date or it leaks into later tests
+        self.set_deck(paid_until=None)
+
+
+class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Access and rendering tests for the staff-facing Subscription details page
+    (epic #1729 PR 6; maintainer-requested admin-menu page)."""
+
+    def setUp(self):
+        """Log in a staff user, clear the cached deck row, and put the deck in a
+        known subscribed state (paid 100 days out, cap 30)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.client.force_login(self.staff)
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100), max_active_users=30)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def get_page(self):
+        """GET the subscription page, asserting 200."""
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 200)
+        return response
+
+    def test_page__staff_only(self):
+        """Anonymous users are redirected to login; students get 403; staff get 200."""
+        self.client.logout()
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('login', response.url)
+
+        self.client.force_login(self.student)
+        self.assertEqual(self.client.get(reverse('decks:subscription')).status_code, 403)
+
+        self.client.force_login(self.staff)
+        self.get_page()
+
+    def test_page__shows_dates_seats_and_status(self):
+        """A subscribed deck shows its status, the governing date, days remaining,
+        and the three seat rows (maximum / current / remaining)."""
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        self.assertContains(response, '100 days remaining')
+        self.assertContains(response, 'Paid until')
+        self.assertContains(response, 'Current students')
+        self.assertContains(response, 'Maximum allowed')
+        self.assertContains(response, 'Remaining students')
+        self.assertContains(response, '30')
+
+    def test_page__dates_show_relative_time_in_every_state(self):
+        """Every Dates row carries a relative phrase: time remaining while the date
+        is ahead, or how long ago it passed -- for Paid until, the grace period's
+        end, and Trial ends alike (maintainer request from staging live testing)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        # subscribed: paid_until ahead, grace end further ahead
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(100 days remaining)', text)
+        self.assertIn('extends 30 days after your subscription ends (ends in 130 days)', text)
+
+        # in grace: paid_until behind, grace end still ahead
+        self.set_deck(paid_until=localdate() - timedelta(days=10))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 10 days ago)', text)
+        self.assertIn('(ends in 20 days)', text)
+
+        # suspended: both behind (the maintainer's "ended 24 days ago" example)
+        self.set_deck(paid_until=localdate() - timedelta(days=54))
+        text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('(expired 54 days ago)', text)
+        self.assertIn('(ended 24 days ago)', text)
+
+        # trial deck: the Trial ends row gets the same treatment, both directions
+        self.set_deck(paid_until=None, trial_end_date=localdate() + timedelta(days=10))
+        self.assertIn('(10 days remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() - timedelta(days=3))
+        self.assertIn('(expired 3 days ago)', ' '.join(self.get_page().content.decode().split()))
+
+        # boundary days read "today", singular day is "1 day"
+        self.set_deck(trial_end_date=localdate())
+        self.assertIn('(expires today)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=localdate() + timedelta(days=1))
+        self.assertIn('(1 day remaining)', ' '.join(self.get_page().content.decode().split()))
+        self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=30))  # final grace day
+        self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
+
+    def test_page__dates_show_only_the_governing_deadline(self):
+        """The Dates table shows ONE deadline row -- Paid until when a paid date
+        exists (it supersedes the trial date, even while lapsed), Trial ends on a
+        trial-only deck, and a never-expires row on a managed-manually deck."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        # subscribed decks keep their old trial date; only the paid row shows
+        self.set_deck(trial_end_date=localdate() - timedelta(days=300))
+        response = self.get_page()
+        self.assertContains(response, 'Paid until')
+        self.assertNotContains(response, 'Trial ends')
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=10), paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Never')
+        self.assertNotContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+    def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
+        """Remaining students = cap minus the LIVE current-student count, clamped
+        at 0 when over the limit; None (rendered "Unlimited") on unlimited decks."""
+        from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
+
+        self.assertEqual(self.get_page().context['remaining_seats'], 30)
+
+        for _ in range(2):  # two current students on a cap of 1: clamped, not -1
+            baker.make('courses.CourseStudent', user=baker.make(User), active=True,
+                       semester=SiteConfig.get().active_semester)
+        self.set_deck(max_active_users=1)
+        response = self.get_page()
+        self.assertEqual(response.context['remaining_seats'], 0)
+
+        self.set_deck(max_active_users=-1)
+        self.assertIsNone(self.get_page().context['remaining_seats'])
+
+    def test_page__grace_period_states_suspension_ahead(self):
+        """A deck in its paid grace window gets its own DANGER "Grace period" label --
+        never the green "Subscribed" badge (maintainer review find) -- and explains
+        what follows: suspension, with only the deck owner able to sign in and the
+        deletion countdown starting (suspension redesign, 2026-07-30)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(paid_until=localdate() - timedelta(days=5))
+        response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        self.assertNotContains(response, 'Subscribed')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
+                      'and the 365-day countdown to deck deletion begins)', text)
+
+    def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
+        """A suspended deck's status copy states the new suspension rules -- only
+        the deck owner can sign in, and the 365-day deletion countdown -- while
+        the seats table still shows the ADMIN-SET cap, whatever it is (the field
+        stays authoritative; production find, 2026-07-24)."""
+        from datetime import date
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        response = self.get_page()
+        self.assertContains(response, 'only the deck owner can sign in')
+        self.assertContains(response, 'suspended for 365 days')
+        # page status copy specifically (the banner says similar things): data intact + how to restore
+        self.assertContains(response, 'Nothing has been deleted yet')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
+
+    def test_page__lifecycle_overview_lists_every_stage(self):
+        """The "How subscriptions work" section walks the owner through the whole
+        lifecycle -- valid subscription, grace period, suspension (owner-only
+        sign-in + deletion countdown), deletion -- and pitches the Maintenance
+        subscription as the keep-it-safe option (maintainer request, 2026-07-30)."""
+        response = self.get_page()
+        self.assertContains(response, 'How subscriptions work')
+        self.assertContains(response, 'Valid subscription')
+        self.assertContains(response, 'Grace period')
+        self.assertContains(response, 'Suspension')
+        self.assertContains(response, 'Deletion')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('Only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
+        self.assertIn('max 5 current students', text)  # the Maintenance pitch states the trial cap
+
+    def test_page__maintenance_subscription_gets_its_own_status(self):
+        """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
+        status label and copy (kept alive, capped, upgradable) instead of the
+        plain green Subscribed badge -- while a paid deck with a higher cap keeps
+        the Subscribed status."""
+        self.set_deck(max_active_users=5)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'Maintenance</span>')  # the status label itself
+        self.assertContains(response, 'maintenance subscription')
+        self.assertContains(response, 'capped at the trial limit')
+        self.assertContains(response, 'max 5 current students')
+        self.assertNotContains(response, '>Subscribed</span>')
+
+        self.set_deck(max_active_users=30)
+        response = self.get_page()
+        self.assertContains(response, 'Subscribed')
+        # the lifecycle overview always PITCHES Maintenance, so pin the status label only
+        self.assertNotContains(response, 'Maintenance</span>')
+
+    def test_page__trial_suspended_and_manual_states(self):
+        """The status section adapts to trial, suspended, and never-expires decks."""
+        from datetime import date, timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=10), paid_until=None)
+        self.assertContains(self.get_page(), 'Free trial')
+
+        self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
+        self.assertContains(self.get_page(), 'Suspended')
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        self.assertContains(self.get_page(), 'Managed manually')
+
+    def test_page__unlimited_cap_shown_as_unlimited(self):
+        """The -1 unlimited sentinel renders as "Unlimited" rather than -1."""
+        self.set_deck(max_active_users=-1)
+        self.assertContains(self.get_page(), 'Unlimited')
+
+    def test_page__not_configured_falls_back_to_public_subscribe_page(self):
+        """Without Stripe keys the page says billing isn't configured and links the
+        public subscribe page instead of rendering the checkout form."""
+        from tenant.utils import get_public_subscribe_url
+
+        response = self.get_page()
+        self.assertContains(response, "billing isn't configured")
+        self.assertContains(response, get_public_subscribe_url())
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_page__configured_shows_checkout_portal_or_manual_note(self):
+        """With Stripe configured: an unlinked trial deck gets "Subscribe now", a
+        linked deck gets "Manage subscription" (billing portal), and an unlinked
+        deck still inside its paid period gets the managed-manually note instead
+        of a button (checkout would double-bill it)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() + timedelta(days=30), paid_until=None)
+        self.assertContains(self.get_page(), 'Subscribe now')
+
+        self.set_deck(stripe_customer_id='cus_123', paid_until=localdate() + timedelta(days=100))
+        self.assertContains(self.get_page(), 'Manage subscription')
+
+        self.set_deck(stripe_customer_id='')  # actively paid, unlinked: manual
+        response = self.get_page()
+        self.assertContains(response, 'managed manually')
+        self.assertNotContains(response, 'Subscribe now')
+
+    def test_menu__admin_dropdown_links_subscription_page_for_staff(self):
+        """The navbar admin menu contains the Subscription entry for staff."""
+        response = self.client.get(reverse('quests:quests'))
+        self.assertContains(response, reverse('decks:subscription'))
+        self.assertContains(response, 'Subscription')
+
+
+class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Stripe checkout/portal flow tests for the subscription page (epic #1729 PR 6).
+
+    Stripe is never called for real: the SDK entry points used by tenant.billing
+    are mocked at that seam.
+    """
+
+    def setUp(self):
+        """Log in staff on an unlinked deck with billing configured via override in
+        each test (the deck's owner email resolution is exercised as-is)."""
+        from model_bakery import baker
+
+        from tenant.utils import deck_cache_key
+
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+        self.client = TenantClient(self.tenant)
+        self.staff = baker.make(User, is_staff=True)
+        self.client.force_login(self.staff)
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def test_post__not_configured_shows_error(self):
+        """POST without Stripe keys redirects back with an error message and calls
+        nothing."""
+        response = self.client.post(reverse('decks:subscription'), follow=True)
+        self.assertContains(response, "billing isn't configured")
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__unlinked_deck_redirects_to_checkout(self):
+        """POST on an unlinked deck creates a subscription Checkout Session carrying
+        the deck's identity and redirects to Stripe's URL."""
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   return_value=Mock(url='https://checkout.stripe.test/cs_123')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_123')
+        kwargs = mock_create.call_args.kwargs
+        self.assertEqual(kwargs['mode'], 'subscription')
+        self.assertEqual(kwargs['client_reference_id'], self.tenant.schema_name)
+        self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+        self.assertEqual(kwargs['line_items'], [{'price': 'price_123', 'quantity': 1}])
+        self.assertIn('session_id={CHECKOUT_SESSION_ID}', kwargs['success_url'])
+        self.assertIn(reverse('decks:subscription_activating'), kwargs['success_url'])
+        self.assertIn(reverse('decks:subscription'), kwargs['cancel_url'])
+        self.assertIn(self.tenant.schema_name, kwargs['idempotency_key'])
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__linked_deck_redirects_to_billing_portal(self):
+        """POST on a Stripe-linked deck opens the billing portal for that customer."""
+        self.set_deck(stripe_customer_id='cus_123')
+        with patch('tenant.billing.stripe.billing_portal.Session.create',
+                   return_value=Mock(url='https://portal.stripe.test/ps_123')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'https://portal.stripe.test/ps_123')
+        self.assertEqual(mock_create.call_args.kwargs['customer'], 'cus_123')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__manually_subscribed_deck_refused_to_prevent_double_billing(self):
+        """An unlinked deck still inside its PAID period has a manually managed
+        subscription: checkout is refused (it would create a second, parallel
+        subscription), while a lapsed deck in its grace window may renew."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100))
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            response = self.client.post(reverse('decks:subscription'), follow=True)
+        mock_create.assert_not_called()
+        self.assertContains(response, 'double-bill')
+        # the page itself shows the manual-subscription note instead of the button
+        self.assertContains(self.client.get(reverse('decks:subscription')), 'managed manually')
+
+        # in grace (paid period over): renewal via checkout is allowed
+        self.set_deck(paid_until=localdate() - timedelta(days=5))
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   return_value=Mock(url='https://checkout.stripe.test/cs_g')) as mock_create:
+            response = self.client.post(reverse('decks:subscription'))
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_g')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__stripe_error_redirects_back_with_message(self):
+        """A Stripe API failure lands back on the page with a friendly error, not a 500."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.checkout.Session.create',
+                   side_effect=stripe_lib.StripeError('boom')):
+            response = self.client.post(reverse('decks:subscription'), follow=True)
+        self.assertContains(response, "couldn't be reached")
+
+    def test_activating_page__renders_for_staff_with_polling_script(self):
+        """The post-checkout page renders the activating message and polls the
+        status endpoint."""
+        response = self.client.get(reverse('decks:subscription_activating'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Activating your subscription')
+        self.assertContains(response, reverse('decks:subscription_status'))
+        # polling is capped so an abandoned checkout can't hammer Stripe forever
+        self.assertContains(response, 'MAX_ATTEMPTS')
+        self.assertContains(response, 'poll-timeout-message')
+
+    def test_status__reports_current_subscription_state_without_session(self):
+        """Without a session_id the endpoint just reports the deck's derived status."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        response = self.client.get(reverse('decks:subscription_status'))
+        self.assertEqual(response.json(), {'active': False})
+
+        self.set_deck(paid_until=localdate() + timedelta(days=100))
+        response = self.client.get(reverse('decks:subscription_status'))
+        self.assertEqual(response.json(), {'active': True})
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__reconciles_completed_checkout_session(self):
+        """With a session_id and a completed checkout, the poll links the deck
+        (customer + subscription ids), advances paid_until to the subscription's
+        period end, and reports active."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        period_end = datetime.now(tz=dt_timezone.utc) + timedelta(days=365)
+        session = {
+            'status': 'complete',
+            'client_reference_id': self.tenant.schema_name,
+            'customer': 'cus_123',
+            'subscription': {'id': 'sub_123', 'status': 'active', 'current_period_end': int(period_end.timestamp())},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session) as mock_retrieve:
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': True})
+        self.assertEqual(mock_retrieve.call_args.args[0], 'cs_123')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_123')
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_123')
+        self.assertGreater(self.tenant.paid_until, localdate() + timedelta(days=300))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__incomplete_session_and_stripe_errors_stay_inactive(self):
+        """An open (unpaid) session, or a Stripe hiccup, leaves the deck untouched
+        and reports active=False so the page just keeps polling."""
+        import stripe as stripe_lib
+
+        self.set_deck(trial_end_date=None, paid_until=None)
+        with patch('tenant.billing.stripe.checkout.Session.retrieve',
+                   return_value={'status': 'open', 'client_reference_id': self.tenant.schema_name, 'subscription': None}):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve',
+                   side_effect=stripe_lib.StripeError('down')):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__foreign_deck_session_never_links(self):
+        """A completed session belonging to a DIFFERENT deck (the session id is
+        user-controlled query input) must not write its Stripe ids onto this tenant."""
+        self.set_deck(trial_end_date=None, paid_until=None)
+        session = {
+            'status': 'complete',
+            'client_reference_id': 'some_other_deck',
+            'metadata': {'schema_name': 'some_other_deck'},
+            'customer': 'cus_foreign',
+            'subscription': {'id': 'sub_foreign', 'status': 'active'},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_foreign')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')
+        self.assertEqual(self.tenant.stripe_subscription_id, '')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_status__incomplete_subscription_not_activated(self):
+        """A complete session whose subscription is still 'incomplete' (e.g. failed
+        3DS on the first payment) must not grant access."""
+        self.set_deck(trial_end_date=None, paid_until=None)
+        session = {
+            'status': 'complete',
+            'client_reference_id': self.tenant.schema_name,
+            'customer': 'cus_123',
+            'subscription': {'id': 'sub_123', 'status': 'incomplete'},
+        }
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=session):
+            response = self.client.get(reverse('decks:subscription_status') + '?session_id=cs_123')
+        self.assertEqual(response.json(), {'active': False})
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, '')

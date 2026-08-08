@@ -111,8 +111,8 @@ class BadgeGrantQualifying(NonPublicOnlyViewMixin, View):
         if not badge.published:
             return self._unpublished_redirect(request, badge)
 
+        # The template sets its own heading via the heading_inner block, so no `heading` here.
         context = {
-            "heading": f"Grant {SiteConfig.get().custom_name_for_badge}: {badge.name}",
             "badge": badge,
             "qualifying_students": badge.students_who_qualify_ungranted(),
         }

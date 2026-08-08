@@ -409,73 +409,6 @@ class CytoScapeManager(models.Manager):
     def get_queryset(self):
         return CytoScapeQueryset(self.model, using=self._db)
 
-    def generate_random_tree_scape(self, name, size=100):
-        scape = CytoScape(
-            name=name,
-            layout_name='breadthfirst',
-            layout_options="directed: true, spacingFactor: " + str(1.75 * 30 / size),
-        )
-        scape.save()
-
-        # generate starting node
-        source_node = CytoElement(scape=scape, group=CytoElement.NODES, )
-        source_node.save()
-        node_list = [source_node]
-        count = 1
-        while node_list and count < size:
-            current_node = random.choice(node_list)
-            # 10% chance to split branch, 10% to cap it
-            split = random.random()
-            children = 1
-            if split < .10:
-                children = random.randint(1, 3)  # 1 to 3
-
-            if current_node is source_node:
-                children = 10
-            if split < 90:  # create the target nodes, connect them to source, add them to list
-                for _i in range(0, children):
-                    new_node = CytoElement(scape=scape, group=CytoElement.NODES, )
-                    new_node.save()
-                    node_list.append(new_node)
-                    edge = CytoElement(
-                        scape=scape, group=CytoElement.EDGES,
-                        data_source=current_node,
-                        data_target=new_node,
-                    )
-                    edge.save()
-                    count += 1
-
-            if len(node_list) > 1:  # don't cap last node
-                node_list.remove(current_node)
-
-        return scape
-
-    def generate_random_scape(self, name, size=100):
-        new_scape = CytoScape(
-            name=name,
-        )
-        new_scape.save()
-
-        # generate nodes
-        for _i in range(0, size):
-            new_node = CytoElement(
-                scape=new_scape,
-                group=CytoElement.NODES,
-            )
-            new_node.save()
-
-        # generate edges
-        for _i in range(0, size * 3):
-            new_edge = CytoElement(
-                scape=new_scape,
-                group=CytoElement.EDGES,
-                data_source=CytoElement.objects.get_random_node(new_scape),
-                data_target=CytoElement.objects.get_random_node(new_scape),
-            )
-            new_edge.save()
-
-        return new_scape
-
     def get_map_for_init(self, initial_object):
         """Return the map that this object initiates, else return None"""
         ct = ContentType.objects.get_for_model(initial_object)
@@ -594,12 +527,16 @@ class CytoScape(models.Model):
     def elements_dict(self):
         """Serialize this scape's nodes and edges into the dict cytoscape/dagre consumes.
 
-        Elements are ordered so the rendered layout is both deterministic (issue #1977) and
-        honours the user's campaign order: dagre places same-rank nodes by their input order, so
-        emitting campaign nodes, their member quests, and the edges into them in Category.map_order
-        nudges campaigns left-to-right into that order. Ties (including every campaign at the
-        default map_order 0) fall back to the node id — i.e. the deterministic node ordering from
-        issue #1977 — so maps where nobody has set an order are unchanged.
+        Every node carries a ``campaignOrder`` in its data — its campaign's ``Category.map_order``
+        (a quest inherits its parent campaign's; campaign-less nodes default to 0). The client
+        (``maps.js``) uses it to order the campaign columns left-to-right *after* dagre has run:
+        dagre decides same-rank order by crossing-minimization and ignores input order, so the
+        order can't be imposed here — it's applied by repositioning the laid-out columns. Ties
+        (and every campaign at the default map_order 0) fall back to the node id, preserving the
+        deterministic layout from issue #2012, so maps where nobody set an order are unchanged.
+
+        Nodes are still emitted parents-before-children because cytoscape requires a compound
+        parent to be defined before any child that references it.
         """
         nodes = list(self.elements().filter(group=CytoElement.NODES))
         edges = list(self.elements().filter(group=CytoElement.EDGES))
@@ -614,20 +551,18 @@ class CytoScape(models.Model):
                 return map_orders[node.id]
             return map_orders.get(node.data_parent_id, 0)
 
-        # Keep every top-level node (compound campaign parents included) before any child node —
-        # cytoscape requires a parent to be defined before the child that references it — then order
-        # by campaign map_order, then node id (the deterministic #1977 fallback).
-        nodes.sort(key=lambda n: (n.data_parent_id is not None, node_campaign_order(n), n.id))
+        # Parents (compound campaign nodes) before children, then deterministic node-id order (#2012).
+        nodes.sort(key=lambda n: (n.data_parent_id is not None, n.id))
+        edges.sort(key=lambda e: e.id)
 
-        nodes_by_id = {node.id: node for node in nodes}
-
-        # Order an edge by the campaign of the node it points at, so the edges feeding a campaign's
-        # quests arrive in the same left-to-right order as the campaigns themselves. Every edge
-        # targets a node in this scape, so the lookup always resolves.
-        edges.sort(key=lambda e: (node_campaign_order(nodes_by_id[e.data_target_id]), e.id))
+        node_dicts = []
+        for node in nodes:
+            node_dict = node.json_dict()
+            node_dict['data']['campaignOrder'] = node_campaign_order(node)
+            node_dicts.append(node_dict)
 
         return {
-            'nodes': [node.json_dict() for node in nodes],
+            'nodes': node_dicts,
             'edges': [edge.json_dict() for edge in edges],
         }
 

@@ -108,3 +108,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Claude Code hook runtime state (per-session mtime cache)
+.claude/.cache/

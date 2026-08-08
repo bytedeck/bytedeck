@@ -4,56 +4,60 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.29.0] 2026-07-21 Claude I
-* Platform — Django 5.2 & Python 3.12:
-  - [New Feature] Upgraded the platform to **Django 5.2 LTS** [#2015](https://github.com/bytedeck/bytedeck/issues/2015) and the **Python 3.12** runtime [#2017](https://github.com/bytedeck/bytedeck/issues/2017). This was staged so the app ran on both Django 4.2 and 5.2 during the transition: a phased modernization of third-party dependencies [#1916](https://github.com/bytedeck/bytedeck/issues/1916) [#1996](https://github.com/bytedeck/bytedeck/issues/1996), library upgrades (numpy, beautifulsoup4, html2text, and others) [#1995](https://github.com/bytedeck/bytedeck/issues/1995) [#1998](https://github.com/bytedeck/bytedeck/issues/1998) [#2000](https://github.com/bytedeck/bytedeck/issues/2000), and pinning dependency floors to current versions with ceilings capped at the next major [#2021](https://github.com/bytedeck/bytedeck/issues/2021)
-  - [Tweak] Switched linting from flake8 to ruff (lint only, no code churn) [#1993](https://github.com/bytedeck/bytedeck/issues/1993)
-* Infrastructure & Deployment:
-  - [New Feature] Automated production/staging deploys via self-hosted GitHub Actions runners, gated on green CI [#1962](https://github.com/bytedeck/bytedeck/issues/1962)
-  - [Tweak] Self-hosted Redis (dropping ElastiCache) with production restart policies and healthchecks [#1954](https://github.com/bytedeck/bytedeck/issues/1954); persistent database connections with health checks [#1965](https://github.com/bytedeck/bytedeck/issues/1965) [#1969](https://github.com/bytedeck/bytedeck/issues/1969); a single templated nginx config shared between production and staging [#1950](https://github.com/bytedeck/bytedeck/issues/1950); fail-fast on insecure production configuration [#1952](https://github.com/bytedeck/bytedeck/issues/1952); Celery failure alerts, session cleanup, and a bounded select2 cache [#2003](https://github.com/bytedeck/bytedeck/issues/2003); an infrastructure cleanup batch and quieter startup [#1990](https://github.com/bytedeck/bytedeck/issues/1990) [#1982](https://github.com/bytedeck/bytedeck/issues/1982)
-  - [Bugfix] Deleting users on the public schema now cascades correctly [#1953](https://github.com/bytedeck/bytedeck/issues/1953); various deploy-reliability fixes [#1991](https://github.com/bytedeck/bytedeck/issues/1991) [#1992](https://github.com/bytedeck/bytedeck/issues/1992) [#1994](https://github.com/bytedeck/bytedeck/issues/1994) [#1971](https://github.com/bytedeck/bytedeck/issues/1971)
-* Deck Requests:
-  - [New Feature] A new confirmation page after requesting a deck, explaining the next steps [#1946](https://github.com/bytedeck/bytedeck/issues/1946)
-  - [Tweak] The "Create New Deck" form now extends the public base template [#1947](https://github.com/bytedeck/bytedeck/issues/1947), and the deck-request form uses an invisible reCAPTCHA widget [#1928](https://github.com/bytedeck/bytedeck/issues/1928)
-  - [Bugfix] Requesting a deck with a long domain no longer crashes while setting the Site name [#1948](https://github.com/bytedeck/bytedeck/issues/1948)
+### [1.30.0] 2026-07-23 Claude II
 * New Features:
-  - Grant a badge to all qualifying students at once through a teacher-confirmed flow [#1925](https://github.com/bytedeck/bytedeck/issues/1925)
-  - New "Completion Statuses" button in the submission button set [#1934](https://github.com/bytedeck/bytedeck/issues/1934)
-  - Order campaigns left-to-right on quest maps [#1977](https://github.com/bytedeck/bytedeck/issues/1977)
+  - **Repeatable quests now show when they'll be available again.** Completing a repeatable quest that has a cooldown used to make it silently vanish from the Available tab; it now appears in an "Available again soon" section at the top of that tab with a live countdown of when it returns (each entry links to the quest), and trying to start a quest you already have in progress now tells you to finish that one first [#57](https://github.com/bytedeck/bytedeck/issues/57)
+  - **TAs can copy a quest after starting it.** A "Copy" button now appears on a quest's submission preview (the In Progress / Completed / Past Courses accordion) and on its full submission page, next to Drop and Continue. Previously a TA could only copy from the Available list, so once you started a quest and it became a submission you lost the option; copying creates a new draft quest using this one as a template, with the original set as its prerequisite [#141](https://github.com/bytedeck/bytedeck/issues/141)
+  - **Per-quest quick reply for grading.** Save canned feedback for a quest's common mistakes in a new "Quick Reply Text" field on the quest edit form; when approving or returning a submission of that quest, a quest-specific quick-reply button inserts it into your response, right beside the existing site-wide one [#161](https://github.com/bytedeck/bytedeck/issues/161)
 * Tweaks:
-  - Relaxed the Referrer-Policy so YouTube (and other) embeds load again [#1896](https://github.com/bytedeck/bytedeck/issues/1896)
-  - Campaign quests now stay vertically stacked on the quest map [#1787](https://github.com/bytedeck/bytedeck/issues/1787)
-  - Quest map layout is now deterministic (stable node ordering) [#1977](https://github.com/bytedeck/bytedeck/issues/1977)
-  - Campaign publish flow: clearer redirects, a publish button on the list view, and distinct icons [#1931](https://github.com/bytedeck/bytedeck/issues/1931)
-  - A "Loading content..." spinner now shows in place of data tables while they format, instead of a flash of the raw/blank table [#1981](https://github.com/bytedeck/bytedeck/issues/1981)
-  - QuestForm now rejects "unlimited repeats" combined with "repeat per semester" [#1531](https://github.com/bytedeck/bytedeck/issues/1531)
-  - Removed the student-facing quick reply form [#1886](https://github.com/bytedeck/bytedeck/issues/1886) [#1951](https://github.com/bytedeck/bytedeck/issues/1951)
+  - The quest **Completion Statuses** page gains a status-filter dropdown, a scope toggle (blocks you teach / all enrolled this semester / all active), a Completed column that sorts by approval date, and a three-group status breakdown with counts and percentages [#1973](https://github.com/bytedeck/bytedeck/issues/1973)
+  - Refined the badge **"grant to everyone who qualifies"** flow: a single clear info banner (instead of a grey box with duplicated text), only students currently enrolled in a course are scanned (staff and test accounts excluded), and the badge action buttons are tidied into "Manage" and "Grant" groups that wrap cleanly [#2061](https://github.com/bytedeck/bytedeck/issues/2061)
+  - Pushing a quest or campaign to the **Shared Library** now emails Library staff that content is awaiting review (with a review link), and your confirmation message explains it won't appear in the Library until an admin publishes it [#1949](https://github.com/bytedeck/bytedeck/issues/1949)
 * Bugfixes:
-  - The sidebar "Quest Approvals" button now opens the Submitted tab [#1895](https://github.com/bytedeck/bytedeck/issues/1895)
-  - Semesters no longer crash when a date is null [#912](https://github.com/bytedeck/bytedeck/issues/912)
-  - All HTML in the plain-text comment forms is escaped, preventing stored XSS [#1343](https://github.com/bytedeck/bytedeck/issues/1343)
-  - Starting the same quest twice at once can no longer grant XP twice, and there is now exactly one prerequisite-cache row per user per model [#1964](https://github.com/bytedeck/bytedeck/issues/1964) [#520](https://github.com/bytedeck/bytedeck/issues/520)
-  - Fixed the blank "Published:" line for unpublished campaigns [#1930](https://github.com/bytedeck/bytedeck/issues/1930)
-  - Long campaign names no longer wrap onto multiple lines in quest maps [#1289](https://github.com/bytedeck/bytedeck/issues/1289)
-  - Fixed the broken checkbox layout on the prerequisites form [#1978](https://github.com/bytedeck/bytedeck/issues/1978)
-  - Changing a profile's email no longer 500s on DNS resolver errors [#1976](https://github.com/bytedeck/bytedeck/issues/1976)
-  - Notification previews no longer mangle content that contains more than one image [#1761](https://github.com/bytedeck/bytedeck/issues/1761)
-  - Archiving or unarchiving a missing quest now returns 404 instead of 500 [#1856](https://github.com/bytedeck/bytedeck/issues/1856)
-  - Deleting a user no longer kicks off unnecessary prerequisite-cache recalculation tasks [#1754](https://github.com/bytedeck/bytedeck/issues/1754)
-  - Fixed a numeric overflow that could crash the XP cache task [#2035](https://github.com/bytedeck/bytedeck/issues/2035)
-  - Fixed the badge action-button row and the status button target [#1988](https://github.com/bytedeck/bytedeck/issues/1988)
-  - Fixed `AllowedGFKChoiceField` caching an empty choice list [#1967](https://github.com/bytedeck/bytedeck/issues/1967)
-  - A no-op prerequisite save is no longer treated as a change [#1989](https://github.com/bytedeck/bytedeck/issues/1989)
-* Refactor/Optimizations:
-  - Big test-suite speedup (~6–8×) via class-level fixtures and a shared test schema [#1997](https://github.com/bytedeck/bytedeck/issues/1997)
-  - Brought the whole test suite up to the naming/docstring conventions (with a guard) and added broad new coverage [#2025](https://github.com/bytedeck/bytedeck/issues/2025) [#2026](https://github.com/bytedeck/bytedeck/issues/2026) [#2028](https://github.com/bytedeck/bytedeck/issues/2028) [#2019](https://github.com/bytedeck/bytedeck/issues/2019) [#2020](https://github.com/bytedeck/bytedeck/issues/2020)
-  - Eliminated N+1 queries on the campaign detail page, the student tag detail view, the mark-distribution chart, and notification/quest batching [#1940](https://github.com/bytedeck/bytedeck/issues/1940) [#1941](https://github.com/bytedeck/bytedeck/issues/1941) [#1942](https://github.com/bytedeck/bytedeck/issues/1942) [#1943](https://github.com/bytedeck/bytedeck/issues/1943)
-  - Added `full_clean()` before `save()` in the comments app [#2006](https://github.com/bytedeck/bytedeck/issues/2006)
+  - A campaign's **Map order** field had no effect on the quest map — setting it left campaigns in the same left-to-right position; campaigns now actually sort left-to-right by Map order (lowest first) [#1977](https://github.com/bytedeck/bytedeck/issues/1977)
+  - With **no semester open**, a student could still "join a course" and get silently attached to a closed semester; the join page now tells them no semester is open and registers nothing, and teachers get a warning banner linking to the semesters page to open one [#2060](https://github.com/bytedeck/bytedeck/issues/2060)
+  - Bulleted lists in submission/approval previews and the announcements list rendered as hollow sub-bullet circles instead of solid dots (a side effect of Bootstrap list-groups); they now show the correct markers [#811](https://github.com/bytedeck/bytedeck/issues/811)
+  - Loading tables (quest and badge lists) no longer visibly jump when their spinner disappears — the spinner hides and the finished table reveals in the same step [#1981](https://github.com/bytedeck/bytedeck/issues/1981)
+* Codebase:
+  - Vendored the LMS's core **Bootstrap and jQuery locally** (served from static files instead of two third-party CDNs) and upgraded Bootstrap 3.3.7 → 3.4.1, patching several known XSS vulnerabilities [#2095](https://github.com/bytedeck/bytedeck/issues/2095)
+  - Pushed test coverage toward "100% of the code we intend to test" across many modules, adopted an explicit coverage-exclusion policy so the number stays meaningful, and tidied earlier coverage-PR test files; along the way fixed a latent crash in the prerequisite `get_ids()` helper [#2065](https://github.com/bytedeck/bytedeck/issues/2065) [#2071](https://github.com/bytedeck/bytedeck/issues/2071) [#2072](https://github.com/bytedeck/bytedeck/issues/2072) [#2076](https://github.com/bytedeck/bytedeck/issues/2076) [#2078](https://github.com/bytedeck/bytedeck/issues/2078) [#2084](https://github.com/bytedeck/bytedeck/issues/2084) [#2088](https://github.com/bytedeck/bytedeck/issues/2088) [#2091](https://github.com/bytedeck/bytedeck/issues/2091) [#2093](https://github.com/bytedeck/bytedeck/issues/2093) [#2094](https://github.com/bytedeck/bytedeck/issues/2094) [#2096](https://github.com/bytedeck/bytedeck/issues/2096) [#2097](https://github.com/bytedeck/bytedeck/issues/2097) [#2100](https://github.com/bytedeck/bytedeck/issues/2100) [#2102](https://github.com/bytedeck/bytedeck/issues/2102) [#2104](https://github.com/bytedeck/bytedeck/issues/2104)
+  - Groundwork for **per-quest submission questions**: a new, default-off `questions` app (models + staff CRUD) that isn't wired into the student submission or marking flow yet, so nothing changes for decks for now [#1304](https://github.com/bytedeck/bytedeck/issues/1304)
+  - Finished Python 3.12 tooling loose ends (pyupgrade `--py312-plus`, a `.python-version` pin) and fixed `quest_manager`'s AppConfig discovery (`app.py` → `apps.py`) so its startup signal wiring is explicit [#2052](https://github.com/bytedeck/bytedeck/issues/2052) [#2063](https://github.com/bytedeck/bytedeck/issues/2063)
 * Devops:
-  - CI no longer runs the test suite twice per commit and cancels stale runs [#2004](https://github.com/bytedeck/bytedeck/issues/2004)
-  - `docker compose` no longer recreates the database mid-migration during CI [#1992](https://github.com/bytedeck/bytedeck/issues/1992)
-  - Made the djcytoscape map-generation tests deterministic [#1968](https://github.com/bytedeck/bytedeck/issues/1968)
-  - Added regression tests for completing unavailable quests [#535](https://github.com/bytedeck/bytedeck/issues/535)
+  - Rollout of automated deck **billing / trial / subscription** (mostly disabled by default while it's validated in report-only mode): derived per-deck trial/subscription/grace status with corrected active-user counts; a nightly cross-schema status refresh replacing an expensive per-page recompute; a subscription **status banner** (trial / expiring / over-limit / suspended) and enforcement of **active-student seat caps** at course registration; automated owner **expiry/limit/suspension reminders**; and a new staff **"Subscription details"** page with Stripe checkout and billing-portal management. Wording throughout now distinguishes "current" (registered this semester, counted toward the cap) from "active" students [#1729](https://github.com/bytedeck/bytedeck/issues/1729) [#1730](https://github.com/bytedeck/bytedeck/issues/1730) [#1731](https://github.com/bytedeck/bytedeck/issues/1731) [#1733](https://github.com/bytedeck/bytedeck/issues/1733)
+  - Production and staging now emit leveled, timestamped logs to stdout, and each Docker service's log files are size-capped and rotated so a runaway process can't fill the host disk [#2027](https://github.com/bytedeck/bytedeck/issues/2027)
+
+
+### [1.29.0] 2026-07-21 Claude I
+* New Features:
+  - **Grant a badge to everyone who qualifies, on demand.** When you change a badge's prerequisites, you're now asked whether to check for students who newly qualify. Say yes and a confirmation page shows how many students would receive it; confirm and it's granted to all of them at once (their teachers are notified). Because it only runs when you ask, a badge is never handed out while you're still setting up its prerequisites [#1925](https://github.com/bytedeck/bytedeck/issues/1925)
+  - **New "Completion Statuses" button on a quest.** Opens a page listing every student's status on that quest — In Progress, Returned, Submitted, Approved, etc. — so you can see at a glance where each student is [#1934](https://github.com/bytedeck/bytedeck/issues/1934)
+  - **Order campaigns left-to-right on quest maps.** Edit a campaign and set its "Map order" field; campaigns with a lower number sit further to the left on the map [#1977](https://github.com/bytedeck/bytedeck/issues/1977)
+* Tweaks:
+  - YouTube (and other) video embeds load again [#1896](https://github.com/bytedeck/bytedeck/issues/1896)
+  - Data tables now show a loading spinner instead of a flash of unstyled/blank table while they load [#1981](https://github.com/bytedeck/bytedeck/issues/1981)
+  - Campaign quests stay vertically stacked on quest maps, and long campaign names no longer wrap [#1787](https://github.com/bytedeck/bytedeck/issues/1787) [#1289](https://github.com/bytedeck/bytedeck/issues/1289)
+  - Campaign publishing: clearer redirects, a publish button on the campaign list, and distinct icons [#1931](https://github.com/bytedeck/bytedeck/issues/1931)
+  - A quest can no longer be set to both "unlimited repeats" and "repeat per semester" — pick one [#1531](https://github.com/bytedeck/bytedeck/issues/1531)
+  - Removed the student-facing quick reply form [#1886](https://github.com/bytedeck/bytedeck/issues/1886)
+* Bugfixes:
+  - The sidebar "Quest Approvals" button opened the wrong approvals tab; it now opens Submitted [#1895](https://github.com/bytedeck/bytedeck/issues/1895)
+  - HTML typed into a comment was rendered as-is, so a crafted comment could run script for anyone who viewed it (stored XSS); comment text is now fully escaped [#1343](https://github.com/bytedeck/bytedeck/issues/1343)
+  - Racing/double-clicking "Start Quest" could create two submissions and award XP twice; starting the same quest twice at once no longer double-grants [#1964](https://github.com/bytedeck/bytedeck/issues/1964)
+  - Editing your profile email could error out (500) when the network's DNS lookup of the email's domain failed; validation now tolerates those lookup failures [#1976](https://github.com/bytedeck/bytedeck/issues/1976)
+  - A notification preview with more than one image spliced the images together and broke the notifications dropdown; multi-image previews now render correctly [#1761](https://github.com/bytedeck/bytedeck/issues/1761)
+  - Unpublished campaigns showed a blank value after "Published:"; it now reads correctly [#1930](https://github.com/bytedeck/bytedeck/issues/1930)
+  - Checkboxes on the prerequisites form were misaligned and overlapping; the layout is fixed [#1978](https://github.com/bytedeck/bytedeck/issues/1978)
+  - The badge action-button row wrapped awkwardly and its status button pointed at the wrong place; both are fixed [#1988](https://github.com/bytedeck/bytedeck/issues/1988)
+  - A semester with a missing start or end date crashed the pages that display it; those are now guarded [#912](https://github.com/bytedeck/bytedeck/issues/912)
+* Codebase:
+  - Upgraded to Django 5.2 LTS and Python 3.12, with a dependency-modernization pass [#2015](https://github.com/bytedeck/bytedeck/issues/2015) [#2017](https://github.com/bytedeck/bytedeck/issues/2017) [#1916](https://github.com/bytedeck/bytedeck/issues/1916)
+  - Test suite ~6–8× faster, brought up to conventions, and broadly expanded; linting moved from flake8 to ruff [#1997](https://github.com/bytedeck/bytedeck/issues/1997) [#2026](https://github.com/bytedeck/bytedeck/issues/2026) [#1993](https://github.com/bytedeck/bytedeck/issues/1993)
+  - Reduced N+1 queries across the campaign, tag, mark-chart, and notification pages [#1940](https://github.com/bytedeck/bytedeck/issues/1940) [#1941](https://github.com/bytedeck/bytedeck/issues/1941) [#1942](https://github.com/bytedeck/bytedeck/issues/1942) [#1943](https://github.com/bytedeck/bytedeck/issues/1943)
+  - Internal correctness/perf: prerequisite-cache uniqueness and skip-on-user-delete, XP-cache overflow, GFK choice caching, no-op prereq saves, comments `full_clean()` [#520](https://github.com/bytedeck/bytedeck/issues/520) [#1754](https://github.com/bytedeck/bytedeck/issues/1754) [#2035](https://github.com/bytedeck/bytedeck/issues/2035) [#1967](https://github.com/bytedeck/bytedeck/issues/1967) [#1989](https://github.com/bytedeck/bytedeck/issues/1989) [#2006](https://github.com/bytedeck/bytedeck/issues/2006)
+* Devops:
+  - Automated production/staging deploys via self-hosted runners (gated on green CI), self-hosted Redis, persistent DB connections, a templated nginx config, and ops-reliability/CI improvements [#1962](https://github.com/bytedeck/bytedeck/issues/1962) [#1954](https://github.com/bytedeck/bytedeck/issues/1954) [#1965](https://github.com/bytedeck/bytedeck/issues/1965) [#1950](https://github.com/bytedeck/bytedeck/issues/1950) [#2003](https://github.com/bytedeck/bytedeck/issues/2003) [#2004](https://github.com/bytedeck/bytedeck/issues/2004)
+  - Public-site deck requests (visitors start at `/decks/request/`): the flow now ends on a confirmation page explaining the next steps, and requesting a deck with a very long name no longer crashes deck creation [#1946](https://github.com/bytedeck/bytedeck/issues/1946) [#1948](https://github.com/bytedeck/bytedeck/issues/1948)
 
 
 ### [1.28.0] 2026-07-12 Marcus III

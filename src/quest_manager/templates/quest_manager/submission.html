@@ -89,7 +89,8 @@
           {% endwith %}
         {% else %}
           {% if submission.quest.published %}
-            <a id='save-draft-btn' class='btn btn-default'>
+            <a id='save-draft-btn' class='btn btn-default'
+               title="Your draft autosaves about every minute, but you can force a save now with this button. Note: attached files are NOT saved in a draft.">
               <span id="draft-text">Save Draft</span>
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
@@ -97,9 +98,20 @@
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
-              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval' />
-              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button">Drop Quest</a>
+              <input id='tour-submit-quest' type='submit' name='complete' class='btn btn-primary' value='Submit Quest for Approval'
+                     title="The quest will move to your &quot;Completed&quot; tab and your teacher will be notified (unless the quest is automatically approved)." />
+              <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button"
+                 title="Remove this quest from your &quot;In Progress&quot; tab, delete any saved draft, and it will re-appear in your Available quests tab.">Drop Quest</a>
             {% endif %}
+          {% endif %}
+          {% comment %} TAs can copy the quest from the full submission view too, not just the
+             In Progress/Completed tab preview (#141). Shown regardless of the quest's published
+             state so a TA can always template off a quest they've started. {% endcomment %}
+          {% if request.user.profile.is_TA %}
+            <a title="Copy Quest &mdash; available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
+               class="btn btn-default" role="button" href="{% url 'quests:quest_copy' submission.quest.id %}">
+              <i class="fa fa-fw fa-copy"></i> Copy Quest
+            </a>
           {% endif %}
         {% endif %}
         </div>
@@ -124,6 +136,21 @@
             // Copied from quest_approvals.html
             $('[id^=btn_quick_text]').on('click', function () {
                 var msg = '<p>{{ quick_reply_text }}<br></p>';
+                var text_area = $('div.note-editable');
+                if (text_area.html() == "<p><br></p>") // default empty summernote text area
+                  text_area.html(msg)
+                else
+                  text_area.append(msg);
+            });
+
+            // Quest-specific quick reply (#161): text comes from the button's data-quick-reply attribute.
+            // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
+            $('[id^=btn_quest_quick_text]').on('click', function () {
+                var raw = $(this).attr('data-quick-reply');
+                if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
+                // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
+                var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
+                var msg = '<p>' + escaped + '<br></p>';
                 var text_area = $('div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)

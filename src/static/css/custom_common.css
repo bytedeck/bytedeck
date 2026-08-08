@@ -615,6 +615,17 @@ form > div.alert.alert-block.alert-danger {
   margin-top: 8px;
 }
 
+/************TABLES *************************/
+
+/* Summary row at the bottom of a facts table (e.g. "Remaining students" on the
+   subscription page): set off from the rows above by a heavier rule, matching the
+   2px weight Bootstrap uses under a thead. Width-only override, so each theme
+   keeps its own table border color. */
+.table > tbody > tr.total-row > th,
+.table > tbody > tr.total-row > td {
+    border-top-width: 2px;
+}
+
 /******* Accordian ***********************/
 
 .panel-heading-tall {
@@ -1127,17 +1138,18 @@ div.btn-group.action-btn-group {
    A "Loading content..." spinner (.bt-loading) is server-rendered right before each such
    table (snippets/table_loading.html), so it's on screen from the very first paint — a
    JS-inserted spinner would arrive too late, after the raw table has already been parsed.
-   This <head> CSS hides the raw table until bootstrap-table formats it, and hides the spinner
-   the moment its table is ready. */
+   This <head> CSS hides the raw table until custom.js reveals it. */
 table[data-toggle="table"] {
     /* Out of flow while hidden so a big table reserves no tall blank gap under the spinner. */
     position: absolute;
     visibility: hidden;
 }
-/* Once bootstrap-table wraps the table in .bootstrap-table it is fully formatted — put it
-   back in flow and show it. The .bt-reveal fallback (custom.js) covers any table
-   bootstrap-table never initializes, so data is never left hidden. */
-.bootstrap-table table[data-toggle="table"],
+/* The table is revealed ONLY by the .bt-reveal class, which custom.js adds in the same step that
+   it hides the spinner. Revealing it automatically as soon as bootstrap-table wrapped it (via a
+   `.bootstrap-table table` rule) let the table appear a frame before the spinner was hidden, so the
+   table then jumped up when the spinner vanished (issue #1981). One JS-driven reveal keeps the
+   swap atomic. .bt-reveal also covers tables bootstrap-table never initializes (6s fallback), so
+   data is never left hidden. */
 table[data-toggle="table"].bt-reveal {
     position: static;
     visibility: visible;
@@ -1152,9 +1164,38 @@ table[data-toggle="table"].bt-reveal {
     min-height: 120px;
     color: #999;
 }
-/* Hide the spinner the moment its table is formatted (wrapped in .bootstrap-table) or
-   force-revealed (.bt-reveal). custom.js also hides it, covering browsers without :has(). */
-.bt-loading:has(+ .bootstrap-table),
-.bt-loading:has(+ table[data-toggle="table"].bt-reveal) {
-    display: none;
+
+/* #2115: a filter dropdown dropped into a bootstrap-table toolbar via data-toolbar. Give the
+   toolbar element the .bt-toolbar-filter class and the search box stays rightmost (as on every
+   other table) with the filter beside it on the left, and a gap between them. Reusable by any
+   bootstrap-table that wants an inline filter. Scoped with :has() so ONLY toolbars that actually
+   contain a filter become flex — search-only and column-toggle tables are left untouched. */
+.fixed-table-toolbar:has(.bt-toolbar-filter) {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 15px;
+}
+.bt-toolbar-filter label {
+    margin-right: 4px;
+    font-weight: normal;
+}
+
+
+/* #811: rendered rich-text content (Summernote HTML) is sometimes shown inside a Bootstrap
+   .list-group, which is itself a <ul>. That makes a content list a *nested* <ul>, so the
+   browser marks its top level with the level-2 style (hollow circle) instead of level-1
+   (solid disc) — and one level deeper again. The templates wrap every such rendered block in
+   a .user-content container, so we re-establish depth-correct bullets counting from the
+   content list itself. Scoping to .user-content (rather than the container the content
+   happens to sit in) keeps this off Bootstrap's own component lists and doesn't depend on
+   the content lists lacking a class. */
+.user-content ul {
+    list-style-type: disc;
+}
+.user-content ul ul {
+    list-style-type: circle;
+}
+.user-content ul ul ul {
+    list-style-type: square;
 }

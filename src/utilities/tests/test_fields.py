@@ -28,9 +28,14 @@ class GFKChoiceFieldTest(ByteDeckTenantTestCase):
 
     def test_GFKChoiceField__choices_and_clean(self):
         """Field groups choices by content type and clean() validates and resolves GFK values."""
+        # order_by('pk') keeps the grouped-choices order deterministic: without
+        # an explicit ordering Postgres returns rows in arbitrary order, so the
+        # user sublist in the assertion below flaked intermittently in CI. The
+        # field respects the caller's queryset order, so the fix belongs on the
+        # queryset here rather than forcing an order inside the field.
         f = GFKChoiceField(
             queryset=QuerySetSequence(
-                User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]),
+                User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]).order_by('pk'),
                 Group.objects.filter(pk__in=[self.group1.pk]),
             ),
         )

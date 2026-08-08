@@ -1,0 +1,18 @@
+{% extends "questions/base.html" %}
+
+{% block head_title %}Delete Question | {% endblock %}
+
+{% block heading_inner %}Delete Question{% endblock %}
+
+{% block content %}
+<form action="" method="post">{% csrf_token %}
+    <p>Are you sure you want to delete this question?</p>
+    <div class="well">
+        <p>Question Instructions: {{ object.instructions|striptags|truncatechars:200 }}</p>
+        <p>Question ID: {{ object.id }}</p>
+    </div>
+    <p>Answers students have already submitted for this question are kept and will still be visible to markers.</p>
+    <a href="{% url 'questions:list' object.quest.id %}" role="button" class="btn btn-info">Cancel</a>
+    <input type="submit" value="Delete" class="btn btn-danger">
+</form>
+{% endblock %}

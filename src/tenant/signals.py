@@ -23,7 +23,12 @@ def initialize_tenant_with_data(sender, tenant, **kwargs):
 
 
 def tenant_save_callback(sender, instance, **kwargs):
-    """ Create one tenant domain """
+    """ Create one tenant domain; invalidate the schema's cached deck row """
+    from .utils import invalidate_current_deck_cache
+
+    # any Tenant save (admin edit, cached-field refresh, future Stripe sync) must
+    # invalidate the cached row the status banner reads, so changes show promptly
+    invalidate_current_deck_cache(instance.schema_name)
 
     # Already have a domain so no further action required
     if instance.domains.exists():

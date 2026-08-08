@@ -36,32 +36,38 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
-    // #1981: bootstrap-table reformats server-rendered tables on load. A "Loading content..."
-    // spinner (.bt-loading) is server-rendered right before each data-toggle="table", so it's
-    // visible from the first paint; the head CSS (custom_common.css) hides the raw table until
-    // bootstrap-table formats it. Here we hide each spinner once its table is wrapped in
-    // .bootstrap-table — and, if bootstrap-table never initializes a table, reveal the raw
-    // table after a timeout so its data is never left hidden behind the spinner.
-    $('.bt-loading').each(function() {
-        var $spinner = $(this);
+    // #1981: bootstrap-table reformats server-rendered tables on load. The head CSS
+    // (custom_common.css) hides each data-toggle="table" until this code adds .bt-reveal, and a
+    // "Loading content..." spinner (.bt-loading) is server-rendered right before the table so
+    // something is on screen from the first paint. For each table we reveal it (add .bt-reveal)
+    // and hide its spinner in ONE synchronous step, so the browser paints both together: the table
+    // never appears while the spinner is still on screen (which made the table jump up when the
+    // spinner then vanished). We iterate the tables themselves — not the spinners — so a table
+    // without a spinner is still revealed. If bootstrap-table never initializes a table, a timeout
+    // reveals it anyway so data is never left hidden.
+    $('table[data-toggle="table"]').each(function() {
+        var table = this;
 
-        // The table this spinner covers is the next sibling — still the raw <table>, or, if
-        // bootstrap-table already ran, the .bootstrap-table wrapper it was replaced with.
-        function findTable() {
-            var $next = $spinner.next();
-            return $next.is('table[data-toggle="table"]') ? $next : $next.find('table[data-toggle="table"]').first();
+        // The spinner, if present, sits right before the table — or before the .bootstrap-table
+        // wrapper once bootstrap-table has moved the table inside it.
+        function findSpinner() {
+            var $wrap = $(table).closest('.bootstrap-table');
+            var $prev = ($wrap.length ? $wrap : $(table)).prev();
+            return $prev.hasClass('bt-loading') ? $prev : $();
+        }
+
+        // Reveal the table and hide its spinner atomically (same synchronous tick → same paint).
+        function revealTable() {
+            $(table).addClass('bt-reveal');
+            findSpinner().hide();
         }
 
         var start = Date.now();
         var poll = setInterval(function() {
-            var $table = findTable();
-            var wrapped = $table.length && $table.closest('.bootstrap-table').length;
+            var wrapped = $(table).closest('.bootstrap-table').length;
             if (wrapped || Date.now() - start > 6000) {
                 clearInterval(poll);
-                if (!wrapped && $table.length) {
-                    $table.addClass('bt-reveal');
-                }
-                $spinner.hide();
+                revealTable();
             }
         }, 50);
     });

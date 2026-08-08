@@ -1,0 +1,34 @@
+<p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
+
+{% if days >= 0 %}
+<p>Your deck <strong>{{ deck.name }}</strong>'s
+  {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
+  on <strong>{% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}</strong>
+  (<strong>{{ days }} day{{ days|pluralize }}</strong> from now).
+  {% if deck.is_on_trial %}When the trial ends, the deck is suspended: only the deck owner can sign in,
+  and the 365-day countdown to deck deletion begins.{% else %}After that, a {{ grace_days }}-day grace
+  period keeps full access until <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
+  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.{% endif %}</p>
+{% else %}
+<p>Your deck <strong>{{ deck.name }}</strong>'s subscription expired on
+  <strong>{{ deck.paid_until }}</strong> ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
+  and is in its {{ grace_days }}-day grace period, which ends on <strong>{{ grace_end_date }}</strong>
+  ({{ grace_days_left }} day{{ grace_days_left|pluralize }} left). When the grace period ends, the deck
+  will be suspended: only the deck owner will be able to sign in, and the 365-day countdown to deck
+  deletion begins.</p>
+{% endif %}
+
+<p>You are currently using <strong>{{ count }}</strong> of
+  <strong>{% if cap == -1 %}unlimited{% else %}{{ cap }}{% endif %}</strong> current student
+  seat{{ cap|pluralize }}.</p>
+
+<p><a href="{{ subscribe_url }}">Subscribe or renew here</a> to keep full access.
+  Questions about which students count? Only <em>current</em> students (those registered in a course
+  this semester) count toward your limit; see
+  <a href="{{ archive_help_url }}">freeing up student seats</a>.</p>
+
+<p>Not planning to use the deck for a while? The low-cost <em>Maintenance</em> subscription keeps it
+  online with trial-level limits (max {{ trial_cap }} current student{{ trial_cap|pluralize }}) and
+  stops it from ever being deleted.</p>
+
+{% include "tenant/email/_email_footer.html" %}

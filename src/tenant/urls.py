@@ -11,4 +11,11 @@ urlpatterns = [
     path("request/email-verification/", views.RequestNewDeckSubmitted.as_view(), name="request_new_deck_submitted"),
     path("request/verify/<path:nonce>/", views.verify_deck_request, name="verify_deck_request"),
     path("request/new/", views.TenantCreate.as_view(), name="new"),
+
+    # Staff-facing subscription pages for the current deck (non-public tenants only,
+    # epic #1729 PR 6): details/checkout, the post-checkout activating page, and its
+    # JSON polling target.
+    path("subscription/", views.SubscriptionDetail.as_view(), name="subscription"),
+    path("subscription/activating/", views.SubscriptionActivating.as_view(), name="subscription_activating"),
+    path("subscription/status/", views.subscription_status, name="subscription_status"),
 ]

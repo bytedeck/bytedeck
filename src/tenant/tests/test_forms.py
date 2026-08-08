@@ -8,7 +8,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from django_recaptcha.widgets import ReCaptchaV2Invisible
 
-from tenant.forms import MAX_DECK_NAME_LENGTH, DeckRequestForm, TenantForm
+from tenant.forms import DeckRequestForm, TenantForm
 from tenant.models import Tenant
 
 User = get_user_model()
@@ -136,24 +136,31 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
-    def test_clean_name__deck_name_too_long(self):
-        """A deck name longer than MAX_DECK_NAME_LENGTH is rejected on the form with a
-        clear error, so the user gets feedback instead of the name being silently
-        truncated (into SiteConfig.site_name_short etc.) when the deck is created.
+    def test_clean_name__deck_name_length_capped_at_url_limit(self):
+        """The deck name may be as long as the URL/schema allows — the model field's
+        max_length — not the old 20-char short-name cap (#1975). Only a name longer
+        than the field limit is rejected; the short name is truncated from it instead.
         """
         base = {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"}
+        max_len = Tenant._meta.get_field("name").max_length
 
-        # one over the limit: rejected with a message that names the limit
-        too_long = "a" * (MAX_DECK_NAME_LENGTH + 1)
+        # one over the field limit: rejected
+        too_long = "a" * (max_len + 1)
         form = TenantForm({**base, "name": too_long})
         self.assertFalse(form.is_valid())
         self.assertIn("name", form.errors)
-        self.assertIn(str(MAX_DECK_NAME_LENGTH), form.errors["name"][0])
 
-        # exactly at the limit: accepted
-        at_limit = "a" * MAX_DECK_NAME_LENGTH
-        form = TenantForm({**base, "name": at_limit})
+        # longer than the old 20-char cap but within the field limit: accepted
+        self.assertGreater(max_len, 20)
+        long_but_valid = "a" * max_len
+        form = TenantForm({**base, "name": long_but_valid})
         self.assertTrue(form.is_valid(), form.errors)
+
+    def test_name_help_text__includes_length_limit(self):
+        """The deck-name field's help text states the character limit (#1975)."""
+        max_len = Tenant._meta.get_field("name").max_length
+        form = TenantForm()
+        self.assertIn(str(max_len), form.fields["name"].help_text)
 
     def test_clean_name__duplicate_deck_name_is_rejected(self):
         """A deck name that already exists is rejected on the form (via the unique

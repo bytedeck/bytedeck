@@ -1,6 +1,5 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from django.utils.html import escape
 
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
@@ -10,6 +9,7 @@ from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
+from comments.sanitize import sanitize_comment_html
 from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
@@ -69,7 +69,7 @@ class QuestForm(forms.ModelForm):
         model = Quest
         fields = ('name', 'published', 'xp', 'xp_can_be_entered_by_students', 'icon', 'short_description',
                   'verification_required', 'instructions',
-                  'campaign', 'common_data', 'submission_details', 'instructor_notes',
+                  'campaign', 'common_data', 'submission_details', 'instructor_notes', 'quick_reply',
                   'repeat_per_semester', 'max_repeats', 'max_xp', 'hours_between_repeats',
                   'map_transition', 'tags',
                   'new_quest_prerequisite',
@@ -147,6 +147,7 @@ class QuestForm(forms.ModelForm):
                 'max_repeats',
                 'hours_between_repeats',
                 'tags',
+                'quick_reply',
                 Accordion(
                     AccordionGroup(
                         "Basic Prerequisites",
@@ -275,19 +276,23 @@ class SubmissionFormStaff(SubmissionForm):
         )
 
 
-class EscapeCommentTextMixin:
-    """Completely escapes HTML entered in a form's `comment_text` field.
+class SanitizeCommentTextMixin:
+    """Sanitizes HTML entered in a form's `comment_text` field.
 
-    Plain-text (non-wysiwyg) comment fields are accessible to all users, so no
-    HTML at all is allowed in them, otherwise scripts can be injected and will
-    execute when the comment is rendered (see issue #1343).
+    These plain-text (non-wysiwyg) comment fields are accessible to all users and
+    rendered with |safe, so they must be sanitized to stop injected scripts from
+    executing (issue #1343). In practice they carry rich HTML from the Summernote
+    editor, so we sanitize with an allow-list rather than escaping everything,
+    keeping legitimate formatting while stripping scripts and event handlers
+    (issue #2113).
     """
 
     def clean_comment_text(self):
-        return escape(self.cleaned_data.get('comment_text', ''))
+        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
+        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
 
 
-class SubmissionReplyForm(EscapeCommentTextMixin, forms.Form):
+class SubmissionReplyForm(SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
 
@@ -295,7 +300,7 @@ class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
     pass
 
 
-class SubmissionQuickReplyForm(EscapeCommentTextMixin, forms.Form):
+class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
@@ -305,7 +310,7 @@ class SubmissionQuickReplyForm(EscapeCommentTextMixin, forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
-class SubmissionQuickReplyFormStudent(EscapeCommentTextMixin, forms.Form):
+class SubmissionQuickReplyFormStudent(SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
 

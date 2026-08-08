@@ -25,7 +25,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
-from courses.models import Block
+from courses.models import Block, CourseStudent
 from library.utils import from_library_schema_first
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -810,6 +810,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         else:
             available_quests = Quest.objects.get_available_without_course(request.user)
 
+    # Repeatable quests the student completed that are still within their cooldown window: shown in
+    # the Available tab as "available again soon" with a countdown, rather than being hidden (#57).
+    cooldown_quests = []
+    if not request.user.is_staff:
+        cooldown_quests = list(Quest.objects.get_in_cooldown(request.user))
+        for quest in cooldown_quests:
+            quest.cooldown_available_at = quest.next_repeat_available(request.user)
+
     in_progress_submissions = QuestSubmission.objects.all_not_completed(
         request.user, blocking=True
     )
@@ -870,6 +878,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "past_submissions": past_submissions,
         "num_past": past_submissions_count,
         "num_completed": completed_submissions_count,
+        "cooldown_quests": cooldown_quests,
         "active_q_id": active_quest_id,
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
@@ -1031,66 +1040,101 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
+    active_semester = SiteConfig.get().active_semester
 
-    active_students = Profile.objects.all_active().students_only().select_related('user')
-    user_ids = active_students.values_list('user_id', flat=True)
+    # Three student groups the page can show, as sets of user ids (issue #1973):
+    #   active    — all active students (in a course or not); the superset
+    #   current   — students registered in a course this active semester (the "current" students)
+    #   my_blocks — students in a course block the current teacher teaches this semester
+    active_profiles = list(Profile.objects.all_active().students_only().select_related('user'))
+    active_ids = {profile.user_id for profile in active_profiles}
+    current_ids = set(
+        CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
+    ) & active_ids
+    my_block_ids = set(
+        CourseStudent.objects.filter(
+            semester=active_semester, block__current_teacher=request.user
+        ).values_list('user_id', flat=True)
+    ) & active_ids
 
+    # Latest submission per user (over the active superset), newest attempt first.
     submissions = (
-        QuestSubmission.objects.filter(
-            quest=quest,
-            user_id__in=user_ids,
-        )
+        QuestSubmission.objects.filter(quest=quest, user_id__in=active_ids)
         .select_related('user')
-        # Latest attempt first per user
         .order_by('user_id', '-time_approved', '-id')
     )
-
-    # Map each user to their latest submission using the first occurrence in the ordered queryset.
     latest_sub_by_user = {}
     for sub in submissions:
-        if sub.user_id not in latest_sub_by_user:
-            latest_sub_by_user[sub.user_id] = sub
+        latest_sub_by_user.setdefault(sub.user_id, sub)
 
-    user_status_list = []
-    for profile in active_students:
-        sub = latest_sub_by_user.get(profile.user_id)
+    def status_of(sub):
+        """Map a user's latest submission (or None) to a display status."""
         if sub is None:
-            status = "Not Started"
-        elif sub.is_approved:
-            status = "Approved"
-        elif sub.is_returned():
-            status = "Returned"
-        elif sub.is_awaiting_approval():
-            status = "Awaiting Approval"
-        else:
-            status = "In Progress"
+            return "Not Started"
+        if sub.is_approved:
+            return "Approved"
+        if sub.is_returned():
+            return "Returned"
+        if sub.is_awaiting_approval():
+            return "Awaiting Approval"
+        return "In Progress"
 
-        user_status_list.append({"user": profile.user, "status": status, "submission": sub})
+    # One status entry per active student; a "completed" date only exists once approved.
+    entries_by_id = {}
+    for profile in active_profiles:
+        sub = latest_sub_by_user.get(profile.user_id)
+        entries_by_id[profile.user_id] = {
+            "user": profile.user,
+            "status": status_of(sub),
+            "submission": sub,
+            "completed": sub.time_approved if (sub and sub.is_approved) else None,
+        }
 
-    total_students = len(user_status_list)
-    status_counts = Counter(user['status'] for user in user_status_list)
     STATUS_ORDER = ["Approved", "Returned", "Awaiting Approval", "In Progress", "Not Started"]
-    status_stats = []
-
-    for status in STATUS_ORDER:
-        count = status_counts.get(status, 0)
-        percent = (count / total_students * 100) if total_students else 0
-        status_stats.append({
-            "status": status,
-            "count": count,
-            "percent": f"{percent:.0f}%"
-        })
-
     status_order_index = {status: i for i, status in enumerate(STATUS_ORDER)}
 
-    # sort user-status_list by the desired status order
-    user_status_list.sort(key=lambda x: status_order_index.get(x['status'], 99))
+    # Which group the table shows; default to the teacher's own blocks, falling back to all active
+    # students when they teach none so the page isn't empty.
+    scopes = {"my_blocks": my_block_ids, "current": current_ids, "active": active_ids}
+    scope = request.GET.get("scope", "my_blocks")
+    if scope not in scopes:
+        scope = "my_blocks"
+    if scope == "my_blocks" and not my_block_ids:
+        scope = "active"
+
+    user_status_list = [entries_by_id[uid] for uid in scopes[scope]]
+    user_status_list.sort(key=lambda e: (status_order_index.get(e["status"], 99), e["user"].username.lower()))
+
+    # Status breakdown across all three groups, side by side.
+    def counts_for(id_set):
+        counts = Counter(entries_by_id[uid]["status"] for uid in id_set)
+        total = len(id_set)
+        return {
+            status: {"count": counts.get(status, 0), "percent": f"{(counts.get(status, 0) / total * 100) if total else 0:.0f}%"}
+            for status in STATUS_ORDER
+        }
+
+    breakdown_my_blocks = counts_for(my_block_ids)
+    breakdown_current = counts_for(current_ids)
+    breakdown_active = counts_for(active_ids)
+    status_breakdown = [
+        {
+            "status": status,
+            "my_blocks": breakdown_my_blocks[status],
+            "current": breakdown_current[status],
+            "active": breakdown_active[status],
+        }
+        for status in STATUS_ORDER
+    ]
 
     context = {
         "q": quest,
         "maps": CytoScape.objects.get_related_maps(quest),
         "user_status_list": user_status_list,
-        "status_stats": status_stats,
+        "status_breakdown": status_breakdown,
+        "scope": scope,
+        "has_my_blocks": bool(my_block_ids),
+        "totals": {"my_blocks": len(my_block_ids), "current": len(current_ids), "active": len(active_ids)},
         "no_details": False,
         "is_library_view": False,
     }
@@ -1817,8 +1861,13 @@ def start(request, quest_id):
             # could happen if they manually enter a different quest.id in the start url
             raise Http404
         else:
-            # We found an in-progress/not completed submission for the quest,
-            # so send them to it instead of starting a new one
+            # We found an in-progress/not completed submission for the quest, so send them to it
+            # instead of starting a new one, and let them know why (issue #57).
+            messages.info(
+                request,
+                f"You already have <strong>{quest.name}</strong> in progress — "
+                "finish this one before starting it again.",
+            )
             return redirect(sub)
     else:
         new_sub = QuestSubmission.objects.create_submission(request.user, quest)

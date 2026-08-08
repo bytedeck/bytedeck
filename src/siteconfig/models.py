@@ -212,6 +212,12 @@ class SiteConfig(models.Model):
             See the <a href=\"https://github.com/bytedeck/bytedeck/wiki/Library#sharing-to-the-library\" target=\"blank\">help page</a> for details."
     )
 
+    enable_submission_questions = models.BooleanField(
+        verbose_name="Enable Submission Questions", default=False,
+        help_text="If enabled, staff can add questions (short answer, long answer, or file upload) to a quest, \
+            which students answer as part of submitting that quest."
+    )
+
     # Field to select custom name to change all instances of "announcement" to site-wide
     # Currently used in: announcements.views, sidebar.html, and delete.html + list.html in announcements.templates
     custom_name_for_announcement = models.CharField(
@@ -389,6 +395,15 @@ class SiteConfig(models.Model):
             return True
 
         return self.allow_staff_export and user.is_staff
+
+    def has_no_open_semester(self):
+        """Whether there is no semester open for students to join a course into (issue #2060).
+
+        Closing a semester (``Semester.complete_active_semester``) sets ``closed=True`` but leaves
+        it as the active semester, so "no open semester" means the active semester is missing or
+        flagged closed. Used to block student registration and to warn staff.
+        """
+        return self.active_semester is None or self.active_semester.closed
 
     @classmethod
     def cache_key(cls):

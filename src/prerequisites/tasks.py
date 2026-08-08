@@ -75,7 +75,12 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
                 user=user,
                 model_name=Quest.get_model_name(),
             )
-        except PrereqAllConditionsMet.MultipleObjectsReturned:
+        # Defensive: PrereqAllConditionsMet has a unique constraint on
+        # (user, model_name) (see the model's Meta.constraints), so get_or_create
+        # can no longer return multiple rows. Kept in case that constraint is ever
+        # relaxed; unreachable under the current schema, so excluded from coverage
+        # rather than tested with a contrived duplicate.
+        except PrereqAllConditionsMet.MultipleObjectsReturned:  # pragma: no cover
             # why are there multiple?  Delete cache and regenerate new for this user
             caches = PrereqAllConditionsMet.objects.filter(user=user, model_name=Quest.get_model_name())
             caches.delete()
@@ -137,7 +142,9 @@ def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
         return f"Skipping task for badge {badge_id}, already started."
     cache.set(cache_key, True, 1)
 
-    users = CourseStudent.objects.all_users_for_active_semester()
+    # students_only=True to match the grant-check preview (Badge.students_who_qualify_ungranted):
+    # the grant is for students, so staff/test accounts enrolled in a course are excluded (#2061).
+    users = CourseStudent.objects.all_users_for_active_semester(students_only=True)
     users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
 
     user = None

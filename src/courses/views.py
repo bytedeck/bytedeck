@@ -10,7 +10,7 @@ from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.views import View
-from django.views.generic import DetailView, ListView
+from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from django.template.loader import render_to_string
 from django.http import JsonResponse
@@ -253,6 +253,17 @@ class CourseDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class ArchiveStudentsHelp(NonPublicOnlyViewMixin, TemplateView):
+    """Staff help page explaining how to archive students so they stop counting toward
+    the deck's current-student cap (#1729 PR 4 / #1733's archiving instructions).
+
+    Linked from the at-capacity refusal page; the reminder emails (plan PR 5) will
+    link here too.
+    """
+    template_name = 'courses/archive_students_help.html'
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
@@ -264,6 +275,29 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         kwargs['student_registration'] = False
         kwargs['instance'] = CourseStudent(user=user)
         return kwargs
+
+    def _deck_at_capacity_for_target(self):
+        """Whether the deck's current-student cap blocks the TARGET student from being added --
+        the staff-side counterpart of CourseStudentCreate's guard (#1729 PR 4)."""
+        from tenant.limits import can_add_current_student
+        target = get_object_or_404(User, pk=self.kwargs.get('user_id'))
+        return not can_add_current_student(target)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the add page with the at-capacity explanation (with staff-facing links to the
+        archive-students help page and the subscribe page) instead of the form."""
+        return render(request, self.template_name, {'heading': 'Add student to course', 'deck_at_capacity': True})
+
+    def get(self, request, *args, **kwargs):
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # block the direct POST too, or the cap could be bypassed by submitting the form URL
+        if self._deck_at_capacity_for_target():
+            return self._deck_at_capacity_response(request)
+        return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data()
@@ -299,17 +333,60 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
 # Student Course Registration View
 class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
 
-    # if an active CourseStudent object assigned to student exists when student accesses registration view (user already enrolled), page will 403
     def test_func(self):
-        return not CourseStudent.objects.filter(user=self.request.user, active=True).exists()
+        """Allow the registration view only when the student is not already actively registered
+        for the current (active) semester.
+
+        A registration left active in an old, not-yet-closed semester must not 403 them out of
+        joining a course in the new semester (#1893), so the check is scoped to the active
+        semester rather than any active registration.
+
+        Returns:
+            bool: True if the user may access the registration view (they are not yet actively
+                registered for the active semester), False otherwise.
+        """
+        return not CourseStudent.objects.filter(
+            user=self.request.user, active=True, semester=SiteConfig.get().active_semester
+        ).exists()
 
     model = CourseStudent
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
     success_message = "You have been added to the %(course)s course"
+    template_name = 'courses/coursestudent_form.html'
+
+    @staticmethod
+    def _no_open_semester():
+        """Whether there is no semester open for a student to join a course into (issue #2060)."""
+        return SiteConfig.get().has_no_open_semester()
+
+    def _no_open_semester_response(self, request):
+        """Render the join page with a message explaining that no semester is open, instead of the
+        registration form, so a student can't join a course when there's nowhere to join (#2060).
+        """
+        return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
+
+    def _deck_at_capacity(self):
+        """Whether the deck's current-student cap blocks this user from registering (#1729 PR 4)."""
+        from tenant.limits import can_add_current_student
+        return not can_add_current_student(self.request.user)
+
+    def _deck_at_capacity_response(self, request):
+        """Render the join page with the at-capacity explanation instead of the registration form.
+
+        Placed before the simplified-registration auto-create path in get(), so a deck at its
+        cap can't gain active students through the auto-create shortcut either.
+        """
+        return render(request, self.template_name, {'heading': 'Join a course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
+        if self._no_open_semester():
+            return self._no_open_semester_response(request)
+
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
+
         # when accessing this view, check if we need a form at all, or can just create the studentcourse object using all defaults
         # if simplified_course_registration is enabled in siteconfig and all three form fields are hidden, object should be created automatically
         simpleregistration = SiteConfig.get().simplified_course_registration
@@ -338,6 +415,16 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
             return redirect(self.success_url)
         else:
             return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        # Also block the POST: without this a student could still submit a registration into the
+        # closed active semester by posting directly (the form's only semester choice) (#2060).
+        if self._no_open_semester():
+            return self._no_open_semester_response(request)
+        # ...and the same for the capacity cap: the GET-side guard alone wouldn't stop a direct POST
+        if self._deck_at_capacity():
+            return self._deck_at_capacity_response(request)
+        return super().post(request, *args, **kwargs)
 
     def get_form_kwargs(self):
         kwargs = super(CreateView, self).get_form_kwargs()

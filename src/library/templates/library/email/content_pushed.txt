@@ -1,0 +1,10 @@
+{{ sharer }} shared a {{ content_type }} from <a href="{{ source_deck_url }}">{{ source_deck_url }}</a> to the ByteDeck Library:
+
+    {{ content_name }}
+
+It has been added to the Library but is not visible to other decks until a Library admin reviews and publishes it.
+
+Review and publish it here:
+<a href="{{ review_url }}">{{ review_url }}</a>
+
+— ByteDeck Library

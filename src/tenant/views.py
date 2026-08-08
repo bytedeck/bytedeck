@@ -6,7 +6,7 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponseRedirect
+from django.http import Http404, HttpResponseRedirect, JsonResponse
 from django.utils.decorators import method_decorator
 from django.utils.text import slugify
 from django.utils import timezone
@@ -20,6 +20,7 @@ from django_tenants.utils import tenant_context
 from allauth.account.utils import user_username
 from allauth.account.models import EmailAddress
 
+from hackerspace_online.decorators import staff_member_required
 from siteconfig.models import SiteConfig
 
 from .forms import TenantForm, DeckRequestForm
@@ -380,3 +381,176 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)
         context["resend_cooldown"] = _humanize_seconds(DeckRequestService.REQUEST_COOLDOWN)
         return context
+
+
+def _relative_date_phrase(target, style):
+    """Human phrase locating `target` relative to today, for the Dates table on the
+    subscription page (maintainer request: every date shows the time remaining, or
+    how long ago it passed).
+
+    Args:
+        target (date): The date to describe.
+        style (str): 'remaining' for deadline rows ("N days remaining" /
+            "expires today" / "expired N days ago"), 'ends' for the grace-period
+            row ("ends in N days" / "ends today" / "ended N days ago").
+
+    Returns:
+        str: The phrase, ready to drop into the row's parenthetical.
+    """
+    days = (target - timezone.localdate()).days
+    plural = 's' if abs(days) != 1 else ''
+    if style == 'remaining':
+        if days > 0:
+            return f"{days} day{plural} remaining"
+        return "expires today" if days == 0 else f"expired {-days} day{plural} ago"
+    if days > 0:
+        return f"ends in {days} day{plural}"
+    return "ends today" if days == 0 else f"ended {-days} day{plural} ago"
+
+
+class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
+    """Staff-facing "Subscription details" page for the current deck (epic #1729 PR 6).
+
+    GET shows the deck's billing status, expiry dates, student-seat usage (live
+    count), and the upgrade/renew action. POST starts the Stripe flow: Checkout
+    for an unlinked deck, the Billing Portal for a linked one. When Stripe isn't
+    configured the page says so and the action falls back to the public
+    subscribe page. Linked from the admin menu for all staff.
+    """
+    template_name = 'tenant/subscription_detail.html'
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        """Require staff (non-staff get 403, anonymous get the login redirect)."""
+        return super().dispatch(*args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """Assemble the deck's billing facts for the template.
+
+        Returns:
+            dict: The template context with the current deck, a LIVE
+            current-student count (the nightly cached one can be a day old), the
+            effective cap, the billing constants the copy references, whether
+            Stripe billing is configured, and the public-subscribe fallback URL.
+        """
+        from datetime import timedelta
+
+        from .billing import billing_configured
+        from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
+        from .utils import get_public_subscribe_url
+
+        context = super().get_context_data(**kwargs)
+        deck = self.request.tenant
+        current_student_count = deck.get_active_user_count()  # live, not cached
+        cap = deck.effective_max_active_users
+        context.update({
+            # relative phrases for the Dates rows ("(100 days remaining)" /
+            # "(expired 24 days ago)"); None when the corresponding date is unset
+            'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
+            'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
+            'grace_end_phrase': (
+                _relative_date_phrase(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS), 'ends')
+                if deck.paid_until else None
+            ),
+        })
+        context.update({
+            'deck': deck,
+            'current_student_count': current_student_count,
+            'cap': cap,
+            # None for unlimited decks; clamped at 0 when over the limit (the
+            # template's at-limit warning covers the overage)
+            'remaining_seats': None if cap == -1 else max(0, cap - current_student_count),
+            # what a fresh suspension will RESET the cap to -- the grace copy
+            # predicts it, and can't derive it from the deck's current paid cap
+            'trial_cap': TRIAL_MAX_ACTIVE_USERS,
+            'grace_days': GRACE_PERIOD_DAYS,
+            'stripe_configured': billing_configured(),
+            # inside its paid period with no Stripe link: the subscription is managed
+            # manually, and a checkout would double-bill (grace counts as renewable)
+            'manually_subscribed': bool(
+                deck.subscription_active and not deck.in_grace_period and not deck.stripe_customer_id
+            ),
+            'public_subscribe_url': get_public_subscribe_url(),
+        })
+        return context
+
+    def post(self, request, *args, **kwargs):
+        """Start the Stripe flow: Checkout (unlinked deck) or Billing Portal (linked).
+
+        Returns:
+            HttpResponse: A redirect to the Stripe-hosted page, or back to this
+            page with an error message when Stripe isn't configured or errors out.
+        """
+        import stripe as stripe_lib
+
+        from .billing import billing_configured, create_checkout_session, create_portal_session
+
+        deck = request.tenant
+        if not billing_configured():
+            messages.error(request, "Online billing isn't configured on this server.")
+            return redirect('decks:subscription')
+        # An unlinked deck that is still inside its PAID period has a manually
+        # managed subscription -- starting a Stripe checkout would double-bill it.
+        # (Grace-period decks are past paid_until, so renewing via checkout is
+        # exactly what they should do.)
+        if not deck.stripe_customer_id and deck.subscription_active and not deck.in_grace_period:
+            messages.error(
+                request,
+                "This deck's subscription is managed manually -- starting a new online "
+                "subscription would double-bill you. Contact ByteDeck to switch to online billing."
+            )
+            return redirect('decks:subscription')
+        try:
+            if deck.stripe_customer_id:
+                url = create_portal_session(deck)
+            else:
+                url = create_checkout_session(deck)
+        except stripe_lib.StripeError:
+            messages.error(request, "Sorry, Stripe couldn't be reached. Please try again in a few minutes.")
+            return redirect('decks:subscription')
+        return HttpResponseRedirect(url)
+
+
+class SubscriptionActivating(NonPublicOnlyViewMixin, TemplateView):
+    """The Checkout success page: "activating your subscription..." (epic #1729 PR 6).
+
+    Stripe redirects here with ?session_id=; the page polls the status endpoint
+    below, which reconciles against Stripe and reports when the deck is active,
+    then this page forwards back to the subscription details. Never assumes a
+    webhook landed (plan §5.4) -- the polling reconciliation IS the activation
+    path in this PR; webhooks (PR 7) take over renewals later.
+    """
+    template_name = 'tenant/subscription_activating.html'
+
+    @method_decorator(staff_member_required)
+    def dispatch(self, *args, **kwargs):
+        """Require staff, like the subscription page it forwards back to."""
+        return super().dispatch(*args, **kwargs)
+
+
+@non_public_only_view
+@staff_member_required
+def subscription_status(request):
+    """JSON poll target for the activating page: is this deck's subscription live yet?
+
+    When a ``session_id`` is supplied and the deck isn't linked yet, reconciles
+    the checkout session against Stripe first (linking the deck and advancing
+    paid_until if the session completed). Stripe/API hiccups return active=False
+    rather than erroring -- the page just polls again.
+
+    Returns:
+        JsonResponse: {"active": bool} for the polling script.
+    """
+    import stripe as stripe_lib
+
+    from .billing import billing_configured, reconcile_checkout_session
+
+    deck = request.tenant
+    session_id = request.GET.get('session_id')
+    if session_id and billing_configured() and not deck.stripe_subscription_id:
+        try:
+            reconcile_checkout_session(deck, session_id)
+        except stripe_lib.StripeError:
+            pass  # transient; the page polls again in a few seconds
+        deck.refresh_from_db()
+    return JsonResponse({'active': deck.subscription_active})

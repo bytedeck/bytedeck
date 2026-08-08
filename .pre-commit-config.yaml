@@ -10,10 +10,10 @@ repos:
         exclude: ^requirements/generated.txt
 
   - repo: https://github.com/asottile/pyupgrade
-    rev: v2.34.0
+    rev: v3.21.2
     hooks:
       - id: pyupgrade
-        args: [ "--py36-plus", "--py37-plus", "--py38-plus" ]
+        args: [ "--py312-plus" ]
         types: [python]
 
   # ruff replaces flake8 (+bugbear/comprehensions/mutable plugins) and
