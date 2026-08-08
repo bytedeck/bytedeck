@@ -1,4 +1,4 @@
-<p>Hello {{ user.get_full_name }},</p>
+<p>Hello {{ user.get_full_name|default:user.username }},</p>
 
 <p>Thank you for confirming your email address. Use these credentials to log in to your
   new deck at <a href="{{ tenant.get_root_url }}">{{ tenant.get_root_url }}</a>:</p>
