@@ -237,3 +237,45 @@ class QuestResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
         QuestResource().generate_simple_prereqs(parent, data_dict)
 
         self.assertEqual(parent.prereqs().count(), 0)
+
+
+class QuestResourceGenerateCampaignTest(ByteDeckTenantTestCase):
+    """Tests for QuestResource.generate_campaign, which assigns/creates a campaign on import."""
+
+    def _resource(self):
+        """A QuestResource with an empty visibility map (set on a real import by after_import)."""
+        resource = QuestResource()
+        resource.local_visibility_map = {}
+        return resource
+
+    def test_generate_campaign__no_import_id_falls_back_to_existing_title(self):
+        """With no campaign_import_id, the campaign is matched by title instead (import_id lookup
+        is skipped)."""
+        existing = baker.make(Category, title='Existing Campaign')
+        quest = baker.make(Quest)
+        data_dict = {
+            'campaign_title': 'Existing Campaign',
+            'campaign_icon': None,
+            'campaign_short_description': '',
+            'campaign_import_id': None,
+        }
+
+        self._resource().generate_campaign(quest, data_dict)
+
+        quest.refresh_from_db()
+        self.assertEqual(quest.campaign, existing)
+
+
+class QuestResourceAfterImportTest(ByteDeckTenantTestCase):
+    """Tests for QuestResource.after_import, the post-import hook."""
+
+    def test_after_import__is_a_noop_during_dry_run(self):
+        """On a dry run (the import confirmation step) after_import returns without processing,
+        so it never stores the visibility map."""
+        resource = QuestResource()
+        resource.local_visibility_map = 'SENTINEL'
+
+        resource.after_import(dataset=None, result=None, dry_run=True)
+
+        # the dry-run guard skips the body that would overwrite the visibility map
+        self.assertEqual(resource.local_visibility_map, 'SENTINEL')

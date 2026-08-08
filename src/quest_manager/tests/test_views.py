@@ -2200,6 +2200,62 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.assertEqual(prereqs[0].prereq_object, new_quest)
         # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
 
+    def _changed_formset_data(self):
+        """Build POST data that changes the existing prereq (prereq_count 1 -> 3) so
+        form.has_changed() is True and form_valid runs past its early return.
+
+        Returns the formset POST-field dict for the request.
+        """
+        ct = ContentType.objects.get_for_model(self.prereq_quest)
+        forms_data = [
+            {
+                "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+                "prereq_count": '3',
+                "or_prereq_count": '1',
+                "id": f'{self.existing_prereq.pk}',
+            },
+        ]
+        return self.build_formset_data(forms_data, QuestPrereqsUpdate.form_prefix)
+
+    def test_form_valid__no_map_message_when_auto_update_disabled(self):
+        """With SiteConfig.map_auto_update off, updating prereqs skips the related-maps lookup and
+        adds no 'maps are being updated' message."""
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = False
+        config.full_clean()
+        config.save()
+
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data=self._changed_formset_data(),
+        )
+
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any('being updated' in m for m in messages))
+
+    def test_form_valid__map_message_when_related_map_exists(self):
+        """With map_auto_update on and a map that includes the quest, updating its prereqs adds a
+        message naming the map(s) being regenerated."""
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.full_clean()
+        config.save()
+        # a map whose initial (first) node is the quest whose prereqs are being edited, so
+        # CytoScape.objects.get_related_maps(parent_quest) returns it
+        scape = CytoScape.generate_map(self.parent_quest, name='Prereq Map')
+
+        response = self.client.post(
+            reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}),
+            data=self._changed_formset_data(),
+        )
+
+        self.assertRedirects(response, self.parent_quest.get_absolute_url())
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any('being updated' in m and scape.name in m for m in messages))
+
         # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
         # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
 

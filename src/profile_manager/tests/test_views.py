@@ -582,7 +582,13 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             mock_messages_info.assert_called()
             message = mock_messages_info.call_args[0][1]
 
-        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+        # The reminder names the address and carries an actionable "Re-send verification link"
+        # pointing at the resend endpoint, flagged safe so the snippet renders the anchor (#2233).
+        resend_url = reverse('profiles:profile_resend_email_verification', args=[self.test_student1.profile.pk])
+        self.assertIn(f"Please verify your email address: {self.test_student1.email}", message)
+        self.assertIn(resend_url, message)
+        self.assertIn("Re-send verification link", message)
+        self.assertEqual(mock_messages_info.call_args.kwargs.get('extra_tags'), 'safe')
         self.client.logout()
         # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
 
