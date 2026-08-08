@@ -32,10 +32,12 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
             <div class="alert {% if current_deck.days_until_expiry < 0 %}alert-danger{% else %}alert-warning{% endif %}" id="deck-status-banner">
                 <i class="fa fa-fw fa-exclamation-triangle"></i>
                 {% if current_deck.days_until_expiry < 0 %}
-                    <strong>Subscription expired:</strong> this deck is in its grace period, which ends in
+                    {# the GOVERNING clock picks the wording: an admin-extended trial can outlast an old paid date (#1734 B4) #}
+                    <strong>{% if current_deck.governing_clock_is_trial %}Trial ended:{% else %}Subscription expired:{% endif %}</strong>
+                    this deck is in its grace period, which ends in
                     {{ current_deck.grace_days_remaining }} day{{ current_deck.grace_days_remaining|pluralize }};
                     the deck will then be suspended (only the deck owner will be able to sign in).
-                {% elif current_deck.is_on_trial %}
+                {% elif current_deck.governing_clock_is_trial %}
                     <strong>Trial ending soon:</strong> this deck's free trial ends in
                     {{ current_deck.days_until_expiry }} day{{ current_deck.days_until_expiry|pluralize }}.
                 {% else %}

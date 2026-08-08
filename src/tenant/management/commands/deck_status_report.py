@@ -82,6 +82,9 @@ class Command(BaseCommand):
             return 'grace' if tenant.in_grace_period else 'subscribed'
         if tenant.is_on_trial:
             return 'trial'
+        if tenant.in_grace_period:
+            # a lapsed trial inside the unified grace window (#1734 B4)
+            return 'grace'
         if tenant.is_suspended:
             return 'suspended'
         return 'unmanaged'

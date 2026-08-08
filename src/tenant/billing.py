@@ -15,7 +15,7 @@ Two flows feed deck billing state, both defined here:
   handler is a thin translator that resolves the deck and funnels through
   ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
 
@@ -37,6 +37,11 @@ try:
 except (ImportError, AttributeError):  # pragma: no cover -- requires a different SDK layout
     pass
 
+# Stripe rejects a subscription trial_end closer than 48 hours out; the extra
+# hour absorbs clock skew and request latency so a boundary-day checkout can't
+# fail at Stripe after passing our check
+CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
+
 
 def billing_configured():
     """Whether Stripe checkout can run: the secret key and the subscription Price are set.
@@ -52,14 +57,46 @@ def _subscription_page_url(deck):
     return deck.get_root_url() + reverse('decks:subscription')
 
 
+def checkout_trial_end(deck):
+    """When this deck subscribes mid-trial, the aware datetime its Stripe trial
+    should run until, or None when a plain (bill-now) checkout is right.
+
+    A mid-trial subscriber keeps their remaining free time (maintainer decision,
+    2026-08-06): checkout passes this as ``subscription_data.trial_end`` so the
+    subscription starts ``trialing``, the card is collected now, and the first
+    charge lands when the deck's existing trial ends, auto-renewing from then
+    on. The deck's trial covers THROUGH ``trial_end_date``, so the Stripe trial
+    runs to local midnight after that day (settings.TIME_ZONE).
+
+    None when the deck isn't on trial, or when the trial ends within
+    CHECKOUT_TRIAL_END_MINIMUM (Stripe requires trial_end at least 48 hours in
+    the future, so a nearly-over trial just bills immediately: at most two days
+    of free time are forfeited, on a deck whose trial was ending anyway).
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        datetime | None: The aware trial-end moment to send to Stripe, or None.
+    """
+    if not deck.is_on_trial:
+        return None
+    end = timezone.make_aware(datetime.combine(deck.trial_end_date + timedelta(days=1), dt_time.min))
+    if end < timezone.now() + CHECKOUT_TRIAL_END_MINIMUM:
+        return None
+    return end
+
+
 def create_checkout_session(deck):
     """Create a subscription Checkout Session for an unlinked deck; return its URL.
 
     The deck is identified to Stripe three ways (client_reference_id, metadata,
     and the customer email), so the webhook (PR 7) and manual reconciliation can
-    always find their way back to the schema. The idempotency key means a
-    double-click or same-day retry with identical parameters reuses the same
-    session instead of minting duplicates.
+    always find their way back to the schema. A mid-trial deck's remaining free
+    time rides along as ``subscription_data.trial_end`` (see
+    :func:`checkout_trial_end`). The idempotency key means a double-click or
+    same-day retry with identical parameters reuses the same session instead of
+    minting duplicates.
 
     Args:
         deck (Tenant): The current deck; must not already have a stripe_customer_id.
@@ -67,6 +104,7 @@ def create_checkout_session(deck):
     Returns:
         str: The Stripe-hosted checkout URL to redirect the owner to.
     """
+    trial_end = checkout_trial_end(deck)
     session = stripe.checkout.Session.create(
         api_key=settings.STRIPE_SECRET_KEY,
         mode='subscription',
@@ -75,12 +113,24 @@ def create_checkout_session(deck):
         customer_email=deck.get_owner_email_cached() or None,
         metadata={'schema_name': deck.schema_name},
         # stamp the subscription too, so webhook subscription events (PR 7)
-        # self-identify without a lookup
-        subscription_data={'metadata': {'schema_name': deck.schema_name}},
+        # self-identify without a lookup; a mid-trial deck's remaining free time
+        # rides along as trial_end, so the subscription starts `trialing` until
+        # the deck's existing trial ends
+        subscription_data={
+            'metadata': {'schema_name': deck.schema_name},
+            **({'trial_end': int(trial_end.timestamp())} if trial_end else {}),
+        },
         # Checkout substitutes the real session id into the literal placeholder
         success_url=deck.get_root_url() + reverse('decks:subscription_activating') + '?session_id={CHECKOUT_SESSION_ID}',
         cancel_url=_subscription_page_url(deck),
-        idempotency_key=f'deck-checkout-{deck.schema_name}-{localdate()}',
+        # Stripe rejects a reused idempotency key whose parameters changed, so the
+        # trial variant carries the trial-end timestamp: a same-day retry after the
+        # cutoff passed, or after an admin moved trial_end_date, gets a fresh key
+        # while an identical retry still reuses the session
+        idempotency_key=(
+            f'deck-checkout-{deck.schema_name}-{localdate()}'
+            + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
+        ),
     )
     return session.url
 

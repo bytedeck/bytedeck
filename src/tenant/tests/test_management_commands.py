@@ -123,9 +123,14 @@ class BillingStatusLabelTest(SimpleTestCase):
         self.assertEqual(Command.billing_status(Tenant(paid_until=today)), 'subscribed')
         self.assertEqual(Command.billing_status(Tenant(paid_until=today - timedelta(days=5), trial_end_date=None)), 'grace')
         self.assertEqual(Command.billing_status(Tenant(trial_end_date=today, paid_until=None)), 'trial')
+        # a lapsed trial in its unified grace window also reads as grace (#1734 B4)
+        self.assertEqual(Command.billing_status(Tenant(trial_end_date=today - timedelta(days=5), paid_until=None)), 'grace')
         self.assertEqual(
             Command.billing_status(
-                Tenant(trial_end_date=today - timedelta(days=1), paid_until=today - timedelta(days=GRACE_PERIOD_DAYS + 1))
+                Tenant(
+                    trial_end_date=today - timedelta(days=GRACE_PERIOD_DAYS + 40),
+                    paid_until=today - timedelta(days=GRACE_PERIOD_DAYS + 1),
+                )
             ),
             'suspended',
         )

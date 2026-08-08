@@ -69,8 +69,7 @@ def close_semester_on_new_suspension(deck):
     if not deck.is_suspended:
         return 'not suspended'
 
-    lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
-    period_key = str(max(lapsed_clocks))
+    period_key = str(deck.governing_deadline)
     with transaction.atomic():
         _, created = DeckNotice.objects.get_or_create(
             tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='semester-close', period_key=period_key,
@@ -106,16 +105,17 @@ def evaluate_deck_notices(deck):
 
     # --- suspension: once per suspension episode ---------------------------------
     if deck.is_suspended:
-        lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
-        period_key = str(max(lapsed_clocks))
+        period_key = str(deck.governing_deadline)
         if _unfired(deck, DeckNotice.KIND_SUSPENDED, 'suspended', period_key):
             due.append((DeckNotice.KIND_SUSPENDED, 'suspended', period_key))
     else:
         # --- expiry cadence (not for suspended decks; their deadline is history) --
         days = deck.days_until_expiry
         if days is not None and days <= EXPIRY_THRESHOLDS[-1][1]:
-            deadline = deck.paid_until if deck.subscription_active else deck.trial_end_date
-            period_key = str(deadline)
+            # keyed to the GOVERNING deadline (the one days_until_expiry counts to
+            # and the email reports), so a stale paid key can never suppress
+            # reminders for a later governing trial date (#1734 B4)
+            period_key = str(deck.governing_deadline)
             # the first (most specific) milestone whose window we're inside governs --
             # broader milestones are superseded, never fired late. The guard above
             # guarantees at least the broadest window matches.
@@ -207,7 +207,14 @@ def _deliver(deck, kind):
         # paid period ended/ends, how long ago, when the grace window closes, and --
         # for suspended decks -- the day the suspension began. None when not applicable.
         'grace_days': GRACE_PERIOD_DAYS,
-        'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
+        # the unified grace window closes GRACE_PERIOD_DAYS after the deck's
+        # governing (latest) deadline, trial and paid clocks alike (#1734 B4);
+        # templates read the deadline and its origin from the deck itself
+        # (governing_deadline / governing_clock_is_trial)
+        'grace_end_date': (
+            deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS)
+            if deck.governing_deadline else None
+        ),
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
         'suspended_since': suspended_since,

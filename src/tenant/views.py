@@ -443,7 +443,7 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         from datetime import timedelta
 
-        from .billing import billing_configured
+        from .billing import billing_configured, checkout_trial_end
         from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
         from .utils import get_public_subscribe_url
 
@@ -456,9 +456,14 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # "(expired 24 days ago)"); None when the corresponding date is unset
             'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
             'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
+            # the unified grace window closes after the LATEST deadline, trial and
+            # paid clocks alike (#1734 B4)
             'grace_end_phrase': (
-                _relative_date_phrase(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS), 'ends')
-                if deck.paid_until else None
+                _relative_date_phrase(
+                    max(d for d in (deck.trial_end_date, deck.paid_until) if d is not None) + timedelta(days=GRACE_PERIOD_DAYS),
+                    'ends',
+                )
+                if (deck.trial_end_date or deck.paid_until) else None
             ),
         })
         context.update({
@@ -478,6 +483,10 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             'manually_subscribed': bool(
                 deck.subscription_active and not deck.in_grace_period and not deck.stripe_customer_id
             ),
+            # set (the Stripe trial's end moment) when checkout would preserve the
+            # deck's remaining free trial; drives the "card isn't charged until
+            # your trial ends" note beside the subscribe button
+            'checkout_trial_end': checkout_trial_end(deck),
             'public_subscribe_url': get_public_subscribe_url(),
         })
         return context
