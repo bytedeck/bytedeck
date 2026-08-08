@@ -76,17 +76,31 @@ class CheckoutTrialEndTest(SimpleTestCase):
         end = checkout_trial_end(self.deck(trial_end_date=date(2026, 9, 14)))
         self.assertEqual(end, timezone.make_aware(datetime(2026, 9, 15, 0, 0)))
 
-    def test_checkout_trial_end__none_when_not_on_trial(self):
-        """Paid, lapsed-trial, and dateless decks have no trial time to keep,
-        so checkout bills immediately as usual."""
+    def test_checkout_trial_end__none_when_the_trial_clock_does_not_govern(self):
+        """Decks whose governing clock isn't the trial (a later paid date, or no
+        dates at all) have no trial to preserve, so checkout bills immediately."""
         self.assertIsNone(
             checkout_trial_end(self.deck(trial_end_date=date(2026, 9, 14), paid_until=date(2026, 12, 1))))
-        self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 10))))  # trial lapsed
         self.assertIsNone(checkout_trial_end(self.deck()))  # managed manually
 
+    def test_checkout_trial_end__governing_clock_decides_with_both_dates(self):
+        """With BOTH dates set the governing (latest) clock decides (#1734 B4):
+        a trial outlasting an old paid date passes its end through, equal dates
+        speak subscription language (no pass-through), and a later paid date
+        bills immediately."""
+        self.assertEqual(
+            checkout_trial_end(self.deck(trial_end_date=date(2026, 9, 14), paid_until=date(2026, 8, 1))),
+            timezone.make_aware(datetime(2026, 9, 15, 0, 0)))
+        self.assertIsNone(
+            checkout_trial_end(self.deck(trial_end_date=date(2026, 9, 14), paid_until=date(2026, 9, 14))))
+        self.assertIsNone(
+            checkout_trial_end(self.deck(trial_end_date=date(2026, 9, 14), paid_until=date(2026, 12, 1))))
+
     def test_checkout_trial_end__none_when_the_trial_ends_too_soon(self):
-        """Stripe requires trial_end at least 48 hours out, so a nearly-over
-        trial gets a plain bill-now checkout instead of a doomed API call."""
+        """Stripe requires trial_end at least 48 hours out, so a trial-governed
+        deck whose trial is nearly over (or already lapsed into grace) gets a
+        plain bill-now checkout instead of a doomed API call."""
+        self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 10))))  # lapsed into grace
         self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 15))))  # ends today
         self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 16))))  # under the 49h floor
         self.assertIsNotNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 17))))  # clears it
