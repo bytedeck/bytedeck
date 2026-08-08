@@ -13,9 +13,21 @@
           href="{% url 'profiles:change_password' object.user.pk %}"
           role="button"><i class="fa fa-key"></i></a>
 
-        <a class="btn btn-danger" title="Delete this User"
-          href="{% url 'profiles:profile_delete' object.id %}"
-          role="button"><i class="fa fa-trash-o"></i></a>
+        {% if object.user.is_active %}
+          {# Archiving deactivates the student (reversible) instead of deleting outright (#2182). #}
+          <a class="btn btn-default" title="Archive this student (deactivates their account; can be restored or deleted later)"
+            href="{% url 'profiles:profile_archive' object.id %}"
+            role="button"><i class="fa fa-archive"></i></a>
+        {% else %}
+          {# Archived (deactivated) student: offer restore, and delete is now available here. #}
+          <a class="btn btn-success" title="Restore this student (reactivates their account)"
+            href="{% url 'profiles:profile_restore' object.id %}"
+            role="button"><i class="fa fa-undo"></i></a>
+
+          <a class="btn btn-danger" title="Delete this User permanently"
+            href="{% url 'profiles:profile_delete' object.id %}"
+            role="button"><i class="fa fa-trash-o"></i></a>
+        {% endif %}
       {% else %}
         <a class="btn btn-warning" title="Change Password"
         href="{% url 'account_change_password' %}"
