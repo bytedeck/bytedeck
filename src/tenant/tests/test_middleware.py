@@ -80,11 +80,14 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'This deck is suspended')
 
     def test_bounce__nobody_bounced_while_not_suspended(self):
-        """On a live deck (trial running, or paid, or in grace) nobody is bounced."""
+        """On a live deck (trial running, or paid, or in grace) nobody is bounced.
+        A lapsed trial's grace window counts (#1734 B4): students keep access for
+        the full grace period before the owner-only bounce begins."""
         for fields in (
             {'trial_end_date': localdate() + timedelta(days=30), 'paid_until': None},  # on trial
             {'trial_end_date': None, 'paid_until': localdate() + timedelta(days=30)},  # subscribed
-            {'trial_end_date': None, 'paid_until': localdate() - timedelta(days=5)},   # in grace
+            {'trial_end_date': None, 'paid_until': localdate() - timedelta(days=5)},   # in paid grace
+            {'trial_end_date': localdate() - timedelta(days=5), 'paid_until': None},   # in trial grace (#1734 B4)
         ):
             self.set_deck(**fields)
             for user in (self.staff, self.student, self.owner):
