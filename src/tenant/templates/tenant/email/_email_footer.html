@@ -7,4 +7,6 @@
   only utilized for maintaining systems and development.</em></p>
 <p>If you have any questions, contact us at <a href="mailto:contact@bytedeck.com">contact@bytedeck.com</a>.</p>
 <p>Bytedeck</p>
-<p><img alt="[Logo]" src="{% site_logo_url %}"></p>
+{# emails rendered on the PUBLIC schema (e.g. the deck-request verification) have no #}
+{# SiteConfig for site_logo_url to read, so they pass the platform logo's URL instead #}
+{% if logo_url %}<p><img alt="[Logo]" src="{{ logo_url }}"></p>{% else %}<p><img alt="[Logo]" src="{% site_logo_url %}"></p>{% endif %}

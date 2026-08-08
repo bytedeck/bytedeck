@@ -1,0 +1,16 @@
+<p>Hello {{ user.get_full_name }},</p>
+
+<p>Thank you for confirming your email address. Use these credentials to log in to your
+  new deck at <a href="{{ tenant.get_root_url }}">{{ tenant.get_root_url }}</a>:</p>
+
+<ul>
+  <li>username: <strong>{{ user.username }}</strong></li>
+  <li>password: <strong>{{ password }}</strong></li>
+</ul>
+
+<p>You should change your password after logging in for the first time.</p>
+
+<p>Help forum: <a href="https://github.com/bytedeck/bytedeck/discussions">https://github.com/bytedeck/bytedeck/discussions</a><br>
+  Documentation: <a href="https://github.com/bytedeck/bytedeck/wiki">https://github.com/bytedeck/bytedeck/wiki</a></p>
+
+{% include "tenant/email/_email_footer.html" %}

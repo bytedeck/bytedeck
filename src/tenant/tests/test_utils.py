@@ -96,3 +96,36 @@ class GetPublicSubscribeUrlTest(SimpleTestCase):
     def test_get_public_subscribe_url__production(self):
         """On a real domain the URL uses https with no port."""
         self.assertEqual(get_public_subscribe_url(), 'https://bytedeck.com/pages/subscribe/')
+
+
+class WelcomeEmailTest(ByteDeckTenantTestCase):
+    """Tests for the new-deck welcome email (deck-request flow polish, 2026-08-08)."""
+
+    def test_send_welcome_email__html_body_and_domain_only_subject(self):
+        """The welcome email is a real HTML message (credential list, clickable deck
+        link, the logo sigblock) whose subject names just the deck's domain: the
+        old subject rendered the Tenant string, which says "name - domain" and so
+        repeated the same identifier twice. send_email_message derives the
+        plain-text part from the HTML, so both email clients get a formatted
+        message instead of one collapsed line."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from model_bakery import baker
+
+        from tenant.utils import DeckRequestService
+
+        user = baker.make(get_user_model(), first_name='Jane', last_name='Doe', email='jane@example.com')
+        with patch('tenant.utils.send_email_message.apply_async') as mock_apply:
+            DeckRequestService.send_welcome_email(user, self.tenant, 'pw-secret-123')
+
+        subject, message, recipients = mock_apply.call_args.kwargs['args']
+        self.assertEqual(subject, f'Instructions to sign in to {self.tenant.primary_domain_url}')
+        self.assertNotIn(' - ', subject)  # the redundant "name - domain" Tenant string is gone
+        self.assertEqual(recipients, ['jane@example.com'])
+        self.assertIn('<p>Hello Jane Doe,</p>', message)
+        self.assertIn(f'<a href="{self.tenant.get_root_url()}">', message)
+        self.assertIn('password: <strong>pw-secret-123</strong>', message)
+        self.assertIn('change your password', message)
+        self.assertIn('alt="[Logo]"', message)  # the standard sigblock, logo included
