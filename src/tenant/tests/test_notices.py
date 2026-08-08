@@ -234,7 +234,12 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         from siteconfig.models import SiteConfig
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
-        self.assertEqual(notification.verb, 'sent a current-student limit warning.')
+        # the notification carries the notice's key fact and links the subscription
+        # page (maintainer request, 2026-08-08: the bare label wasn't actionable)
+        self.assertEqual(
+            notification.verb,
+            'sent a current-student limit warning: 5 of 5 current-student seats are used.')
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__notification_comes_from_support_admin_when_present(self):
@@ -253,7 +258,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
         self.assertEqual(notification.sender_object, support_admin)
-        self.assertIn('Bytedeck sent a current-student limit warning.', notification.get_link())
+        self.assertIn('Bytedeck sent a current-student limit warning:', notification.get_link())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__notification_sender_falls_back_to_deck_ai(self):
@@ -272,6 +277,63 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
         self.assertEqual(notification.sender_object, SiteConfig.get().deck_ai)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__notification_names_the_governing_deadline(self):
+        """The expiry notification names the governing clock's deadline while it
+        approaches, switches to the grace-window wording once it has passed, and
+        the suspended notice adds the deletion horizon: the owner sees the date
+        that matters without opening the email (maintainer request, 2026-08-08)."""
+        from unittest.mock import patch
+
+        from django.urls import reverse
+
+        from siteconfig.models import SiteConfig
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        owner = SiteConfig.get().deck_owner
+        inline_email = patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        )
+
+        # approaching: trial ends Aug 22 (7 days from frozen TODAY Aug 15)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY + timedelta(days=7), paid_until=None)
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ends on Aug. 22, 2026 (7 days left).")
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
+
+        # lapsed into grace: ended Aug 10, grace runs to Sep 9 (30 days)
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY - timedelta(days=5))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ended on Aug. 10, 2026 "
+            "and the grace period ends on Sept. 9, 2026.")
+
+        # suspended: lapsed past the grace window; the deletion horizon is named
+        # (warned today, so a year from frozen TODAY)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a deck suspended warning: this deck's free trial ended on July 15, 2026 "
+            "and the grace period has run out; without a subscription the deck may be "
+            "deleted after Aug. 15, 2027.")
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
