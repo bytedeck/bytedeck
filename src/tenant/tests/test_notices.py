@@ -238,8 +238,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # page (maintainer request, 2026-08-08: the bare label wasn't actionable)
         self.assertEqual(
             notification.verb,
-            'sent a current-student limit warning: 5 of 5 current-student seats are used.')
+            'sent a current-student limit warning: 5 of 5 current-student seats are used. See your')
         self.assertEqual(notification.target_url, reverse('decks:subscription'))
+        self.assertEqual(notification.target_link_text, 'subscription details page.')
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__notification_comes_from_support_admin_when_present(self):
@@ -307,7 +308,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         notification = Notification.objects.filter(recipient=owner).latest('id')
         self.assertEqual(
             notification.verb,
-            "sent a subscription expiry reminder: this deck's free trial ends on Aug. 22, 2026 (7 days left).")
+            "sent a subscription expiry reminder: this deck's free trial ends on Aug. 22, 2026 (7 days left). See your")
         self.assertEqual(notification.target_url, reverse('decks:subscription'))
 
         # lapsed into grace: ended Aug 10, grace runs to Sep 9 (30 days)
@@ -319,7 +320,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(
             notification.verb,
             "sent a subscription expiry reminder: this deck's free trial ended on Aug. 10, 2026 "
-            "and the grace period ends on Sept. 9, 2026.")
+            "and the grace period ends on Sept. 9, 2026. See your")
 
         # suspended: lapsed past the grace window; the deletion horizon is named
         # (warned today, so a year from frozen TODAY)
@@ -333,7 +334,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             notification.verb,
             "sent a deck suspended warning: this deck's free trial ended on July 15, 2026 "
             "and the grace period has run out; without a subscription the deck may be "
-            "deleted after Aug. 15, 2027.")
+            "deleted after Aug. 15, 2027. See your")
 
         # defensive fall-through: a deck with no running deletion clock (it isn't
         # actually suspended, so Tenant.deletion_date is None) still gets a

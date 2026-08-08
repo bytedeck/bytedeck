@@ -285,12 +285,13 @@ def _deliver(deck, kind):
         sender,
         recipient=config.deck_owner,
         affected_users=staff,
-        # the label plus the notice's key fact (deadline or seat count), and a link
-        # to the subscription page: the bare "sent a reminder" line told the owner
-        # nothing actionable (maintainer request, 2026-08-08)
-        verb=f'sent a {verb}: {_notification_detail(deck, kind)}',
+        # the label plus the notice's key fact (deadline or seat count), then one
+        # small "subscription details page" link: the bare "sent a reminder" line
+        # told the owner nothing actionable (maintainer requests, 2026-08-08)
+        verb=f'sent a {verb}: {_notification_detail(deck, kind)} See your',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
         url=reverse('decks:subscription'),
+        link_text='subscription details page.',
     )
 
     # Email enqueue last: it can't be rolled back, so it only runs once everything

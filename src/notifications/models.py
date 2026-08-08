@@ -122,6 +122,10 @@ class Notification(models.Model):
     # has no natural target model, e.g. a deck's subscription status: when set, the
     # notification links here instead of to target_object.get_absolute_url()
     target_url = models.CharField(max_length=255, blank=True, default='')
+    # the anchor text for target_url, e.g. "subscription details page." -- keeps the
+    # notification body plain text with one small link at the end (maintainer
+    # request, 2026-08-08); when blank, the whole verb becomes the link text
+    target_link_text = models.CharField(max_length=255, blank=True, default='')
 
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='notifications', on_delete=models.CASCADE)
 
@@ -236,6 +240,7 @@ class Notification(models.Model):
             "verb": self.verb,
             "action": action,  # notif text
             "target": self.target_object,  # basically quest name
+            "link_text": self.target_link_text,
             "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
@@ -247,9 +252,13 @@ class Notification(models.Model):
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
         elif self.target_url:
-            # no target model to name, so the verb itself is the link text: without
-            # this the anchor would render empty and the destination be unreachable
-            url = "%(sender)s <a href='%(verify_read)s?next=%(target_url)s'>%(verb)s</a>" % context
+            if self.target_link_text:
+                # plain verb, one small link at the end (maintainer request, 2026-08-08)
+                url = url_common_part + "%(link_text)s</a>" % context
+            else:
+                # no link text given, so the verb itself is the link text: without
+                # this the anchor would render empty and the destination be unreachable
+                url = "%(sender)s <a href='%(verify_read)s?next=%(target_url)s'>%(verb)s</a>" % context
         else:
             url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
         return url
@@ -303,6 +312,7 @@ class Notification(models.Model):
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
+            "link_text": self.target_link_text,
             # "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             # "target_url": target_url,
             "url": self.get_url(),
@@ -315,6 +325,10 @@ class Notification(models.Model):
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
+        elif self.target_link_text:
+            # the dropdown row is one big anchor, so the link text just completes
+            # the sentence the verb starts
+            url = url_common_part + " %(link_text)s</a>" % context
         else:
             url = url_common_part + "</a>"
 
@@ -334,6 +348,9 @@ def new_notification(sender, **kwargs):
         url (string): explicit URL path the notification links to, for notices about
             something with no natural target model (e.g. a deck's subscription status);
             overrides the target's get_absolute_url()
+        link_text (string): anchor text for `url`, e.g. "subscription details page." --
+            keeps the notification body plain with one small link at the end; without
+            it the whole verb becomes the link text
         icon (html string): e.g.:
             "<span class='fa-stack'>" + \
                "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
@@ -347,6 +364,7 @@ def new_notification(sender, **kwargs):
     verb = kwargs.pop('verb')  # required
     icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
     target_url = kwargs.pop('url', '')
+    target_link_text = kwargs.pop('link_text', '')
     affected_users = kwargs.pop('affected_users', [recipient, ])
 
     # try:
@@ -370,6 +388,7 @@ def new_notification(sender, **kwargs):
             sender_object_id=sender.id,
             font_icon=icon,
             target_url=target_url,
+            target_link_text=target_link_text,
         )
         # Set the target if provided.
         for option in ("target", "action"):
