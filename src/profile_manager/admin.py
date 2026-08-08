@@ -22,11 +22,14 @@ def create_missing_profiles(modeladmin, request, queryset):
 
 
 def migrate_names_to_user_model(modeladmin, request, queryset):
+    # One-time migration helper: first_name/last_name were moved off Profile onto the User
+    # model (migration 0018), so ``hasattr(profile, 'first_name')`` is always False now and the
+    # copy-across bodies never run. The guards are kept so the action stays harmless if invoked.
     for profile in queryset:
         if hasattr(profile, 'first_name') and profile.first_name:
-            profile.user.first_name = profile.first_name
+            profile.user.first_name = profile.first_name  # pragma: no cover -- field removed in migration 0018
         if hasattr(profile, 'last_name') and profile.last_name:
-            profile.user.last_name = profile.last_name
+            profile.user.last_name = profile.last_name  # pragma: no cover -- field removed in migration 0018
 
         profile.user.save()
 

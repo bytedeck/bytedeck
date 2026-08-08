@@ -236,6 +236,25 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
+    def test_assertion_create__zero_ids_render_empty_initial_form(self):
+        """Calling assertion_create with user_id=0 and badge_id=0 (no pre-selected user/badge)
+        renders the grant form without pre-filling either, then a valid POST still grants."""
+        self.client.force_login(self.test_teacher)
+
+        # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
+        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
+        self.assertEqual(response.status_code, 200)
+
+        form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}),
+            data=form_data,
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+        self.assertTrue(
+            BadgeAssertion.objects.filter(user=self.test_student1, badge=self.test_badge).exists()
+        )
+
     def test_assertion_create__no_xp(self):
         """Don't grant XP for this badge assertion"""
         self.client.force_login(self.test_teacher)
