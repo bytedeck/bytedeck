@@ -9,7 +9,8 @@ Priority: suspended (everyone) > over-limit (staff) > expiring soon (staff) > tr
         <div class="alert alert-danger" id="deck-status-banner">
             <i class="fa fa-fw fa-ban"></i>
             {% if request.user.is_staff %}
-                <strong>This deck is suspended:</strong> its trial or subscription has ended. Only the deck
+                <strong>This deck is suspended:</strong> its trial or subscription ended and the grace
+                period has run out. Only the deck
                 owner can sign in, and a deck suspended for 365 days may be permanently deleted.
                 <a href="{{ deck_subscribe_url }}" class="alert-link">Subscribe</a> to restore access
                 (even the low-cost Maintenance subscription keeps the deck safe).
