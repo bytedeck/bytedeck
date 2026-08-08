@@ -12,22 +12,6 @@
         <a class="btn btn-warning" title="Change User's Password"
           href="{% url 'profiles:change_password' object.user.pk %}"
           role="button"><i class="fa fa-key"></i></a>
-
-        {% if object.user.is_active %}
-          {# Archiving deactivates the student (reversible) instead of deleting outright (#2182). #}
-          <a class="btn btn-default" title="Archive this student (deactivates their account; can be restored or deleted later)"
-            href="{% url 'profiles:profile_archive' object.id %}"
-            role="button"><i class="fa fa-archive"></i></a>
-        {% else %}
-          {# Archived (deactivated) student: offer restore, and delete is now available here. #}
-          <a class="btn btn-success" title="Restore this student (reactivates their account)"
-            href="{% url 'profiles:profile_restore' object.id %}"
-            role="button"><i class="fa fa-undo"></i></a>
-
-          <a class="btn btn-danger" title="Delete this User permanently"
-            href="{% url 'profiles:profile_delete' object.id %}"
-            role="button"><i class="fa fa-trash-o"></i></a>
-        {% endif %}
       {% else %}
         <a class="btn btn-warning" title="Change Password"
         href="{% url 'account_change_password' %}"
@@ -50,6 +34,27 @@
           role="button"><i class="fa fa-picture-o"></i></a>
       {% endif %}
     </div>
+
+    {# Archive / restore / delete get their own button group, separate from the profile actions above (#2182). #}
+    {% if request.user.is_staff and not object.user.is_staff %}
+      <div class="btn-group" role="group">
+        {% if object.user.is_active %}
+          {# Archiving deactivates the student (reversible) instead of deleting outright. #}
+          <a class="btn btn-default" title="Archive this student (deactivates their account; can be restored or deleted later)"
+            href="{% url 'profiles:profile_archive' object.id %}"
+            role="button"><i class="fa fa-archive"></i></a>
+        {% else %}
+          {# Archived (deactivated) student: restore (archive + up arrow) reactivates, and delete is now available here. #}
+          <a class="btn btn-success" title="Restore this student (reactivates their account)"
+            href="{% url 'profiles:profile_restore' object.id %}"
+            role="button"><i class="fa fa-archive"></i><sup><i class="fa fa-arrow-up"></i></sup></a>
+
+          <a class="btn btn-danger" title="Delete this User permanently"
+            href="{% url 'profiles:profile_delete' object.id %}"
+            role="button"><i class="fa fa-trash-o"></i></a>
+        {% endif %}
+      </div>
+    {% endif %}
 {% endblock %}
 
 {% block content %}
