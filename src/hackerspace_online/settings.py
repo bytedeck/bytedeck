@@ -729,6 +729,16 @@ if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is c
     _validate_stripe_settings(ROOT_DOMAIN, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
 
 
+# DEMO DECK #######################################################
+
+# Course code for the public demo deck (learn.bytedeck.com), shown on the
+# deck-request page so visitors can preview ByteDeck as a student. Set only in
+# the deployment's .env: keeping it out of the repo means bots scraping the
+# codebase can't harvest it, and it can be rotated without a release. When
+# unset, the page links the demo deck without printing a code.
+DEMO_DECK_COURSE_CODE = env('DEMO_DECK_COURSE_CODE', default='')
+
+
 # RECAPTCHA #######################################################
 
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
