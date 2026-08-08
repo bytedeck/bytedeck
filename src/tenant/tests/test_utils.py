@@ -129,3 +129,23 @@ class WelcomeEmailTest(ByteDeckTenantTestCase):
         self.assertIn('password: <strong>pw-secret-123</strong>', message)
         self.assertIn('change your password', message)
         self.assertIn('alt="[Logo]"', message)  # the standard sigblock, logo included
+
+    def test_send_welcome_email__uses_username_when_owner_name_is_blank(self):
+        """An owner with no first/last name set is greeted by username instead of
+        an empty "Hello ,": legacy and seeded owners often have no name."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+
+        from model_bakery import baker
+
+        from tenant.utils import DeckRequestService
+
+        user = baker.make(
+            get_user_model(), username='nameless-owner', first_name='', last_name='',
+            email='nameless@example.com')
+        with patch('tenant.utils.send_email_message.apply_async') as mock_apply:
+            DeckRequestService.send_welcome_email(user, self.tenant, 'pw-secret-123')
+
+        _subject, message, _recipients = mock_apply.call_args.kwargs['args']
+        self.assertIn('<p>Hello nameless-owner,</p>', message)
