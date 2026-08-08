@@ -380,6 +380,29 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__limit_email_names_the_grace_state(self):
+        """The limit email on an in-grace deck says the governing clock already
+        ran out and the deck is in its grace period, rather than quoting a
+        pre-lapse deadline (#1734 B5)."""
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=5), paid_until=None,
+            max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        with patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            _deliver(self.tenant, DeckNotice.KIND_LIMIT)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('free trial ended on <strong>Aug. 10, 2026</strong> and the deck is in its grace period', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_states_when_and_why_with_logo(self):
         """The suspension email says when the suspension began, which clock ran
         out (trial or paid, plus the unified grace window, #1734 B4), current
