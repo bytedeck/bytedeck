@@ -244,6 +244,9 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
         response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
         self.assertEqual(response.status_code, 200)
+        # neither field is pre-filled because both id lookups were skipped
+        self.assertNotIn('user', response.context['form'].initial)
+        self.assertNotIn('badge', response.context['form'].initial)
 
         form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
         response = self.client.post(

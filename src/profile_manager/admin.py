@@ -22,6 +22,16 @@ def create_missing_profiles(modeladmin, request, queryset):
 
 
 def migrate_names_to_user_model(modeladmin, request, queryset):
+    """Admin action: copy each selected Profile's legacy first/last name onto its User.
+
+    A one-time data-migration helper. It is now inert (see the comment below), but is kept as an
+    admin action so it stays available and harmless if ever invoked.
+
+    :param modeladmin: the ModelAdmin the action is registered on (unused).
+    :param request: the current admin request (used to flash the completion message).
+    :param queryset: the selected Profile rows to migrate.
+    :return: None.
+    """
     # One-time migration helper: first_name/last_name were moved off Profile onto the User
     # model (migration 0018), so ``hasattr(profile, 'first_name')`` is always False now and the
     # copy-across bodies never run. The guards are kept so the action stays harmless if invoked.

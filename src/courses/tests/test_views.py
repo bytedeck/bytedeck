@@ -1546,7 +1546,7 @@ class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cutoff loop finishes without breaking), and a badge with a single assertion gets no
         ordinal suffix on its name."""
         # xp 10 x2 = 20, well under max_xp 100, so the cutoff loop never breaks
-        self._tagged_quest_with_submissions('gamma', xp=10, max_xp=100, quantity=2)
+        quest = self._tagged_quest_with_submissions('gamma', xp=10, max_xp=100, quantity=2)
         # a single assertion -> count() == 1 -> no "(ordinal)" appended
         self._tagged_badge_with_assertions('gamma', xp=15, quantity=1)
 
@@ -1557,7 +1557,13 @@ class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
         payload = json.loads(response.content)
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
         badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # both under-cap submissions are kept (the cutoff loop never dropped one)
+        self.assertEqual(
+            sum(name == quest.name or name.startswith(f'{quest.name} (') for name in quest_names),
+            2,
+        )
         self.assertTrue(badge_names)
         self.assertTrue(all('(' not in name for name in badge_names), badge_names)
 

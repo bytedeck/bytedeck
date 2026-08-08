@@ -2201,8 +2201,11 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
 
     def _changed_formset_data(self):
-        """A formset that actually changes the existing prereq (prereq_count 1 -> 3) so
-        form.has_changed() is True and form_valid runs past its early return."""
+        """Build POST data that changes the existing prereq (prereq_count 1 -> 3) so
+        form.has_changed() is True and form_valid runs past its early return.
+
+        Returns the formset POST-field dict for the request.
+        """
         ct = ContentType.objects.get_for_model(self.prereq_quest)
         forms_data = [
             {
@@ -2220,6 +2223,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         config = SiteConfig.get()
         config.map_auto_update = False
+        config.full_clean()
         config.save()
 
         response = self.client.post(
@@ -2237,6 +2241,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         config = SiteConfig.get()
         config.map_auto_update = True
+        config.full_clean()
         config.save()
         # a map whose initial (first) node is the quest whose prereqs are being edited, so
         # CytoScape.objects.get_related_maps(parent_quest) returns it

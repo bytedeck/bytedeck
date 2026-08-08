@@ -277,5 +277,5 @@ class QuestResourceAfterImportTest(ByteDeckTenantTestCase):
 
         resource.after_import(dataset=None, result=None, dry_run=True)
 
-        # the dry-run early return skips the body that would overwrite the visibility map
+        # the dry-run guard skips the body that would overwrite the visibility map
         self.assertEqual(resource.local_visibility_map, 'SENTINEL')
