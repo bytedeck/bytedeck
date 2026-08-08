@@ -494,14 +494,6 @@ def recalculate_current_xp(request):
     return redirect_to_previous_page(request)
 
 
-@login_required
-def tour_complete(request):
-    profile = request.user.profile
-    profile.intro_tour_completed = True
-    profile.save()
-    return redirect('quests:quests')
-
-
 @non_public_only_view
 @staff_member_required
 def xp_toggle(request, profile_id):
