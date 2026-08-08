@@ -9,6 +9,7 @@ from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
+from django.utils.html import format_html
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView, DeleteView
 
@@ -500,6 +501,58 @@ def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
     profile.save()
+    return redirect_to_previous_page(request)
+
+
+@non_public_only_view
+@staff_member_required
+def profile_archive(request, profile_id):
+    """Archive a student by deactivating their account (``User.is_active = False``).
+
+    Archiving is the safe, reversible replacement for deleting a student
+    (issue #2182): the student can no longer log in and moves to the Inactive
+    list, but all of their data is kept and staff can later restore or delete
+    them from there. Staff-only; staff accounts can't be archived this way.
+    """
+    profile = get_object_or_404(Profile, id=profile_id)
+    user = profile.user
+
+    if user.is_staff:
+        messages.error(request, "Staff accounts cannot be archived.")
+        return redirect_to_previous_page(request)
+
+    user.is_active = False
+    user.save()
+
+    messages.success(
+        request,
+        format_html(
+            "<a href='{}'>{}</a> has been archived. You can restore or delete them from the Inactive list.",
+            profile.get_absolute_url(),
+            user.username,
+        ),
+    )
+    return redirect_to_previous_page(request)
+
+
+@non_public_only_view
+@staff_member_required
+def profile_restore(request, profile_id):
+    """Restore an archived student by reactivating their account (``User.is_active = True``).
+
+    The reverse of :func:`profile_archive`: the student can log in again and
+    returns to the active student lists. Staff-only.
+    """
+    profile = get_object_or_404(Profile, id=profile_id)
+    user = profile.user
+
+    user.is_active = True
+    user.save()
+
+    messages.success(
+        request,
+        format_html("<a href='{}'>{}</a> has been restored.", profile.get_absolute_url(), user.username),
+    )
     return redirect_to_previous_page(request)
 
 

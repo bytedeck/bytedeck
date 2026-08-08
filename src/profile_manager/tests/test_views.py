@@ -779,6 +779,91 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ProfileArchiveTests(ByteDeckTenantTestCase):
+    """Archiving replaces deleting a student (issue #2182): staff deactivate (archive) a student
+    instead of deleting outright, and can then restore or delete the archived student."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher plus two students (the target and a second non-staff actor)."""
+        cls.User = get_user_model()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.teacher = cls.User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = cls.User.objects.create_user('test_student')
+        cls.other_student = cls.User.objects.create_user('other_student')
+
+        cls.archive_url = reverse("profiles:profile_archive", args=[cls.student.profile.pk])
+        cls.restore_url = reverse("profiles:profile_restore", args=[cls.student.profile.pk])
+        cls.detail_url = reverse("profiles:profile_detail", args=[cls.student.profile.pk])
+        cls.delete_url = reverse("profiles:profile_delete", args=[cls.student.profile.pk])
+
+    def setUp(self):
+        """Create a tenant-aware test client for each test."""
+        self.client = TenantClient(self.tenant)
+
+    def test_profile_archive__staff_deactivates_student(self):
+        """A staff request to profile_archive deactivates the student (is_active=False) and redirects."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_restore__staff_reactivates_archived_student(self):
+        """A staff request to profile_restore reactivates a previously-archived student (is_active=True)."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_archive__refuses_staff_accounts(self):
+        """Archiving a staff account is refused, leaving that account active."""
+        staff_target = self.User.objects.create_user('other_teacher', is_staff=True)
+        self.client.force_login(self.teacher)
+        self.client.get(reverse("profiles:profile_archive", args=[staff_target.profile.pk]))
+        staff_target.refresh_from_db()
+        self.assertTrue(staff_target.is_active)
+
+    def test_profile_archive__non_staff_forbidden(self):
+        """A non-staff user cannot archive: access is forbidden and the target stays active."""
+        self.client.force_login(self.other_student)
+        response = self.client.get(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self.student.is_active)
+
+    def test_profile_restore__non_staff_forbidden(self):
+        """A non-staff user cannot restore: access is forbidden and the target stays archived."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.other_student)
+        response = self.client.get(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.student.is_active)
+
+    def test_profile_detail__active_student_shows_archive_not_delete(self):
+        """Staff viewing an active student's detail get the Archive action, with Delete gated away."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.archive_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_profile_detail__archived_student_shows_restore_and_delete(self):
+        """Staff viewing an archived student's detail get Restore and Delete, but not Archive again."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.restore_url)
+        self.assertContains(response, self.delete_url)
+        self.assertNotContains(response, self.archive_url)
+
+
 class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     """Dedicated, isolated tests for the ``oauth_merge_account`` view.
 

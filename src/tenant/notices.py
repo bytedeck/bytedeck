@@ -24,12 +24,13 @@ from django.conf import settings
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.timezone import localdate
+from django.utils.formats import date_format
+from django.utils.timezone import localdate, timedelta
 
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import DeckNotice, TRIAL_MAX_ACTIVE_USERS
+from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -176,12 +177,41 @@ def process_deck_notices(deck):
     return f"sent {sent} notice(s): [{labels}]"
 
 
+def _notification_detail(deck, kind):
+    """The key fact for one notice's in-app notification, as a short sentence.
+
+    The email tells the full story; the notification names the date or count the
+    owner needs at a glance: the governing deadline (#1734 B4: the LATER of the
+    trial and paid clocks, which drives all lifecycle wording), the grace end, or
+    the seat usage. Assumes the notice is actually due, so the dates its branches
+    read exist (e.g. a suspended deck always has a lapsed governing deadline).
+
+    Args:
+        deck (Tenant): The deck the notice is about.
+        kind (str): The DeckNotice KIND_* being delivered.
+
+    Returns:
+        str: One sentence, ready to append after the notice's label.
+    """
+    clock = 'free trial' if deck.governing_clock_is_trial else 'subscription'
+    deadline = date_format(deck.governing_deadline) if deck.governing_deadline else None
+    if kind == DeckNotice.KIND_SUSPENDED:
+        detail = f"this deck's {clock} ended on {deadline} and the grace period has run out"
+        if deck.deletion_date:
+            detail += f'; without a subscription the deck may be deleted after {date_format(deck.deletion_date)}'
+        return detail + '.'
+    if kind == DeckNotice.KIND_LIMIT:
+        return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+    # expiry cadence: approaching the deadline, or already inside the grace window
+    days = deck.days_until_expiry
+    if days is not None and days < 0:
+        grace_end = date_format(deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS))
+        return f"this deck's {clock} ended on {deadline} and the grace period ends on {grace_end}."
+    return f"this deck's {clock} ends on {deadline} ({days} day{'s' if days != 1 else ''} left)."
+
+
 def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
-    from django.utils.timezone import timedelta
-
-    from tenant.models import GRACE_PERIOD_DAYS
-
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
@@ -256,8 +286,13 @@ def _deliver(deck, kind):
         sender,
         recipient=config.deck_owner,
         affected_users=staff,
-        verb=f'sent a {verb}.',
+        # the label plus the notice's key fact (deadline or seat count), then one
+        # small "subscription details page" link: the bare "sent a reminder" line
+        # told the owner nothing actionable (maintainer requests, 2026-08-08)
+        verb=f'sent a {verb}: {_notification_detail(deck, kind)} See your',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
+        url=reverse('decks:subscription'),
+        link_text='subscription details page.',
     )
 
     # Email enqueue last: it can't be rolled back, so it only runs once everything
