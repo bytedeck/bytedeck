@@ -234,6 +234,29 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         self.assertIn(comment_hash, notification.get_url())
         self.assertIn(comment_hash, str(notification))
 
+    def test_get_sender_display__support_admin_renders_as_bytedeck(self):
+        """A notification sent by the deck's ByteDeck support account displays its
+        actor as "Bytedeck" (the raw `admin` username would read like any other
+        user), in both the notification-page rendering and the string form."""
+        from django.conf import settings
+
+        support_admin, _ = User.objects.get_or_create(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        new_notification(support_admin, recipient=self.student, verb='sent a deck suspended warning.')
+
+        notification = self.student.notifications.get()
+        self.assertEqual(notification.get_sender_display(), 'Bytedeck')
+        self.assertIn('Bytedeck sent a deck suspended warning.', notification.get_link())
+        self.assertIn('Bytedeck sent a deck suspended warning.', str(notification))
+
+    def test_get_sender_display__other_senders_keep_their_normal_form(self):
+        """Any other sender renders exactly as before: its own string form (for a
+        user, the username)."""
+        new_notification(self.teacher, recipient=self.student, verb='tested.')
+
+        notification = self.student.notifications.get()
+        self.assertEqual(str(notification.get_sender_display()), str(self.teacher))
+        self.assertIn(f'{self.teacher} tested.', notification.get_link())
+
 
 class NotificationModel_html_strip_Test(TestCase):
     """
