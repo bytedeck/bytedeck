@@ -67,11 +67,27 @@ class CheckoutTrialEndTest(SimpleTestCase):
     """Tests for the mid-trial checkout trial_end pass-through (maintainer
     decision, 2026-08-06): a mid-trial subscriber keeps their remaining free
     time, so checkout starts the subscription `trialing` until the deck's
-    existing trial ends. Pure date logic on unsaved in-memory decks."""
+    existing trial ends.
+
+    Deliberately SimpleTestCase rather than TenantTestCase (the approved
+    exception for pure in-memory model tests): every deck here is an unsaved
+    Tenant exercising pure date logic, and SimpleTestCase makes that
+    no-database invariant executable by refusing all queries. Database-backed
+    checkout behavior is covered by CreateCheckoutSessionTrialEndTest below."""
 
     def deck(self, trial_end_date=None, paid_until=None):
-        """Build an unsaved Tenant with explicit billing dates (overriding the
-        field default, which would give every bare deck a 60-day trial)."""
+        """Build an unsaved in-memory Tenant with explicit billing dates.
+
+        Args:
+            trial_end_date (date | None): Value for Tenant.trial_end_date.
+                Defaults to None (a dateless deck), overriding the model
+                field's default, which would give every bare deck a 60-day
+                trial.
+            paid_until (date | None): Value for Tenant.paid_until, or None.
+
+        Returns:
+            Tenant: An unsaved deck; tests never persist it.
+        """
         return Tenant(name='trialend', trial_end_date=trial_end_date, paid_until=paid_until)
 
     def test_checkout_trial_end__runs_to_local_midnight_after_the_trials_last_day(self):
@@ -94,6 +110,12 @@ class CheckoutTrialEndTest(SimpleTestCase):
         self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 15))))  # ends today
         self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 16))))  # under the 49h floor
         self.assertIsNotNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 17))))  # clears it
+        # the floor is a strict cutoff: a trial ending EXACTLY 49h out is preserved, one
+        # second later it isn't (midnight after Aug 17 local = 2026-08-18 07:00 UTC; -49h)
+        with freeze_time("2026-08-16 06:00:00"):
+            self.assertIsNotNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 17))))
+        with freeze_time("2026-08-16 06:00:01"):
+            self.assertIsNone(checkout_trial_end(self.deck(trial_end_date=date(2026, 8, 17))))
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
@@ -133,7 +155,11 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         kwargs = self.create_session()
         self.assertEqual(kwargs['subscription_data'], {'metadata': {'schema_name': self.tenant.schema_name}})
-        self.assertNotIn('-trial', kwargs['idempotency_key'])
+        # the full base key, not a substring check: a schema name containing "trial"
+        # must not fail the unmarked-key assertion
+        self.assertEqual(
+            kwargs['idempotency_key'],
+            f'deck-checkout-{self.tenant.schema_name}-{timezone.localdate()}')
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
