@@ -748,6 +748,40 @@ class CourseStudentViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTen
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
+    def test_CourseStudentCreate__simple_registration_reuses_existing_membership(self):
+        """When simplified auto-registration finds an existing (matching) membership, get_or_create
+        returns created=False: the view still redirects but adds no 'added to' message and creates
+        no duplicate row."""
+        self.client.force_login(self.test_student1)
+
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+
+        # reduce to a single active block/course so the registration fields render hidden
+        Block.objects.first().delete()
+        Course.objects.first().delete()
+
+        # a membership matching the auto-create lookup already exists; active=False so access
+        # isn't blocked by the "already registered this semester" guard
+        baker.make(
+            CourseStudent,
+            user=self.test_student1,
+            semester=SiteConfig.get().active_semester,
+            block=Block.objects.filter(active=True).first(),
+            course=Course.objects.filter(active=True).first(),
+            active=False,
+        )
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        # existing row reused, not duplicated
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any('added to' in m for m in messages))
+
 
 class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Test module for the MarkRange model's view classes"""
@@ -1506,6 +1540,32 @@ class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # the two-submission quest and two-assertion badge get an ordinal appended to their name
         self.assertTrue(any('(' in name for name in quest_names), quest_names)
         self.assertTrue(any('(' in name for name in badge_names), badge_names)
+
+    def test_ajax__under_cap_keeps_all_and_single_assertion_has_no_ordinal(self):
+        """A capped quest whose submissions stay under max_xp keeps every submission (the max-xp
+        cutoff loop finishes without breaking), and a badge with a single assertion gets no
+        ordinal suffix on its name."""
+        # xp 10 x2 = 20, well under max_xp 100, so the cutoff loop never breaks
+        quest = self._tagged_quest_with_submissions('gamma', xp=10, max_xp=100, quantity=2)
+        # a single assertion -> count() == 1 -> no "(ordinal)" appended
+        self._tagged_badge_with_assertions('gamma', xp=15, quantity=1)
+
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # both under-cap submissions are kept (the cutoff loop never dropped one)
+        self.assertEqual(
+            sum(name == quest.name or name.startswith(f'{quest.name} (') for name in quest_names),
+            2,
+        )
+        self.assertTrue(badge_names)
+        self.assertTrue(all('(' not in name for name in badge_names), badge_names)
 
 
 class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):

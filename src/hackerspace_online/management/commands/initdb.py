@@ -130,11 +130,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('\n** Creating homepage...'))
             from django.contrib.flatpages.models import FlatPage
 
-            homepage = FlatPage.objects.create(
+            # get_or_create so re-running against an existing public tenant doesn't add a
+            # duplicate '/home/' flatpage (FlatPage.url isn't unique on its own).
+            homepage, _ = FlatPage.objects.get_or_create(
                 url='/home/',
-                title='Home',
-                content=get_homepage_content(),
-                template_name='public/flatpage-wide.html',
+                defaults={
+                    'title': 'Home',
+                    'content': get_homepage_content(),
+                    'template_name': 'public/flatpage-wide.html',
+                },
             )
             homepage.sites.add(site)
             absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])

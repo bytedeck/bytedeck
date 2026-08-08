@@ -14,6 +14,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
+from django.utils.html import format_html
 
 from django_resized import ResizedImageField
 from django_tenants.utils import get_public_schema_name
@@ -141,7 +142,6 @@ class Profile(models.Model):
                                           help_text="A test account that won't show up in student lists",
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
-    intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
 
@@ -525,7 +525,20 @@ def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
     # Only send the email when they login again
     if not recently_signed_up_with_email:
         if email_address and email_address.verified is False:
-            messages.info(request, f"Please verify your email address: {user.email}.")
+            # Give the reminder an actionable link: clicking it re-sends the
+            # verification email (the same resend endpoint the profile form uses),
+            # since verifying requires the link inside that email. extra_tags='safe'
+            # lets the messages snippet render the anchor instead of escaping it.
+            resend_url = reverse('profiles:profile_resend_email_verification', args=[user.profile.pk])
+            messages.info(
+                request,
+                format_html(
+                    'Please verify your email address: {}. <a href="{}">Re-send verification link</a>.',
+                    user.email,
+                    resend_url,
+                ),
+                extra_tags='safe',
+            )
 
 
 def smart_list(value, delimiter=",", func=None):
