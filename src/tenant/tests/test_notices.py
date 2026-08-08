@@ -335,6 +335,16 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             "and the grace period has run out; without a subscription the deck may be "
             "deleted after Aug. 15, 2027.")
 
+        # defensive fall-through: a deck with no running deletion clock (it isn't
+        # actually suspended, so Tenant.deletion_date is None) still gets a
+        # coherent sentence, just without the deletion clause
+        from tenant.notices import _notification_detail
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY + timedelta(days=60))
+        self.tenant.refresh_from_db()
+        detail = _notification_detail(self.tenant, DeckNotice.KIND_SUSPENDED)
+        self.assertNotIn('deleted after', detail)
+        self.assertTrue(detail.endswith('the grace period has run out.'))
+
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
         """Running the engine twice on the same day delivers exactly once."""
