@@ -452,9 +452,14 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # "(expired 24 days ago)"); None when the corresponding date is unset
             'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
             'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
+            # the unified grace window closes after the LATEST deadline, trial and
+            # paid clocks alike (#1734 B4)
             'grace_end_phrase': (
-                _relative_date_phrase(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS), 'ends')
-                if deck.paid_until else None
+                _relative_date_phrase(
+                    max(d for d in (deck.trial_end_date, deck.paid_until) if d is not None) + timedelta(days=GRACE_PERIOD_DAYS),
+                    'ends',
+                )
+                if (deck.trial_end_date or deck.paid_until) else None
             ),
         })
         context.update({

@@ -779,6 +779,22 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         # whole object, so clear the paid date or it leaks into later tests
         self.set_deck(paid_until=None)
 
+    def test_banner__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed long ago), the expired-into-grace
+        banner speaks about the TRIAL: the governing clock picks the wording
+        (#1734 B4 review find), not whether a paid date exists."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=localdate() - timedelta(days=100))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial ended')
+        self.assertNotContains(response, 'Subscription expired')
+        # clear the paid date so it doesn't leak into later tests (shared instance)
+        self.set_deck(paid_until=None)
+
 
 class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     """Access and rendering tests for the staff-facing Subscription details page
@@ -878,14 +894,15 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
 
     def test_page__dates_show_only_the_governing_deadline(self):
-        """The Dates table shows ONE deadline row -- Paid until when a paid date
-        exists (it supersedes the trial date, even while lapsed), Trial ends on a
-        trial-only deck, and a never-expires row on a managed-manually deck."""
+        """The Dates table shows ONE deadline row -- the governing (LATEST) clock's
+        (#1734 B4): Paid until when the paid clock governs, Trial ends when the
+        trial clock governs (even with both dates set), and a never-expires row
+        on a managed-manually deck."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
 
-        # subscribed decks keep their old trial date; only the paid row shows
+        # subscribed decks keep their old trial date; the paid clock governs
         self.set_deck(trial_end_date=localdate() - timedelta(days=300))
         response = self.get_page()
         self.assertContains(response, 'Paid until')
@@ -900,6 +917,25 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.get_page()
         self.assertContains(response, 'Never')
         self.assertNotContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+    def test_page__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed earlier), the grace status and
+        the Dates table follow the governing trial clock: trial wording,
+        subscribe (not renew), the Trial ends row, and no Paid until row
+        (#1734 B4 review find)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=localdate() - timedelta(days=100))
+        response = self.get_page()
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('free trial ended on', text)
+        self.assertIn('subscribe to keep full access', text)
+        self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
+        self.assertContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
     def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
@@ -938,6 +974,24 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         text = ' '.join(response.content.decode().split())
         self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
                       'and the 365-day countdown to deck deletion begins)', text)
+
+    def test_page__lapsed_trial_gets_the_same_grace_status(self):
+        """A lapsed trial lands in the SAME grace state (#1734 B4): the danger
+        "Grace period" label, trial-specific wording ("free trial ended",
+        subscribe rather than renew), and the trial Dates rows with the grace
+        row's countdown."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('free trial ended on', text)
+        self.assertIn('subscribe to keep full access', text)
+        self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
 
     def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
         """A suspended deck's status copy states the suspension rules -- only

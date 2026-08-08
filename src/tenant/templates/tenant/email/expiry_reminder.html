@@ -1,17 +1,23 @@
 <p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
 
+{% comment %}
+The GOVERNING deadline (the deck's latest clock) picks both the date shown and the
+trial-vs-subscription wording: trial_end_date is never cleared, so an admin-extended
+trial can outlast an old paid date (#1734 B4).
+{% endcomment %}
 {% if days >= 0 %}
 <p>Your deck <strong>{{ deck.name }}</strong>'s
-  {% if deck.is_on_trial %}free trial ends{% else %}subscription expires{% endif %}
-  on <strong>{% if deck.is_on_trial %}{{ deck.trial_end_date }}{% else %}{{ deck.paid_until }}{% endif %}</strong>
+  {% if deck.governing_clock_is_trial %}free trial ends{% else %}subscription expires{% endif %}
+  on <strong>{{ deck.governing_deadline }}</strong>
   (<strong>{{ days }} day{{ days|pluralize }}</strong> from now).
-  {% if deck.is_on_trial %}When the trial ends, the deck is suspended: only the deck owner can sign in,
-  and the 365-day countdown to deck deletion begins.{% else %}After that, a {{ grace_days }}-day grace
-  period keeps full access until <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
-  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.{% endif %}</p>
+  After that, a {{ grace_days }}-day grace period keeps full access until
+  <strong>{{ grace_end_date }}</strong>; the deck is then suspended:
+  only the deck owner can sign in, and the 365-day countdown to deck deletion begins.</p>
 {% else %}
-<p>Your deck <strong>{{ deck.name }}</strong>'s subscription expired on
-  <strong>{{ deck.paid_until }}</strong> ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
+<p>Your deck <strong>{{ deck.name }}</strong>'s
+  {% if deck.governing_clock_is_trial %}free trial ended{% else %}subscription expired{% endif %}
+  on <strong>{{ deck.governing_deadline }}</strong>
+  ({{ expired_days_ago }} day{{ expired_days_ago|pluralize }} ago)
   and is in its {{ grace_days }}-day grace period, which ends on <strong>{{ grace_end_date }}</strong>
   ({{ grace_days_left }} day{{ grace_days_left|pluralize }} left). When the grace period ends, the deck
   will be suspended: only the deck owner will be able to sign in, and the 365-day countdown to deck

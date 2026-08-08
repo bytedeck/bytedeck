@@ -6,11 +6,13 @@
   ({{ deletion_days_left }} day{{ deletion_days_left|pluralize }} from now){% endif %}</strong>,
   unless it gets a valid subscription before then.</p>
 
+{# the GOVERNING clock (the latest one) picks the explanation: an admin-extended trial can outlast an old paid date (#1734 B4) #}
 <p>The deck has been <strong>suspended</strong>{% if suspended_since %}
   since <strong>{{ suspended_since }}</strong>{% endif %}
-  {% if deck.paid_until %}(its subscription was paid through {{ deck.paid_until }}, and the
-  {{ grace_days }}-day grace period ended on {{ grace_end_date }}){% elif deck.trial_end_date %}(its
-  free trial ended on {{ deck.trial_end_date }}){% endif %}: only the deck owner can sign in until the
+  {% if deck.governing_clock_is_trial %}(its free trial ended on {{ deck.governing_deadline }}, and the
+  {{ grace_days }}-day grace period ended on {{ grace_end_date }}){% elif deck.governing_deadline %}(its
+  subscription was paid through {{ deck.governing_deadline }}, and the {{ grace_days }}-day grace period
+  ended on {{ grace_end_date }}){% endif %}: only the deck owner can sign in until the
   deck has a valid subscription. Nothing has been deleted yet: your content and student data
   are intact until the deletion date above.</p>
 
