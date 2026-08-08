@@ -35,8 +35,13 @@ def check_tenant_name(name):
         raise ValidationError("Invalid string used for the tenant name.")
 
 
+# Length of every new deck's free trial: applied at deck creation through the
+# trial_end_date field default, and quoted by the deck-request flow's copy.
+TRIAL_LENGTH_DAYS = 60
+
+
 def default_trial_end_date():
-    return date.today() + timedelta(days=60)
+    return date.today() + timedelta(days=TRIAL_LENGTH_DAYS)
 
 
 # The trial/Maintenance reference cap: the default for new (trial) decks, the cap

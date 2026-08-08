@@ -3,11 +3,20 @@ from django_recaptcha.widgets import ReCaptchaV2Invisible
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django.core.validators import MaxLengthValidator
 from django.forms import ModelForm
 
 from .models import Tenant
 
 User = get_user_model()
+
+# The longest deck name a requester can pick. The name becomes the deck's
+# subdomain and schema, and while Postgres would allow up to the model field's
+# 62 characters, a 62-character subdomain is unreadable in a browser bar and in
+# every email that quotes it, so new decks are capped well below that
+# (maintainer decision, 2026-08-08). Existing decks are untouched: this is a
+# form-level cap on the creation path, not a model constraint.
+DECK_NAME_MAX_LENGTH = 30
 
 
 class TenantBaseForm(ModelForm):
@@ -20,17 +29,16 @@ class TenantBaseForm(ModelForm):
         fields = ["name"]
 
     def __init__(self, *args, **kwargs):
-        """Initialize the form and surface the deck-name length limit in its help text.
-
-        The deck name becomes the deck's subdomain/schema, so the only real cap is the
-        model field's ``max_length`` (the longest a Postgres schema — and therefore the
-        URL — can be). It is no longer tied to the shorter ``site_name_short`` display
-        field, which is truncated from the name at creation time instead. Appending the
-        limit to the help text tells requesters the cap up front (#1975).
+        """Initialize the form: cap the deck name at DECK_NAME_MAX_LENGTH and
+        surface that limit in the field's help text, so requesters see the cap
+        up front (#1975) and the resulting deck URL stays readable.
         """
         super().__init__(*args, **kwargs)
-        max_len = Tenant._meta.get_field("name").max_length
-        self.fields["name"].help_text += f". The name can be at most {max_len} characters long."
+        name_field = self.fields["name"]
+        name_field.max_length = DECK_NAME_MAX_LENGTH
+        name_field.validators.append(MaxLengthValidator(DECK_NAME_MAX_LENGTH))
+        name_field.widget.attrs["maxlength"] = DECK_NAME_MAX_LENGTH
+        name_field.help_text += f". The name can be at most {DECK_NAME_MAX_LENGTH} characters long."
 
     def clean_name(self):
         """Validate the deck name.

@@ -232,6 +232,47 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "one deck")
         self.assertContains(response, "5 minutes")
 
+    def test_RequestNewDeckSubmitted_get__renders_trial_terms(self):
+        """The confirmation page's info box states the free-trial terms (length,
+        student cap, grace window), sourced from the constants that enforce them
+        (maintainer request, 2026-08-08)."""
+        from tenant.models import GRACE_PERIOD_DAYS, TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck_submitted"))
+        self.assertContains(response, f"free {TRIAL_LENGTH_DAYS}-day trial")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} current student")
+        self.assertContains(response, f"{GRACE_PERIOD_DAYS}-day grace period")
+        # the info box is an ordinary in-flow alert; the public stylesheet's
+        # fixed-toast styling is reserved for the BD-flash flash banner
+        self.assertContains(response, "alert alert-warning")
+        self.assertNotContains(response, "BD-flash")
+
+    def test_RequestNewDeck_get__outlines_the_flow_steps(self):
+        """The request form page outlines the whole flow (verify email, emailed
+        credentials, trial terms with a subscribe link, demo-deck preview)
+        instead of showing a bare email form (maintainer request, 2026-08-08)."""
+        from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Verify your email")
+        self.assertContains(response, "login credentials")
+        self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} student")
+        self.assertContains(response, 'href="/pages/subscribe/"')
+        self.assertContains(response, 'href="https://learn.bytedeck.com"')
+        # the demo course code is unset by default, so no code is printed
+        self.assertNotContains(response, "course code")
+
+    @override_settings(DEMO_DECK_COURSE_CODE="join-us-123")
+    def test_RequestNewDeck_get__demo_course_code_comes_from_the_environment(self):
+        """The demo deck's course code renders only when configured: it lives in
+        the deployment's environment rather than the repo, so bots scraping the
+        codebase can't harvest it (maintainer request, 2026-08-08)."""
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertContains(response, "course code")
+        self.assertContains(response, "join-us-123")
+
     def test_RequestNewDeckSubmitted_get_context_data__timeouts_track_configured_values(self):
         """The timeout copy is derived from DeckRequestService's settings, not
         hard-coded: changing the configured values changes the rendered page."""
@@ -522,6 +563,28 @@ class DeckRequestServiceTest(TestCase):
         self.assertEqual(subject, "Verify your email to confirm your deck request")
         self.assertEqual(recipients, ["john.doe@example.com"])
         self.assertIn(request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])), message)
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__html_body_with_validity_and_logo(self, mock_apply_async):
+        """The verification email is a real HTML message: paragraphs, a clickable
+        link, the validity window sourced from TOKEN_MAX_AGE rather than
+        hard-coded copy, and the platform logo in the standard sigblock.
+        send_email_message derives the plain-text part from the HTML, so both
+        parts render with formatting instead of one collapsed line."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=request)
+
+        _subject, message, _recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertIn("<p>Hello John,</p>", message)
+        link = request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce]))
+        self.assertIn(f'<a href="{link}">', message)
+        self.assertIn("1 hour", message)  # TOKEN_MAX_AGE = 3600, humanized
+        # the platform logo, absolute so it renders inside email clients
+        self.assertIn('alt="[Logo]"', message)
+        self.assertIn(request.build_absolute_uri("/"), message.split('alt="[Logo]"')[1])
+        self.assertIn("pixels-4-icon", message)
 
     @patch("tenant.utils.send_email_message.apply_async")
     def test_send_verification_email__without_request_uses_relative_link(self, mock_apply_async):
