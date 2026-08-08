@@ -15,7 +15,6 @@ urlpatterns = [
     re_path(r'^list/block/(?P<pk>[0-9]+)/$', views.ProfileListBlock.as_view(), name='profile_list_block'),
     re_path(r'^list/staff/$', views.ProfileListStaff.as_view(), name='profile_list_staff'),
     re_path(r'^list/inactive/$', views.ProfileListInactive.as_view(), name='profile_list_inactive'),
-    re_path(r'^tour/$', views.tour_complete, name='tour_complete'),
     re_path(r'^recalculate/current/$', views.recalculate_current_xp, name='recalculate_xp_current'),
     re_path(r'^(?P<pk>[0-9]+)/$', views.ProfileDetail.as_view(), name='profile_detail'),
     re_path(r'^(?P<profile_id>[0-9]+)/xp_toggle/$', views.xp_toggle, name='xp_toggle'),

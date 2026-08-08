@@ -148,16 +148,6 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # nothing was recomputed synchronously in the request
         self.assertFalse(mock_invalidate.called)
 
-    def test_tour_complete__marks_completed_and_redirects_to_quests(self):
-        """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
-        self.client.force_login(self.test_student1)
-
-        response = self.client.get(reverse('profiles:tour_complete'))
-
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.test_student1.profile.refresh_from_db()
-        self.assertTrue(self.test_student1.profile.intro_tour_completed)
-
     def test_profile_edit_own__resolves_to_logged_in_users_own_profile(self):
         """profile_edit_own (ProfileUpdateOwn.get_object) loads the logged-in user's own profile form."""
         self.client.force_login(self.test_student1)
@@ -592,7 +582,13 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             mock_messages_info.assert_called()
             message = mock_messages_info.call_args[0][1]
 
-        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+        # The reminder names the address and carries an actionable "Re-send verification link"
+        # pointing at the resend endpoint, flagged safe so the snippet renders the anchor (#2233).
+        resend_url = reverse('profiles:profile_resend_email_verification', args=[self.test_student1.profile.pk])
+        self.assertIn(f"Please verify your email address: {self.test_student1.email}", message)
+        self.assertIn(resend_url, message)
+        self.assertIn("Re-send verification link", message)
+        self.assertEqual(mock_messages_info.call_args.kwargs.get('extra_tags'), 'safe')
         self.client.logout()
         # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
 

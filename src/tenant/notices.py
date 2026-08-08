@@ -226,10 +226,13 @@ def _deliver(deck, kind):
         'subscribe_url': deck.get_root_url() + reverse('decks:subscription'),
         'archive_help_url': deck.get_root_url() + reverse('courses:archive_students_help'),
     }
+    # Each label must read naturally in BOTH places it appears (kept deliberately
+    # coupled, maintainer decision 2026-07-31): the email subject
+    # "{site}: {label}" and the in-app notification sentence "sent a {label}."
     templates = {
-        DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'trial/subscription expiry reminder'),
+        DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'subscription expiry reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
-        DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended'),
+        DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended warning'),
         DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
     template_name, verb = templates[kind]
@@ -238,16 +241,22 @@ def _deliver(deck, kind):
 
     # In-app notification first (DB-only, rolls back cleanly with the ledger row);
     # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify.
-    # Edge: if deck_ai IS the owner (the seeded default on decks that never set a
-    # dedicated AI user), the notifications app skips the self-notification -- such
-    # owners are still covered by the email and the status banner.
+    # The sender is the ByteDeck support account (displayed as "Bytedeck" by the
+    # notifications app), falling back to deck_ai on older decks that predate the
+    # support account (maintainer request, 2026-07-31: these notices come from
+    # Bytedeck, not from the deck owner's own account). Fallback edge: if deck_ai
+    # IS the owner (the seeded default on decks that never set a dedicated AI
+    # user), the notifications app skips the self-notification -- such owners are
+    # still covered by the email and the status banner.
     from django.contrib.auth import get_user_model
-    staff = get_user_model().objects.filter(is_staff=True, is_active=True)
+    User = get_user_model()
+    staff = User.objects.filter(is_staff=True, is_active=True)
+    sender = User.objects.filter(username=settings.TENANT_DEFAULT_ADMIN_USERNAME, is_active=True).first() or config.deck_ai
     notify.send(
-        config.deck_ai,
+        sender,
         recipient=config.deck_owner,
         affected_users=staff,
-        verb=f'sent a {verb} for this deck:',
+        verb=f'sent a {verb}.',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
     )
 

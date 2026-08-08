@@ -9,7 +9,8 @@
 <h3>Status</h3>
 {% if deck.is_suspended %}
   <p><span class="label label-danger">Suspended</span>
-    This deck's trial and/or subscription period has ended: only the deck owner can sign in, and a deck
+    This deck's trial or subscription ended and the {{ grace_days }}-day grace period has run out:
+    only the deck owner can sign in, and a deck
     suspended for 365 days may be permanently deleted. Nothing has been deleted yet: subscribe
     (any level, including the low-cost Maintenance subscription) to restore access.</p>
 {% elif deck.in_grace_period %}

@@ -211,7 +211,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__records_ledger_and_delivers_both_channels(self):
         """When enabled, a due notice writes its ledger row, emails the deck owner, and
-        creates an in-app notification from the deck AI."""
+        creates an in-app notification (sender choice has its own tests below)."""
         summary = self.run_engine_with_inline_email()
         self.assertIn('sent 1 notice(s)', summary)
 
@@ -228,10 +228,50 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         from django.urls import reverse
         self.assertIn(self.tenant.get_root_url() + reverse('decks:subscription'), mail.outbox[0].body)
 
-        # in-app notification exists for the deck owner
+        # in-app notification exists for the deck owner, phrased as a complete
+        # sentence: no dangling "for this deck:" pointing at an object that was
+        # never attached (maintainer find, 2026-07-31)
         from siteconfig.models import SiteConfig
         owner = SiteConfig.get().deck_owner
-        self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        self.assertEqual(notification.verb, 'sent a current-student limit warning.')
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__notification_comes_from_support_admin_when_present(self):
+        """The in-app notice's sender is the ByteDeck support account when the deck
+        has one, so it renders as "Bytedeck sent a ..." instead of coming from a
+        deck user's own account (maintainer request, 2026-07-31)."""
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        from siteconfig.models import SiteConfig
+
+        support_admin, _ = get_user_model().objects.get_or_create(
+            username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        self.run_engine_with_inline_email()
+
+        owner = SiteConfig.get().deck_owner
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        self.assertEqual(notification.sender_object, support_admin)
+        self.assertIn('Bytedeck sent a current-student limit warning.', notification.get_link())
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__notification_sender_falls_back_to_deck_ai(self):
+        """Decks without a usable support account (older decks predate it; here it
+        is deactivated) still get their notice: the sender falls back to the deck
+        AI user."""
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        from siteconfig.models import SiteConfig
+
+        get_user_model().objects.filter(
+            username=settings.TENANT_DEFAULT_ADMIN_USERNAME).update(is_active=False)
+        self.run_engine_with_inline_email()
+
+        owner = SiteConfig.get().deck_owner
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        self.assertEqual(notification.sender_object, SiteConfig.get().deck_ai)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
@@ -301,13 +341,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__owner_without_email_still_gets_in_app_notification(self):
-        """A deck whose owner has no known email skips the email channel but still
+        """A deck whose owner has no email at all skips the email channel but still
         records the notice and creates the in-app notification."""
-        from allauth.account.models import EmailAddress
+        from django.contrib.auth import get_user_model
         from siteconfig.models import SiteConfig
 
         owner = SiteConfig.get().deck_owner
-        EmailAddress.objects.filter(user=owner).delete()
+        get_user_model().objects.filter(pk=owner.pk).update(email='')
         self.assertIsNone(self.tenant.get_owner_email_cached())
 
         summary = self.run_engine_with_inline_email()
@@ -378,6 +418,29 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__limit_email_names_the_grace_state(self):
+        """The limit email on an in-grace deck says the governing clock already
+        ran out and the deck is in its grace period, rather than quoting a
+        pre-lapse deadline (#1734 B5)."""
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=5), paid_until=None,
+            max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        with patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            _deliver(self.tenant, DeckNotice.KIND_LIMIT)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('free trial ended on <strong>Aug. 10, 2026</strong> and the deck is in its grace period', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_states_when_and_why_with_logo(self):

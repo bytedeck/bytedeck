@@ -24,7 +24,7 @@ django-select2>=8.4.8,<9.0
 django-storages[boto3]>=1.14.6,<2
 django-summernote>=0.8.20.0,<0.9
 django-taggit>=6.1.0,<7.0
-django-tenants>=3.10.2,<3.11  # compat cap: multitenancy core, tracks Django closely -- hold at the tested minor
+django-tenants>=3.12.0,<3.13  # compat cap: multitenancy core, tracks Django closely -- hold at the tested minor
 django-url-or-relative-url-field>=0.2.0,<0.3.0
 tenant-schemas-celery>=5.0.0,<6.0
 

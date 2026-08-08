@@ -298,6 +298,38 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             new_ann.get_absolute_url()
         )
 
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_copy_announcement__draft_copy_sends_no_notification(self, mock_send):
+        """Copying to a draft announcement queues no notification (only a published copy does)."""
+        self.client.force_login(self.test_teacher)
+        form_data = {
+            'title': "Draft copy",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",
+            'draft': True,
+        }
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data,
+        )
+
+        new_ann = Announcement.objects.latest('datetime_created')
+        self.assertTrue(new_ann.draft)
+        self.assertRedirects(response, new_ann.get_absolute_url())
+        mock_send.assert_not_called()
+
+    def test_list__anchor_absent_from_student_list_still_renders(self):
+        """Requesting the list anchored to a draft announcement (which students can't see) walks
+        the whole page range without finding it, then falls back and still renders."""
+        draft = baker.make(Announcement)  # draft defaults to True, archived False
+        self.assertTrue(draft.draft)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('announcements:list', args=[draft.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
     # Custom label tests
     def test_announcement_views__header_custom_label_displayed(self):
         """

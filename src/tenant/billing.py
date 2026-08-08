@@ -68,10 +68,12 @@ def checkout_trial_end(deck):
     on. The deck's trial covers THROUGH ``trial_end_date``, so the Stripe trial
     runs to local midnight after that day (settings.TIME_ZONE).
 
-    None when the deck isn't on trial, or when the trial ends within
+    None when the TRIAL clock isn't the deck's governing (latest) clock
+    (#1734 B4: with both dates set the later one governs, and a tie speaks
+    subscription language), and None when the trial ends within
     CHECKOUT_TRIAL_END_MINIMUM (Stripe requires trial_end at least 48 hours in
-    the future, so a nearly-over trial just bills immediately: at most two days
-    of free time are forfeited, on a deck whose trial was ending anyway).
+    the future, so a nearly-over or lapsed-into-grace trial just bills
+    immediately: there is little or no free time left to preserve).
 
     Args:
         deck (Tenant): The current deck.
@@ -79,9 +81,9 @@ def checkout_trial_end(deck):
     Returns:
         datetime | None: The aware trial-end moment to send to Stripe, or None.
     """
-    if not deck.is_on_trial:
+    if not deck.governing_clock_is_trial:
         return None
-    end = timezone.make_aware(datetime.combine(deck.trial_end_date + timedelta(days=1), dt_time.min))
+    end = timezone.make_aware(datetime.combine(deck.governing_deadline + timedelta(days=1), dt_time.min))
     if end < timezone.now() + CHECKOUT_TRIAL_END_MINIMUM:
         return None
     return end
