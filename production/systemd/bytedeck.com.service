@@ -15,10 +15,6 @@ Type=oneshot
 RemainAfterExit=yes
 WorkingDirectory=/home/ubuntu/bytedeck
 # WorkingDirectory=/usr/share/nginx/hackerspace
-# Both lines name the same file set. A bare `docker compose down` would instead
-# pick up docker-compose.yml plus docker-compose.override.yml (the development
-# override, which is present in the checkout on the server), so teardown would
-# be reasoning about a different set of services than startup created.
 ExecStart=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml up -d
 ExecStop=/usr/bin/docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml down
 TimeoutStartSec=0
