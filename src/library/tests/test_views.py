@@ -735,6 +735,20 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertFalse(unpublished_local_quest.published)
         self.assertTrue(published_local_quest.published)
 
+    def test_import_campaign_to__unknown_campaign_id_skips_deactivation(self):
+        """When no local Category matches the given campaign_import_id, the importer finishes
+        without trying to deactivate a campaign (the `if category` false branch)."""
+        with library_schema_context():
+            library_quests = baker.make(Quest, published=True, _quantity=1)
+
+        result = import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[q.import_id for q in library_quests],
+            campaign_import_id=uuid.uuid4(),  # no local Category will match this
+        )
+
+        self.assertIsNotNone(result)
+
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
         Campaigns are only included in the library list if they have at least one
