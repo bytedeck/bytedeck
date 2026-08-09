@@ -4,17 +4,16 @@ from django.db import connection
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 from notifications.signals import notify
 
 User = get_user_model()
 
 
-class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class NotificationViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -26,10 +25,6 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_notification_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page '''

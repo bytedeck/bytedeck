@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 
 from django.contrib.contenttypes.models import ContentType
-from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
@@ -40,10 +39,6 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         cls.course_student = baker.make(CourseStudent,
                                         user=cls.student,
                                         active=False)
-
-    def setUp(self):
-        """Create a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     @patch('prerequisites.signals.update_quest_conditions_for_user.apply_async')
     def test_update_conditions_met_for_user__triggered_by_badge_assertion_on_create(self, task):

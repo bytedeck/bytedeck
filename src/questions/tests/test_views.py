@@ -2,17 +2,16 @@ from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest
 from questions.models import Question
 
 User = get_user_model()
 
 
-class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestionCRUDViewTest(ByteDeckTenantTestCase):
     """Tests for the staff-only question CRUD views (list/create/update/delete)."""
 
     @classmethod
@@ -39,7 +38,6 @@ class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant test client, per-test form data, and a file_upload question
         (per-test because its uploaded file is consumed when read)."""
-        self.client = TenantClient(self.tenant)
         self.question_form_data = {
             "type": "short_answer",
             "instructions": "Test instructions",
@@ -239,7 +237,7 @@ class QuestionCRUDViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(Question.objects.filter(id=self.question1.id).exists())
 
 
-class QuestionMoveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestionMoveViewTest(ByteDeckTenantTestCase):
     """Tests for QuestionMoveView: staff-only up/down reordering of a quest's questions."""
 
     @classmethod
@@ -254,10 +252,6 @@ class QuestionMoveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.q1 = baker.make(Question, quest=cls.quest, ordinal=1, instructions="Q1")
         cls.q2 = baker.make(Question, quest=cls.quest, ordinal=2, instructions="Q2")
         cls.q3 = baker.make(Question, quest=cls.quest, ordinal=3, instructions="Q3")
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def _move(self, question, direction, quest=None):
         """POST to move `question` in `direction`, scoped to `quest` (defaults to its own quest)."""
