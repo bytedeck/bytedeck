@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.test import SimpleTestCase, TestCase
 from django.template import Template, Context
 
@@ -18,8 +19,16 @@ class FaviconUrlTagTest(ByteDeckTenantTestCase):
     """Tests for the favicon_url tag on a (non-public) tenant."""
 
     def test_favicon_url__returns_siteconfig_favicon(self):
-        """On a tenant, favicon_url returns the deck's configured favicon URL."""
-        self.assertEqual(favicon_url(), SiteConfig.get().get_favicon_url())
+        """On a tenant, favicon_url returns the deck's configured favicon URL.
+
+        A known favicon is configured first, then the tag is asserted against that exact URL
+        (computed independently of get_favicon_url) so the test can't pass on an empty fixture
+        where both sides would collapse to the same default.
+        """
+        config = SiteConfig.get()
+        config.favicon = 'favicon/known_test_favicon.png'
+        config.save()  # invalidates the SiteConfig cache via invalidate_siteconfig_cache_signal
+        self.assertEqual(favicon_url(), f"{settings.MEDIA_URL}favicon/known_test_favicon.png")
 
 
 class PossessiveFilterTest(TestCase):

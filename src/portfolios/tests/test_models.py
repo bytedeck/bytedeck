@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.templatetags.static import static
+from django.urls import reverse
 
 from model_bakery import baker
 
@@ -38,7 +39,7 @@ class ArtworkStrAndUrlTest(ByteDeckTenantTestCase):
     def test_get_absolute_url__points_at_parent_portfolio(self):
         """An artwork's absolute url is its parent portfolio's detail page."""
         art = baker.make(Artwork)
-        self.assertIn(str(art.portfolio.pk), art.get_absolute_url())
+        self.assertEqual(art.get_absolute_url(), reverse('portfolios:detail', kwargs={'pk': art.portfolio.pk}))
 
 
 class ArtworkGetLinkTest(ByteDeckTenantTestCase):

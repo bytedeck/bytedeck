@@ -133,8 +133,8 @@ class CleanHTMLTests(TestCase):
         """A bare <li> whose previous <li> was skipped (because that one followed a <ul>) hits the
         'no open <ul> group yet' path and is left where it is rather than re-wrapped."""
         cleaned = clean_html('<ul></ul><li>A</li><li>B</li>')
-        self.assertIn('<li>A</li>', cleaned)
-        self.assertIn('<li>B</li>', cleaned)
+        # the two orphan <li>s are left exactly where they were, not re-wrapped in a new <ul>
+        self.assertEqual(cleaned, '<ul></ul><li>A</li><li>B</li>')
 
     def test_clean_html__removes_script_tags(self):
         """Script tags and their contents are stripped from the html."""

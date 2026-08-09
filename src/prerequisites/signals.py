@@ -118,8 +118,7 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """
     if isinstance(instance.parent_object, Quest):
         # The enclosing isinstance() already guarantees parent_object is a (truthy) Quest, so this
-        # guard is always True here; the deleted-parent case is handled by a separate Quest
-        # post_delete receiver, not this branch.
+        # inner guard is always True here and has no false branch to exercise.
         if instance.parent_object:  # pragma: no branch
             update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
 
