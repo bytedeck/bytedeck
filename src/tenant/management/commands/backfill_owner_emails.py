@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from allauth.account.models import EmailAddress
@@ -25,7 +25,8 @@ class Command(BaseCommand):
     Dry-run by default: pass ``--apply`` to write. In apply mode each fixed
     deck's cached fields are refreshed immediately so ``owner_email_cached`` (the
     address the notice engine and the Stripe backfill report use) is correct
-    without waiting for the nightly task.
+    without waiting for the nightly task. ``--schema <deck>`` narrows the run to
+    a single deck, for cleaning up one legacy deck by hand.
 
     Every run also audits the owners that need a human: owners with no email at
     all, owners whose address is already verified by a different account on the
@@ -38,9 +39,10 @@ class Command(BaseCommand):
 
     help = (
         "Normalize every deck owner's allauth EmailAddress to verified+primary, matching "
-        "what deck creation sets up. Dry-run by default; pass --apply to write. Also "
-        "audits owners with no email, addresses already verified by another account, "
-        "and decks still on the heuristic default owner."
+        "what deck creation sets up. Dry-run by default; pass --apply to write and "
+        "--schema <deck> to process a single deck. Also audits owners with no email, "
+        "addresses already verified by another account, and decks still on the "
+        "heuristic default owner."
     )
 
     def add_arguments(self, parser):
@@ -55,13 +57,25 @@ class Command(BaseCommand):
             help="Write the EmailAddress fixes and refresh each fixed deck's cached fields. "
                  "Without this flag nothing is written.",
         )
+        parser.add_argument(
+            '--schema', default=None,
+            help="Only process this one deck (its schema name), e.g. a single legacy deck "
+                 "being cleaned up by hand. Without it every deck is processed.",
+        )
 
     def handle(self, *args, **options):
-        """Iterate every billable tenant, print one audit line each, then a summary."""
+        """Iterate the selected billable tenant(s), print one audit line each, then a summary."""
         apply_changes = options['apply']
         tenants = get_tenant_model().objects.exclude(
             schema_name__in=[get_public_schema_name(), get_library_schema_name()]
         ).order_by('schema_name')
+        if options['schema']:
+            tenants = tenants.filter(schema_name=options['schema'])
+            if not tenants.exists():
+                raise CommandError(
+                    f"No deck with schema name '{options['schema']}' "
+                    "(the public and library schemas are not decks)."
+                )
 
         header = f"{'deck':<24} {'status':<10} {'owner':<20} {'email':<32} notes"
         self.stdout.write(header)
