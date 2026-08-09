@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone as dt_timezone
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 
@@ -12,8 +13,8 @@ from django_tenants.utils import schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.billing import (
-    billing_configured, checkout_trial_end, create_checkout_session, reconcile_checkout_session,
-    subscription_period_end_date,
+    _plan_summary_from_subscription, billing_configured, checkout_trial_end, clear_plan_summary_cache,
+    create_checkout_session, reconcile_checkout_session, subscription_period_end_date, subscription_plan_summary,
 )
 from tenant.models import Tenant
 
@@ -60,6 +61,174 @@ class SubscriptionPeriodEndDateTest(SimpleTestCase):
         """No period end in either shape (or no items at all) -> None."""
         self.assertIsNone(subscription_period_end_date({}))
         self.assertIsNone(subscription_period_end_date({'items': {'data': []}}))
+
+
+class PlanSummaryFromSubscriptionTest(SimpleTestCase):
+    """Tests for condensing an expanded subscription into the status line's plan
+    summary: product name plus a cadence-and-price renewal phrase (maintainer
+    request, 2026-08-09)."""
+
+    def subscription(self, product='Bytedeck Subscription - 40 Students', unit_amount=7500,
+                     currency='usd', interval='year', interval_count=1):
+        """A minimal subscription double shaped like Stripe's expanded retrieve.
+
+        Args:
+            product (str | None): The expanded Product's name; None leaves the
+                product unexpanded (the plain id string Stripe returns without
+                ``expand``).
+            unit_amount (int | None): The price in cents, or None (e.g. metered).
+            currency (str): The price's currency code.
+            interval (str | None): ``recurring.interval``; None makes a one-time
+                price with no recurrence.
+            interval_count (int): ``recurring.interval_count``.
+
+        Returns:
+            dict: The subscription double.
+        """
+        price = {
+            'product': {'name': product} if product is not None else 'prod_123',
+            'unit_amount': unit_amount,
+            'currency': currency,
+        }
+        if interval:
+            price['recurring'] = {'interval': interval, 'interval_count': interval_count}
+        return {'items': {'data': [{'price': price}]}}
+
+    def test_summary__yearly_price_reads_renewed_annually(self):
+        """A $75/year price reads "renewed annually at $75.00 per year"."""
+        self.assertEqual(
+            _plan_summary_from_subscription(self.subscription()),
+            {'name': 'Bytedeck Subscription - 40 Students',
+             'renewal_phrase': 'renewed annually at $75.00 per year'},
+        )
+
+    def test_summary__monthly_price_reads_renewed_monthly(self):
+        """An $8/month price reads "renewed monthly at $8.00 per month"."""
+        summary = _plan_summary_from_subscription(self.subscription(unit_amount=800, interval='month'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed monthly at $8.00 per month')
+
+    def test_summary__multi_month_price_reads_renewed_every_n_months(self):
+        """A $50-per-6-months price reads "renewed every 6 months at $50.00"
+        (the maintainer's half-year plan example)."""
+        summary = _plan_summary_from_subscription(
+            self.subscription(unit_amount=5000, interval='month', interval_count=6)
+        )
+        self.assertEqual(summary['renewal_phrase'], 'renewed every 6 months at $50.00')
+
+    def test_summary__singular_day_or_week_cadence_reads_without_a_count(self):
+        """A weekly or daily price with interval_count=1 reads "renewed every
+        week", never the mis-pluralized "renewed every 1 weeks" (review find)."""
+        summary = _plan_summary_from_subscription(self.subscription(unit_amount=200, interval='week'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed every week at $2.00')
+        summary = _plan_summary_from_subscription(
+            self.subscription(unit_amount=200, interval='day', interval_count=3)
+        )
+        self.assertEqual(summary['renewal_phrase'], 'renewed every 3 days at $2.00')
+
+    def test_summary__non_usd_currency_is_spelled_out(self):
+        """Only USD gets the $ sign; other currencies read "75.00 CAD" so the
+        amount is never misattributed to the wrong currency."""
+        summary = _plan_summary_from_subscription(self.subscription(currency='cad'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed annually at 75.00 CAD per year')
+
+    def test_summary__zero_decimal_currency_is_not_divided_by_100(self):
+        """Stripe amounts for zero-decimal currencies (e.g. JPY) are already
+        whole units: 7500 renders as "7,500 JPY", not "75.00 JPY" (review find)."""
+        summary = _plan_summary_from_subscription(self.subscription(currency='jpy'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed annually at 7,500 JPY per year')
+
+    def test_summary__no_recurrence_or_no_amount_degrades_gracefully(self):
+        """A one-time price yields an empty renewal phrase (name still shows); a
+        recurring price without a unit amount keeps the cadence alone."""
+        self.assertEqual(_plan_summary_from_subscription(self.subscription(interval=None))['renewal_phrase'], '')
+        self.assertEqual(
+            _plan_summary_from_subscription(self.subscription(unit_amount=None))['renewal_phrase'],
+            'renewed annually',
+        )
+
+    def test_summary__missing_product_name_or_items_returns_none(self):
+        """An unexpanded product (a plain id string) or a subscription without
+        items can't be summarized: None, so the page shows its usual copy."""
+        self.assertIsNone(_plan_summary_from_subscription(self.subscription(product=None)))
+        self.assertIsNone(_plan_summary_from_subscription({}))
+        self.assertIsNone(_plan_summary_from_subscription({'items': {'data': []}}))
+
+
+class SubscriptionPlanSummaryTest(SimpleTestCase):
+    """Tests for the cached Stripe fetch behind the status line's plan summary.
+
+    Deliberately SimpleTestCase (the approved exception for pure in-memory model
+    tests): the deck is an unsaved Tenant carrying only its schema name and
+    linked subscription id, and the Stripe retrieve is mocked at the SDK seam,
+    so no query ever runs."""
+
+    RETRIEVED = {'items': {'data': [{'price': {
+        'product': {'name': 'Bytedeck Subscription - 40 Students'},
+        'unit_amount': 7500, 'currency': 'usd',
+        'recurring': {'interval': 'year', 'interval_count': 1},
+    }}]}}
+
+    def setUp(self):
+        """An in-memory linked deck, with its summary cache entry emptied."""
+        from tenant.billing import _plan_summary_cache_key
+
+        self.deck = Tenant(schema_name='plancache', stripe_subscription_id='sub_1')
+        cache.delete(_plan_summary_cache_key('plancache', 'sub_1'))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__fetches_once_expanded_then_serves_from_cache(self):
+        """The subscription is retrieved once (price and product expanded),
+        condensed, and cached: a second call within the TTL never re-asks Stripe."""
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED) as mock_retrieve:
+            first = subscription_plan_summary(self.deck)
+            second = subscription_plan_summary(self.deck)
+        self.assertEqual(first, {'name': 'Bytedeck Subscription - 40 Students',
+                                 'renewal_phrase': 'renewed annually at $75.00 per year'})
+        self.assertEqual(second, first)
+        self.assertEqual(mock_retrieve.call_count, 1)
+        self.assertEqual(mock_retrieve.call_args.kwargs['expand'], ['items.data.price.product'])
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__clearing_the_cache_refetches(self):
+        """clear_plan_summary_cache drops the entry (the billing write paths call
+        it on every sync, so a portal plan switch shows immediately); falsy ids
+        in the call are skipped harmlessly."""
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED) as mock_retrieve:
+            subscription_plan_summary(self.deck)
+            clear_plan_summary_cache('plancache', 'sub_1', '')
+            subscription_plan_summary(self.deck)
+        self.assertEqual(mock_retrieve.call_count, 2)
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__stripe_error_returns_none_and_caches_nothing(self):
+        """A Stripe failure yields None (the page renders its usual copy, no
+        error) and caches nothing, so a later load can still succeed."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('boom')):
+            self.assertIsNone(subscription_plan_summary(self.deck))
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED):
+            self.assertIsNotNone(subscription_plan_summary(self.deck))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__unusable_subscription_data_is_not_cached(self):
+        """A retrieve that succeeds but can't be summarized (e.g. the product came
+        back unexpanded) yields None and caches nothing, so the next load retries
+        rather than pinning the page to a bad answer for the TTL."""
+        bare = {'items': {'data': [{'price': {'product': 'prod_123'}}]}}
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=bare) as mock_retrieve:
+            self.assertIsNone(subscription_plan_summary(self.deck))
+            self.assertIsNone(subscription_plan_summary(self.deck))
+        self.assertEqual(mock_retrieve.call_count, 2)
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__unlinked_deck_or_unconfigured_server_short_circuits(self):
+        """No linked subscription, or no secret key: None without any Stripe call."""
+        with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve:
+            self.assertIsNone(subscription_plan_summary(Tenant(schema_name='x', stripe_subscription_id='')))
+            with override_settings(STRIPE_SECRET_KEY=None):
+                self.assertIsNone(subscription_plan_summary(self.deck))
+        mock_retrieve.assert_not_called()
 
 
 @freeze_time("2026-08-15 20:00:00")  # midday Pacific so localtime dates are stable
@@ -184,6 +353,15 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
     endpoint in test_views; these pin the module-level edges.
     """
 
+    def setUp(self):
+        """Stub the cosmetic customer-description stamp so link tests that don't
+        care about it never attempt a real Stripe call; tests that DO assert on
+        it install their own mock over this stub."""
+        super().setUp()
+        patcher = patch('tenant.billing.stripe.Customer.modify')
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_reconcile__missing_period_end_links_ids_but_keeps_paid_until(self):
         """A completed session whose subscription carries no period end still links
         the deck to Stripe, but leaves paid_until alone rather than clearing it."""
@@ -203,6 +381,70 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_9')
         self.assertEqual(self.tenant.paid_until, original_paid_until)
 
+    def _complete_session(self, customer='cus_9'):
+        """A completed Checkout Session double for this deck, ready to reconcile.
+
+        Args:
+            customer (str): The Stripe customer id to place in the session.
+
+        Returns:
+            dict: A completed session payload bound to this deck, carrying the
+            given customer and an active subscription ('sub_9').
+        """
+        return {
+            'status': 'complete', 'client_reference_id': self.tenant.schema_name,
+            'customer': customer, 'subscription': {'id': 'sub_9', 'status': 'active'},
+        }
+
+    def test_reconcile__fresh_link_stamps_the_deck_on_the_stripe_customer(self):
+        """A fresh customer link labels the Stripe Customer with the deck's
+        schema name (description + searchable metadata), so the dashboard's Customers list
+        shows which deck each customer pays for (maintainer request, 2026-08-09)."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            stripe_customer_id='', stripe_subscription_id='')
+        self.tenant.refresh_from_db()
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=self._complete_session()):
+            with patch('tenant.billing.stripe.Customer.modify') as mock_modify:
+                self.assertTrue(reconcile_checkout_session(self.tenant, 'cs_9'))
+
+        mock_modify.assert_called_once()
+        args, kwargs = mock_modify.call_args
+        self.assertEqual(args[0], 'cus_9')
+        # the schema name (maintainer review on the PR): the operational deck
+        # identifier used everywhere else (admin, backfill report, logs)
+        self.assertEqual(kwargs['description'], self.tenant.schema_name)
+        self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+
+    def test_reconcile__repeat_poll_does_not_restamp_the_customer(self):
+        """Reconciling an already-linked deck (the status endpoint polls) leaves
+        the Stripe Customer untouched instead of re-writing it on every poll."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            stripe_customer_id='cus_9', stripe_subscription_id='sub_9')
+        self.tenant.refresh_from_db()
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=self._complete_session()):
+            with patch('tenant.billing.stripe.Customer.modify') as mock_modify:
+                self.assertTrue(reconcile_checkout_session(self.tenant, 'cs_9'))
+
+        mock_modify.assert_not_called()
+
+    def test_reconcile__customer_stamp_failure_never_breaks_the_link(self):
+        """The description stamp is cosmetic: a Stripe error while writing it is
+        swallowed, and the deck still ends up fully linked."""
+        import stripe as stripe_module
+
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            stripe_customer_id='', stripe_subscription_id='')
+        self.tenant.refresh_from_db()
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=self._complete_session()):
+            with patch('tenant.billing.stripe.Customer.modify',
+                       side_effect=stripe_module.StripeError('boom')):
+                self.assertTrue(reconcile_checkout_session(self.tenant, 'cs_9'))
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_9')
     def test_reconcile__handles_the_sdks_real_session_object(self):
         """Session.retrieve returns the SDK's object, which is NOT a dict on
         stripe-python 15.x (.get() raises): the reconciler's dict-style reads only
@@ -277,6 +519,14 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
     PERIOD_END_TS = 1800014400  # 2027-01-15 12:00 UTC -> 2027-01-15 local
     PERIOD_END = date(2027, 1, 15)
 
+    def setUp(self):
+        """Stub the cosmetic customer-description stamp so linking tests never
+        attempt a real Stripe call; the stamping tests install their own mock."""
+        super().setUp()
+        patcher = patch('tenant.billing.stripe.Customer.modify')
+        self.mock_customer_modify = patcher.start()
+        self.addCleanup(patcher.stop)
+
     def set_deck(self, **fields):
         """Persist billing fields on this deck's Tenant row and refresh the instance."""
         Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
@@ -310,6 +560,33 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_wh')
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_wh')
+
+    def test_checkout_completed__fresh_customer_link_stamps_the_deck_description(self):
+        """A fresh customer link from the webhook labels the Stripe Customer with
+        the deck's schema name (description + searchable metadata), so the dashboard's
+        Customers list shows which deck each customer pays for (maintainer
+        request, 2026-08-09); a re-delivered event that rewrites the same id does
+        not re-stamp."""
+        from tenant.billing import handle_webhook_event
+
+        self.set_deck(paid_until=None, stripe_customer_id='', stripe_subscription_id='')
+        event = self.make_event('checkout.session.completed', {
+            'client_reference_id': self.tenant.schema_name, 'customer': 'cus_wh', 'subscription': 'sub_wh',
+        })
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
+            handle_webhook_event(event)
+
+        self.mock_customer_modify.assert_called_once()
+        args, kwargs = self.mock_customer_modify.call_args
+        self.assertEqual(args[0], 'cus_wh')
+        self.assertEqual(kwargs['description'], self.tenant.schema_name)
+        self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+
+        # duplicate delivery: the link UPDATE rewrites the same id; no re-stamp
+        self.tenant.refresh_from_db()
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.stripe_subscription()):
+            handle_webhook_event(event)
+        self.mock_customer_modify.assert_called_once()
         self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
 
     def test_subscription_events__sync_through_the_single_write_path(self):
