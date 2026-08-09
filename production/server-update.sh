@@ -37,11 +37,6 @@ sudo systemctl restart redis-host-setup.service
 sudo systemctl enable bytedeck.com.service
 sudo systemctl restart bytedeck.com
 
-# Restart the nginx server: sometimes nginx doesn't reconnect to uwsgi after a
-# restart, and this helps when run manually. Best-effort: -T avoids needing a
-# TTY (so it works on the runner), and a failed reload shouldn't fail the deploy.
-$COMPOSE exec -T nginx nginx -s reload || echo "WARN: nginx reload failed; continuing."
-
 # Show logs. Follow them when run interactively; in an automated deploy (no TTY,
 # e.g. the CI runner) print a recent snapshot and exit so the job can finish.
 if [ -t 1 ]; then
