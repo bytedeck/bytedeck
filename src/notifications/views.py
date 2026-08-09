@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.http import HttpResponse, JsonResponse
-from django.shortcuts import Http404, HttpResponseRedirect, redirect, render
+from django.shortcuts import Http404, HttpResponseRedirect, get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from tenant.views import non_public_only_view
@@ -125,10 +125,22 @@ def ajax(request):
 @non_public_only_view
 @login_required
 def ajax_mark_read(request):
+    """Mark one of the requesting user's own notifications as read.
+
+    Scoped to the recipient so a user can't mark (and so hide) another user's
+    notification, and so an id that doesn't exist is a 404 rather than an
+    unhandled DoesNotExist.
+    """
     if request.method == "POST":
 
-        id = request.POST.get('id', None)
-        n = Notification.objects.get(id=id)
+        # the id is client-supplied: a missing or non-numeric one would raise
+        # ValueError in the pk lookup below (a 500), so turn it away as a 404 first.
+        try:
+            id = int(request.POST.get('id', ''))
+        except (TypeError, ValueError):
+            raise Http404("No valid notification id provided.")
+
+        n = get_object_or_404(Notification, id=id, recipient=request.user)
         n.mark_read()
         return JsonResponse(data={})
     else:

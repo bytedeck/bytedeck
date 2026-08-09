@@ -39,4 +39,11 @@ RUN chmod -R 755 /etc/nginx/sites-enabled
 #RUN chmod -R 755 /etc/letsencrypt/
 RUN mkdir -p /var/www/bytedeck/static
 
+# Static maintenance page served by nginx when the app backend is unreachable
+# (see the error_page directive in bytedeck.conf.template). Baked into the image
+# so it is always available, independent of the app containers or mounted
+# volumes. COPY leaves it world-readable (644), so the non-root nginx worker can
+# serve it.
+COPY maintenance/ /var/www/maintenance/
+
 CMD ["nginx", "-g", "daemon off;"]

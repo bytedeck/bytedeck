@@ -273,11 +273,18 @@ request, so it redirects every request forever).
 
 ## Troubleshooting
 
-- **502 right after a restart:** expected for a minute or two. The `web`
-  container runs `migrate_schemas` over every tenant schema and then
-  `collectstatic` before uwsgi binds :8000, and nginx has nothing to talk to
-  until it does. Watch for `spawned uWSGI master process` in
-  `docker compose ... logs web`.
+- **502 right after a restart:** expected while `web` is still starting, and it
+  lasts as long as startup does rather than any fixed time: the `web` container
+  runs `migrate_schemas` over every tenant schema and then `collectstatic`
+  before uwsgi binds :8000 (the more tenants, the longer it takes; the
+  container healthcheck allows up to 10 minutes), and nginx has nothing to talk
+  to until it does. The 502s clear once `spawned uWSGI master process` appears
+  in the web logs:
+  ```bash
+  cd ~/bytedeck
+  C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+  $C logs -f web
+  ```
 - **502 that does not clear:** check that nginx is dialling the address `web`
   actually has:
   ```bash
@@ -285,9 +292,11 @@ request, so it redirects every request forever).
   C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
   $C logs nginx | grep -o 'upstream: "uwsgi://[^"]*"' | tail -1   # who nginx calls
   $C ps -q web | xargs docker inspect \
-      -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}'  # where web is
+      -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}'  # web's IP per network
   ```
-  These must match. If they do not, nginx is holding a stale address: confirm
+  The upstream address must match web's IP on the network it shares with nginx
+  (`backend-network`; web also sits on `frontend-network`, and that IP is not
+  the one nginx dials). If they do not match, nginx is holding a stale address: confirm
   the site config still carries the `resolver` line and the `$web_upstream`
   variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping
   either one restores the old resolve-once-at-startup behaviour.

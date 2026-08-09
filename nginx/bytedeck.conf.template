@@ -88,6 +88,21 @@ server {
         uwsgi_param HTTP_X_FORWARDED_PROTO $scheme;
     }
 
+    # Friendly maintenance page served by nginx itself when the app backend is
+    # unreachable: chiefly the short window during a deploy while `web`/uwsgi is
+    # restarting and the `uwsgi_pass` above has no backend, which otherwise
+    # surfaces as a bare "502 Bad Gateway". Django can't serve this (it is the
+    # process that's down), so the page is a self-contained static file (logo
+    # embedded) baked into the nginx image. The response is normalized to 503
+    # (temporary, not "bad gateway") with a Retry-After hint, and the page
+    # auto-refreshes so the browser returns to the app once it is back.
+    error_page 502 503 504 =503 /maintenance.html;
+    location = /maintenance.html {
+        root /var/www/maintenance;
+        internal;
+        add_header Retry-After 30 always;
+    }
+
     ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem; # managed by Certbot
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
@@ -110,8 +125,8 @@ server {
     # OCSP responders in 2025 (in favour of CRLs), so its certificates carry no
     # OCSP URL and "ssl_stapling on" only produced a startup warning
     # ('"ssl_stapling" ignored, no OCSP responder URL in the certificate').
-    # The `resolver` directive that existed solely for OCSP fetching was
-    # removed along with it.
+    # The resolver at the top of this file is for Docker DNS resolution of the
+    # `web` upstream and plays no part in OCSP.
 
     # GZIP SETTINGS: https://www.nginx.com/blog/help-the-world-by-healing-your-nginx-configuration/#Enabling-Gzip-Compression-for-HTML-CSS-and-JavaScript-Files
     gzip on;

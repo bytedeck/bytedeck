@@ -9,12 +9,12 @@ from unittest.mock import patch
 from djcytoscape.models import CytoScape
 
 from profile_manager.models import Profile
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
 
 
-class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -42,10 +42,6 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             initial_content_type=cls.quest_ct,
             initial_object_id=cls.map_initial_quest.id,
         )
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
@@ -185,7 +181,7 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         mock_regenerate.assert_called_once()
 
 
-class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestMapAccessAndInterlinkTests(ByteDeckTenantTestCase):
     """Access-control and interlink/generate branches of the map views."""
 
     @classmethod
@@ -207,10 +203,6 @@ class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase
             initial_content_type=cls.quest_ct,
             initial_object_id=cls.map_quest.id,
         )
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest_map_personalized__student_cannot_view_another_students_map(self):
         """A non-staff user requesting another user's personalized map gets a 404."""
@@ -254,7 +246,7 @@ class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase
         self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
 
 
-class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
     """UpdateMapMessageMixin adds a 'maps are being updated' message after editing/deleting a
     model that maps depend on (ranks/quests/badges). Its map-auto-update-off path is exercised
     here through a rank delete (RankDelete mixes it in); the message-emitting path is covered by
@@ -262,7 +254,6 @@ class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Log in a staff user (the mixin's consumer views require staff)."""
-        self.client = TenantClient(self.tenant)
         self.staff = User.objects.create_user('mixin_staff', is_staff=True)
         self.client.force_login(self.staff)
 
@@ -287,7 +278,7 @@ class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
 
-class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class PrimaryViewTests(ByteDeckTenantTestCase):
 
     def test_primary__generates_initial_map_on_first_view(self):
         """Viewing the primary map for the first time generates the 'Main' map."""
@@ -307,7 +298,7 @@ class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(CytoScape.objects.filter(name="Main").exists())
 
 
-class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class RegenerateViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -320,7 +311,6 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant client logged in as the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
     def test_regenerate__redirects_to_quest_map(self):
