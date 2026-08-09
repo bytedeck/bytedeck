@@ -31,9 +31,7 @@ class Command(BaseCommand):
     all, owners whose address is already verified by a different account on the
     deck (the DB allows one verified row per address, so which account is really
     the owner's is a human call), and owners still on the initial heuristic
-    default account (the deck never chose a real owner). Where the deprecated
-    public-tenant ``Tenant.owner_email`` disagrees with the owner's address, the
-    line says so: it is often the best clue to who the owner should be.
+    default account (the deck never chose a real owner).
     """
 
     help = (
@@ -128,11 +126,6 @@ class Command(BaseCommand):
         # user, else a bare created account): flag decks that never chose for real
         if owner.username == settings.TENANT_DEFAULT_OWNER_USERNAME:
             notes.append("default owner account (heuristic guess, never chosen)")
-        # the deprecated hand-entered public-tenant address is often the best clue
-        # to who the owner SHOULD be when the schema's data is missing or wrong
-        legacy = (tenant.owner_email or '').strip()
-        if legacy and legacy.lower() != (owner.email or '').lower():
-            notes.append(f"public-tenant legacy owner_email differs: {legacy}")
 
         if not owner.email:
             return 'no-email', owner.username, None, '; '.join(notes)

@@ -536,10 +536,7 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
         """Build baseline valid form data reused across the form validation tests."""
         cls.form_data = {
             'name': 'test',  # This is the name of the already existing test tenant
-            # 'owner_full_name': None,
-            # 'owner_email': None,
             'max_active_users': 50,
-            'max_quests': 100,
             # 'paid_until': None,
             'trial_end_date': timezone.now()
         }
