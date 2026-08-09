@@ -12,6 +12,7 @@ or they could be moved into a `test_urls.py` module.
 
 import re
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -731,6 +732,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         quest = baker.make(Quest, name="TestSaveDrafts")
         draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
+                         user=self.test_student1,
                          quest=quest,
                          draft_comment=draft_comment)
         draft_text = "Test draft comment"
@@ -758,6 +760,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         quest = baker.make(Quest, name="TestSaveDrafts")
         # create a submission with no draft comment
         sub = baker.make(QuestSubmission, draft_comment=None,
+                         user=self.test_student1,
                          quest=quest)
 
         response = self.client.post(
@@ -777,6 +780,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         quest = baker.make(Quest, name="TestSaveDrafts")
         draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
+                         user=self.test_student1,
                          quest=quest,
                          draft_comment=draft_comment)
         draft_text = "I am a test draft comment"
@@ -804,6 +808,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         quest = baker.make(Quest, name="TestSaveDrafts")
         draft_comment = baker.make(Comment, text="I am a test draft comment")
         sub = baker.make(QuestSubmission,
+                         user=self.test_student1,
                          quest=quest,
                          draft_comment=draft_comment,
                          )
@@ -820,6 +825,56 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 200)
+
+    def test_ajax_save_draft__another_students_draft_is_not_overwritten(self):
+        """A student can't save over another student's draft: it 404s and the draft text is unchanged."""
+        self.client.force_login(self.test_student1)
+
+        original_text = "Student 2's work in progress"
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text=original_text)
+        victims_sub = baker.make(QuestSubmission,
+                                 user=self.test_student2,
+                                 quest=quest,
+                                 draft_comment=draft_comment)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "Overwritten by student 1",
+                'submission_id': victims_sub.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+        draft_comment.refresh_from_db()
+        self.assertEqual(original_text, draft_comment.text)
+
+    def test_ajax_save_draft__staff_cannot_save_a_students_draft(self):
+        """A draft belongs to the student writing it; staff get the marking form, not the draft form."""
+        self.client.force_login(self.test_teacher)
+
+        original_text = "Student 1's work in progress"
+        quest = baker.make(Quest, name="TestSaveDrafts")
+        draft_comment = baker.make(Comment, text=original_text)
+        students_sub = baker.make(QuestSubmission,
+                                  user=self.test_student1,
+                                  quest=quest,
+                                  draft_comment=draft_comment)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'comment': "Overwritten by a teacher",
+                'submission_id': students_sub.id,
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+        draft_comment.refresh_from_db()
+        self.assertEqual(original_text, draft_comment.text)
 
 
 class PaginateHelperTest(SimpleTestCase):
@@ -3360,25 +3415,33 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     url(r'^ajax_approval_info/(?P<submission_id>[0-9]+)/$', views.ajax_approval_info, name='ajax_approval_info'),
     """
 
+    INSTRUCTOR_NOTES = "Marking key: accept any answer mentioning recursion."
+
     @classmethod
     def setUpTestData(cls):
-        """Create a student, a quest, and a submission shared across the tests."""
+        """Create a teacher, two students, and a submission belonging to one of them.
+
+        The quest carries recognisable instructor notes so the tests can assert on the
+        staff-only content the rendered template exposes, not just on a status code.
+        """
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
-        cls.quest = baker.make(Quest)
-        cls.submission = baker.make(QuestSubmission)
-        # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.another_student = User.objects.create_user('another_student')
+        cls.quest = baker.make(Quest, instructor_notes=cls.INSTRUCTOR_NOTES)
+        cls.submission = baker.make(QuestSubmission, user=cls.test_student, quest=cls.quest)
 
     def setUp(self):
-        """Set up a tenant-aware test client and log in the student."""
+        """Set up a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
-        self.client.force_login(self.test_student)
 
     def test_ajax_approval_info__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
+        self.client.force_login(self.test_teacher)
         self.assert403('quests:ajax_approval_info', args=[self.submission.id])
 
     def test_ajax_approval_info__non_ajax_post_returns_403(self):
         """ This view is only accessible by an ajax POST request """
+        self.client.force_login(self.test_teacher)
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id])
         )
@@ -3386,6 +3449,7 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def test_ajax_approval_info__ajax_get_returns_404(self):
         """ This view is only accessible by an ajax POST request """
+        self.client.force_login(self.test_teacher)
         response = self.client.get(
             reverse('quests:ajax_approval_info', args=[self.submission.id]),
             content_type='application/json',
@@ -3394,7 +3458,8 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_ajax_approval_info__returns_json(self):
-        """An ajax POST returns a JsonResponse with the submission in context; missing id 404s."""
+        """A teacher's ajax POST returns a JsonResponse with the submission in context; missing id 404s."""
+        self.client.force_login(self.test_teacher)
         response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id]),
             content_type='application/json',
@@ -3407,6 +3472,9 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # includes the submission in context as s
         self.assertEqual(response.context['s'], self.submission)
 
+        # the approval view is where a teacher reads the staff-only instructor notes
+        self.assertIn(self.INSTRUCTOR_NOTES, response.json()['quest_info_html'])
+
         # Without a submission ID fails, 404:
         response = self.client.post(
             reverse('quests:ajax_approval_root'),  # what the heck is this used for?!
@@ -3414,6 +3482,41 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_ajax_approval_info__student_is_denied_their_own_submission(self):
+        """This is the teachers' approval view: a student can't read it even for their own work.
+
+        The template it renders includes the quest's Instructor Notes, which are staff-only.
+        """
+        self.client.force_login(self.test_student)
+        response = self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotContains(response, self.INSTRUCTOR_NOTES, status_code=403)
+
+    def test_ajax_approval_info__student_is_denied_another_students_submission(self):
+        """A student can't read another student's submission, which would leak their marking thread."""
+        self.client.force_login(self.another_student)
+        response = self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotContains(response, self.INSTRUCTOR_NOTES, status_code=403)
+
+    def test_ajax_approval_info__anonymous_is_redirected_to_login(self):
+        """An anonymous ajax POST is sent to the login page rather than served the submission."""
+        response = self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(reverse(settings.LOGIN_URL), response.url)
 
 
 class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):

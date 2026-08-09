@@ -959,8 +959,14 @@ def ajax_quest_info(request, quest_id=None):
 
 @xml_http_request_required
 @non_public_only_view
-@login_required
+@staff_member_required
 def ajax_approval_info(request, submission_id=None):
+    """Render one submission's row content for the teachers' approvals page.
+
+    Staff-only: the template it renders includes the quest's Instructor Notes and the
+    submitting student's details, and its only caller is the approvals page, which is
+    itself staff-only.
+    """
     if request.method == "POST":
         qs = QuestSubmission.objects.get_queryset(exclude_archived_quests=False, exclude_quests_not_published=False)
 
@@ -2045,6 +2051,12 @@ def skipped(request, quest_id):
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
+    """Autosave the requesting student's own draft comment and draft question answers.
+
+    Scoped to the submission's owner: a draft is the student's own work in progress, and
+    the draft form is only ever rendered for them (staff get the marking form instead), so
+    any other user's submission id is a 404.
+    """
     if request.POST:
         response_data = {
             "result": "No changes",
@@ -2054,7 +2066,7 @@ def ajax_save_draft(request):
         submission_id = request.POST.get("submission_id")
         # xp_requested = request.POST.get('xp_requested')
 
-        sub = get_object_or_404(QuestSubmission, pk=submission_id)
+        sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
         # if there is no draft comment, then the quest is not in progress
         if not sub.draft_comment:
             raise Http404("No draft comment found. The quest is not in progress.")
@@ -2071,7 +2083,7 @@ def ajax_save_draft(request):
         # upload when the quest is submitted). Sent as a JSON object of the formset's field
         # names, pairing each row's hidden id with its response_text.
         answers_json = request.POST.get("answers")
-        if answers_json and sub.user == request.user and sub.quest.question_set.exists():
+        if answers_json and sub.quest.question_set.exists():
             try:
                 answers = json.loads(answers_json)
             except ValueError:
