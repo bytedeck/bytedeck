@@ -246,7 +246,9 @@ class ProfileDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
         context["approved_submission_count"] = approved_submission_qs.count()
         return context
 
-    def delete(self, request, *args, **kwargs):
+    # Deliberately untested: users should be archived, not hard-deleted (see #2182), so this
+    # delete flow is slated for removal/replacement rather than covered with a test.
+    def delete(self, request, *args, **kwargs):  # pragma: no cover -- see comment above (#2182)
         profile = self.get_object()
         user = profile.user
         user.delete()  # Delete the User (cascades to Profile)
