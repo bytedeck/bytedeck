@@ -15,6 +15,7 @@ Two flows feed deck billing state, both defined here:
   handler is a thin translator that resolves the deck and funnels through
   ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
+import logging
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
@@ -23,6 +24,8 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localdate
+
+logger = logging.getLogger(__name__)
 
 # Cap outbound Stripe HTTP time: webhook handlers retrieve subscriptions inside
 # the request's DB transaction (needed for the StripeEventLog dedupe + rollback
@@ -157,6 +160,32 @@ def create_portal_session(deck):
     return session.url
 
 
+def stamp_customer_description(deck, customer_id):
+    """Best-effort: label the Stripe Customer with the deck it pays for.
+
+    Checkout creates the Customer with only the payer's email, so the dashboard's
+    Customers list gives no hint which deck a customer belongs to (maintainer
+    request, 2026-08-09). Stamping the deck name/domain into the description and
+    the schema into searchable metadata fixes that at the moment a customer is
+    first linked to a deck. Purely cosmetic, so a Stripe error is logged and
+    swallowed: it must never fail the webhook or the post-checkout reconcile
+    that calls it.
+
+    Args:
+        deck (Tenant): The deck the customer was just linked to.
+        customer_id (str): The Stripe customer id (cus_...).
+    """
+    try:
+        stripe.Customer.modify(
+            customer_id,
+            api_key=settings.STRIPE_SECRET_KEY,
+            description=f'Deck: {deck.name} ({deck.primary_domain_url})',
+            metadata={'schema_name': deck.schema_name},
+        )
+    except stripe.StripeError as e:
+        logger.warning('could not stamp deck description on Stripe customer %s: %s', customer_id, e)
+
+
 def subscription_period_end_date(subscription):
     """The subscription's current period end as a local date, or None.
 
@@ -218,8 +247,13 @@ def reconcile_checkout_session(deck, session_id):
     paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
+    # stamp only on a fresh link, so repeat polls of the status endpoint don't
+    # re-write the customer on every poll
+    newly_linked = bool(updates['stripe_customer_id']) and deck.stripe_customer_id != updates['stripe_customer_id']
     Tenant.objects.filter(schema_name=deck.schema_name).update(**updates)
     invalidate_current_deck_cache(deck.schema_name)  # the banner should update immediately
+    if newly_linked:
+        stamp_customer_description(deck, updates['stripe_customer_id'])
     return True
 
 
@@ -347,6 +381,10 @@ def handle_webhook_event(event):
             if session_sub:
                 guard |= Q(stripe_subscription_id=session_sub)
             linked = Tenant.objects.filter(guard, pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            if linked and deck.stripe_customer_id != obj['customer']:
+                # a fresh link (not a re-delivery rewriting the same id): label the
+                # customer with its deck so the dashboard's Customers list is legible
+                stamp_customer_description(deck, obj['customer'])
             parts.append('linked customer' if linked else 'customer link kept (session not for the linked subscription)')
         else:
             # a session without a customer must not CLEAR a stored link
