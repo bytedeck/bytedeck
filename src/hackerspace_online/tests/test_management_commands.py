@@ -70,9 +70,9 @@ class InitDbTest(TestCase, CommandMixin):
 
         with tenant_context(public_tenant):
             homepage = FlatPage.objects.get(url='/home/')  # will throw exception if doesn't exist
-            # the seeded TRY IT buttons must point at the deck-request form: the old
-            # "#contact" anchor target no longer exists anywhere on the seeded page
-            self.assertIn('href="/decks/request/"', homepage.content)
+            # ALL THREE seeded TRY IT buttons must point at the deck-request form:
+            # the old "#contact" anchor target no longer exists anywhere on the page
+            self.assertEqual(homepage.content.count('href="/decks/request/"'), 3)
             self.assertNotIn('href="#contact"', homepage.content)
             user = User.objects.get(username='admin')
             self.assertTrue(user.is_superuser)
