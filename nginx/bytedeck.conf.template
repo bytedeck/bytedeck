@@ -110,8 +110,8 @@ server {
     # OCSP responders in 2025 (in favour of CRLs), so its certificates carry no
     # OCSP URL and "ssl_stapling on" only produced a startup warning
     # ('"ssl_stapling" ignored, no OCSP responder URL in the certificate').
-    # The `resolver` directive that existed solely for OCSP fetching was
-    # removed along with it.
+    # The resolver at the top of this file is for Docker DNS resolution of the
+    # `web` upstream and plays no part in OCSP.
 
     # GZIP SETTINGS: https://www.nginx.com/blog/help-the-world-by-healing-your-nginx-configuration/#Enabling-Gzip-Compression-for-HTML-CSS-and-JavaScript-Files
     gzip on;

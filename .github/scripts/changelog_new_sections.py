@@ -85,6 +85,7 @@ def parse_sections(text):
     current_lines = []
 
     def flush():
+        """Append the section collected so far, if any, to ``sections``."""
         if current_version is not None:
             # Drop trailing blank lines so joined sections space evenly.
             body = "\n".join(current_lines).rstrip("\n")
@@ -133,6 +134,11 @@ def write_output(name, value):
 
 
 def main():
+    """Diff the changelog against ``BEFORE_SHA`` and emit the workflow outputs.
+
+    Writes ``discussion_body.md`` plus the ``has_new``/``title``/``versions``
+    outputs described in the module docstring.
+    """
     before_sha = os.environ.get("BEFORE_SHA", "")
     new_text = read_current(CHANGELOG)
     available, old_text = read_old(before_sha, CHANGELOG)
