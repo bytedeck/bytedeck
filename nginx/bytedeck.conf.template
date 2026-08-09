@@ -8,11 +8,24 @@
 # source of truth instead of maintaining divergent copies. Do not edit the
 # generated /etc/nginx/sites-available/bytedeck.conf directly.
 
-# the upstream uwsgi component nginx needs to connect to
-upstream django {
-    # server unix:/bytedeck-volume/app.sock; # for a file socket
-    server web:8000; # for a web port socket (we'll use this first)
-}
+# Resolve the `web` service name through Docker's embedded DNS (127.0.0.11) on
+# every request rather than once at startup, so nginx follows the app container
+# to whatever address it currently has.
+#
+# nginx caches a hostname it resolves at config-load time for the whole life of
+# the worker process. Compose gives the `web` container a fresh IP whenever it
+# is recreated (`systemctl restart bytedeck.com` does exactly that), so a cached
+# address goes stale on every restart and nginx keeps dialling the dead one:
+# `connect() failed (111: Connection refused) ... upstream: "uwsgi://<old-ip>:8000"`,
+# i.e. a 502 on every request until nginx itself is reloaded.
+#
+# `valid=10s` bounds how long a resolved address is reused. Docker's DNS returns
+# no TTL of its own, so without it nginx would cache indefinitely again.
+#
+# None of this applies to a unix socket (`uwsgi_pass unix:/bytedeck-volume/app.sock;`,
+# the alternative the commented-out socket_data mounts in the compose files are
+# for): a path cannot go stale, so it needs no resolver and no variable.
+resolver 127.0.0.11 valid=10s ipv6=off;
 
 server {
 
@@ -73,7 +86,15 @@ server {
 
 
     location / {
-        uwsgi_pass django;
+        # The variable is load-bearing: nginx only consults the resolver at
+        # request time when the passed address contains one. Inlining the name
+        # (`uwsgi_pass web:8000`) or naming an `upstream` block resolves it once
+        # at startup and caches the address for the life of the worker, which is
+        # the stale-address 502 described at the top of this file. envsubst in
+        # nginx/Dockerfile substitutes only the domain placeholder, so
+        # $web_upstream survives the build untouched.
+        set $web_upstream web;
+        uwsgi_pass $web_upstream:8000;
         include /etc/nginx/uwsgi_params;
         # Forward the original request scheme so Django's request.is_secure()
         # is correct behind this TLS-terminating proxy. Without it, is_secure()
