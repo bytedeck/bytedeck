@@ -38,6 +38,15 @@ def _announcement_node(title, url=DISCUSSION_URL, category="Announcements"):
     return {"title": title, "url": url, "category": {"name": category}}
 
 
+class ReleaseNotificationModelTests(SimpleTestCase):
+    """ReleaseNotification.__str__ labels a real notification vs a baseline row."""
+
+    def test_str__distinguishes_notified_from_baseline(self):
+        """The audit string reports whether staff were actually notified."""
+        self.assertEqual(str(ReleaseNotification(version="1.31.0", notified=True)), "1.31.0 (notified)")
+        self.assertEqual(str(ReleaseNotification(version="1.31.0", notified=False)), "1.31.0 (baseline)")
+
+
 @override_settings(GITHUB_API_TOKEN="test-token", RELEASE_ANNOUNCEMENT_REPO="bytedeck/bytedeck")
 class GetLatestReleaseAnnouncementTests(SimpleTestCase):
     """tenant.github.get_latest_release_announcement reads the newest changelog
