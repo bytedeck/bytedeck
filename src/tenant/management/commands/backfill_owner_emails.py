@@ -44,7 +44,10 @@ class Command(BaseCommand):
     )
 
     def add_arguments(self, parser):
-        """Register the --apply flag (without it the command only reports).
+        """Register the --apply flag and the --schema option.
+
+        Without --apply the command only reports; without --schema every deck
+        is processed.
 
         Args:
             parser (argparse.ArgumentParser): The command's argument parser,

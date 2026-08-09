@@ -455,12 +455,23 @@ def switch_deck_owner(tenant, username):
             )
         config = SiteConfig.get()
         old_owner = config.deck_owner
+        # the field is NOT NULL, but older admin code guards ownerless decks
+        # (message_selected), so surface the state through the ValueError channel
+        # the callers already handle rather than an AttributeError below
+        if old_owner is None:
+            raise ValueError(
+                f"deck '{tenant.schema_name}' has no owner set in its SiteConfig; fix it there first"
+            )
         if old_owner == new_owner:
             return old_owner.username, new_owner.username
-        # mirror SiteConfigForm.clean_deck_owner: the deck owner is always a superuser
+        # mirror SiteConfigForm.clean_deck_owner: the deck owner is always a superuser.
+        # A narrow update_fields save so a concurrent edit to any OTHER column of
+        # this user row can't be clobbered; like the mirrored admin path, no
+        # full_clean here: validating the whole (possibly legacy) user row could
+        # block the promotion on data unrelated to the one boolean changing.
         if not new_owner.is_superuser:
             new_owner.is_superuser = True
-            new_owner.save()
+            new_owner.save(update_fields=['is_superuser'])
         config.deck_owner = new_owner
         config.full_clean()
         config.save()

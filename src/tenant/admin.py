@@ -283,6 +283,15 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         tenant = queryset.first()
         with tenant_context(tenant):
             current_owner = SiteConfig.get().deck_owner
+            # the field is NOT NULL, but older admin code guards ownerless decks
+            # (message_selected), so match that caution instead of 500ing on .pk
+            if current_owner is None:
+                self.message_user(
+                    request,
+                    f"{tenant.schema_name}: this deck has no owner set in its SiteConfig; fix it there first.",
+                    messages.ERROR,
+                )
+                return None
             staff = User.objects.filter(is_staff=True).exclude(pk=current_owner.pk).order_by('username')
             choices = [
                 (user.username, f"{user.get_full_name() or user.username} ({user.username})")

@@ -1313,6 +1313,7 @@ class TenantAdminOwnerActionsTest(PublicTenantTestAdminPublic):
         response = self.client.post(url, action_data)
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Change the owner of deck")
+        self.assertContains(response, "Select a valid choice")
 
         with tenant_context(self.tenant):
             self.assertEqual(SiteConfig.objects.get().deck_owner, owner_before)
@@ -1325,6 +1326,18 @@ class TenantAdminOwnerActionsTest(PublicTenantTestAdminPublic):
                        ACTION_CHECKBOX_NAME: [self.tenant.pk, self.extra_tenant.pk]}
         response = self.client.post(url, action_data, follow=True)
         self.assertContains(response, "Select exactly ONE deck")
+
+    def test_change_deck_owner_action__ownerless_deck_reported_not_500(self):
+        """A deck whose SiteConfig has no owner (the field is NOT NULL, so this
+        is a defensive guard matching message_selected's caution) gets an ERROR
+        message instead of a 500 on the missing owner's pk (review find)."""
+        from unittest.mock import Mock
+
+        url = self.login_admin()
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        with patch('tenant.admin.SiteConfig.get', return_value=Mock(deck_owner=None)):
+            response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "no owner set in its SiteConfig")
 
     def test_change_deck_owner_action__warns_when_no_other_staff(self):
         """A deck whose only staff user is the current owner has nobody to hand

@@ -508,8 +508,7 @@ class ChangeDeckOwnerTest(ByteDeckTenantTestCase):
         self.assertIn('backfill_owner_emails --schema', output)
 
     def test_change__already_superuser_new_owner_is_left_as_is(self):
-        """A new owner who is already a superuser is simply set as owner, with no
-        redundant re-save of the user row."""
+        """A new owner who is already a superuser is simply set as owner."""
         new_owner = baker.make(User, is_staff=True, is_superuser=True, username='superstaff')
         self.run_command(self.tenant.schema_name, 'superstaff')
         self.assertEqual(SiteConfig.objects.get().deck_owner, new_owner)
@@ -520,6 +519,19 @@ class ChangeDeckOwnerTest(ByteDeckTenantTestCase):
         output = self.run_command(self.tenant.schema_name, owner.username)
         self.assertIn('already owns', output)
         self.assertEqual(SiteConfig.objects.get().deck_owner, owner)
+
+    def test_change__ownerless_deck_raises_the_callers_error_channel(self):
+        """A deck whose SiteConfig has no owner (defensive: the field is NOT
+        NULL) surfaces as the ValueError/CommandError the callers already handle,
+        never an AttributeError on the missing owner (review find)."""
+        from unittest.mock import Mock, patch
+
+        from django.core.management.base import CommandError
+
+        baker.make(User, is_staff=True, username='wouldbe')
+        with patch('tenant.utils.SiteConfig.get', return_value=Mock(deck_owner=None)):
+            with self.assertRaisesMessage(CommandError, 'no owner set in its SiteConfig'):
+                self.run_command(self.tenant.schema_name, 'wouldbe')
 
     def test_change__rejects_non_staff_unknown_user_and_non_deck_schemas(self):
         """A non-staff user, an unknown username, an unknown schema, and the
