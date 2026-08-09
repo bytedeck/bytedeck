@@ -220,8 +220,8 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         }
 
     def test_reconcile__fresh_link_stamps_the_deck_on_the_stripe_customer(self):
-        """A fresh customer link labels the Stripe Customer with the deck's name,
-        domain, and searchable schema metadata, so the dashboard's Customers list
+        """A fresh customer link labels the Stripe Customer with the deck's name
+        and searchable schema metadata, so the dashboard's Customers list
         shows which deck each customer pays for (maintainer request, 2026-08-09)."""
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
             stripe_customer_id='', stripe_subscription_id='')
@@ -234,8 +234,9 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         mock_modify.assert_called_once()
         args, kwargs = mock_modify.call_args
         self.assertEqual(args[0], 'cus_9')
-        self.assertIn(self.tenant.name, kwargs['description'])
-        self.assertIn(self.tenant.primary_domain_url, kwargs['description'])
+        # just the deck name (maintainer review on the PR): the Customers list's
+        # Description column stays short, and metadata carries the schema
+        self.assertEqual(kwargs['description'], self.tenant.name)
         self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
 
     def test_reconcile__repeat_poll_does_not_restamp_the_customer(self):
@@ -363,7 +364,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
 
     def test_checkout_completed__fresh_customer_link_stamps_the_deck_description(self):
         """A fresh customer link from the webhook labels the Stripe Customer with
-        the deck's name/domain and searchable schema metadata, so the dashboard's
+        the deck's name and searchable schema metadata, so the dashboard's
         Customers list shows which deck each customer pays for (maintainer
         request, 2026-08-09); a re-delivered event that rewrites the same id does
         not re-stamp."""
@@ -379,8 +380,7 @@ class HandleWebhookEventTest(ByteDeckTenantTestCase):
         self.mock_customer_modify.assert_called_once()
         args, kwargs = self.mock_customer_modify.call_args
         self.assertEqual(args[0], 'cus_wh')
-        self.assertIn(self.tenant.name, kwargs['description'])
-        self.assertIn(self.tenant.primary_domain_url, kwargs['description'])
+        self.assertEqual(kwargs['description'], self.tenant.name)
         self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
 
         # duplicate delivery: the link UPDATE rewrites the same id; no re-stamp

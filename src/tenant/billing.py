@@ -165,8 +165,8 @@ def stamp_customer_description(deck, customer_id):
 
     Checkout creates the Customer with only the payer's email, so the dashboard's
     Customers list gives no hint which deck a customer belongs to (maintainer
-    request, 2026-08-09). Stamping the deck name/domain into the description and
-    the schema into searchable metadata fixes that at the moment a customer is
+    request, 2026-08-09). Stamping the deck name into the description and the
+    schema into searchable metadata fixes that at the moment a customer is
     first linked to a deck. Purely cosmetic, so a Stripe error is logged and
     swallowed: it must never fail the webhook or the post-checkout reconcile
     that calls it.
@@ -179,7 +179,7 @@ def stamp_customer_description(deck, customer_id):
         stripe.Customer.modify(
             customer_id,
             api_key=settings.STRIPE_SECRET_KEY,
-            description=f'Deck: {deck.name} ({deck.primary_domain_url})',
+            description=deck.name,
             metadata={'schema_name': deck.schema_name},
         )
     except stripe.StripeError as e:
