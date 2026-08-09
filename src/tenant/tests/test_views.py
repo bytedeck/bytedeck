@@ -1352,6 +1352,8 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             response = self.client.post(reverse('decks:subscription'), follow=True)
         mock_create.assert_not_called()
         self.assertContains(response, 'double-bill')
+        # the error message renders its contact address as a clickable mailto link
+        self.assertContains(response, 'mailto:contact@bytedeck.com')
         # the page itself shows the manual-subscription note instead of the button
         self.assertContains(self.client.get(reverse('decks:subscription')), 'managed manually')
 

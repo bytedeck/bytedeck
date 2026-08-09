@@ -12,6 +12,7 @@ from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonRespons
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.utils.html import format_html
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
@@ -542,11 +543,17 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         # (Grace-period decks are past paid_until, so renewing via checkout is
         # exactly what they should do.)
         if not deck.stripe_customer_id and deck.subscription_active and not deck.in_grace_period:
+            # format_html marks the message safe so the message banner (which
+            # renders message HTML) shows a clickable contact link, while still
+            # escaping the interpolated address itself
             messages.error(
                 request,
-                "This deck's subscription is managed manually -- starting a new online "
-                f"subscription would double-bill you. Contact ByteDeck ({settings.SUPPORT_EMAIL}) "
-                "to switch to online billing."
+                format_html(
+                    "This deck's subscription is managed manually -- starting a new online "
+                    'subscription would double-bill you. <a href="mailto:{0}">Contact ByteDeck</a> ({0}) '
+                    "to switch to online billing.",
+                    settings.SUPPORT_EMAIL,
+                )
             )
             return redirect('decks:subscription')
         try:

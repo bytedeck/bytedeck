@@ -115,11 +115,27 @@ class PlanSummaryFromSubscriptionTest(SimpleTestCase):
         )
         self.assertEqual(summary['renewal_phrase'], 'renewed every 6 months at $50.00')
 
+    def test_summary__singular_day_or_week_cadence_reads_without_a_count(self):
+        """A weekly or daily price with interval_count=1 reads "renewed every
+        week", never the mis-pluralized "renewed every 1 weeks" (review find)."""
+        summary = _plan_summary_from_subscription(self.subscription(unit_amount=200, interval='week'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed every week at $2.00')
+        summary = _plan_summary_from_subscription(
+            self.subscription(unit_amount=200, interval='day', interval_count=3)
+        )
+        self.assertEqual(summary['renewal_phrase'], 'renewed every 3 days at $2.00')
+
     def test_summary__non_usd_currency_is_spelled_out(self):
         """Only USD gets the $ sign; other currencies read "75.00 CAD" so the
         amount is never misattributed to the wrong currency."""
         summary = _plan_summary_from_subscription(self.subscription(currency='cad'))
         self.assertEqual(summary['renewal_phrase'], 'renewed annually at 75.00 CAD per year')
+
+    def test_summary__zero_decimal_currency_is_not_divided_by_100(self):
+        """Stripe amounts for zero-decimal currencies (e.g. JPY) are already
+        whole units: 7500 renders as "7,500 JPY", not "75.00 JPY" (review find)."""
+        summary = _plan_summary_from_subscription(self.subscription(currency='jpy'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed annually at 7,500 JPY per year')
 
     def test_summary__no_recurrence_or_no_amount_degrades_gracefully(self):
         """A one-time price yields an empty renewal phrase (name still shows); a

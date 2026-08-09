@@ -53,6 +53,14 @@ CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
 # (e.g. a renamed product) that fire no event we act on.
 PLAN_SUMMARY_CACHE_SECONDS = 60 * 15
 
+# Currencies whose Stripe amounts are already whole units rather than cents
+# (https://docs.stripe.com/currencies#zero-decimal): dividing by 100 would
+# display a hundredth of the real price.
+ZERO_DECIMAL_CURRENCIES = frozenset((
+    'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga',
+    'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+))
+
 
 def to_plain_dict(stripe_obj):
     """A stripe-python object (or a dict) as plain nested dicts/lists.
@@ -266,6 +274,9 @@ def _plan_summary_from_subscription(subscription):
         cadence, per_suffix = 'renewed annually', ' per year'
     elif interval == 'month' and count == 1:
         cadence, per_suffix = 'renewed monthly', ' per month'
+    elif interval and count == 1:
+        # a singular day/week cadence reads without the count ("renewed every week")
+        cadence, per_suffix = f'renewed every {interval}', ''
     elif interval:
         cadence, per_suffix = f'renewed every {count} {interval}s', ''
     else:  # a one-time price shouldn't arise on a subscription, but Stripe allows odd data
@@ -275,7 +286,13 @@ def _plan_summary_from_subscription(subscription):
     money = ''
     if amount is not None:
         currency = (price.get('currency') or '').lower()
-        rendered = f'{amount / 100:,.2f}'
+        # Stripe amounts are in the currency's SMALLEST unit: cents for most
+        # currencies, but zero-decimal currencies (Stripe's documented list)
+        # carry the whole amount already, so 7500 JPY is 7,500, not 75.00.
+        if currency in ZERO_DECIMAL_CURRENCIES:
+            rendered = f'{amount:,.0f}'
+        else:
+            rendered = f'{amount / 100:,.2f}'
         money = f'${rendered}' if currency in ('', 'usd') else f'{rendered} {currency.upper()}'
 
     if cadence and money:
