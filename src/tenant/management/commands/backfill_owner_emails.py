@@ -1,8 +1,6 @@
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from allauth.account.models import EmailAddress
 from django_tenants.utils import get_public_schema_name, get_tenant_model, tenant_context
 
 from library.utils import get_library_schema_name
@@ -118,7 +116,9 @@ class Command(BaseCommand):
     def _process_deck(self, tenant, apply_changes):
         """Audit (and in apply mode normalize) one deck's owner email bookkeeping.
 
-        Must run inside the deck's tenant context.
+        Thin wrapper over :func:`tenant.utils.normalize_owner_email` (the single
+        write path this command shares with the tenant admin's "Verify owner
+        email" action). Must run inside the deck's tenant context.
 
         Args:
             tenant (Tenant): The deck being processed (its public-schema row).
@@ -126,74 +126,8 @@ class Command(BaseCommand):
                 refresh the deck's cached fields; when False, only report.
 
         Returns:
-            tuple: ``(status, owner_name, email, notes)`` where ``status`` is
-            ``ok`` (nothing to do), ``fixed`` (bookkeeping created or corrected;
-            in dry-run mode this means it WOULD be), ``no-email`` (needs a
-            human), or ``skipped`` (a different account already verified the
-            address, so no write can succeed: needs a human); ``owner_name`` is
-            the owner's username; ``email`` is the owner's address or None;
-            ``notes`` is the semicolon-joined audit remarks for the report line.
+            tuple: The helper's ``(status, owner_name, email, notes)``.
         """
-        from siteconfig.models import SiteConfig
+        from tenant.utils import normalize_owner_email
 
-        owner = SiteConfig.get().deck_owner
-        notes = []
-        # the initial deck_owner default was a heuristic (oldest non-admin staff
-        # user, else a bare created account): flag decks that never chose for real
-        if owner.username == settings.TENANT_DEFAULT_OWNER_USERNAME:
-            notes.append("default owner account (heuristic guess, never chosen)")
-        # the deprecated hand-entered public-tenant address is often the best clue
-        # to who the owner SHOULD be when the schema's data is missing or wrong
-        legacy = (tenant.owner_email or '').strip()
-        if legacy and legacy.lower() != (owner.email or '').lower():
-            notes.append(f"public-tenant legacy owner_email differs: {legacy}")
-
-        if not owner.email:
-            return 'no-email', owner.username, None, '; '.join(notes)
-
-        # deterministic target row, preferring the form a save lands on:
-        # EmailAddress.clean() lowercases the address, so normalizing any other
-        # row rewrites it to the lowercase form; targeting the lowercase row
-        # first means that rewrite can never collide with a case-variant sibling
-        # under the unique (user, email) constraint. Fall back to the exact-case
-        # match, then the oldest case-variant duplicate.
-        canonical = owner.email.lower()
-        matches = list(EmailAddress.objects.filter(user=owner, email__iexact=owner.email).order_by('pk'))
-        email_address = next(
-            (row for row in matches if row.email == canonical),
-            next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
-        )
-        already_ok = (
-            email_address is not None and email_address.verified and email_address.primary
-            and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
-        )
-        if already_ok:
-            return 'ok', owner.username, owner.email, '; '.join(notes)
-
-        # the DB allows one VERIFIED row per address across the whole schema
-        # (unique_verified_email, from ACCOUNT_UNIQUE_EMAIL): if a different
-        # account already verified this address, no write can succeed, and which
-        # account is really the owner's is a human call. Report and leave it.
-        if EmailAddress.objects.exclude(user=owner).filter(email=canonical, verified=True).exists():
-            notes.append("address already verified by another account on this deck")
-            return 'skipped', owner.username, owner.email, '; '.join(notes)
-
-        if apply_changes:
-            # mirror TenantCreate.form_valid: the owner's address exists, verified
-            # and primary. Every OTHER primary row is demoted BEFORE the target
-            # saves: the DB allows at most one primary per user
-            # (unique_primary_email), so the demote must come first, and excluding
-            # by pk (a brand-new target has none, so nothing is spared) also
-            # demotes a case-variant duplicate of the owner's own address.
-            if email_address is None:
-                email_address = EmailAddress(user=owner, email=owner.email, verified=True, primary=True)
-            else:
-                email_address.verified = True
-                email_address.primary = True
-            EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).update(primary=False)
-            email_address.full_clean()
-            email_address.save()
-            # land owner_email_cached now; the notice engine and the Stripe
-            # backfill report read the cache, not the schema
-            tenant.update_cached_fields()
-        return 'fixed', owner.username, owner.email, '; '.join(notes)
+        return normalize_owner_email(tenant, apply_changes)

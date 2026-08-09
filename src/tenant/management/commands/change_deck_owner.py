@@ -1,8 +1,6 @@
-from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
-from django_tenants.utils import get_public_schema_name, get_tenant_model, tenant_context
+from django_tenants.utils import get_public_schema_name, get_tenant_model
 
 from library.utils import get_library_schema_name
 
@@ -10,13 +8,14 @@ from library.utils import get_library_schema_name
 class Command(BaseCommand):
     """Change a deck's owner to another staff user on that deck (legacy cleanup).
 
-    Mirrors what choosing a new Deck Owner in the SiteConfig admin does
-    (``SiteConfigForm.clean_deck_owner``): the new owner must be an existing
-    STAFF user on the deck and is promoted to superuser. The previous owner's
-    account and permissions are left untouched (demote them by hand if wanted).
-    The deck's cached owner fields are refreshed immediately so the public
-    admin, the notice engine, and the Stripe backfill report see the new owner
-    without waiting for the nightly task.
+    Thin CLI wrapper over :func:`tenant.utils.switch_deck_owner`, the single
+    write path this command shares with the tenant admin's "Change deck owner"
+    action: the new owner must be an existing STAFF user on the deck and is
+    promoted to superuser (mirroring ``SiteConfigForm.clean_deck_owner``); the
+    previous owner's account and permissions are left untouched, and the deck's
+    cached owner fields are refreshed immediately so the public admin, the
+    notice engine, and the Stripe backfill report see the new owner without
+    waiting for the nightly task.
 
     The new owner's email-verification bookkeeping is deliberately NOT touched
     here: run ``backfill_owner_emails --schema <deck> --apply`` afterwards to
@@ -41,10 +40,9 @@ class Command(BaseCommand):
         parser.add_argument('username', help="The new owner: an existing STAFF user on that deck.")
 
     def handle(self, *args, **options):
-        """Validate the deck and user, then switch the owner and refresh caches."""
-        from siteconfig.models import SiteConfig
+        """Validate the deck, then switch the owner via the shared helper."""
+        from tenant.utils import switch_deck_owner
 
-        User = get_user_model()
         Tenant = get_tenant_model()
         schema_name = options['schema_name']
         if schema_name in (get_public_schema_name(), get_library_schema_name()):
@@ -54,34 +52,16 @@ class Command(BaseCommand):
         except Tenant.DoesNotExist:
             raise CommandError(f"No deck with schema name '{schema_name}'.")
 
-        with transaction.atomic(), tenant_context(tenant):
-            try:
-                new_owner = User.objects.get(username=options['username'])
-            except User.DoesNotExist:
-                raise CommandError(f"No user '{options['username']}' on deck '{schema_name}'.")
-            if not new_owner.is_staff:
-                raise CommandError(
-                    f"'{new_owner.username}' is not a staff user on '{schema_name}': the deck owner "
-                    "must be staff. Make them staff first if this really is the right account."
-                )
-            config = SiteConfig.get()
-            old_owner = config.deck_owner
-            if old_owner == new_owner:
-                self.stdout.write(f"'{new_owner.username}' already owns '{schema_name}'; nothing to do.")
-                return
-            # mirror SiteConfigForm.clean_deck_owner: the deck owner is always a superuser
-            if not new_owner.is_superuser:
-                new_owner.is_superuser = True
-                new_owner.save()
-            config.deck_owner = new_owner
-            config.full_clean()
-            config.save()
-            # land the cached owner name/email now; the public admin, the notice
-            # engine, and the Stripe backfill report all read the cache
-            tenant.update_cached_fields()
+        try:
+            old_username, new_username = switch_deck_owner(tenant, options['username'])
+        except ValueError as e:
+            raise CommandError(str(e))
 
+        if old_username == new_username:
+            self.stdout.write(f"'{new_username}' already owns '{schema_name}'; nothing to do.")
+            return
         self.stdout.write(self.style.SUCCESS(
-            f"'{schema_name}' owner changed: {old_owner.username} -> {new_owner.username} "
+            f"'{schema_name}' owner changed: {old_username} -> {new_username} "
             "(promoted to superuser; the previous owner's permissions are untouched)."
         ))
         self.stdout.write(

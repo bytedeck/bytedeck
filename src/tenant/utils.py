@@ -1,9 +1,15 @@
 import secrets
 
+from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.db import transaction
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.crypto import get_random_string
+
+from allauth.account.models import EmailAddress
+from django_tenants.utils import tenant_context
 
 from siteconfig.models import SiteConfig
 from .models import Tenant
@@ -325,3 +331,140 @@ def get_public_subscribe_url():
     if 'localhost' in settings.ROOT_DOMAIN:  # Development
         return f"http://{settings.ROOT_DOMAIN}:8000/pages/subscribe/"
     return f"https://{settings.ROOT_DOMAIN}/pages/subscribe/"
+
+
+def normalize_owner_email(tenant, apply_changes):
+    """Audit (and in apply mode normalize) one deck's owner email bookkeeping.
+
+    The single write path behind both the ``backfill_owner_emails`` management
+    command and the tenant admin's "Verify owner email" action: brings the
+    deck owner up to the state deck creation produces (the ``EmailAddress`` row
+    matching ``owner.email`` exists, is verified, and is the owner's only
+    primary address). Must run inside the deck's tenant context.
+
+    Args:
+        tenant (Tenant): The deck being processed (its public-schema row).
+        apply_changes (bool): When True, write the EmailAddress fixes and
+            refresh the deck's cached fields; when False, only report.
+
+    Returns:
+        tuple: ``(status, owner_name, email, notes)`` where ``status`` is
+        ``ok`` (nothing to do), ``fixed`` (bookkeeping created or corrected;
+        in dry-run mode this means it WOULD be), ``no-email`` (needs a
+        human), or ``skipped`` (a different account already verified the
+        address, so no write can succeed: needs a human); ``owner_name`` is
+        the owner's username; ``email`` is the owner's address or None;
+        ``notes`` is the semicolon-joined audit remarks for the report line.
+    """
+    owner = SiteConfig.get().deck_owner
+    notes = []
+    # the initial deck_owner default was a heuristic (oldest non-admin staff
+    # user, else a bare created account): flag decks that never chose for real
+    if owner.username == settings.TENANT_DEFAULT_OWNER_USERNAME:
+        notes.append("default owner account (heuristic guess, never chosen)")
+    # the deprecated hand-entered public-tenant address is often the best clue
+    # to who the owner SHOULD be when the schema's data is missing or wrong
+    legacy = (tenant.owner_email or '').strip()
+    if legacy and legacy.lower() != (owner.email or '').lower():
+        notes.append(f"public-tenant legacy owner_email differs: {legacy}")
+
+    if not owner.email:
+        return 'no-email', owner.username, None, '; '.join(notes)
+
+    # deterministic target row, preferring the form a save lands on:
+    # EmailAddress.clean() lowercases the address, so normalizing any other
+    # row rewrites it to the lowercase form; targeting the lowercase row
+    # first means that rewrite can never collide with a case-variant sibling
+    # under the unique (user, email) constraint. Fall back to the exact-case
+    # match, then the oldest case-variant duplicate.
+    canonical = owner.email.lower()
+    matches = list(EmailAddress.objects.filter(user=owner, email__iexact=owner.email).order_by('pk'))
+    email_address = next(
+        (row for row in matches if row.email == canonical),
+        next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
+    )
+    already_ok = (
+        email_address is not None and email_address.verified and email_address.primary
+        and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
+    )
+    if already_ok:
+        return 'ok', owner.username, owner.email, '; '.join(notes)
+
+    # the DB allows one VERIFIED row per address across the whole schema
+    # (unique_verified_email, from ACCOUNT_UNIQUE_EMAIL): if a different
+    # account already verified this address, no write can succeed, and which
+    # account is really the owner's is a human call. Report and leave it.
+    if EmailAddress.objects.exclude(user=owner).filter(email=canonical, verified=True).exists():
+        notes.append("address already verified by another account on this deck")
+        return 'skipped', owner.username, owner.email, '; '.join(notes)
+
+    if apply_changes:
+        # mirror TenantCreate.form_valid: the owner's address exists, verified
+        # and primary. Every OTHER primary row is demoted BEFORE the target
+        # saves: the DB allows at most one primary per user
+        # (unique_primary_email), so the demote must come first, and excluding
+        # by pk (a brand-new target has none, so nothing is spared) also
+        # demotes a case-variant duplicate of the owner's own address.
+        if email_address is None:
+            email_address = EmailAddress(user=owner, email=owner.email, verified=True, primary=True)
+        else:
+            email_address.verified = True
+            email_address.primary = True
+        EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).update(primary=False)
+        email_address.full_clean()
+        email_address.save()
+        # land owner_email_cached now; the notice engine and the Stripe
+        # backfill report read the cache, not the schema
+        tenant.update_cached_fields()
+    return 'fixed', owner.username, owner.email, '; '.join(notes)
+
+
+def switch_deck_owner(tenant, username):
+    """Make ``username`` (an existing STAFF user on the deck) the deck's owner.
+
+    The single write path behind both the ``change_deck_owner`` management
+    command and the tenant admin's "Change deck owner" action. Mirrors the
+    SiteConfig admin's semantics (``SiteConfigForm.clean_deck_owner``): the new
+    owner is promoted to superuser, and the previous owner's account and
+    permissions are left untouched. The deck's cached owner fields are
+    refreshed immediately so the public admin, the notice engine, and the
+    Stripe backfill report see the new owner without waiting for the nightly
+    task. When the user already owns the deck, nothing is written.
+
+    Args:
+        tenant (Tenant): The deck whose owner changes (its public-schema row).
+        username (str): The new owner's username on that deck.
+
+    Returns:
+        tuple[str, str]: ``(old_username, new_username)``; equal when the user
+        already owned the deck and nothing was written.
+
+    Raises:
+        ValueError: When no such user exists on the deck, or the user is not staff.
+    """
+    User = get_user_model()
+    with transaction.atomic(), tenant_context(tenant):
+        try:
+            new_owner = User.objects.get(username=username)
+        except User.DoesNotExist:
+            raise ValueError(f"no user '{username}' exists on deck '{tenant.schema_name}'")
+        if not new_owner.is_staff:
+            raise ValueError(
+                f"'{username}' is not a staff user on '{tenant.schema_name}': the deck owner must be "
+                "staff. Make them staff first if this really is the right account."
+            )
+        config = SiteConfig.get()
+        old_owner = config.deck_owner
+        if old_owner == new_owner:
+            return old_owner.username, new_owner.username
+        # mirror SiteConfigForm.clean_deck_owner: the deck owner is always a superuser
+        if not new_owner.is_superuser:
+            new_owner.is_superuser = True
+            new_owner.save()
+        config.deck_owner = new_owner
+        config.full_clean()
+        config.save()
+        # land the cached owner name/email now; the public admin, the notice
+        # engine, and the Stripe backfill report all read the cache
+        tenant.update_cached_fields()
+    return old_owner.username, new_owner.username
