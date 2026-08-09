@@ -175,7 +175,7 @@ def get_homepage_content():
             <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#teachers" role="button">TEACHERS</a>
           </div>
           <div class="col-md-4">
-            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#contact" role="button">TRY IT</a>
+            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="/decks/request/" role="button">TRY IT</a>
           </div>
         </div>
         <!-- /row -->
@@ -258,7 +258,7 @@ def get_homepage_content():
             open-ended, self-directed activities, where students can showcase their learning and creativity.</p>
             <div class="row">
               <div class="col-lg-4 BD-title-pixels">
-                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="#contact" role="button">TRY IT!</a>
+                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="/decks/request/" role="button">TRY IT!</a>
                 <!-- <div>
                   <img class="students-pixels BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%203.png">
                 </div> -->
@@ -302,7 +302,7 @@ def get_homepage_content():
             where they're at.</p>
             <div class="row">
               <div class="col-lg-4">
-                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="#contact" role="button">TRY IT!!</a>
+                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="/decks/request/" role="button">TRY IT!!</a>
               </div>
             </div>
           </div>
