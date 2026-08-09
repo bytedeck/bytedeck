@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
@@ -25,14 +24,15 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         """Create a test campaign (Category) shared across the tests."""
         cls.category = baker.make(Category, title="Test Campaign")
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_category__creation_and_str(self):
         """Creating a Category yields a Category instance whose str is its title."""
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
+
+    def test_get_icon_url__returns_category_icon_when_set(self):
+        """Category.get_icon_url returns the campaign's own icon url when it has one."""
+        self.category.icon = 'icons/campaign.png'
+        self.assertEqual(self.category.get_icon_url(), self.category.icon.url)
 
     def test_condition_met_as_prerequisite__all_unique_quests_completed(self):
         """ Test that all unique quests in a campaign are completed before the campaign is considered completed
@@ -148,10 +148,6 @@ class QuestTestModel(ByteDeckTenantTestCase):
         """Create a Quest shared across the tests."""
         cls.quest = baker.make(Quest)
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_quest__creation_and_str(self):
         """Creating a Quest yields a Quest instance whose str is its name."""
         self.assertIsInstance(self.quest, Quest)
@@ -171,6 +167,35 @@ class QuestTestModel(ByteDeckTenantTestCase):
         self.quest.icon = ''
         self.quest.campaign = baker.make('quest_manager.Category', icon='icons/campaign.png')
         self.assertEqual(self.quest.get_icon_url(), self.quest.campaign.icon.url)
+
+    def test_icon_url__returns_icon_url_when_set(self):
+        """XPItem.icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.icon_url(), self.quest.icon.url)
+
+    def test_icon_url__returns_none_when_no_icon(self):
+        """XPItem.icon_url returns None when the quest has no icon (used by templates via default_if_none)."""
+        self.quest.icon = ''
+        self.assertIsNone(self.quest.icon_url())
+
+    def test_is_repeatable__reflects_max_repeats(self):
+        """XPItem.is_repeatable is True when max_repeats is non-zero (a finite or unlimited cap), False when 0."""
+        self.quest.max_repeats = 0
+        self.assertFalse(self.quest.is_repeatable())
+        self.quest.max_repeats = 3
+        self.assertTrue(self.quest.is_repeatable())
+        self.quest.max_repeats = -1  # unlimited repeats
+        self.assertTrue(self.quest.is_repeatable())
+
+    def test_is_repeat_available__false_during_cooldown(self):
+        """is_repeat_available is False when a repeatable quest has been completed but its
+        hours_between_repeats cooldown has not yet elapsed (issue #57)."""
+        student = baker.make(User)
+        quest = baker.make(Quest, max_repeats=-1, hours_between_repeats=24)
+        sub = QuestSubmission.objects.create_submission(student, quest)
+        sub.mark_completed()
+        # Completed just now, so fewer than 24 hours have passed: still on cooldown.
+        self.assertFalse(quest.is_repeat_available(student))
 
     def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """
@@ -423,10 +448,6 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
         """Capture the active semester shared across the tests."""
         cls.active_semester = SiteConfig.get().active_semester
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_all_approved__filters_by_semester_quest_and_user(self):
         """ Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
@@ -547,10 +568,6 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
         cls.submission = baker.make(QuestSubmission, quest__name="Test")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_submission__creation_and_quest_name(self):
         """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
@@ -719,10 +736,6 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
     it reuses an ``is_expired`` annotation from the queryset when one is present
     instead of issuing a query per call."""
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_expired__prefers_is_expired_annotation(self):
         """When the instance carries an is_expired annotation, expired() returns
         it without issuing a query."""
@@ -755,10 +768,6 @@ class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
         # a teacher is needed both as staff caller and as each quest's editor
         cls.teacher = User.objects.create_user('teacher', is_staff=True)
         cls.campaign = baker.make(Category, title="Test Campaign")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def _make_quests(self, **kwargs):
         """Create three quests with a campaign, editor and tags set, so the

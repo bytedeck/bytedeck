@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import SimpleTestCase
 
+from allauth.account.models import EmailAddress
 from django_tenants.utils import get_public_schema_name, schema_context
 from freezegun import freeze_time
 from model_bakery import baker
@@ -123,10 +124,322 @@ class BillingStatusLabelTest(SimpleTestCase):
         self.assertEqual(Command.billing_status(Tenant(paid_until=today)), 'subscribed')
         self.assertEqual(Command.billing_status(Tenant(paid_until=today - timedelta(days=5), trial_end_date=None)), 'grace')
         self.assertEqual(Command.billing_status(Tenant(trial_end_date=today, paid_until=None)), 'trial')
+        # a lapsed trial in its unified grace window also reads as grace (#1734 B4)
+        self.assertEqual(Command.billing_status(Tenant(trial_end_date=today - timedelta(days=5), paid_until=None)), 'grace')
         self.assertEqual(
             Command.billing_status(
-                Tenant(trial_end_date=today - timedelta(days=1), paid_until=today - timedelta(days=GRACE_PERIOD_DAYS + 1))
+                Tenant(
+                    trial_end_date=today - timedelta(days=GRACE_PERIOD_DAYS + 40),
+                    paid_until=today - timedelta(days=GRACE_PERIOD_DAYS + 1),
+                )
             ),
             'suspended',
         )
         self.assertEqual(Command.billing_status(Tenant(trial_end_date=None, paid_until=None)), 'unmanaged')
+
+
+class StripeBackfillReportTest(ByteDeckTenantTestCase):
+    """Tests for the read-only #2043 legacy backfill report (plan §10.3)."""
+
+    def call(self):
+        """Run the command and return its stdout."""
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command('stripe_backfill_report', stdout=out)
+        return out.getvalue()
+
+    def test_report__not_configured(self):
+        """Without a secret key the command explains and exits without calling Stripe."""
+        output = self.call()
+        self.assertIn('not configured', output)
+
+    def test_report__matches_ambiguous_unmatched_and_skips_linked(self):
+        """Subscriptions are bucketed by owner-email match; already-linked ones are
+        skipped; nothing is ever written."""
+        from unittest.mock import MagicMock, patch
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        def sub(sub_id, email, customer_id='cus_x'):
+            return {'id': sub_id, 'customer': {'id': customer_id, 'email': email}}
+
+        listing = MagicMock()
+        # two extra schema-less decks sharing an owner email make an ambiguous bucket
+        # (tenant rows can only be created from the public schema)
+        from django_tenants.utils import get_public_schema_name, schema_context
+        with schema_context(get_public_schema_name()):
+            for name in ('twin', 'twin2'):
+                twin = Tenant(schema_name=name, name=name, owner_email_cached='shared@example.com')
+                twin.auto_create_schema = False
+                twin.save()
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
+
+        listing.auto_paging_iter.return_value = [
+            sub('sub_match', 'owner@example.com'),          # exactly one deck
+            sub('sub_shared', 'shared@example.com'),        # two decks -> ambiguous
+            sub('sub_none', 'stranger@example.com'),        # no deck
+            sub('sub_noemail', None),                       # customer without email
+        ]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+
+        self.assertIn("sub_match", output)
+        self.assertIn(f"deck '{self.tenant.schema_name}'", output)
+        self.assertIn('MULTIPLE decks', output)
+        self.assertIn('sub_none', output)
+        self.assertIn('no deck with this owner email', output)
+        self.assertIn('sub_noemail', output)
+        self.assertIn('nothing was changed', output)
+        # read-only: the matched deck was NOT linked
+        self.assertEqual(Tenant.objects.get(pk=self.tenant.pk).stripe_subscription_id, '')
+
+    def test_report__handles_the_sdks_real_subscription_objects(self):
+        """The listing yields the SDK's Subscription objects, which are NOT dicts
+        on stripe-python 15.x (.get() raises): the report's dict-style reads only
+        worked in tests because the doubles were plain dicts (the same drift that
+        500ed staging's webhook, 2026-08-09). Pins the seam with the real type."""
+        from unittest.mock import MagicMock, patch
+
+        import stripe as stripe_lib
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
+        sdk_sub = stripe_lib.Subscription.construct_from(
+            {'id': 'sub_sdk', 'customer': {'id': 'cus_sdk', 'email': 'OWNER@example.com'}}, 'sk_test_x')
+        self.assertFalse(hasattr(sdk_sub, 'get'))  # the very property that broke staging
+
+        listing = MagicMock()
+        listing.auto_paging_iter.return_value = [sdk_sub]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+
+        self.assertIn('sub_sdk', output)
+        self.assertIn(f"deck '{self.tenant.schema_name}'", output)
+
+    def test_report__skips_already_linked_subscriptions(self):
+        """A subscription some deck already carries doesn't reappear in the report."""
+        from unittest.mock import MagicMock, patch
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_done')
+        listing = MagicMock()
+        listing.auto_paging_iter.return_value = [
+            {'id': 'sub_done', 'customer': {'id': 'cus_x', 'email': 'x@example.com'}},
+        ]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+        self.assertNotIn('sub_done', output)
+
+
+class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
+    """Tests for the `backfill_owner_emails` management command (#1729 rollout)."""
+
+    def run_command(self, *args):
+        """Run backfill_owner_emails and capture its report.
+
+        Args:
+            *args: Extra command arguments (e.g. '--apply'); none means dry run.
+
+        Returns:
+            str: The command's full stdout.
+        """
+        out = StringIO()
+        call_command('backfill_owner_emails', *args, stdout=out)
+        return out.getvalue()
+
+    def deck_line(self, output):
+        """Extract this test deck's audit line from a command report.
+
+        Args:
+            output (str): The command's full stdout.
+
+        Returns:
+            str: The single report line for this test's deck (fails the test if
+            the line is absent or duplicated).
+        """
+        matches = [line for line in output.splitlines() if line.startswith(self.tenant.schema_name)]
+        self.assertEqual(len(matches), 1, f"expected exactly one audit line for {self.tenant.schema_name}:\n{output}")
+        return matches[0]
+
+    def set_owner(self, **user_fields):
+        """Make a fresh staff user the deck owner.
+
+        Args:
+            **user_fields: Field overrides forwarded to the User baker (e.g. email).
+
+        Returns:
+            User: The newly created owner now set as SiteConfig.deck_owner.
+        """
+        owner = baker.make(User, is_staff=True, **user_fields)
+        config = SiteConfig.get()
+        config.deck_owner = owner
+        config.save()
+        return owner
+
+    def test_backfill__dry_run_reports_and_writes_nothing(self):
+        """Without --apply the command reports the fix it would make, but writes no
+        EmailAddress row and leaves the cached owner email untouched."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        output = self.run_command()
+        self.assertIn('would-fix', self.deck_line(output))
+        self.assertIn('Dry run: no changes were written', output)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+
+    def test_backfill__apply_normalizes_bookkeeping_and_refreshes_cache(self):
+        """--apply creates the owner's EmailAddress verified+primary, demotes any
+        other primary address, lands owner_email_cached immediately, and a second
+        run reports the deck as already ok (idempotent)."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        stale_primary = EmailAddress.objects.create(user=owner, email='old.address@example.com', verified=False, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        address = EmailAddress.objects.get(user=owner, email='legacy.owner@example.com')
+        self.assertTrue(address.verified)
+        self.assertTrue(address.primary)
+        stale_primary.refresh_from_db()
+        self.assertFalse(stale_primary.primary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'legacy.owner@example.com')
+
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
+    def test_backfill__flags_owners_needing_a_human(self):
+        """An owner with no email is reported with nothing written, the deprecated
+        public-tenant owner_email is surfaced as a clue, and a deck still on the
+        heuristic default owner account is flagged."""
+        from django.conf import settings
+
+        # move the seeded default-owner username out of the way so the fresh owner
+        # can carry it (usernames are unique per schema)
+        User.objects.filter(username=settings.TENANT_DEFAULT_OWNER_USERNAME).update(username='renamed-for-test')
+        owner = self.set_owner(email='')
+        User.objects.filter(pk=owner.pk).update(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email='clue@example.com')
+
+        output = self.run_command('--apply')
+        line = self.deck_line(output)
+        self.assertIn('no-email', line)
+        self.assertIn('default owner account', line)
+        self.assertIn('clue@example.com', line)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+        self.assertIn('1 with no owner email', output)
+
+    def test_backfill__existing_unverified_row_is_marked_not_duplicated(self):
+        """--apply promotes an existing unverified, non-primary EmailAddress row for
+        the owner's address in place: no duplicate row is created."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        EmailAddress.objects.create(user=owner, email='legacy.owner@example.com', verified=False, primary=False)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        rows = EmailAddress.objects.filter(user=owner)
+        self.assertEqual(rows.count(), 1)
+        self.assertTrue(rows[0].verified)
+        self.assertTrue(rows[0].primary)
+
+    def test_backfill__mixed_case_owner_email_normalizes_the_lowercase_row(self):
+        """When the owner's User.email is mixed case and both the lowercase row and an
+        exact-case duplicate exist, --apply targets the lowercase row (the form
+        EmailAddress.clean() stores) and demotes the duplicate's primary, instead of
+        lowercasing the duplicate into a unique (user, email) collision with its
+        sibling. The cache lands allauth's canonical lowercase form."""
+        owner = self.set_owner(email='Mixed.Case@Example.com')
+        variant = EmailAddress.objects.create(user=owner, email='Mixed.Case@Example.com', verified=False, primary=True)
+        canonical = EmailAddress.objects.create(user=owner, email='mixed.case@example.com', verified=False, primary=False)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        canonical.refresh_from_db()
+        variant.refresh_from_db()
+        self.assertTrue(canonical.verified)
+        self.assertTrue(canonical.primary)
+        self.assertFalse(variant.primary)
+        self.assertEqual(EmailAddress.objects.filter(user=owner, primary=True).count(), 1)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'mixed.case@example.com')
+
+    def test_backfill__mixed_case_owner_email_creates_lowercase_row_idempotently(self):
+        """With no existing rows and a mixed-case User.email, --apply stores the new row
+        lowercase (EmailAddress.clean() lowercases on save), the cache lands allauth's
+        canonical lowercase form, and a second run still reports the deck as ok."""
+        owner = self.set_owner(email='Mixed.Case@Example.com')
+
+        self.assertIn(' fixed', self.deck_line(self.run_command('--apply')))
+        row = EmailAddress.objects.get(user=owner)
+        self.assertEqual(row.email, 'mixed.case@example.com')
+        self.assertTrue(row.verified)
+        self.assertTrue(row.primary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'mixed.case@example.com')
+
+        self.assertIn(' ok', self.deck_line(self.run_command()))
+
+    def test_backfill__skips_when_another_account_verified_the_address(self):
+        """When a different account on the deck already holds the owner's address
+        verified (the DB allows one verified row per address), both dry run and
+        --apply report the deck as skipped for a human and write nothing: the
+        command must not guess which account is really the owner's."""
+        owner = self.set_owner(email='Shared@Example.com')
+        other_row = EmailAddress.objects.create(user=baker.make(User), email='shared@example.com', verified=True, primary=True)
+
+        dry_line = self.deck_line(self.run_command())
+        self.assertIn('skipped', dry_line)
+        self.assertIn('verified by another account', dry_line)
+
+        output = self.run_command('--apply')
+        self.assertIn('skipped', self.deck_line(output))
+        self.assertIn('1 skipped', output)
+        self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
+        other_row.refresh_from_db()
+        self.assertTrue(other_row.verified)
+        self.assertTrue(other_row.primary)
+
+    def test_backfill__broken_schema_reported_as_error_line(self):
+        """A Tenant row whose schema doesn't exist is reported as an ERROR line (and
+        counted in the summary) without aborting the run for the remaining decks."""
+        with schema_context(get_public_schema_name()):
+            broken = Tenant(name='brokendeck', schema_name='brokendeck')
+            broken.auto_create_schema = False
+            broken.full_clean()
+            broken.save()
+
+        output = self.run_command()
+        broken_line = [line for line in output.splitlines() if line.startswith('brokendeck')]
+        self.assertEqual(len(broken_line), 1)
+        self.assertIn('ERROR', broken_line[0])
+        self.assertIn('1 with errors', output)
+        # the healthy test deck was still processed after the broken one
+        self.deck_line(output)
+
+    def test_backfill__case_variant_primary_demoted_in_favor_of_exact_match(self):
+        """When a case-variant duplicate of the owner's address holds primary, --apply
+        demotes it (by pk, before the promote saves: the DB's unique_primary_email
+        constraint allows only one primary per user) and promotes the exact-case
+        row, leaving exactly one verified primary."""
+        owner = self.set_owner(email='legacy.owner@example.com')
+        exact = EmailAddress.objects.create(user=owner, email='legacy.owner@example.com', verified=False, primary=False)
+        variant = EmailAddress.objects.create(user=owner, email='Legacy.Owner@example.com', verified=False, primary=True)
+
+        output = self.run_command('--apply')
+        self.assertIn(' fixed', self.deck_line(output))
+        exact.refresh_from_db()
+        variant.refresh_from_db()
+        self.assertTrue(exact.primary)
+        self.assertTrue(exact.verified)
+        self.assertFalse(variant.primary)
+        self.assertEqual(EmailAddress.objects.filter(user=owner, primary=True).count(), 1)

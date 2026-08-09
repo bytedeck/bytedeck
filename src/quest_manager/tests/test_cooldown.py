@@ -11,7 +11,7 @@ from freezegun import freeze_time
 from model_bakery import baker
 
 from courses.models import CourseStudent
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
@@ -135,7 +135,7 @@ class GetInCooldownManagerTests(CooldownTestMixin, ByteDeckTenantTestCase):
         self.assertNotIn(one_off, Quest.objects.get_in_cooldown(self.test_student))
 
 
-class CooldownViewTests(CooldownTestMixin, ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CooldownViewTests(CooldownTestMixin, ByteDeckTenantTestCase):
 
     def test_quest_list__available_tab_lists_cooldown_quest(self):
         """The Available tab shows a completed-in-cooldown quest with its countdown."""

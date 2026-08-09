@@ -6,7 +6,7 @@
 {% block head %}
     {{ submission_form.media }}
     {% if question_formset %}{{ question_formset.media }}{% endif %}
-    <link rel="stylesheet" href="{% static 'css/select2-bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
 {% block head_css %}
@@ -106,10 +106,14 @@
           {% if question_formset.non_form_errors %}
             <div class="alert alert-danger">{{ question_formset.non_form_errors }}</div>
           {% endif %}
+          {% comment %} Each question is a list-group item, so the questions read as one connected
+             list (single hairline borders between them, no inter-item gaps) rather than a stack of
+             separate padded cards. {% endcomment %}
+          <div class="list-group question-submission-list">
           {# the loop variable must be named `form`: the crispy HTML() layout objects inside #}
           {# QuestionSubmissionForm reference {{ form.question... }} from the template context #}
           {% for form in question_formset %}
-            <div class="well well-sm question-submission-form">
+            <div class="list-group-item question-submission-form">
               {# question number and the teacher's instructions on one line to save space; unwrap_p strips #}
               {# summernote's wrapping <p> so a one-line prompt flows right after the "Question N:" label. #}
               {# A <div> (not <p>) wraps it because multi-paragraph instructions keep their <p> tags, which #}
@@ -121,12 +125,13 @@
               {% crispy form %}
             </div>
           {% endfor %}
+          </div>
           <hr>
         {% endif %}
         {% if question_formset %}
           {# with per-question answer fields above, the general comment box needs its own heading #}
           {# so students know it's for anything beyond their answers #}
-          <p><strong>Additional Submission Comments</strong></p>
+          <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
         {% endif %}
         <div id="main-comment-form">
           {{ submission_form | crispy }}

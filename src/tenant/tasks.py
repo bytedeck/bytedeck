@@ -87,14 +87,23 @@ def deck_status_check():
     was an acknowledged N+1 across all decks). Later phases of epic #1729 extend
     this task with the expiry-reminder cadence and limit warnings (#1733).
 
-    After the refresh, runs the deck reminder engine (#1733): expiry cadence,
-    current-student limit warnings, and the suspension notice -- report-only
-    until settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
+    After the refresh, three steps run in a deliberate order. First the nightly
+    Stripe reconcile (plan §5.3) re-syncs a linked deck's subscription, so a
+    renewal Stripe knows about lifts the deck out of suspension before anything
+    acts on it. Then a fresh suspension closes the deck's open semester exactly
+    once per episode (#1734 redesign B2, see
+    tenant.notices.close_semester_on_new_suspension): enforcement, not
+    communication, so it is NOT gated by DECK_NOTICES_ENABLED. Then the deck
+    reminder engine (#1733) runs: expiry cadence, current-student limit
+    warnings, and the suspension notice -- report-only until
+    settings.DECK_NOTICES_ENABLED is turned on (see tenant/notices.py).
 
     Takes no arguments (the schema comes from the task's tenant context);
     returns a short summary string for the worker log.
     """
-    from tenant.notices import process_deck_notices
+    import stripe as stripe_lib
+
+    from tenant.notices import close_semester_on_new_suspension, process_deck_notices
 
     # Defensive mirror of the dispatcher's exclusions: the public and shared-library
     # schemas aren't billable decks and SiteConfig.get() returns None on the public
@@ -107,8 +116,31 @@ def deck_status_check():
 
     tenant = get_tenant_model().objects.get(schema_name=connection.schema_name)
     tenant.update_cached_fields()
+
+    # Nightly Stripe reconcile (plan §5.3, PR 7): webhooks are an optimization,
+    # not the source of truth -- re-fetching every linked deck's subscription
+    # means a webhook outage shorter than the 30-day grace can never suspend a
+    # paying deck. Stripe errors are reported, not raised: the semester close
+    # and the notices below must still run. Runs FIRST so a renewal Stripe
+    # knows about lifts the deck out of suspension before anything closes
+    # (the sync updates this instance in place, so the close reads the
+    # post-reconcile billing state; suspension never touches the admin-set
+    # cap: #2210).
+    stripe_summary = 'not linked'
+    if tenant.stripe_subscription_id and settings.STRIPE_SECRET_KEY:
+        from tenant.billing import _sync_deck_from_subscription_id
+        try:
+            stripe_summary = _sync_deck_from_subscription_id(tenant, tenant.stripe_subscription_id)
+        except stripe_lib.StripeError as e:
+            stripe_summary = f'stripe error: {e}'
+
+    # enforcement before communication (#1734 redesign B2): a fresh suspension
+    # closes the open semester exactly once, so the suspended notice below (and
+    # the refreshed counts) describe the deck's actual post-suspension state
+    semester_summary = close_semester_on_new_suspension(tenant)
+    tenant.update_cached_fields()  # the close empties the current-student count
     notices_summary = process_deck_notices(tenant)
     return (
         f"Refreshed cached Tenant fields for deck '{tenant.schema_name}'; "
-        f"notices: {notices_summary}"
+        f"stripe: {stripe_summary}; semester: {semester_summary}; notices: {notices_summary}"
     )

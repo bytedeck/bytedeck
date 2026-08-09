@@ -7,19 +7,18 @@ from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 from comments.models import Comment
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -31,10 +30,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         cls.test_announcement = baker.make(Announcement, draft=False)
         cls.ann_pk = cls.test_announcement.pk
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_announcement_form__has_unsaved_changes_guard(self):
         """The announcement create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
@@ -298,6 +293,38 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             new_ann.get_absolute_url()
         )
 
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_copy_announcement__draft_copy_sends_no_notification(self, mock_send):
+        """Copying to a draft announcement queues no notification (only a published copy does)."""
+        self.client.force_login(self.test_teacher)
+        form_data = {
+            'title': "Draft copy",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",
+            'draft': True,
+        }
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data,
+        )
+
+        new_ann = Announcement.objects.latest('datetime_created')
+        self.assertTrue(new_ann.draft)
+        self.assertRedirects(response, new_ann.get_absolute_url())
+        mock_send.assert_not_called()
+
+    def test_list__anchor_absent_from_student_list_still_renders(self):
+        """Requesting the list anchored to a draft announcement (which students can't see) walks
+        the whole page range without finding it, then falls back and still renders."""
+        draft = baker.make(Announcement)  # draft defaults to True, archived False
+        self.assertTrue(draft.draft)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('announcements:list', args=[draft.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
     # Custom label tests
     def test_announcement_views__header_custom_label_displayed(self):
         """
@@ -357,7 +384,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "CustomAnnouncement commented on")
 
 
-class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
     """ Tests for archived announcements view and other archived processes
 
     Mostly this one:
@@ -371,10 +398,6 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_teacher = baker.make(User, is_staff=True)
         cls.test_student = baker.make(User)
         cls.test_announcement = baker.make(Announcement, draft=False)
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_archived_announcement__hidden_from_list(self):
         """ Archived announcements should not appear in announcements list"""
@@ -460,7 +483,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertTrue(announcement.archived)
 
 
-class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementCreateUpdateViewTests(ByteDeckTenantTestCase):
     """Covers the Create/Update CBV form_valid + success-message branches and EmptyPage paging."""
 
     @classmethod
@@ -468,10 +491,6 @@ class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCa
         """Create a staff author and one existing published announcement to edit."""
         cls.teacher = User.objects.create_user('cu_teacher', is_staff=True)
         cls.announcement = baker.make(Announcement, draft=False)
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def _form_data(self, **overrides):
         """Return valid AnnouncementForm POST data (title/content/release), with overrides applied."""

@@ -5,14 +5,18 @@ thin and tests can mock a single seam (``tenant.billing.stripe``). Nothing in
 this module is reachable when billing isn't configured: the page checks
 :func:`billing_configured` first and falls back to the public subscribe page.
 
-The checkout flow is deliberately webhook-free in this PR: after Checkout
-redirects back, the "activating" page polls a status endpoint that calls
-:func:`reconcile_checkout_session`, which reads the session/subscription state
-from Stripe and links/extends the deck itself. The webhook endpoint (plan PR 7)
-later takes over renewals and payment failures; this reconciliation stays as
-the never-assume-the-webhook-landed fallback (plan §5.4).
+Two flows feed deck billing state, both defined here:
+
+* Checkout (PR 6): after Checkout redirects back, the "activating" page polls a
+  status endpoint that calls :func:`reconcile_checkout_session` -- the
+  never-assume-the-webhook-landed path (plan §5.4).
+* Webhooks (PR 7): Stripe posts events to the public-schema endpoint, which
+  verifies the signature and dispatches to :func:`handle_webhook_event`. Every
+  handler is a thin translator that resolves the deck and funnels through
+  ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
-from datetime import datetime, timezone as dt_timezone
+import json
+from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
 
@@ -20,6 +24,45 @@ from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localdate
+
+# Cap outbound Stripe HTTP time: webhook handlers retrieve subscriptions inside
+# the request's DB transaction (needed for the StripeEventLog dedupe + rollback
+# semantics), so the SDK's default read timeout (80s) could pin a DB connection
+# through a slow Stripe response. 15s is generous for single-object calls.
+# (_http_client is the SDK's internal module; under an incompatible SDK layout
+# the guard leaves Stripe's default timeout active and boot proceeds.)
+try:
+    from stripe import _http_client as _stripe_http_client
+
+    stripe.default_http_client = _stripe_http_client.new_default_http_client(timeout=15)
+except (ImportError, AttributeError):  # pragma: no cover -- requires a different SDK layout
+    pass
+
+# Stripe rejects a subscription trial_end closer than 48 hours out; the extra
+# hour absorbs clock skew and request latency so a boundary-day checkout can't
+# fail at Stripe after passing our check
+CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
+
+
+def to_plain_dict(stripe_obj):
+    """A stripe-python object (or a dict) as plain nested dicts/lists.
+
+    stripe-python 15.x objects support indexing but are NOT dicts: ``.get()``
+    raises AttributeError. The handlers and sync code are written dict-style,
+    which every test exercised with plain-dict doubles, so the mismatch only
+    surfaced on staging's first real webhook delivery (500 on every event,
+    2026-08-09). Converting at each SDK boundary keeps the dict-style code and
+    the test doubles honest; ``str()`` of a Stripe object is its full JSON.
+
+    Args:
+        stripe_obj: A stripe-python object, or an already-plain dict.
+
+    Returns:
+        dict: The same data as plain nested dicts/lists.
+    """
+    if isinstance(stripe_obj, dict):
+        return stripe_obj
+    return json.loads(str(stripe_obj))
 
 
 def billing_configured():
@@ -36,14 +79,48 @@ def _subscription_page_url(deck):
     return deck.get_root_url() + reverse('decks:subscription')
 
 
+def checkout_trial_end(deck):
+    """When this deck subscribes mid-trial, the aware datetime its Stripe trial
+    should run until, or None when a plain (bill-now) checkout is right.
+
+    A mid-trial subscriber keeps their remaining free time (maintainer decision,
+    2026-08-06): checkout passes this as ``subscription_data.trial_end`` so the
+    subscription starts ``trialing``, the card is collected now, and the first
+    charge lands when the deck's existing trial ends, auto-renewing from then
+    on. The deck's trial covers THROUGH ``trial_end_date``, so the Stripe trial
+    runs to local midnight after that day (settings.TIME_ZONE).
+
+    None when the TRIAL clock isn't the deck's governing (latest) clock
+    (#1734 B4: with both dates set the later one governs, and a tie speaks
+    subscription language), and None when the trial ends within
+    CHECKOUT_TRIAL_END_MINIMUM (Stripe requires trial_end at least 48 hours in
+    the future, so a nearly-over or lapsed-into-grace trial just bills
+    immediately: there is little or no free time left to preserve).
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        datetime | None: The aware trial-end moment to send to Stripe, or None.
+    """
+    if not deck.governing_clock_is_trial:
+        return None
+    end = timezone.make_aware(datetime.combine(deck.governing_deadline + timedelta(days=1), dt_time.min))
+    if end < timezone.now() + CHECKOUT_TRIAL_END_MINIMUM:
+        return None
+    return end
+
+
 def create_checkout_session(deck):
     """Create a subscription Checkout Session for an unlinked deck; return its URL.
 
     The deck is identified to Stripe three ways (client_reference_id, metadata,
     and the customer email), so the webhook (PR 7) and manual reconciliation can
-    always find their way back to the schema. The idempotency key means a
-    double-click or same-day retry with identical parameters reuses the same
-    session instead of minting duplicates.
+    always find their way back to the schema. A mid-trial deck's remaining free
+    time rides along as ``subscription_data.trial_end`` (see
+    :func:`checkout_trial_end`). The idempotency key means a double-click or
+    same-day retry with identical parameters reuses the same session instead of
+    minting duplicates.
 
     Args:
         deck (Tenant): The current deck; must not already have a stripe_customer_id.
@@ -51,6 +128,7 @@ def create_checkout_session(deck):
     Returns:
         str: The Stripe-hosted checkout URL to redirect the owner to.
     """
+    trial_end = checkout_trial_end(deck)
     session = stripe.checkout.Session.create(
         api_key=settings.STRIPE_SECRET_KEY,
         mode='subscription',
@@ -58,10 +136,25 @@ def create_checkout_session(deck):
         client_reference_id=deck.schema_name,
         customer_email=deck.get_owner_email_cached() or None,
         metadata={'schema_name': deck.schema_name},
+        # stamp the subscription too, so webhook subscription events (PR 7)
+        # self-identify without a lookup; a mid-trial deck's remaining free time
+        # rides along as trial_end, so the subscription starts `trialing` until
+        # the deck's existing trial ends
+        subscription_data={
+            'metadata': {'schema_name': deck.schema_name},
+            **({'trial_end': int(trial_end.timestamp())} if trial_end else {}),
+        },
         # Checkout substitutes the real session id into the literal placeholder
         success_url=deck.get_root_url() + reverse('decks:subscription_activating') + '?session_id={CHECKOUT_SESSION_ID}',
         cancel_url=_subscription_page_url(deck),
-        idempotency_key=f'deck-checkout-{deck.schema_name}-{localdate()}',
+        # Stripe rejects a reused idempotency key whose parameters changed, so the
+        # trial variant carries the trial-end timestamp: a same-day retry after the
+        # cutoff passed, or after an admin moved trial_end_date, gets a fresh key
+        # while an identical retry still reuses the session
+        idempotency_key=(
+            f'deck-checkout-{deck.schema_name}-{localdate()}'
+            + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
+        ),
     )
     return session.url
 
@@ -86,7 +179,7 @@ def create_portal_session(deck):
     return session.url
 
 
-def _subscription_period_end_date(subscription):
+def subscription_period_end_date(subscription):
     """The subscription's current period end as a local date, or None.
 
     Newer Stripe API versions moved ``current_period_end`` from the subscription
@@ -122,9 +215,9 @@ def reconcile_checkout_session(deck, session_id):
     from tenant.models import Tenant
     from tenant.utils import invalidate_current_deck_cache
 
-    session = stripe.checkout.Session.retrieve(
+    session = to_plain_dict(stripe.checkout.Session.retrieve(
         session_id, api_key=settings.STRIPE_SECRET_KEY, expand=['subscription'],
-    )
+    ))
     # The session id arrives via the success-URL query string, so never trust it
     # blindly: the session must be one THIS deck's checkout created (bound via
     # client_reference_id/metadata), or a session id from some other deck's
@@ -144,9 +237,184 @@ def reconcile_checkout_session(deck, session_id):
         'stripe_customer_id': session.get('customer') or '',
         'stripe_subscription_id': subscription.get('id') or '',
     }
-    paid_until = _subscription_period_end_date(subscription)
+    paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
     Tenant.objects.filter(schema_name=deck.schema_name).update(**updates)
     invalidate_current_deck_cache(deck.schema_name)  # the banner should update immediately
     return True
+
+
+def subscription_max_active_users(subscription):
+    """The current-student cap this subscription's Price grants, or None.
+
+    Tier configuration lives on the Stripe Price as ``metadata.max_active_users``
+    (dashboard-editable, plan §2), with ``settings.STRIPE_PRICE_TIER_MAP``
+    (price_id -> cap) as the fallback for Prices whose metadata was never set.
+    Returns None -- leave the deck's cap alone -- when neither source knows.
+    """
+    items = subscription.get('items') or {}
+    data = items.get('data') or []
+    price = (data[0].get('price') or {}) if data else {}
+    metadata = price.get('metadata') or {}
+    raw = metadata.get('max_active_users')
+    if raw is None:
+        raw = (settings.STRIPE_PRICE_TIER_MAP or {}).get(price.get('id'))
+    if raw is None:
+        return None
+    try:
+        cap = int(raw)
+    except (TypeError, ValueError):
+        return None
+    # -1 = unlimited (the Tenant field's own convention); anything below it is
+    # meaningless metadata that would read as a cap every count exceeds, so it
+    # resolves to None like any other malformed value (review find on #2110)
+    return cap if cap >= -1 else None
+
+
+def _resolve_deck(schema_name=None, customer_id=None, subscription_id=None):
+    """Find the Tenant a webhook event belongs to, or None.
+
+    Resolution order (plan §5.2): explicit schema binding (client_reference_id /
+    metadata, stamped by our checkout) first, then the stored Stripe ids.
+    """
+    from tenant.models import Tenant
+
+    if schema_name:
+        deck = Tenant.objects.filter(schema_name=schema_name).first()
+        if deck is not None:
+            return deck
+    if subscription_id:
+        deck = Tenant.objects.filter(stripe_subscription_id=subscription_id).first()
+        if deck is not None:
+            return deck
+    if customer_id:
+        return Tenant.objects.filter(stripe_customer_id=customer_id).first()
+    return None
+
+
+def _invoice_subscription_id(invoice):
+    """The subscription an invoice belongs to, or None.
+
+    Older Stripe API versions carry a top-level ``subscription`` on the invoice;
+    newer ones moved the reference under ``parent.subscription_details``. Same
+    dual-shape handling as :func:`subscription_period_end_date`.
+    """
+    sub_id = invoice.get('subscription')
+    if sub_id:
+        return sub_id
+    details = (invoice.get('parent') or {}).get('subscription_details') or {}
+    return details.get('subscription') or None
+
+
+def _sync_deck_from_subscription_id(deck, subscription_id):
+    """Retrieve a subscription from Stripe and run the single-write-path sync.
+
+    Skips (with a log summary) when ``STRIPE_SECRET_KEY`` is unset: a server
+    configured with only the webhook secret can still absorb events that sync
+    straight from their payloads, but it cannot retrieve, and an exception here
+    would turn into a 500 that Stripe retries for days (review find on #2110).
+
+    Args:
+        deck (Tenant): The deck whose billing state the subscription drives.
+        subscription_id (str): The Stripe subscription id (sub_...) to retrieve.
+
+    Returns:
+        str: A short human-readable summary for the caller's log/audit trail.
+    """
+    if not settings.STRIPE_SECRET_KEY:
+        return 'STRIPE_SECRET_KEY unset; retrieve skipped'
+    subscription = to_plain_dict(stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY))
+    return deck.sync_from_stripe_subscription(subscription)
+
+
+def handle_webhook_event(event):
+    """Dispatch one verified Stripe webhook event.
+
+    Handlers are thin translators (plan §5.2): resolve the deck, then call one
+    named method -- ``Tenant.sync_from_stripe_subscription`` for anything that
+    changes billing state, the notices machinery for payment failures. Unhandled
+    event types are logged and acknowledged. Idempotence (duplicate delivery)
+    is enforced by the caller via StripeEventLog before this runs.
+
+    Args:
+        event: The verified Stripe Event, as the SDK's Event object or an
+            equivalent plain dict (converted internally via to_plain_dict).
+
+    Returns:
+        tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema
+        (empty string when no deck resolved) as structured data for the event
+        log's audit trail, and a human-readable summary for the worker log.
+    """
+    from django_tenants.utils import tenant_context
+
+    # accept the SDK's Event object as well as a plain dict: everything below
+    # (and every handler) speaks dict
+    event = to_plain_dict(event)
+    event_type = event.get('type', '')
+    obj = (event.get('data') or {}).get('object') or {}
+    metadata = obj.get('metadata') or {}
+
+    if event_type == 'checkout.session.completed':
+        deck = _resolve_deck(schema_name=obj.get('client_reference_id') or metadata.get('schema_name'),
+                             customer_id=obj.get('customer'))
+        if deck is None:
+            return '', 'no deck resolved'
+        # Subscription sync first (the payload carries the subscription only as
+        # an id string, so this retrieves it): the sync's identity guard rules
+        # on whether this session's subscription is the deck's linked one, and
+        # the customer link below follows that same ruling.
+        parts = []
+        session_sub = obj.get('subscription') or ''
+        if session_sub:
+            parts.append(_sync_deck_from_subscription_id(deck, session_sub))
+        if obj.get('customer'):
+            from django.db.models import Q
+
+            from tenant.models import Tenant
+            # Identity-guarded customer link, applied as one conditional UPDATE
+            # (atomic, so no read-then-write race): the customer is linked only
+            # when this session's subscription IS the deck's linked subscription,
+            # or the deck is entirely unlinked (the initial link on a server that
+            # cannot retrieve). A delayed event for a superseded checkout must
+            # not overwrite a newer customer link -- the same identity principle
+            # as sync_from_stripe_subscription (review find on #2110).
+            guard = Q(stripe_customer_id='', stripe_subscription_id='')
+            if session_sub:
+                guard |= Q(stripe_subscription_id=session_sub)
+            linked = Tenant.objects.filter(guard, pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            parts.append('linked customer' if linked else 'customer link kept (session not for the linked subscription)')
+        else:
+            # a session without a customer must not CLEAR a stored link
+            # (review find on #2110)
+            parts.append('no customer on session')
+        return deck.schema_name, '; '.join(parts)
+
+    if event_type in ('customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'):
+        deck = _resolve_deck(schema_name=metadata.get('schema_name'),
+                             customer_id=obj.get('customer'), subscription_id=obj.get('id'))
+        if deck is None:
+            return '', 'no deck resolved'
+        return deck.schema_name, deck.sync_from_stripe_subscription(obj)
+
+    if event_type == 'invoice.paid':
+        subscription_id = _invoice_subscription_id(obj)
+        deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=subscription_id)
+        if deck is None:
+            return '', 'no deck resolved'
+        if not subscription_id:
+            return deck.schema_name, 'invoice without subscription, ignored'
+        return deck.schema_name, _sync_deck_from_subscription_id(deck, subscription_id)
+
+    if event_type == 'invoice.payment_failed':
+        deck = _resolve_deck(customer_id=obj.get('customer'), subscription_id=_invoice_subscription_id(obj))
+        if deck is None:
+            return '', 'no deck resolved'
+        # Delivery resolves the owner/staff from the deck's schema, and respects
+        # the same report-only rollout gate as the reminder engine.
+        from tenant.notices import record_and_deliver_payment_failure
+        with tenant_context(deck):
+            summary = record_and_deliver_payment_failure(deck, invoice_id=obj.get('id') or 'unknown')
+        return deck.schema_name, summary
+
+    return '', f'ignored event type {event_type}'

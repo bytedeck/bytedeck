@@ -118,6 +118,15 @@ class Notification(models.Model):
 
     font_icon = models.CharField(max_length=255, default="<i class='fa fa-info-circle'></i>")
 
+    # explicit link destination (a URL path), for notifications about something that
+    # has no natural target model, e.g. a deck's subscription status: when set, the
+    # notification links here instead of to target_object.get_absolute_url()
+    target_url = models.CharField(max_length=255, blank=True, default='')
+    # the anchor text for target_url, e.g. "subscription details page." -- keeps the
+    # notification body plain text with one small link at the end (maintainer
+    # request, 2026-08-08); when blank, the whole verb becomes the link text
+    target_link_text = models.CharField(max_length=255, blank=True, default='')
+
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, related_name='notifications', on_delete=models.CASCADE)
 
     timestamp = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -192,15 +201,32 @@ class Notification(models.Model):
 
         return str(result) + ("..." if truncated else "")
 
-    def __str__(self):
-        try:
-            target_url = self.target_object.get_absolute_url()
+    def get_sender_display(self):
+        """The actor name rendered at the start of the notification text.
 
-            # Is this the right place to do this?
-            if 'commented on' in self.verb:
-                target_url += f'#comment-{self.action_object_id}'
-        except AttributeError:
-            target_url = None
+        The deck's ByteDeck support account (settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        displays as "Bytedeck": it sends the automated deck status notices, and its
+        raw username reads like any other user (maintainer request, 2026-07-31).
+        Every other sender keeps its normal string form.
+        """
+        sender = self.sender_object
+        if getattr(sender, 'username', None) == settings.TENANT_DEFAULT_ADMIN_USERNAME:
+            return "Bytedeck"
+        return sender
+
+    def __str__(self):
+        if self.target_url:
+            # an explicit destination always wins over the target object's own page
+            target_url = self.target_url
+        else:
+            try:
+                target_url = self.target_object.get_absolute_url()
+
+                # Is this the right place to do this?
+                if 'commented on' in self.verb:
+                    target_url += f'#comment-{self.action_object_id}'
+            except AttributeError:
+                target_url = None
 
         action = self.action_object
 
@@ -210,10 +236,11 @@ class Notification(models.Model):
         # absolute url needed for when notifications are sent via email
         root_url = get_root_url()
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,  # notif text
             "target": self.target_object,  # basically quest name
+            "link_text": self.target_link_text,
             "verify_read": "{}{}".format(root_url, reverse('notifications:read', kwargs={"id": self.id})),
             "target_url": target_url,
         }
@@ -224,6 +251,14 @@ class Notification(models.Model):
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
+        elif self.target_url:
+            if self.target_link_text:
+                # plain verb, one small link at the end (maintainer request, 2026-08-08)
+                url = url_common_part + "%(link_text)s</a>" % context
+            else:
+                # no link text given, so the verb itself is the link text: without
+                # this the anchor would render empty and the destination be unreachable
+                url = "%(sender)s <a href='%(verify_read)s?next=%(target_url)s'>%(verb)s</a>" % context
         else:
             url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
         return url
@@ -235,14 +270,19 @@ class Notification(models.Model):
 
     def get_url(self):
         # print("***** NOTIFICATION.get_url **********")
-        try:
-            target_url = self.target_object.get_absolute_url()
+        if self.target_url:
+            # an explicit destination always wins over the target object's own page
+            target_url = self.target_url
+        else:
+            try:
+                target_url = self.target_object.get_absolute_url()
 
-            if 'commented on' in self.verb:
-                target_url += f'#comment-{self.action_object_id}'
-        except:  # noqa
-            # TODO make this except explicit, don't remember what it's doing
-            target_url = reverse('notifications:list')
+                if 'commented on' in self.verb:
+                    target_url += f'#comment-{self.action_object_id}'
+            except Exception:
+                # no target object, or one without a resolvable page (AttributeError /
+                # NoReverseMatch): fall back to the notifications list
+                target_url = reverse('notifications:list')
 
         context = {
             "verify_read": reverse('notifications:read', kwargs={"id": self.id}),
@@ -268,10 +308,11 @@ class Notification(models.Model):
         action = Notification.html_strip(str(self.action_object))
 
         context = {
-            "sender": self.sender_object,
+            "sender": self.get_sender_display(),
             "verb": self.verb,
             "action": action,
             "target": self.target_object,
+            "link_text": self.target_link_text,
             # "verify_read": reverse('notifications:read', kwargs={"id":self.id}),
             # "target_url": target_url,
             "url": self.get_url(),
@@ -284,6 +325,10 @@ class Notification(models.Model):
                 url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
             else:
                 url = url_common_part + " <em>%(target)s</em></a>" % context
+        elif self.target_link_text:
+            # the dropdown row is one big anchor, so the link text just completes
+            # the sentence the verb starts
+            url = url_common_part + " %(link_text)s</a>" % context
         else:
             url = url_common_part + "</a>"
 
@@ -300,6 +345,12 @@ def new_notification(sender, **kwargs):
         recipient (User): The receiving User, required (but not used if affected_users are provided ...?)
         affected_users (list of Users): everyone who should receive the notification
         verb (string): sender 'verb' [target] [action]. E.g MrC 'commented on' SomeAnnouncement
+        url (string): explicit URL path the notification links to, for notices about
+            something with no natural target model (e.g. a deck's subscription status);
+            overrides the target's get_absolute_url()
+        link_text (string): anchor text for `url`, e.g. "subscription details page." --
+            keeps the notification body plain with one small link at the end; without
+            it the whole verb becomes the link text
         icon (html string): e.g.:
             "<span class='fa-stack'>" + \
                "<i class='fa fa-comment-o fa-flip-horizontal fa-stack-1x'></i>" + \
@@ -312,6 +363,8 @@ def new_notification(sender, **kwargs):
     recipient = kwargs.pop('recipient')  # required
     verb = kwargs.pop('verb')  # required
     icon = kwargs.pop('icon', "<i class='fa fa-info-circle'></i>")
+    target_url = kwargs.pop('url', '')
+    target_link_text = kwargs.pop('link_text', '')
     affected_users = kwargs.pop('affected_users', [recipient, ])
 
     # try:
@@ -334,6 +387,8 @@ def new_notification(sender, **kwargs):
             sender_content_type=ContentType.objects.get_for_model(sender),
             sender_object_id=sender.id,
             font_icon=icon,
+            target_url=target_url,
+            target_link_text=target_link_text,
         )
         # Set the target if provided.
         for option in ("target", "action"):

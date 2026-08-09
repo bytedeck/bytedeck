@@ -6,9 +6,8 @@ from django.core.cache import cache
 from django.forms.models import model_to_dict
 from django.shortcuts import reverse
 
-from django_tenants.test.client import TenantClient
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 from siteconfig.forms import SiteConfigForm
@@ -19,7 +18,7 @@ from model_bakery import baker
 User = get_user_model()
 
 
-class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SiteConfigViewTest(ByteDeckTenantTestCase):
     """Tests for the SiteConfig View
     """
 
@@ -29,8 +28,6 @@ class SiteConfigViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         that is created upon first access via the get() method.
         """
         self.config = SiteConfig.get()
-        self.client = TenantClient(self.tenant)
-
     def test_siteconfig_page_status_codes__anonymous(self):
         """Anonymous users are redirected to login from the siteconfig update views."""
         self.assertRedirectsLogin('config:site_config_update', args=[self.config.get().id])

@@ -15,7 +15,7 @@ from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Ra
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data, model_to_form_data, generate_formset_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 
@@ -27,7 +27,7 @@ import json
 User = get_user_model()
 
 
-class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class RankViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -37,10 +37,6 @@ class RankViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_rank_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -186,7 +182,7 @@ class CourseViewTestData:
         self.client = TenantClient(self.tenant)
 
 
-class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
     def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -482,7 +478,7 @@ class CourseViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTest
         self.assertContains(response, dt_well_ptag)
 
 
-class CourseStudentViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
     def test_CourseStudentUpdate_view__staff_can_update(self):
         """ Staff can update a student's course """
@@ -730,8 +726,42 @@ class CourseStudentViewTests(CourseViewTestData, ViewTestUtilsMixin, ByteDeckTen
         self.assertEqual(response.status_code, 403)
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
 
+    def test_CourseStudentCreate__simple_registration_reuses_existing_membership(self):
+        """When simplified auto-registration finds an existing (matching) membership, get_or_create
+        returns created=False: the view still redirects but adds no 'added to' message and creates
+        no duplicate row."""
+        self.client.force_login(self.test_student1)
 
-class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+
+        # reduce to a single active block/course so the registration fields render hidden
+        Block.objects.first().delete()
+        Course.objects.first().delete()
+
+        # a membership matching the auto-create lookup already exists; active=False so access
+        # isn't blocked by the "already registered this semester" guard
+        baker.make(
+            CourseStudent,
+            user=self.test_student1,
+            semester=SiteConfig.get().active_semester,
+            block=Block.objects.filter(active=True).first(),
+            course=Course.objects.filter(active=True).first(),
+            active=False,
+        )
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        # existing row reused, not duplicated
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any('added to' in m for m in messages))
+
+
+class MarkRangeViewTests(ByteDeckTenantTestCase):
     """Test module for the MarkRange model's view classes"""
 
     @classmethod
@@ -749,10 +779,6 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             'color_dark': '#337AB7',
             'days': '1,2,3,4,5,6,7',
         }
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_MarkRangeList_view__lists_all(self):
         """The MarkRange list view's object list should contain all MarkRange objects"""
@@ -807,7 +833,7 @@ class MarkRangeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(MarkRange.objects.filter(id=1).exists())
 
 
-class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SemesterStatusBannerTests(ByteDeckTenantTestCase):
     """The staff-only semester status banner rendered on every page via base.html
     (semester_status_banner.html): nudges archiving an ended active semester (#2157)
     and warns when no semester is open for students to join (#1177)."""
@@ -819,10 +845,6 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """A teacher and a student for checking who sees the banner."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_semester_status_banner__hidden_while_active_semester_is_running(self):
         """No banner renders while the active semester is open and within its dates."""
@@ -904,7 +926,7 @@ class SemesterStatusBannerTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotContains(response, self.BANNER_ID)
 
 
-class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SemesterViewTests(ByteDeckTenantTestCase):
 
     def generate_dates(quantity, dates=None):
         """
@@ -930,10 +952,6 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUpTestData(cls):
         """Create a teacher for the class tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_SemesterList_view__lists_semesters(self):
         """The semester list view renders each semester with its day counts and excluded-date counts."""
@@ -1197,16 +1215,12 @@ class SemesterViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn(registration, response.context['registrations'])
 
 
-class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BlockViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
         """Create a teacher for the class tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_BlockList_view__staff_can_view(self):
         """ Admin should be able to view block list """
@@ -1290,7 +1304,7 @@ class BlockViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(form['current_teacher'].value(), SiteConfig.get().deck_owner.pk)
 
 
-class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -1301,10 +1315,6 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         cls.course = baker.make(Course)
         cls.semester = SiteConfig.get().active_semester
         cls.inactive_semester = baker.make(Semester)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def create_student_course(self, xp):
         """
@@ -1420,7 +1430,7 @@ class TestAjax_MarkDistributionChart(ViewTestUtilsMixin, ByteDeckTenantTestCase)
         self.assertEqual(total_students, len(active_sem_students))
 
 
-class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class TestAjax_TagChart(ByteDeckTenantTestCase):
     """Tests for the Ajax_TagChart view (courses:ajax_tag_progress_chart), which returns
     per-tag quest/badge XP datasets for chart.js."""
 
@@ -1429,10 +1439,6 @@ class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """Create the target user whose tag chart is requested, and cache the active semester."""
         cls.user = baker.make(User)
         cls.semester = SiteConfig.get().active_semester
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
         """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.
@@ -1508,8 +1514,34 @@ class TestAjax_TagChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(any('(' in name for name in quest_names), quest_names)
         self.assertTrue(any('(' in name for name in badge_names), badge_names)
 
+    def test_ajax__under_cap_keeps_all_and_single_assertion_has_no_ordinal(self):
+        """A capped quest whose submissions stay under max_xp keeps every submission (the max-xp
+        cutoff loop finishes without breaking), and a badge with a single assertion gets no
+        ordinal suffix on its name."""
+        # xp 10 x2 = 20, well under max_xp 100, so the cutoff loop never breaks
+        quest = self._tagged_quest_with_submissions('gamma', xp=10, max_xp=100, quantity=2)
+        # a single assertion -> count() == 1 -> no "(ordinal)" appended
+        self._tagged_badge_with_assertions('gamma', xp=15, quantity=1)
 
-class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+        self.client.force_login(self.user)
+        response = self.client.get(
+            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = json.loads(response.content)
+        quest_names = [d['name'] for d in payload['data']['quest_dataset']]
+        badge_names = [d['name'] for d in payload['data']['badge_dataset']]
+        # both under-cap submissions are kept (the cutoff loop never dropped one)
+        self.assertEqual(
+            sum(name == quest.name or name.startswith(f'{quest.name} (') for name in quest_names),
+            2,
+        )
+        self.assertTrue(badge_names)
+        self.assertTrue(all('(' not in name for name in badge_names), badge_names)
+
+
+class TestAjax_ProgressChart(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -1537,10 +1569,6 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # (UTC-8) for datetime.date(2024, 1, 1)
         cls.tz = timezone.get_default_timezone()
         cls.base_xp = 1
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def create_quest_and_submissions(self, xp, quest_submission_date, quest_submission_quantity=1):
         """
@@ -1733,7 +1761,7 @@ class TestAjax_ProgressChart(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertEqual(valid_days, 10)
 
 
-class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -1753,8 +1781,6 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
-
         # to show mark calculation page without 404 you need to turn this on
         # (stays in setUp: SiteConfig writes populate cross-test caches)
         siteconfig = SiteConfig.get()
@@ -1834,7 +1860,7 @@ class MarkCalculationsViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
 
 
-class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxRankPopupTests(ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_ranked_popup/
     + ajax/on_close_ranked_popup/
@@ -1844,10 +1870,6 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def setUpTestData(cls):
         """Create a student for the rank popup tests."""
         cls.student = baker.make(User)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_status_codes__ranked_popup_endpoints(self):
         ''' tests correct status codes for `on_show_ranked_popup` and `on_close_ranked_popup`
@@ -1984,7 +2006,7 @@ class AjaxRankPopupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(Notification.objects.all_unread(self.student).count(), 1)
 
 
-class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class DeckCapacityEnforcementTests(ByteDeckTenantTestCase):
     """Enforcement of the deck's current-student cap at the registration choke points
     (#1729 PR 4; closes the 'trial mode (max 5 users)' checkbox of #1730)."""
 
@@ -2003,7 +2025,6 @@ class DeckCapacityEnforcementTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.tenant.max_active_users = 1
         self.tenant.save()
 
-        self.client = TenantClient(self.tenant)
         self.occupant = baker.make(User)
         baker.make('courses.CourseStudent', user=self.occupant, active=True, semester=SiteConfig.get().active_semester)
         self.newcomer = baker.make(User)

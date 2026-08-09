@@ -8,11 +8,12 @@
 # source of truth instead of maintaining divergent copies. Do not edit the
 # generated /etc/nginx/sites-available/bytedeck.conf directly.
 
-# the upstream uwsgi component nginx needs to connect to
-upstream django {
-    # server unix:/bytedeck-volume/app.sock; # for a file socket
-    server web:8000; # for a web port socket (we'll use this first)
-}
+# Docker's embedded DNS, so nginx can look `web` up while it is serving rather
+# than only at config load. A hostname resolved at config load is cached for the
+# life of the worker process, and compose gives `web` a new IP every time it is
+# recreated, so without this nginx dials a dead address after each restart and
+# 502s until it is reloaded. `valid=10s` caps how long an answer is reused.
+resolver 127.0.0.11 valid=10s ipv6=off;
 
 server {
 
@@ -73,7 +74,11 @@ server {
 
 
     location / {
-        uwsgi_pass django;
+        # Keep the hostname in a variable. nginx uses the resolver above only
+        # when the passed address contains one; `uwsgi_pass web:8000` or an
+        # `upstream` block would go back to resolving once at startup.
+        set $web_upstream web;
+        uwsgi_pass $web_upstream:8000;
         include /etc/nginx/uwsgi_params;
         # Forward the original request scheme so Django's request.is_secure()
         # is correct behind this TLS-terminating proxy. Without it, is_secure()
@@ -105,8 +110,8 @@ server {
     # OCSP responders in 2025 (in favour of CRLs), so its certificates carry no
     # OCSP URL and "ssl_stapling on" only produced a startup warning
     # ('"ssl_stapling" ignored, no OCSP responder URL in the certificate').
-    # The `resolver` directive that existed solely for OCSP fetching was
-    # removed along with it.
+    # The resolver at the top of this file is for Docker DNS resolution of the
+    # `web` upstream and plays no part in OCSP.
 
     # GZIP SETTINGS: https://www.nginx.com/blog/help-the-world-by-healing-your-nginx-configuration/#Enabling-Gzip-Compression-for-HTML-CSS-and-JavaScript-Files
     gzip on;

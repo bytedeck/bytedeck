@@ -1,0 +1,157 @@
+name: Announce Changelog
+
+# Posts a release announcement to GitHub Discussions when a new changelog
+# version reaches production. The branch model is develop -> staging -> master;
+# master is production, so this fires only on pushes to master that touch
+# CHANGELOG.md. The extract step diffs CHANGELOG.md against the commit before the
+# push (github.event.before) and emits only the version sections that are newly
+# added, so a release is announced exactly once and later edits to an already
+# released section (typo fixes, etc.) don't re-post. If nothing new was added,
+# the post step is skipped.
+#
+# Auth: the post uses GITHUB_TOKEN (granted discussions:write below), which can
+# create discussions via GraphQL and posts as github-actions[bot]. To have the
+# announcement authored by a real account instead, add a DISCUSSIONS_TOKEN
+# repository secret (a PAT with discussions write access) and it's used in
+# preference to GITHUB_TOKEN.
+on:
+  push:
+    branches: [master]
+    paths:
+      - CHANGELOG.md
+
+# Least-privilege: this workflow only reads the repo and writes a discussion.
+permissions:
+  contents: read
+  discussions: write
+
+# Never run two announcement jobs at once; if two pushes land close together,
+# let the first finish so the duplicate-title guard sees its discussion.
+concurrency:
+  group: announce-changelog
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    name: Announce changelog to Discussions
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need full history so the extract step can `git show` CHANGELOG.md at
+          # github.event.before to diff against. This job doesn't push, so don't
+          # leave GITHUB_TOKEN persisted in .git/config for later steps to read.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Extract newly-added changelog sections
+        id: extract
+        env:
+          BEFORE_SHA: ${{ github.event.before }}
+        run: python3 .github/scripts/changelog_new_sections.py
+      - name: Post announcement to Discussions
+        if: steps.extract.outputs.has_new == 'true'
+        uses: actions/github-script@v7
+        env:
+          DISCUSSION_TITLE: ${{ steps.extract.outputs.title }}
+          DISCUSSION_VERSIONS: ${{ steps.extract.outputs.versions }}
+        with:
+          github-token: ${{ secrets.DISCUSSIONS_TOKEN || secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const versions = (process.env.DISCUSSION_VERSIONS || '')
+              .split(',')
+              .filter(Boolean);
+            const fullBody = fs.readFileSync('discussion_body.md', 'utf8');
+            const { owner, repo } = context.repo;
+
+            // Look up the repository node id and its discussion categories so we
+            // can post into the "Announcements" category (the changelog home).
+            const repoData = await github.graphql(
+              `query($owner: String!, $repo: String!) {
+                 repository(owner: $owner, name: $repo) {
+                   id
+                   discussionCategories(first: 25) { nodes { id name } }
+                 }
+               }`,
+              { owner, repo }
+            );
+            const repositoryId = repoData.repository.id;
+            const categories = repoData.repository.discussionCategories.nodes;
+            // Match "Announcements" exactly, then fall back to any category whose
+            // name contains "announcement" (in case it's renamed or emoji-tagged).
+            const category =
+              categories.find((c) => c.name.toLowerCase() === 'announcements') ||
+              categories.find((c) => c.name.toLowerCase().includes('announcement'));
+            if (!category) {
+              core.setFailed(
+                `No "Announcements" discussion category found. Available: ` +
+                  categories.map((c) => c.name).join(', ')
+              );
+              return;
+            }
+
+            // Best-effort duplicate guard, keyed on the version number(s) rather
+            // than the exact title. A version number is the stable identity of an
+            // announcement and always appears in the discussion title, so this
+            // still recognizes a version a previous post announced alongside
+            // others under a different aggregate title (e.g. a later force-push
+            // fallback re-announcing just the newest). Versions that were already
+            // announced are dropped from this post; if none are left, the post
+            // is skipped entirely.
+            const titleHasVersion = (discussionTitle, version) => {
+              // Bounded match so "1.3.0" doesn't match "1.30.0" or "11.3.0".
+              const escaped = version.replace(/\./g, '\\.');
+              return new RegExp(`(^|[^0-9.])${escaped}([^0-9.]|$)`).test(discussionTitle);
+            };
+            const versionAnnounced = async (version) => {
+              const res = await github.graphql(
+                `query($q: String!) {
+                   search(query: $q, type: DISCUSSION, first: 20) {
+                     nodes { ... on Discussion { title } }
+                   }
+                 }`,
+                { q: `repo:${owner}/${repo} in:title ${JSON.stringify(version)}` }
+              );
+              return res.search.nodes.some((n) => n && titleHasVersion(n.title, version));
+            };
+            const announced = await Promise.all(versions.map(versionAnnounced));
+            const newVersions = versions.filter((v, i) => !announced[i]);
+            if (versions.length && newVersions.length === 0) {
+              core.info(`Version(s) already announced, skipping: ${versions.join(', ')}`);
+              return;
+            }
+
+            // Mixed batch: part of this push was announced before (e.g. a section
+            // restored by a history rewrite landing alongside a genuinely new
+            // release). Keep only the unannounced sections in the body and
+            // rebuild the title to name just those versions. newVersions
+            // preserves the extract script's ascending order, and the title
+            // wording mirrors its format_title().
+            let title = process.env.DISCUSSION_TITLE;
+            let body = fullBody;
+            if (newVersions.length < versions.length) {
+              const dropped = versions.filter((v, i) => announced[i]);
+              core.info(`Already announced, dropped from this post: ${dropped.join(', ')}`);
+              const sections = fullBody.split(/^(?=### \[\d+\.\d+\.\d+\])/m);
+              const kept = sections.filter((section) => {
+                const match = section.match(/^### \[(\d+\.\d+\.\d+)\]/);
+                return match && newVersions.includes(match[1]);
+              });
+              body = kept.map((s) => s.replace(/\s+$/, '')).join('\n\n\n') + '\n';
+              const last = newVersions[newVersions.length - 1];
+              const joined =
+                newVersions.length === 1 ? last
+                : newVersions.length === 2 ? `${newVersions[0]} and ${last}`
+                : `${newVersions.slice(0, -1).join(', ')}, and ${last}`;
+              title = `Bytedeck App Updates (${joined})`;
+            }
+
+            const created = await github.graphql(
+              `mutation($repositoryId: ID!, $categoryId: ID!, $title: String!, $body: String!) {
+                 createDiscussion(input: {
+                   repositoryId: $repositoryId, categoryId: $categoryId, title: $title, body: $body
+                 }) { discussion { url } }
+               }`,
+              { repositoryId, categoryId: category.id, title, body }
+            );
+            core.info(`Created discussion: ${created.createDiscussion.discussion.url}`);

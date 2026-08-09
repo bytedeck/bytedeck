@@ -7,7 +7,6 @@ from django.contrib.messages import get_messages
 from django.test import override_settings, RequestFactory, SimpleTestCase
 from django.http import HttpResponse
 
-from django_tenants.test.client import TenantClient
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -51,8 +50,6 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Use a tenant client and ensure RequestDataTooBigMiddleware is enabled."""
-        self.client = TenantClient(self.tenant)
-
         # make sure RequestDataTooBig middleware is enabled for a testing purpose
         self.old_MIDDLEWARE = settings.MIDDLEWARE
         middleware_class = "hackerspace_online.middleware.RequestDataTooBigMiddleware"

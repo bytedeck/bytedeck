@@ -6,9 +6,8 @@ from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection
 from django.urls import reverse
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import schema_exists
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
@@ -23,7 +22,7 @@ from tenant.models import TenantDomain
 User = get_user_model()
 
 
-class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
     library_tenant = None
     library_domain = None
 
@@ -77,7 +76,6 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up a tenant client, site config, and active semester."""
-        self.client = TenantClient(self.tenant)
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
@@ -502,7 +500,6 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up a tenant client, active semester, site config, and deck owner."""
-        self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()
@@ -734,6 +731,20 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertFalse(unpublished_local_quest.published)
         self.assertTrue(published_local_quest.published)
+
+    def test_import_campaign_to__unknown_campaign_id_skips_deactivation(self):
+        """When no local Category matches the given campaign_import_id, the importer finishes
+        without trying to deactivate a campaign (the `if category` false branch)."""
+        with library_schema_context():
+            library_quests = baker.make(Quest, published=True, _quantity=1)
+
+        result = import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[q.import_id for q in library_quests],
+            campaign_import_id=uuid.uuid4(),  # no local Category will match this
+        )
+
+        self.assertIsNotNone(result)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
@@ -1105,10 +1116,6 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         # Need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_library_overview__redirects_anonymous(self):
         """
