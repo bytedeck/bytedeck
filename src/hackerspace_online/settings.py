@@ -738,6 +738,16 @@ if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is c
 # unset, the page links the demo deck without printing a code.
 DEMO_DECK_COURSE_CODE = env('DEMO_DECK_COURSE_CODE', default='')
 
+# Logo for the sigblock of platform emails (the public-tenant sends: deck-request
+# verification and welcome). Must be an ABSOLUTE URL: mail clients resolve the
+# email body with no origin, so a schema-relative static path renders as a broken
+# image. The default is the production static host's copy of
+# static/public/images/wordmark-v2.png (maintainer request, 2026-08-08).
+PUBLIC_EMAIL_LOGO_URL = env(
+    'PUBLIC_EMAIL_LOGO_URL',
+    default='https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png',
+)
+
 
 # RECAPTCHA #######################################################
 

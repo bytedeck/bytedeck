@@ -581,10 +581,10 @@ class DeckRequestServiceTest(TestCase):
         link = request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce]))
         self.assertIn(f'<a href="{link}">', message)
         self.assertIn("1 hour", message)  # TOKEN_MAX_AGE = 3600, humanized
-        # the platform logo, absolute so it renders inside email clients
+        # the platform wordmark at half its 510x128 natural size, by absolute URL
+        # so it renders inside email clients (maintainer request, 2026-08-08)
         self.assertIn('alt="[Logo]"', message)
-        self.assertIn(request.build_absolute_uri("/"), message.split('alt="[Logo]"')[1])
-        self.assertIn("pixels-4-icon", message)
+        self.assertIn(f'src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', message)
 
     @patch("tenant.utils.send_email_message.apply_async")
     def test_send_verification_email__without_request_uses_relative_link(self, mock_apply_async):

@@ -4,7 +4,7 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
-### [1.30.0] 2026-07-23 Claude II
+### [1.30.0] 2026-08-01 Claude II
 * New Features:
   - **Repeatable quests now show when they'll be available again.** Completing a repeatable quest that has a cooldown used to make it silently vanish from the Available tab; it now appears in an "Available again soon" section at the top of that tab with a live countdown of when it returns (each entry links to the quest), and trying to start a quest you already have in progress now tells you to finish that one first [#57](https://github.com/bytedeck/bytedeck/issues/57)
   - **TAs can copy a quest after starting it.** A "Copy" button now appears on a quest's submission preview (the In Progress / Completed / Past Courses accordion) and on its full submission page, next to Drop and Continue. Previously a TA could only copy from the Available list, so once you started a quest and it became a submission you lost the option; copying creates a new draft quest using this one as a template, with the original set as its prerequisite [#141](https://github.com/bytedeck/bytedeck/issues/141)

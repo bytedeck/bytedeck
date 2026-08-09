@@ -130,6 +130,29 @@ class WelcomeEmailTest(ByteDeckTenantTestCase):
         self.assertIn('change your password', message)
         self.assertIn('alt="[Logo]"', message)  # the standard sigblock, logo included
 
+    def test_send_welcome_email__sigblock_shows_the_wordmark_at_half_size(self):
+        """The welcome sigblock logo is the platform wordmark by ABSOLUTE URL at
+        half its natural size (maintainer request, 2026-08-08). A new deck's
+        SiteConfig only holds the seeded default logo as a schema-relative path,
+        which mail clients render as a broken image."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+        from django.test import override_settings
+
+        from model_bakery import baker
+
+        from tenant.utils import DeckRequestService
+
+        user = baker.make(get_user_model(), first_name='Jane', last_name='Doe', email='jane@example.com')
+        with override_settings(PUBLIC_EMAIL_LOGO_URL='https://cdn.example.com/wordmark.png'):
+            with patch('tenant.utils.send_email_message.apply_async') as mock_apply:
+                DeckRequestService.send_welcome_email(user, self.tenant, 'pw-secret-123')
+
+        _subject, message, _recipients = mock_apply.call_args.kwargs['args']
+        self.assertIn('src="https://cdn.example.com/wordmark.png" width="255" height="64"', message)
+        self.assertNotIn('src="/static/', message)  # no schema-relative logo path survives
+
     def test_send_welcome_email__uses_username_when_owner_name_is_blank(self):
         """An owner with no first/last name set is greeted by username instead of
         an empty "Hello ,": legacy and seeded owners often have no name."""
