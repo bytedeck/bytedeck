@@ -7,6 +7,8 @@
   only utilized for maintaining systems and development.</em></p>
 <p>If you have any questions, contact us at <a href="mailto:contact@bytedeck.com">contact@bytedeck.com</a>.</p>
 <p>Bytedeck</p>
-{# emails rendered on the PUBLIC schema (e.g. the deck-request verification) have no #}
-{# SiteConfig for site_logo_url to read, so they pass the platform logo's URL instead #}
-{% if logo_url %}<p><img alt="[Logo]" src="{{ logo_url }}"></p>{% else %}<p><img alt="[Logo]" src="{% site_logo_url %}"></p>{% endif %}
+{# platform emails (the deck-request sends) pass the wordmark's absolute URL as logo_url: #}
+{# there is no SiteConfig on the public schema, and mail clients can't resolve relative #}
+{# static paths anyway. width/height show the 510x128 wordmark at half size (maintainer #}
+{# request, 2026-08-08). Tenant lifecycle emails omit logo_url and get the deck's logo. #}
+{% if logo_url %}<p><img alt="[Logo]" src="{{ logo_url }}" width="255" height="64"></p>{% else %}<p><img alt="[Logo]" src="{% site_logo_url %}"></p>{% endif %}
