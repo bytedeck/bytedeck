@@ -195,6 +195,17 @@ class SubscriptionPlanSummaryTest(SimpleTestCase):
             self.assertIsNotNone(subscription_plan_summary(self.deck))
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__unusable_subscription_data_is_not_cached(self):
+        """A retrieve that succeeds but can't be summarized (e.g. the product came
+        back unexpanded) yields None and caches nothing, so the next load retries
+        rather than pinning the page to a bad answer for the TTL."""
+        bare = {'items': {'data': [{'price': {'product': 'prod_123'}}]}}
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=bare) as mock_retrieve:
+            self.assertIsNone(subscription_plan_summary(self.deck))
+            self.assertIsNone(subscription_plan_summary(self.deck))
+        self.assertEqual(mock_retrieve.call_count, 2)
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
     def test_summary__unlinked_deck_or_unconfigured_server_short_circuits(self):
         """No linked subscription, or no secret key: None without any Stripe call."""
         with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve:
