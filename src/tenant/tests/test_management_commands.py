@@ -319,9 +319,8 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertIn(' ok', self.deck_line(self.run_command()))
 
     def test_backfill__flags_owners_needing_a_human(self):
-        """An owner with no email is reported with nothing written, the deprecated
-        public-tenant owner_email is surfaced as a clue, and a deck still on the
-        heuristic default owner account is flagged."""
+        """An owner with no email is reported with nothing written, and a deck
+        still on the heuristic default owner account is flagged."""
         from django.conf import settings
 
         # move the seeded default-owner username out of the way so the fresh owner
@@ -329,13 +328,11 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         User.objects.filter(username=settings.TENANT_DEFAULT_OWNER_USERNAME).update(username='renamed-for-test')
         owner = self.set_owner(email='')
         User.objects.filter(pk=owner.pk).update(username=settings.TENANT_DEFAULT_OWNER_USERNAME)
-        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email='clue@example.com')
 
         output = self.run_command('--apply')
         line = self.deck_line(output)
         self.assertIn('no-email', line)
         self.assertIn('default owner account', line)
-        self.assertIn('clue@example.com', line)
         self.assertFalse(EmailAddress.objects.filter(user=owner).exists())
         self.assertIn('1 with no owner email', output)
 

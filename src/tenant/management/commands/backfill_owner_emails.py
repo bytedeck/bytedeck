@@ -30,9 +30,7 @@ class Command(BaseCommand):
     all, owners whose address is already verified by a different account on the
     deck (the DB allows one verified row per address, so which account is really
     the owner's is a human call), and owners still on the initial heuristic
-    default account (the deck never chose a real owner). Where the deprecated
-    public-tenant ``Tenant.owner_email`` disagrees with the owner's address, the
-    line says so: it is often the best clue to who the owner should be.
+    default account (the deck never chose a real owner).
     """
 
     help = (

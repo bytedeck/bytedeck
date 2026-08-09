@@ -362,11 +362,6 @@ def normalize_owner_email(tenant, apply_changes):
     # user, else a bare created account): flag decks that never chose for real
     if owner.username == settings.TENANT_DEFAULT_OWNER_USERNAME:
         notes.append("default owner account (heuristic guess, never chosen)")
-    # the deprecated hand-entered public-tenant address is often the best clue
-    # to who the owner SHOULD be when the schema's data is missing or wrong
-    legacy = (tenant.owner_email or '').strip()
-    if legacy and legacy.lower() != (owner.email or '').lower():
-        notes.append(f"public-tenant legacy owner_email differs: {legacy}")
 
     if not owner.email:
         return 'no-email', owner.username, None, '; '.join(notes)
