@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from tenant.billing import to_plain_dict
 from tenant.models import Tenant
 
 
@@ -19,7 +20,15 @@ class Command(BaseCommand):
             "'Sync from Stripe' admin action.")
 
     def handle(self, *args, **options):
-        """Fetch active subscriptions and print matched / ambiguous / unmatched sections."""
+        """Fetch active subscriptions and print matched / ambiguous / unmatched sections.
+
+        Args:
+            *args: Unused positional arguments (BaseCommand signature).
+            **options: Unused parsed options (the command takes no arguments).
+
+        Returns:
+            None: The report is written to stdout; nothing is ever modified.
+        """
         import stripe
 
         if not settings.STRIPE_SECRET_KEY:
@@ -32,6 +41,9 @@ class Command(BaseCommand):
 
         matched, ambiguous, unmatched = [], [], []
         for subscription in subscriptions:
+            # the SDK yields Subscription objects, which are not dicts on
+            # stripe-python 15.x; the reads below all speak dict
+            subscription = to_plain_dict(subscription)
             customer = subscription.get('customer') or {}
             email = (customer.get('email') or '').strip().lower()
             label = f"sub {subscription.get('id')} / customer {customer.get('id')} <{email or 'no email'}>"
