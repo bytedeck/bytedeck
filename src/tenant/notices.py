@@ -24,12 +24,13 @@ from django.conf import settings
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.timezone import localdate
+from django.utils.formats import date_format
+from django.utils.timezone import localdate, timedelta
 
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import DeckNotice, TRIAL_MAX_ACTIVE_USERS
+from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -176,12 +177,41 @@ def process_deck_notices(deck):
     return f"sent {sent} notice(s): [{labels}]"
 
 
+def _notification_detail(deck, kind):
+    """The key fact for one notice's in-app notification, as a short sentence.
+
+    The email tells the full story; the notification names the date or count the
+    owner needs at a glance: the governing deadline (#1734 B4: the LATER of the
+    trial and paid clocks, which drives all lifecycle wording), the grace end, or
+    the seat usage. Assumes the notice is actually due, so the dates its branches
+    read exist (e.g. a suspended deck always has a lapsed governing deadline).
+
+    Args:
+        deck (Tenant): The deck the notice is about.
+        kind (str): The DeckNotice KIND_* being delivered.
+
+    Returns:
+        str: One sentence, ready to append after the notice's label.
+    """
+    clock = 'free trial' if deck.governing_clock_is_trial else 'subscription'
+    deadline = date_format(deck.governing_deadline) if deck.governing_deadline else None
+    if kind == DeckNotice.KIND_SUSPENDED:
+        detail = f"this deck's {clock} ended on {deadline} and the grace period has run out"
+        if deck.deletion_date:
+            detail += f'; without a subscription the deck may be deleted after {date_format(deck.deletion_date)}'
+        return detail + '.'
+    if kind == DeckNotice.KIND_LIMIT:
+        return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+    # expiry cadence: approaching the deadline, or already inside the grace window
+    days = deck.days_until_expiry
+    if days is not None and days < 0:
+        grace_end = date_format(deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS))
+        return f"this deck's {clock} ended on {deadline} and the grace period ends on {grace_end}."
+    return f"this deck's {clock} ends on {deadline} ({days} day{'s' if days != 1 else ''} left)."
+
+
 def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
-    from django.utils.timezone import timedelta
-
-    from tenant.models import GRACE_PERIOD_DAYS
-
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
@@ -226,10 +256,14 @@ def _deliver(deck, kind):
         'subscribe_url': deck.get_root_url() + reverse('decks:subscription'),
         'archive_help_url': deck.get_root_url() + reverse('courses:archive_students_help'),
     }
+    # Each label must read naturally in BOTH places it appears (kept deliberately
+    # coupled, maintainer decision 2026-07-31): the email subject
+    # "{site}: {label}" and the in-app notification sentence "sent a {label}."
     templates = {
-        DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'trial/subscription expiry reminder'),
+        DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'subscription expiry reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
-        DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended'),
+        DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended warning'),
+        DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"
@@ -237,17 +271,28 @@ def _deliver(deck, kind):
 
     # In-app notification first (DB-only, rolls back cleanly with the ledger row);
     # deck_owner is a non-nullable PROTECT FK, so there is always an owner to notify.
-    # Edge: if deck_ai IS the owner (the seeded default on decks that never set a
-    # dedicated AI user), the notifications app skips the self-notification -- such
-    # owners are still covered by the email and the status banner.
+    # The sender is the ByteDeck support account (displayed as "Bytedeck" by the
+    # notifications app), falling back to deck_ai on older decks that predate the
+    # support account (maintainer request, 2026-07-31: these notices come from
+    # Bytedeck, not from the deck owner's own account). Fallback edge: if deck_ai
+    # IS the owner (the seeded default on decks that never set a dedicated AI
+    # user), the notifications app skips the self-notification -- such owners are
+    # still covered by the email and the status banner.
     from django.contrib.auth import get_user_model
-    staff = get_user_model().objects.filter(is_staff=True, is_active=True)
+    User = get_user_model()
+    staff = User.objects.filter(is_staff=True, is_active=True)
+    sender = User.objects.filter(username=settings.TENANT_DEFAULT_ADMIN_USERNAME, is_active=True).first() or config.deck_ai
     notify.send(
-        config.deck_ai,
+        sender,
         recipient=config.deck_owner,
         affected_users=staff,
-        verb=f'sent a {verb} for this deck:',
+        # the label plus the notice's key fact (deadline or seat count), then one
+        # small "subscription details page" link: the bare "sent a reminder" line
+        # told the owner nothing actionable (maintainer requests, 2026-08-08)
+        verb=f'sent a {verb}: {_notification_detail(deck, kind)} See your',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
+        url=reverse('decks:subscription'),
+        link_text='subscription details page.',
     )
 
     # Email enqueue last: it can't be rolled back, so it only runs once everything
@@ -261,3 +306,33 @@ def _deliver(deck, kind):
             kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
             queue='default',
         )
+
+
+def record_and_deliver_payment_failure(deck, invoice_id):
+    """Record and deliver a payment-failure notice (Stripe webhook, plan §5.2 PR 7).
+
+    Keyed by the failing invoice, so Stripe's own retries of the same invoice
+    produce ONE notice, while next month's failing invoice produces a fresh one.
+    No billing state changes -- the grace period already covers a failed renewal;
+    this is purely the owner heads-up. Respects the same DECK_NOTICES_ENABLED
+    report-only gate as the reminder engine. Must run inside the deck's tenant
+    context (delivery resolves the owner and staff from the schema).
+
+    Args:
+        deck (Tenant): The deck whose renewal payment failed.
+        invoice_id (str): The Stripe invoice id (in_...) that failed.
+
+    Returns:
+        str: A short summary string for the webhook log.
+    """
+    period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
+    if not settings.DECK_NOTICES_ENABLED:
+        return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"
+    with transaction.atomic():
+        _, created = DeckNotice.objects.get_or_create(
+            tenant=deck, kind=DeckNotice.KIND_PAYMENT_FAILED, threshold='invoice', period_key=period_key,
+        )
+        if not created:  # a Stripe retry of the same invoice; already notified
+            return 'payment-failure notice already sent for this invoice'
+        _deliver(deck, DeckNotice.KIND_PAYMENT_FAILED)
+    return 'sent payment-failure notice'

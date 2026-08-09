@@ -28,6 +28,28 @@ def generate_schema_name(tenant_name):
     return tenant_name.replace('-', '_').lower()
 
 
+def _humanize_seconds(seconds):
+    """Render a whole number of seconds as a friendly duration string.
+
+    Used to surface the deck-request timeouts (``TOKEN_MAX_AGE`` /
+    ``REQUEST_COOLDOWN``) on the confirmation page and in the verification
+    email from their actual configured values, so the copy can't drift.
+    Examples: ``3600 -> "1 hour"``, ``300 -> "5 minutes"``, ``90 -> "90 seconds"``.
+
+    Args:
+        seconds (int): A non-negative number of seconds.
+
+    Returns:
+        str: The duration in the largest whole unit (hours, then minutes, then
+        seconds) with correct singular/plural wording.
+    """
+    for unit_seconds, unit_name in ((3600, "hour"), (60, "minute"), (1, "second")):
+        if seconds >= unit_seconds and seconds % unit_seconds == 0:
+            value = seconds // unit_seconds
+            return f"{value} {unit_name}{'s' if value != 1 else ''}"
+    return f"{seconds} seconds"
+
+
 def generate_default_owner_password():
     """Generate a random initial password for a new deck's owner.
 
@@ -172,14 +194,22 @@ class DeckRequestService:
         Returns:
             None
         """
+        from django.conf import settings
+
         if request is not None:
             verification_link = DeckRequestService.build_verification_link(request, nonce)
         else:
             verification_link = reverse("decks:verify_deck_request", args=[nonce])
 
-        message = get_template("tenant/email/verify_deck_request.txt").render({
+        # rendered as the email's HTML part (send_email_message derives the
+        # plain-text part from it); this email goes out on the PUBLIC schema, so
+        # the footer gets the platform wordmark's absolute URL explicitly (no
+        # SiteConfig here, and mail clients can't resolve relative paths)
+        message = get_template("tenant/email/verify_deck_request.html").render({
             "first_name": first_name,
             "verification_link": verification_link,
+            "verification_validity": _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE),
+            "logo_url": settings.PUBLIC_EMAIL_LOGO_URL,
         })
 
         # send in the background so the request doesn't block on SMTP
@@ -214,11 +244,19 @@ class DeckRequestService:
         })
         subject = "".join(subject.splitlines())
 
-        message = get_template("tenant/email/welcome_message.txt").render({
+        from django.conf import settings
+
+        # rendered as the email's HTML part (send_email_message derives the
+        # plain-text part from it). A platform email, so the sigblock shows the
+        # ByteDeck wordmark by absolute URL: a brand-new deck's SiteConfig only
+        # holds the seeded default logo as a schema-relative path, which mail
+        # clients render as a broken image.
+        message = get_template("tenant/email/welcome_message.html").render({
             "config": SiteConfig.get(),
             "tenant": tenant,
             "user": user,
             "password": password,
+            "logo_url": settings.PUBLIC_EMAIL_LOGO_URL,
         })
 
         # send in the background so the request doesn't block on SMTP

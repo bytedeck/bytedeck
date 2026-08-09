@@ -1,13 +1,17 @@
 import functools
 import hashlib
 
+from django.conf import settings
+
 from django.contrib.sites.models import Site
 from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
@@ -25,7 +29,7 @@ from siteconfig.models import SiteConfig
 
 from .forms import TenantForm, DeckRequestForm
 from .models import Tenant
-from .utils import DeckRequestService, generate_default_owner_password
+from .utils import DeckRequestService, _humanize_seconds, generate_default_owner_password
 
 
 def public_only_view(f):
@@ -249,6 +253,33 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
     # instead of dropping the user back on the form with a thin flash banner.
     success_url = reverse_lazy("decks:request_new_deck_submitted")
 
+    def get_context_data(self, **kwargs):
+        """Add the flow-outline facts to the template context.
+
+        The page walks the requester through the whole flow (maintainer request,
+        2026-08-08), so it quotes the trial terms from the constants that enforce
+        them, and the demo deck's course code from settings: the code lives only
+        in the deployment's environment (never the repo) so bots can't harvest
+        it, and the template omits the code sentence when it is unset.
+
+        Args:
+            **kwargs: Keyword arguments from the URLconf, passed through to the
+                base ``FormView`` implementation.
+
+        Returns:
+            dict: The template context, with ``trial_days``, ``trial_cap`` and
+            ``demo_course_code`` added.
+        """
+        from django.conf import settings
+
+        from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        context = super().get_context_data(**kwargs)
+        context["trial_days"] = TRIAL_LENGTH_DAYS
+        context["trial_cap"] = TRIAL_MAX_ACTIVE_USERS
+        context["demo_course_code"] = settings.DEMO_DECK_COURSE_CODE
+        return context
+
     def form_valid(self, form):
         """
         Handle valid deck request form submissions.
@@ -331,28 +362,6 @@ def verify_deck_request(request, nonce):
     return redirect("decks:new")
 
 
-def _humanize_seconds(seconds):
-    """Render a whole number of seconds as a friendly duration string.
-
-    Used to surface the deck-request timeouts (``TOKEN_MAX_AGE`` /
-    ``REQUEST_COOLDOWN``) on the confirmation page from their actual configured
-    values, so the on-page copy can't drift. Examples: ``3600 -> "1 hour"``,
-    ``300 -> "5 minutes"``, ``90 -> "90 seconds"``.
-
-    Args:
-        seconds (int): A non-negative number of seconds.
-
-    Returns:
-        str: The duration in the largest whole unit (hours, then minutes, then
-        seconds) with correct singular/plural wording.
-    """
-    for unit_seconds, unit_name in ((3600, "hour"), (60, "minute"), (1, "second")):
-        if seconds >= unit_seconds and seconds % unit_seconds == 0:
-            value = seconds // unit_seconds
-            return f"{value} {unit_name}{'s' if value != 1 else ''}"
-    return f"{seconds} seconds"
-
-
 class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
     """Confirmation page shown after a deck request is submitted.
 
@@ -384,6 +393,12 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)
         context["resend_cooldown"] = _humanize_seconds(DeckRequestService.REQUEST_COOLDOWN)
+        # the free-trial terms quoted beside the verification steps (maintainer
+        # request, 2026-08-08), sourced from the same constants that enforce them
+        from tenant.models import GRACE_PERIOD_DAYS, TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+        context["trial_days"] = TRIAL_LENGTH_DAYS
+        context["trial_cap"] = TRIAL_MAX_ACTIVE_USERS
+        context["grace_days"] = GRACE_PERIOD_DAYS
         return context
 
 
@@ -567,3 +582,54 @@ def subscription_status(request):
             pass  # transient; the page polls again in a few seconds
         deck.refresh_from_db()
     return JsonResponse({'active': deck.subscription_active})
+
+
+@csrf_exempt
+@require_POST
+@public_only_view
+def stripe_webhook(request):
+    """Stripe webhook endpoint (epic #1729 PR 7, plan §5.2) -- the repo's only
+    csrf_exempt view.
+
+    Public-schema only; under the single ROOT_URLCONF it resolves on every host
+    (and SHOW_PUBLIC_IF_NO_TENANT_FOUND=True means unknown-host probes reach it
+    too), so an invalid signature must fail fast: signature verification happens
+    before any database work. Duplicate deliveries are absorbed by the unique
+    StripeEventLog before any handler runs; handler crashes return 500 so Stripe
+    retries the event (the log row rolls back with the transaction).
+
+    Args:
+        request (HttpRequest): The POST carrying Stripe's raw JSON event payload
+            in the body and the ``Stripe-Signature`` header it is verified with.
+
+    Returns:
+        HttpResponse: 200 acknowledged (handled, duplicate, or ignored type),
+        400 for a bad/unverifiable payload, 503 when no webhook secret is
+        configured.
+    """
+    import stripe as stripe_lib
+
+    from django.db import transaction
+
+    from .billing import handle_webhook_event
+    from .models import StripeEventLog
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        return HttpResponse('webhook secret not configured', status=503, content_type='text/plain')
+    try:
+        event = stripe_lib.Webhook.construct_event(
+            request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
+        )
+    except (ValueError, stripe_lib.SignatureVerificationError):
+        return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
+
+    with transaction.atomic():
+        _, created = StripeEventLog.objects.get_or_create(
+            event_id=event['id'], defaults={'event_type': event.get('type', '')},
+        )
+        if not created:  # duplicate delivery: acknowledged without re-running the handler
+            return HttpResponse('duplicate event', status=200, content_type='text/plain')
+        schema_name, summary = handle_webhook_event(event)
+        # record which deck the event resolved to, for the audit trail
+        StripeEventLog.objects.filter(event_id=event['id']).update(schema_name=schema_name)
+    return HttpResponse(summary, status=200, content_type='text/plain')

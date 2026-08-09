@@ -140,7 +140,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = ['refresh_cached_fields', 'message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
+    actions = ['refresh_cached_fields', 'sync_from_stripe', 'message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
 
     @admin.action(description="Refresh deck stats for selected deck(s)")
     def refresh_cached_fields(self, request, queryset):
@@ -161,6 +161,48 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         self.message_user(request, f"Refreshed deck stats for {refreshed} deck(s).", messages.SUCCESS)
         if skipped_public:
             self.message_user(request, "Skipped the public schema (it isn't a deck).", messages.WARNING)
+
+    @admin.action(description="Sync selected deck(s) from Stripe")
+    def sync_from_stripe(self, request, queryset):
+        """Re-fetch each selected Stripe-linked deck's subscription and re-sync it
+        (epic #1729 PR 7, plan §5.3).
+
+        This is both the missed-webhook recovery path and the linkage path for
+        legacy manual subscribers (#2043): paste a stripe_subscription_id into the
+        deck, save, then run this action. Decks without a stripe_subscription_id
+        are skipped. Uses the same single write path as the webhook handlers
+        (Tenant.sync_from_stripe_subscription).
+        """
+        import stripe as stripe_lib
+
+        from django.conf import settings
+
+        from tenant.billing import _sync_deck_from_subscription_id
+
+        if not settings.STRIPE_SECRET_KEY:
+            self.message_user(request, "Stripe isn't configured on this server (STRIPE_SECRET_KEY unset).", messages.ERROR)
+            return
+        synced, skipped, failed = 0, 0, 0
+        for tenant in queryset:
+            if not tenant.stripe_subscription_id:
+                skipped += 1
+                continue
+            try:
+                summary = _sync_deck_from_subscription_id(tenant, tenant.stripe_subscription_id)
+            except stripe_lib.StripeError as e:
+                failed += 1
+                self.message_user(request, f"{tenant.schema_name}: Stripe error -- {e}", messages.ERROR)
+                continue
+            synced += 1
+            self.message_user(request, f"{tenant.schema_name}: {summary}", messages.SUCCESS)
+        if skipped:
+            # the admin framework never dispatches an action with an empty selection,
+            # so skipped/synced/failed always accounts for every selected row
+            self.message_user(
+                request,
+                f"Skipped {skipped} deck(s) with no stripe_subscription_id (link them first, or use checkout).",
+                messages.WARNING,
+            )
 
     @admin.display(description="owner full name")
     def owner_full_name_text(self, obj):

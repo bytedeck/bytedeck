@@ -696,8 +696,57 @@ DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
 # and self-hosted environments boot clean without a Stripe account.
 STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
 STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
-STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # used by the webhook endpoint (plan PR 7)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # verifies every webhook delivery (plan §5.2)
 STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
+
+# Fallback tier map (price_id -> current-student cap) for Prices whose
+# metadata.max_active_users was never set in the Stripe dashboard (plan §2).
+# JSON in the env, e.g. STRIPE_PRICE_TIER_MAP={"price_abc": 40, "price_def": 80}
+STRIPE_PRICE_TIER_MAP = env.json('STRIPE_PRICE_TIER_MAP', default={})
+
+
+def _validate_stripe_settings(root_domain, stripe_secret_key, stripe_webhook_secret):
+    """Refuse to boot a real deployment that enables Stripe checkout without the
+    webhook secret: without webhooks, renewals never sync and every Stripe-billed
+    deck drifts toward suspension at its stale ``paid_until``. Local development
+    (``localhost``) is never blocked. Raises ``ImproperlyConfigured``.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if stripe_secret_key and not stripe_webhook_secret:
+        raise ImproperlyConfigured(
+            "STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not. Register the webhook "
+            "endpoint in the Stripe dashboard and set its signing secret, or unset the Stripe "
+            "keys entirely -- checkout without webhooks leaves renewals unsynced."
+        )
+
+
+# Same bootstrap pattern as _validate_deployment_settings above: skipped during
+# tests (where settings are exercised directly by tests instead).
+if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is covered by StripeSettingsGuardTest
+    _validate_stripe_settings(ROOT_DOMAIN, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
+
+
+# DEMO DECK #######################################################
+
+# Course code for the public demo deck (learn.bytedeck.com), shown on the
+# deck-request page so visitors can preview ByteDeck as a student. Set only in
+# the deployment's .env: keeping it out of the repo means bots scraping the
+# codebase can't harvest it, and it can be rotated without a release. When
+# unset, the page links the demo deck without printing a code.
+DEMO_DECK_COURSE_CODE = env('DEMO_DECK_COURSE_CODE', default='')
+
+# Logo for the sigblock of platform emails (the public-tenant sends: deck-request
+# verification and welcome). Must be an ABSOLUTE URL: mail clients resolve the
+# email body with no origin, so a schema-relative static path renders as a broken
+# image. The default is the production static host's copy of
+# static/public/images/wordmark-v2.png (maintainer request, 2026-08-08).
+PUBLIC_EMAIL_LOGO_URL = env(
+    'PUBLIC_EMAIL_LOGO_URL',
+    default='https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png',
+)
 
 
 # RECAPTCHA #######################################################

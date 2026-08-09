@@ -232,6 +232,47 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "one deck")
         self.assertContains(response, "5 minutes")
 
+    def test_RequestNewDeckSubmitted_get__renders_trial_terms(self):
+        """The confirmation page's info box states the free-trial terms (length,
+        student cap, grace window), sourced from the constants that enforce them
+        (maintainer request, 2026-08-08)."""
+        from tenant.models import GRACE_PERIOD_DAYS, TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck_submitted"))
+        self.assertContains(response, f"free {TRIAL_LENGTH_DAYS}-day trial")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} current student")
+        self.assertContains(response, f"{GRACE_PERIOD_DAYS}-day grace period")
+        # the info box is an ordinary in-flow alert; the public stylesheet's
+        # fixed-toast styling is reserved for the BD-flash flash banner
+        self.assertContains(response, "alert alert-warning")
+        self.assertNotContains(response, "BD-flash")
+
+    def test_RequestNewDeck_get__outlines_the_flow_steps(self):
+        """The request form page outlines the whole flow (verify email, emailed
+        credentials, trial terms with a subscribe link, demo-deck preview)
+        instead of showing a bare email form (maintainer request, 2026-08-08)."""
+        from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Verify your email")
+        self.assertContains(response, "login credentials")
+        self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} student")
+        self.assertContains(response, 'href="/pages/subscribe/"')
+        self.assertContains(response, 'href="https://learn.bytedeck.com"')
+        # the demo course code is unset by default, so no code is printed
+        self.assertNotContains(response, "course code")
+
+    @override_settings(DEMO_DECK_COURSE_CODE="join-us-123")
+    def test_RequestNewDeck_get__demo_course_code_comes_from_the_environment(self):
+        """The demo deck's course code renders only when configured: it lives in
+        the deployment's environment rather than the repo, so bots scraping the
+        codebase can't harvest it (maintainer request, 2026-08-08)."""
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertContains(response, "course code")
+        self.assertContains(response, "join-us-123")
+
     def test_RequestNewDeckSubmitted_get_context_data__timeouts_track_configured_values(self):
         """The timeout copy is derived from DeckRequestService's settings, not
         hard-coded: changing the configured values changes the rendered page."""
@@ -326,8 +367,8 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     @patch("tenant.models.Tenant.full_clean")
     @patch("tenant.views.EmailAddress.objects.get_or_create")
     def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
-        """When the owner already has an EmailAddress, form_valid marks that record verified+primary
-        (the get_or_create 'not created' branch) instead of relying on the create-time defaults."""
+        """When the owner already has an EmailAddress, form_valid explicitly marks that
+        record verified and primary (the get_or_create created=False branch)."""
         existing_email = Mock()
         mock_get_or_create.return_value = (existing_email, False)
 
@@ -524,6 +565,28 @@ class DeckRequestServiceTest(TestCase):
         self.assertIn(request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])), message)
 
     @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__html_body_with_validity_and_logo(self, mock_apply_async):
+        """The verification email is a real HTML message: paragraphs, a clickable
+        link, the validity window sourced from TOKEN_MAX_AGE rather than
+        hard-coded copy, and the platform logo in the standard sigblock.
+        send_email_message derives the plain-text part from the HTML, so both
+        parts render with formatting instead of one collapsed line."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=request)
+
+        _subject, message, _recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertIn("<p>Hello John,</p>", message)
+        link = request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce]))
+        self.assertIn(f'<a href="{link}">', message)
+        self.assertIn("1 hour", message)  # TOKEN_MAX_AGE = 3600, humanized
+        # the platform wordmark at half its 510x128 natural size, by absolute URL
+        # so it renders inside email clients (maintainer request, 2026-08-08)
+        self.assertIn('alt="[Logo]"', message)
+        self.assertIn(f'src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', message)
+
+    @patch("tenant.utils.send_email_message.apply_async")
     def test_send_verification_email__without_request_uses_relative_link(self, mock_apply_async):
         """Without a request, the emailed verification link is the relative path (no host)."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
@@ -701,8 +764,9 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         load pages: the deck owner (the staff variant with the owner-only sign-in
         rule, the 365-day deletion countdown, and the subscribe link) and
         anonymous visitors on the sign-in page (the everyone-else variant).
-        Signed-in non-owners never see it, because the suspension middleware
-        signs them out first (#1734 redesign)."""
+        Signed-in non-owners are signed out by the suspension middleware before
+        any page renders; that path is exercised in test_middleware.py
+        (test_bounce__non_owner_is_signed_out_and_redirected_with_message)."""
         from datetime import date
 
         from siteconfig.models import SiteConfig
@@ -1323,3 +1387,99 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.json(), {'active': False})
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, '')
+
+
+class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the Stripe webhook endpoint (epic #1729 PR 7, plan §5.2).
+
+    The endpoint is public-schema-only, so these tests build the public tenant
+    (as TenantCreateViewTest does) and POST against it. Signature verification is
+    mocked at the SDK seam -- its real crypto is Stripe's to test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Build the public schema on the 'testserver' domain."""
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
+            cls.public_tenant.domains.create(domain="testserver", is_primary=True)
+
+    def setUp(self):
+        """Keep the default tenant client (super) and add a public-host client."""
+        super().setUp()
+        self.public_client = TenantClient(self.public_tenant, host="testserver")
+
+    def post_webhook(self, **kwargs):
+        """POST an (empty) payload to the webhook with a dummy signature header."""
+        return self.public_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json',
+            headers={'stripe-signature': 't=1,v1=dummy'}, **kwargs,
+        )
+
+    def test_webhook__503_when_secret_not_configured(self):
+        """Without STRIPE_WEBHOOK_SECRET the endpoint refuses (nothing to verify with)."""
+        self.assertEqual(self.post_webhook().status_code, 503)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__400_on_bad_signature_before_any_db_work(self):
+        """An unverifiable payload fails fast with 400 -- unknown-host probes reach
+        this endpoint (SHOW_PUBLIC_IF_NO_TENANT_FOUND), so no DB work happens first."""
+        import stripe as stripe_lib
+
+        from tenant.models import StripeEventLog
+
+        with patch('stripe.Webhook.construct_event',
+                   side_effect=stripe_lib.SignatureVerificationError('bad', 'sig')):
+            response = self.post_webhook()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(StripeEventLog.objects.exists())
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__dispatches_verified_event_and_logs_it(self):
+        """A verified event is logged (with its resolved deck) and dispatched once;
+        a duplicate delivery is acknowledged without re-running the handler."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_hook', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_hook', 'status': 'active', 'customer': 'cus_hook',
+                                     'metadata': {'schema_name': self.tenant.schema_name}}}}
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            response = self.post_webhook()
+            self.assertEqual(response.status_code, 200)
+            log = StripeEventLog.objects.get(event_id='evt_hook')
+            self.assertEqual(log.event_type, 'customer.subscription.updated')
+            self.assertEqual(log.schema_name, self.tenant.schema_name)
+
+            with patch('tenant.billing.handle_webhook_event') as mock_handler:
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'duplicate', response.content)
+        mock_handler.assert_not_called()
+        self.assertEqual(StripeEventLog.objects.count(), 1)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__404_on_tenant_schemas(self):
+        """The endpoint only exists on the public schema (public_only_view)."""
+        tenant_client = TenantClient(self.tenant)  # requests on the deck's own domain
+        response = tenant_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__handler_crash_rolls_back_event_log_so_stripe_retries(self):
+        """A handler crash returns 500 and rolls the StripeEventLog row back with the
+        transaction, so Stripe's retry of the event is re-processed, not absorbed
+        as a duplicate."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_crash', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_crash'}}}
+        # surface the 500 as a response instead of re-raising into the test
+        self.public_client.raise_request_exception = False
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            with patch('tenant.billing.handle_webhook_event', side_effect=RuntimeError('handler boom')):
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(StripeEventLog.objects.filter(event_id='evt_crash').exists())

@@ -211,7 +211,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__records_ledger_and_delivers_both_channels(self):
         """When enabled, a due notice writes its ledger row, emails the deck owner, and
-        creates an in-app notification from the deck AI."""
+        creates an in-app notification (sender choice has its own tests below)."""
         summary = self.run_engine_with_inline_email()
         self.assertIn('sent 1 notice(s)', summary)
 
@@ -228,10 +228,123 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         from django.urls import reverse
         self.assertIn(self.tenant.get_root_url() + reverse('decks:subscription'), mail.outbox[0].body)
 
-        # in-app notification exists for the deck owner
+        # in-app notification exists for the deck owner, phrased as a complete
+        # sentence: no dangling "for this deck:" pointing at an object that was
+        # never attached (maintainer find, 2026-07-31)
         from siteconfig.models import SiteConfig
         owner = SiteConfig.get().deck_owner
-        self.assertTrue(Notification.objects.filter(recipient=owner, verb__contains='limit warning').exists())
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        # the notification carries the notice's key fact and links the subscription
+        # page (maintainer request, 2026-08-08: the bare label wasn't actionable)
+        self.assertEqual(
+            notification.verb,
+            'sent a current-student limit warning: 5 of 5 current-student seats are used. See your')
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
+        self.assertEqual(notification.target_link_text, 'subscription details page.')
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__notification_comes_from_support_admin_when_present(self):
+        """The in-app notice's sender is the ByteDeck support account when the deck
+        has one, so it renders as "Bytedeck sent a ..." instead of coming from a
+        deck user's own account (maintainer request, 2026-07-31)."""
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        from siteconfig.models import SiteConfig
+
+        support_admin, _ = get_user_model().objects.get_or_create(
+            username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        self.run_engine_with_inline_email()
+
+        owner = SiteConfig.get().deck_owner
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        self.assertEqual(notification.sender_object, support_admin)
+        self.assertIn('Bytedeck sent a current-student limit warning:', notification.get_link())
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__notification_sender_falls_back_to_deck_ai(self):
+        """Decks without a usable support account (older decks predate it; here it
+        is deactivated) still get their notice: the sender falls back to the deck
+        AI user."""
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        from siteconfig.models import SiteConfig
+
+        get_user_model().objects.filter(
+            username=settings.TENANT_DEFAULT_ADMIN_USERNAME).update(is_active=False)
+        self.run_engine_with_inline_email()
+
+        owner = SiteConfig.get().deck_owner
+        notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
+        self.assertEqual(notification.sender_object, SiteConfig.get().deck_ai)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__notification_names_the_governing_deadline(self):
+        """The expiry notification names the governing clock's deadline while it
+        approaches, switches to the grace-window wording once it has passed, and
+        the suspended notice adds the deletion horizon: the owner sees the date
+        that matters without opening the email (maintainer request, 2026-08-08)."""
+        from unittest.mock import patch
+
+        from django.urls import reverse
+
+        from siteconfig.models import SiteConfig
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        owner = SiteConfig.get().deck_owner
+        inline_email = patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        )
+
+        # approaching: trial ends Aug 22 (7 days from frozen TODAY Aug 15)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY + timedelta(days=7), paid_until=None)
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ends on Aug. 22, 2026 (7 days left). See your")
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
+
+        # lapsed into grace: ended Aug 10, grace runs to Sep 9 (30 days)
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY - timedelta(days=5))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ended on Aug. 10, 2026 "
+            "and the grace period ends on Sept. 9, 2026. See your")
+
+        # suspended: lapsed past the grace window; the deletion horizon is named
+        # (warned today, so a year from frozen TODAY)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a deck suspended warning: this deck's free trial ended on July 15, 2026 "
+            "and the grace period has run out; without a subscription the deck may be "
+            "deleted after Aug. 15, 2027. See your")
+
+        # defensive fall-through: a deck with no running deletion clock (it isn't
+        # actually suspended, so Tenant.deletion_date is None) still gets a
+        # coherent sentence, just without the deletion clause
+        from tenant.notices import _notification_detail
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY + timedelta(days=60))
+        self.tenant.refresh_from_db()
+        detail = _notification_detail(self.tenant, DeckNotice.KIND_SUSPENDED)
+        self.assertNotIn('deleted after', detail)
+        self.assertTrue(detail.endswith('the grace period has run out.'))
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
@@ -301,13 +414,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__owner_without_email_still_gets_in_app_notification(self):
-        """A deck whose owner has no known email skips the email channel but still
+        """A deck whose owner has no email at all skips the email channel but still
         records the notice and creates the in-app notification."""
-        from allauth.account.models import EmailAddress
+        from django.contrib.auth import get_user_model
         from siteconfig.models import SiteConfig
 
         owner = SiteConfig.get().deck_owner
-        EmailAddress.objects.filter(user=owner).delete()
+        get_user_model().objects.filter(pk=owner.pk).update(email='')
         self.assertIsNone(self.tenant.get_owner_email_cached())
 
         summary = self.run_engine_with_inline_email()

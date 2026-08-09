@@ -1218,3 +1218,65 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         self.assertIsInstance(response, TemplateResponse)
         self.assertContains(response, "<h1>Write your message here</h1>")
         self.assertEqual(len(mail.outbox), 0)  # nothing was sent
+
+
+class SyncFromStripeActionTest(ByteDeckTenantTestCase):
+    """Tests for the "Sync selected deck(s) from Stripe" changelist action
+    (epic #1729 PR 7, plan §5.3 -- missed-webhook recovery + #2043 hand-linking)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Build the public schema and a superuser (the admin lives on public)."""
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            cls.superuser = User.objects.create_superuser(
+                username="admin", password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
+            )
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
+            cls.public_tenant.domains.create(domain="localhost", is_primary=True)
+
+    def post_action(self, pks):
+        """Log in (public-schema dance) and POST the sync action for the given decks."""
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema before force_login
+        self.client.force_login(self.superuser)
+        action_data = {"action": "sync_from_stripe", ACTION_CHECKBOX_NAME: pks}
+        return self.client.post(url, action_data, follow=True)
+
+    def test_action__errors_when_stripe_not_configured(self):
+        """Without a secret key the action reports Stripe isn't configured."""
+        response = self.post_action([self.tenant.pk])
+        self.assertContains(response, "Stripe isn&#x27;t configured")
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_action__syncs_linked_decks_and_skips_unlinked(self):
+        """Linked decks re-sync through the single write path; unlinked decks are
+        skipped with pointers to link them first."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+
+        from django.utils.timezone import localdate
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_adm', paid_until=None)
+        period_end = int((datetime.now(tz=dt_timezone.utc) + timedelta(days=200)).timestamp())
+        subscription = {'id': 'sub_adm', 'status': 'active',
+                        'items': {'data': [{'current_period_end': period_end, 'price': {'id': 'p', 'metadata': {}}}]}}
+        public_pk = Tenant.objects.get(schema_name='public').pk  # no sub id: skipped
+
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=subscription):
+            response = self.post_action([self.tenant.pk, public_pk])
+
+        self.assertContains(response, "paid_until")
+        self.assertContains(response, "Skipped 1 deck(s) with no stripe_subscription_id")
+        refreshed = Tenant.objects.get(pk=self.tenant.pk)
+        self.assertGreater(refreshed.paid_until, localdate() + timedelta(days=150))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_action__stripe_error_reported_per_deck(self):
+        """A Stripe API failure surfaces as an error message, not a crash."""
+        import stripe as stripe_lib
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_adm')
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('nope')):
+            response = self.post_action([self.tenant.pk])
+        self.assertContains(response, "Stripe error")
