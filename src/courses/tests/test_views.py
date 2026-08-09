@@ -924,6 +924,8 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, self.BANNER_ID)
+        # the suspension banner is the one warning that must remain
+        self.assertContains(response, 'This deck is suspended')
 
 
 class SemesterViewTests(ByteDeckTenantTestCase):
