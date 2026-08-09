@@ -250,6 +250,16 @@ class UpdateConditionsForQuestTaskTest(ByteDeckTenantTestCase):
         self.assertEqual(recursive_call.call_count, 1)
         self.assertEqual(recursive_call.call_args.kwargs['kwargs']['quest_id'], quest.id)
 
+    def test_update_conditions_for_quest__empty_user_bunch_returns_message_without_requeue(self):
+        """When the starting user id is past every user, the bunch is empty so the loop's
+        else-branch leaves `user` None: the task neither recomputes nor re-queues, and just
+        returns the quest name."""
+        quest = baker.make(Quest, available_outside_course=True)  # -> every user
+        with patch.object(update_conditions_for_quest, 'apply_async') as recursive_call:
+            result = update_conditions_for_quest(quest_id=quest.id, start_from_user_id=999999)
+        self.assertEqual(result, quest.name)
+        recursive_call.assert_not_called()
+
 
 class UpdateQuestConditionsForUserTaskTest(ByteDeckTenantTestCase):
     """Tests for update_quest_conditions_for_user, which recomputes one user's whole
@@ -291,6 +301,16 @@ class UpdateQuestConditionsAllUsersTaskTest(ByteDeckTenantTestCase):
             update_quest_conditions_all_users(start_from_user_id=1)
         self.assertEqual(per_user_call.call_count, 1)   # one user in the bunch of 1
         self.assertEqual(recursive_call.call_count, 1)  # more users remain -> recurse
+
+    def test_update_quest_conditions_all_users__no_users_exits_without_dispatch(self):
+        """With no course students at/after the starting id, the bunch is empty so the task
+        dispatches no per-user recompute and does not re-queue itself."""
+        with patch.object(update_quest_conditions_for_user, 'apply_async') as per_user_call, \
+             patch.object(update_quest_conditions_all_users, 'apply_async') as recursive_call:
+            result = update_quest_conditions_all_users(start_from_user_id=999999)
+        self.assertIsNone(result)
+        per_user_call.assert_not_called()
+        recursive_call.assert_not_called()
 
 
 class TransactionAwareTaskTest(ByteDeckTenantTestCase):
