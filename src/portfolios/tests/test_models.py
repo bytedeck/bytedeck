@@ -27,6 +27,20 @@ class PortfolioModelTest(ByteDeckTenantTestCase):
         self.assertIn(str(portfolio.uuid), portfolio.get_public_url())
 
 
+class ArtworkStrAndUrlTest(ByteDeckTenantTestCase):
+    """Tests for the Artwork model's __str__ and get_absolute_url."""
+
+    def test_str__is_the_title(self):
+        """An artwork stringifies to its title."""
+        art = baker.make(Artwork, title='My Art')
+        self.assertEqual(str(art), 'My Art')
+
+    def test_get_absolute_url__points_at_parent_portfolio(self):
+        """An artwork's absolute url is its parent portfolio's detail page."""
+        art = baker.make(Artwork)
+        self.assertIn(str(art.portfolio.pk), art.get_absolute_url())
+
+
 class ArtworkGetLinkTest(ByteDeckTenantTestCase):
     """Tests for Artwork.get_link()'s video_url / video_file / image_file precedence."""
 
@@ -118,6 +132,12 @@ class ArtworkGetEmbedUrlSourceTest(ByteDeckTenantTestCase):
     def test_get_embed_url_source__none_without_video_url(self):
         """No video_url yields no source."""
         self.assertIsNone(Artwork(video_url='').get_embed_url_source())
+
+    def test_get_embed_url_source__other_backend_returns_none(self):
+        """A video_url whose backend is neither YouTube nor Vimeo yields no source."""
+        art = Artwork(video_url='https://soundcloud.com/x/y')
+        with patch('portfolios.models.detect_backend', return_value=MagicMock()):
+            self.assertIsNone(art.get_embed_url_source())
 
 
 class ArtworkIsVideoTest(ByteDeckTenantTestCase):

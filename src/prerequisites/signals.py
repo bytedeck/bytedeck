@@ -117,9 +117,10 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     demand from the badge page (see badges.views.badge_grant_qualifying, issue #1157).
     """
     if isinstance(instance.parent_object, Quest):
-        # # The parent_object itself being deleted could have cascaded to delete the sender Prereq, so it parent might not exist.
-        # Cover this instance in a post_delete signal receiver for Quest objects.
-        if instance.parent_object:
+        # The enclosing isinstance() already guarantees parent_object is a (truthy) Quest, so this
+        # guard is always True here; the deleted-parent case is handled by a separate Quest
+        # post_delete receiver, not this branch.
+        if instance.parent_object:  # pragma: no branch
             update_conditions_for_quest.apply_async(kwargs={'quest_id': instance.parent_object.id, 'start_from_user_id': 1}, queue='default')
 
 

@@ -180,3 +180,27 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
         self.assertIn("name", form.errors)
+
+    def test_clean_email__disabled_without_verified_email_raises(self):
+        """When the email field is disabled (verified session present) but no verified email is
+        available, clean_email raises rather than saving a tenant with an empty owner email."""
+        # verified_data is truthy but carries no email, so __init__ disables the field with an
+        # empty initial and clean_email finds nothing to fall back on.
+        form = TenantForm(
+            data={"name": "noemaildeck", "first_name": "John", "last_name": "Doe"},
+            verified_data={"first_name": "John", "last_name": "Doe"},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("email", form.errors)
+
+    def test_save__commit_false_returns_unsaved_tenant(self):
+        """save(commit=False) returns the built-but-unsaved Tenant (no pk, no schema build)."""
+        form = TenantForm(data={
+            "name": "commitfalse",
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john.doe@example.com",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        tenant = form.save(commit=False)
+        self.assertIsNone(tenant.pk)

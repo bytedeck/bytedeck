@@ -129,6 +129,13 @@ class CleanHTMLTests(TestCase):
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
+    def test_clean_html__orphan_li_after_empty_ul_is_left_in_place(self):
+        """A bare <li> whose previous <li> was skipped (because that one followed a <ul>) hits the
+        'no open <ul> group yet' path and is left where it is rather than re-wrapped."""
+        cleaned = clean_html('<ul></ul><li>A</li><li>B</li>')
+        self.assertIn('<li>A</li>', cleaned)
+        self.assertIn('<li>B</li>', cleaned)
+
     def test_clean_html__removes_script_tags(self):
         """Script tags and their contents are stripped from the html."""
         text = '<p>Some text<script>alert("Hello");</script></p>'

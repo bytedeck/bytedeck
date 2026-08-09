@@ -1,5 +1,6 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from django.conf import settings
 from django.db import connection
 
 from django_tenants.utils import get_public_schema_name
@@ -7,7 +8,7 @@ from django_tenants.utils import get_public_schema_name
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from tenant.models import Tenant
-from tenant.signals import initialize_tenant_with_data
+from tenant.signals import initialize_tenant_with_data, tenant_save_callback
 
 
 class InitializeTenantWithDataTest(ByteDeckTenantTestCase):
@@ -40,3 +41,22 @@ class InitializeTenantWithDataTest(ByteDeckTenantTestCase):
             connection.set_tenant(tenant)
 
         mock_load.assert_called_once()
+
+
+class TenantSaveCallbackTest(ByteDeckTenantTestCase):
+    """Tests for the `post_save` handler that gives a Tenant its first domain."""
+
+    def test_tenant_save_callback__public_schema_uses_root_domain(self):
+        """For the public tenant (which has no `<name>.` subdomain) the created domain is
+        ROOT_DOMAIN itself, unlike a regular deck whose domain is `<name>.ROOT_DOMAIN`.
+
+        A MagicMock stands in for the Tenant so the real public tenant's domains aren't
+        mutated: the handler only reads schema_name and calls domains.exists()/create().
+        """
+        instance = MagicMock()
+        instance.schema_name = get_public_schema_name()
+        instance.domains.exists.return_value = False  # force the domain-creating path
+
+        tenant_save_callback(sender=Tenant, instance=instance)
+
+        instance.domains.create.assert_called_once_with(domain=settings.ROOT_DOMAIN, is_primary=True)

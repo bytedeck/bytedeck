@@ -144,6 +144,14 @@ class IsAPrereqMixinTest(PrereqMixinTestData, ByteDeckTenantTestCase):
         reliant_objects = self.quest_prereq.get_reliant_objects()
         self.assertListEqual(list(reliant_objects), [self.quest_parent, self.quest_prereq2])
 
+    def test_get_reliant_objects__skips_prereq_with_missing_parent(self):
+        """A reliant Prereq whose parent object no longer exists (a dangling GFK) is skipped
+        rather than returned as None."""
+        # dangle the parent GFK so prereq.parent() returns None for quest_prereq's only reliant
+        Prereq.objects.filter(pk=self.prereq_with_or.pk).update(parent_object_id=999999)
+
+        self.assertListEqual(list(self.quest_prereq.get_reliant_objects()), [])
+
     def test_get_reliant_objects__exclude_NOT(self):
         """With exclude_NOT, an inverted main requirement drops its parent from the reliant list."""
         reliant_objects = self.quest_prereq.get_reliant_objects(exclude_NOT=True)
@@ -374,6 +382,14 @@ class PrereqAllConditionsMetModelTest(ByteDeckTenantTestCase):
         self.prereq_cache.add_id(101)
         self.assertEqual(len(self.prereq_cache.get_ids()), 2)
         self.assertEqual(self.prereq_cache.get_ids(), [100, 101])
+
+    def test_add_id__does_not_duplicate_existing_id(self):
+        """Re-adding an id that is already stored is a no-op (no duplicate appended)."""
+        self.prereq_cache.ids = str([5])
+
+        self.prereq_cache.add_id(5)
+
+        self.assertEqual(self.prereq_cache.get_ids(), [5])
 
     def test_remove_id__removes(self):
         """remove_id deletes an existing id from the cache."""
