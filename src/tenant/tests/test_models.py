@@ -359,6 +359,54 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertTrue(tenant.is_suspended)
         self.assertEqual(tenant.days_until_expiry, -(GRACE_PERIOD_DAYS + 5))
 
+    def test_subscription_status__one_slug_per_lifecycle_state(self):
+        """subscription_status maps each lifecycle state to its slug: the single
+        precedence chain behind the subscription page badge and the admin's
+        Subscription column."""
+        self.assertEqual(self.make_tenant().subscription_status, 'manual')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY).subscription_status, 'trial')
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=40).subscription_status, 'subscribed')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status, 'maintenance')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).subscription_status, 'grace')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), max_active_users=40).subscription_status,
+            'suspended')
+
+    def test_subscription_status__precedence_when_states_overlap(self):
+        """Where the underlying properties overlap, the more urgent state wins:
+        a deck in the paid clock's grace window is 'grace' even though
+        subscription_active (and the maintenance cap test) still hold there, and
+        a suspended deck is 'suspended' even though its old trial date still
+        exists. Unlimited (-1) paid decks are 'subscribed', never 'maintenance'."""
+        # paid grace: subscription_active is still True through the window, grace wins
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1), max_active_users=40).subscription_status, 'grace')
+        # a lapsing maintenance deck in grace is 'grace' too, not 'maintenance'
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1), max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status,
+            'grace')
+        # suspension outranks the stale never-cleared trial date
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY - timedelta(days=400),
+                paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 5),
+            ).subscription_status,
+            'suspended')
+        # unlimited seats is a real subscription, not maintenance
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=-1).subscription_status, 'subscribed')
+
+    def test_subscription_status_label__human_label_for_every_slug(self):
+        """subscription_status_label renders the human word for the current slug,
+        and every slug the property can return has a label to render."""
+        self.assertEqual(self.make_tenant().subscription_status_label, 'Managed manually')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY).subscription_status_label, 'Free trial')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=40).subscription_status_label, 'Subscribed')
+        self.assertEqual(
+            sorted(Tenant.SUBSCRIPTION_STATUS_LABELS),
+            sorted(['grace', 'maintenance', 'manual', 'subscribed', 'suspended', 'trial']))
+
 
 @freeze_time(FROZEN_NOW)
 class TenantDeletionClockTest(ByteDeckTenantTestCase):
