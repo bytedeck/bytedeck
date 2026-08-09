@@ -1197,7 +1197,9 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Log in staff on an unlinked deck with billing configured via override in
-        each test (the deck's owner email resolution is exercised as-is)."""
+        each test (the deck's owner email resolution is exercised as-is). The
+        cosmetic customer-description stamp is stubbed so link-path tests never
+        attempt a real Stripe call."""
         from model_bakery import baker
 
         from tenant.utils import deck_cache_key
@@ -1206,6 +1208,9 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.client.force_login(self.staff)
+        patcher = patch('tenant.billing.stripe.Customer.modify')
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def set_deck(self, **fields):
         """Persist billing fields on this deck's Tenant row and refresh the instance."""
