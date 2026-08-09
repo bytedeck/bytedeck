@@ -69,7 +69,11 @@ class InitDbTest(TestCase, CommandMixin):
         public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
         with tenant_context(public_tenant):
-            FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            homepage = FlatPage.objects.get(url='/home/')  # will throw exception if doesn't exist
+            # the seeded TRY IT buttons must point at the deck-request form: the old
+            # "#contact" anchor target no longer exists anywhere on the seeded page
+            self.assertIn('href="/decks/request/"', homepage.content)
+            self.assertNotIn('href="#contact"', homepage.content)
             user = User.objects.get(username='admin')
             self.assertTrue(user.is_superuser)
             self.assertTrue(Site.objects.exists())
