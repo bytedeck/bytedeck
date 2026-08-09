@@ -15,7 +15,7 @@ from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 from django_tenants.utils import tenant_context
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.views import (
     non_public_only_view, public_only_view, TenantCreate, TenantForm, EmailVerificationRequiredMixin, _humanize_seconds,
 )
@@ -37,7 +37,7 @@ def view_accessible_by_non_public_only(request):
     return HttpResponse(status=200)
 
 
-class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ViewsTest(ByteDeckTenantTestCase):
     def setUp(self):
         """Build a request factory and an empty request for calling the views directly."""
         self.factory = RequestFactory()
@@ -71,7 +71,7 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             view_accessible_by_non_public_only(self.request)
 
 
-class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class TenantCreateViewTest(ByteDeckTenantTestCase):
     """Various tests for `TenantCreate` view class."""
 
     @classmethod
@@ -678,7 +678,6 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         from tenant.utils import deck_cache_key
 
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.student = baker.make(User)
 
@@ -860,7 +859,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=None)
 
 
-class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     """Access and rendering tests for the staff-facing Subscription details page
     (epic #1729 PR 6; maintainer-requested admin-menu page)."""
 
@@ -876,7 +875,6 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         from tenant.utils import deck_cache_key
 
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         self.client.force_login(self.staff)
@@ -1188,7 +1186,7 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, 'Subscription')
 
 
-class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
     """Stripe checkout/portal flow tests for the subscription page (epic #1729 PR 6).
 
     Stripe is never called for real: the SDK entry points used by tenant.billing
@@ -1203,7 +1201,6 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         from tenant.utils import deck_cache_key
 
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.client.force_login(self.staff)
 
@@ -1389,7 +1386,7 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.stripe_customer_id, '')
 
 
-class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class StripeWebhookViewTest(ByteDeckTenantTestCase):
     """Tests for the Stripe webhook endpoint (epic #1729 PR 7, plan §5.2).
 
     The endpoint is public-schema-only, so these tests build the public tenant
