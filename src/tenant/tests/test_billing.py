@@ -213,7 +213,15 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
         self.assertEqual(self.tenant.paid_until, original_paid_until)
 
     def _complete_session(self, customer='cus_9'):
-        """A completed session double for this deck, ready to reconcile."""
+        """A completed Checkout Session double for this deck, ready to reconcile.
+
+        Args:
+            customer (str): The Stripe customer id to place in the session.
+
+        Returns:
+            dict: A completed session payload bound to this deck, carrying the
+            given customer and an active subscription ('sub_9').
+        """
         return {
             'status': 'complete', 'client_reference_id': self.tenant.schema_name,
             'customer': customer, 'subscription': {'id': 'sub_9', 'status': 'active'},
@@ -254,7 +262,7 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
 
     def test_reconcile__customer_stamp_failure_never_breaks_the_link(self):
         """The description stamp is cosmetic: a Stripe error while writing it is
-        swallowed, and the deck still ends up linked and paid up."""
+        swallowed, and the deck still ends up fully linked."""
         import stripe as stripe_module
 
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
