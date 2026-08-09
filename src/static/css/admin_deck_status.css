@@ -1,8 +1,10 @@
 /* Status badges for the tenant admin changelist's Subscription column
    (TenantAdmin.subscription_status_text). One class per
-   Tenant.subscription_status slug, mirroring the bootstrap-3 label colors the
-   deck subscription page uses for the same statuses (the admin doesn't load
-   bootstrap, so the badge look-alikes live here). */
+   Tenant.subscription_status slug, in darker shades of the bootstrap-3 label
+   hues the deck subscription page uses for the same statuses: the shared hue
+   keeps the two surfaces visually consistent, and every shade holds at least
+   a 4.5:1 (WCAG AA) contrast ratio against the white badge text. The admin
+   doesn't load bootstrap, so the badge styles live here. */
 .deck-status {
     display: inline-block;
     padding: 2px 6px;
@@ -13,17 +15,17 @@
 }
 .deck-status-suspended,
 .deck-status-grace {
-    background-color: #d9534f;  /* bootstrap label-danger */
+    background-color: #b52b27;  /* label-danger hue; 6.3:1 against the white text */
 }
 .deck-status-maintenance {
-    background-color: #337ab7;  /* bootstrap label-primary */
+    background-color: #286090;  /* label-primary hue; 6.6:1 */
 }
 .deck-status-subscribed {
-    background-color: #5cb85c;  /* bootstrap label-success */
+    background-color: #3c763d;  /* label-success hue; 5.5:1 */
 }
 .deck-status-trial {
-    background-color: #5bc0de;  /* bootstrap label-info */
+    background-color: #31708f;  /* label-info hue; 5.5:1 */
 }
 .deck-status-manual {
-    background-color: #777;  /* bootstrap label-default */
+    background-color: #5e5e5e;  /* label-default hue; 6.5:1 */
 }

@@ -327,9 +327,12 @@ class Tenant(TenantMixin):
         Precedence matters: a deck past its grace window is 'suspended' even
         though its trial dates still exist, and a deck in the paid clock's
         grace window is 'grace' even though ``subscription_active`` is still
-        True there (access is retained through grace). 'manual' is the
-        both-dates-blank escape hatch for comped/legacy decks managed outside
-        the subscription lifecycle.
+        True there (access is retained through grace). The LATEST clock governs
+        the lifecycle (#1734 B4), so when the trial clock governs (and hasn't
+        lapsed into the branches above) the deck is 'trial' even if an older
+        ``paid_until`` still keeps ``subscription_active`` True through its
+        grace tail. 'manual' is the both-dates-blank escape hatch for
+        comped/legacy decks managed outside the subscription lifecycle.
 
         Returns:
             str: One of the ``SUBSCRIPTION_STATUS_LABELS`` keys: 'suspended',
@@ -339,12 +342,15 @@ class Tenant(TenantMixin):
             return 'suspended'
         if self.in_grace_period:
             return 'grace'
+        if self.governing_clock_is_trial:
+            # not suspended and not in grace, so the governing trial clock is
+            # still running: the deck is on trial regardless of any older,
+            # still-in-grace paid_until (which would misreport as subscribed)
+            return 'trial'
         if self.is_on_maintenance:
             return 'maintenance'
         if self.subscription_active:
             return 'subscribed'
-        if self.is_on_trial:
-            return 'trial'
         return 'manual'
 
     @property

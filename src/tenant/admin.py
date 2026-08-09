@@ -155,9 +155,9 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     )
 
     class Media:
-        # badge styles for the Subscription column (.deck-status-*); the admin
-        # doesn't load the app's bootstrap css, so the look-alikes live in their
-        # own small stylesheet
+        """Extra assets for the changelist: the Subscription column's badge
+        stylesheet (.deck-status-*), since the admin doesn't load the app's
+        bootstrap css."""
         css = {'all': ('css/admin_deck_status.css',)}
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name_cached', 'owner_email_cached']
@@ -385,8 +385,14 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """The deck's lifecycle status as a colored badge: the same status (and
         the same word) the deck owner sees on their subscription details page,
         both rendered from the shared ``Tenant.subscription_status`` precedence
-        chain so the two can never disagree. The public schema row isn't a
-        deck, so it shows no status.
+        chain so the two can never disagree.
+
+        Args:
+            obj (Tenant): The changelist row's tenant.
+
+        Returns:
+            SafeString | None: The rendered ``<span>`` badge for a deck row, or
+            None (an empty cell) for the public schema row, which isn't a deck.
         """
         if obj.schema_name == get_public_schema_name():
             return None

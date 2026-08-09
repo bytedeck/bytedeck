@@ -395,17 +395,56 @@ class TenantBillingStatusTest(SimpleTestCase):
             'suspended')
         # unlimited seats is a real subscription, not maintenance
         self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=-1).subscription_status, 'subscribed')
+        # the GOVERNING (latest) clock decides trial vs paid (#1734 B4): an
+        # admin-extended trial outranks an older paid_until even while that paid
+        # date's grace tail keeps subscription_active True (regression: this
+        # deck read as 'subscribed'/'maintenance' when only the paid flags were
+        # consulted), and also while the paid date is still current
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=30), paid_until=FROZEN_TODAY - timedelta(days=1),
+                max_active_users=40,
+            ).subscription_status,
+            'trial')
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=60), paid_until=FROZEN_TODAY + timedelta(days=30),
+            ).subscription_status,
+            'trial')
+        # a TIE between the clocks speaks subscription language (B4)
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=30), paid_until=FROZEN_TODAY + timedelta(days=30),
+                max_active_users=40,
+            ).subscription_status,
+            'subscribed')
 
     def test_subscription_status_label__human_label_for_every_slug(self):
         """subscription_status_label renders the human word for the current slug,
-        and every slug the property can return has a label to render."""
+        for a deck in each of the six lifecycle states, and the label map holds
+        exactly those six labels (a typo in any one label fails here)."""
         self.assertEqual(self.make_tenant().subscription_status_label, 'Managed manually')
         self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY).subscription_status_label, 'Free trial')
         self.assertEqual(
             self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=40).subscription_status_label, 'Subscribed')
         self.assertEqual(
-            sorted(Tenant.SUBSCRIPTION_STATUS_LABELS),
-            sorted(['grace', 'maintenance', 'manual', 'subscribed', 'suspended', 'trial']))
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status_label,
+            'Maintenance')
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).subscription_status_label, 'Grace period')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).subscription_status_label,
+            'Suspended')
+        self.assertEqual(
+            Tenant.SUBSCRIPTION_STATUS_LABELS,
+            {
+                'suspended': 'Suspended',
+                'grace': 'Grace period',
+                'maintenance': 'Maintenance',
+                'subscribed': 'Subscribed',
+                'trial': 'Free trial',
+                'manual': 'Managed manually',
+            })
 
 
 @freeze_time(FROZEN_NOW)
