@@ -27,6 +27,8 @@ The site only works via `http://localhost:8000` (not `0.0.0.0`) because the mult
 
 ### Tests and Linting
 
+**Claude Code: stand up the environment and run these for real: don't default to a static-only review.** A fresh session (web/remote sessions included) starts with no venv, no Postgres, and no running containers, but they can be built, so don't announce something like "no Postgres/Docker/venv here, so this is a static-only review" and skip actually running things. Bring the stack up the way CI does and run against it: `cp .env.example .env` (if absent), `docker compose up -d`, then `docker compose exec -T web python src/manage.py test src` (and `docker compose exec -T web ruff check src`). `TenantTestCase` builds its own test schemas, so you don't need a manual `initdb` just to run the suite. Building the images the first time takes a few minutes; do it once at the start rather than treating it as a blocker. Only fall back to a static-only review if the environment genuinely can't be brought up, and then say exactly which step failed (e.g. Docker daemon unavailable, image build error) instead of presuming it can't be done: running the real migrations and suite catches what static reading can't (migration state, tenant-schema behavior, actual pass/fail).
+
 ```bash
 # Full test suite + style check (expected before every commit/PR)
 python src/manage.py test src && ruff check src
