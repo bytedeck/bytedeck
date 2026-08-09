@@ -119,6 +119,59 @@ class NotificationViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         notification.refresh_from_db()
         self.assertFalse(notification.unread)
 
+    def test_ajax_mark_read__another_users_notification_is_rejected(self):
+        """A student can't mark someone else's notification read: it 404s and stays unread."""
+        self.client.force_login(self.test_student1)
+
+        victims_notification = baker.make(
+            'notifications.Notification', recipient=self.test_student2,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        self.assertTrue(victims_notification.unread)
+
+        response = self.client.post(
+            reverse('notifications:ajax_mark_read'),
+            data={'id': victims_notification.id},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+        victims_notification.refresh_from_db()
+        self.assertTrue(victims_notification.unread)
+
+    def test_ajax_mark_read__unknown_id_returns_404(self):
+        """An id matching no notification is a 404, not an unhandled DoesNotExist (a 500)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(
+            reverse('notifications:ajax_mark_read'),
+            data={'id': 999999},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_mark_read__non_numeric_id_returns_404(self):
+        """A non-numeric id is a 404, not the ValueError the pk lookup would raise (a 500)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(
+            reverse('notifications:ajax_mark_read'),
+            data={'id': 'not-a-number'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_mark_read__missing_id_returns_404(self):
+        """A POST with no id at all is a 404 rather than a crash."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(
+            reverse('notifications:ajax_mark_read'),
+            data={},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax__returns_200_for_logged_in_student(self):
         """A logged-in student's ajax POST to the notifications endpoint returns 200."""
         # log in student1

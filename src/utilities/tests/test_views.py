@@ -511,7 +511,7 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 
 class VideosViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    """The Video Resources page (utilities:videos) — lists videos and accepts uploads."""
+    """The Video Resources page (utilities:videos): lists videos and accepts uploads from staff."""
 
     @classmethod
     def setUpClass(cls):
@@ -532,12 +532,50 @@ class VideosViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
         super().setUpClass()
 
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher (who may manage videos) and a student (who may not)."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
     def setUp(self):
         """Build a tenant-aware test client."""
         self.client = TenantClient(self.tenant)
 
+    def test_videos__anonymous_is_redirected_to_login(self):
+        """An anonymous visitor can't reach the page: the upload form writes to the deck's storage."""
+        self.assertRedirectsLogin('utilities:videos')
+
+    def test_videos__anonymous_post_does_not_upload(self):
+        """An anonymous POST is turned away at the login redirect without saving the file."""
+        upload = SimpleUploadedFile("anon.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Anonymous Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(VideoResource.objects.filter(title='Anonymous Clip').exists())
+
+    def test_videos__student_get_is_forbidden(self):
+        """A logged-in student can't even read the page: it is the staff upload form."""
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('utilities:videos'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_videos__student_post_does_not_upload(self):
+        """A logged-in student gets a 403 and their upload is not saved."""
+        self.client.force_login(self.test_student)
+        upload = SimpleUploadedFile("student.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Student Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(VideoResource.objects.filter(title='Student Clip').exists())
+
     def test_videos__get_lists_existing_video_resources(self):
-        """GET renders the videos page and includes existing VideoResources in the context."""
+        """A teacher's GET renders the videos page and includes existing VideoResources in the context."""
+        self.client.force_login(self.test_teacher)
         video = VideoResource.objects.create(
             title="Intro Video",
             video_file=SimpleUploadedFile("intro.mp4", b"fake video bytes", content_type="video/mp4"),
@@ -548,7 +586,8 @@ class VideosViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn(video, list(response.context['videos']))
 
     def test_videos__post_valid_form_creates_video_resource(self):
-        """POST with a title and an uploaded file saves a new VideoResource and re-renders the page."""
+        """A teacher's POST with a title and an uploaded file saves a new VideoResource and re-renders the page."""
+        self.client.force_login(self.test_teacher)
         upload = SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4")
         response = self.client.post(
             reverse('utilities:videos'),

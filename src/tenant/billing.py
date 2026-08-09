@@ -15,6 +15,7 @@ Two flows feed deck billing state, both defined here:
   handler is a thin translator that resolves the deck and funnels through
   ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
+import json
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
@@ -41,6 +42,27 @@ except (ImportError, AttributeError):  # pragma: no cover -- requires a differen
 # hour absorbs clock skew and request latency so a boundary-day checkout can't
 # fail at Stripe after passing our check
 CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
+
+
+def to_plain_dict(stripe_obj):
+    """A stripe-python object (or a dict) as plain nested dicts/lists.
+
+    stripe-python 15.x objects support indexing but are NOT dicts: ``.get()``
+    raises AttributeError. The handlers and sync code are written dict-style,
+    which every test exercised with plain-dict doubles, so the mismatch only
+    surfaced on staging's first real webhook delivery (500 on every event,
+    2026-08-09). Converting at each SDK boundary keeps the dict-style code and
+    the test doubles honest; ``str()`` of a Stripe object is its full JSON.
+
+    Args:
+        stripe_obj: A stripe-python object, or an already-plain dict.
+
+    Returns:
+        dict: The same data as plain nested dicts/lists.
+    """
+    if isinstance(stripe_obj, dict):
+        return stripe_obj
+    return json.loads(str(stripe_obj))
 
 
 def billing_configured():
@@ -193,9 +215,9 @@ def reconcile_checkout_session(deck, session_id):
     from tenant.models import Tenant
     from tenant.utils import invalidate_current_deck_cache
 
-    session = stripe.checkout.Session.retrieve(
+    session = to_plain_dict(stripe.checkout.Session.retrieve(
         session_id, api_key=settings.STRIPE_SECRET_KEY, expand=['subscription'],
-    )
+    ))
     # The session id arrives via the success-URL query string, so never trust it
     # blindly: the session must be one THIS deck's checkout created (bound via
     # client_reference_id/metadata), or a session id from some other deck's
@@ -292,10 +314,17 @@ def _sync_deck_from_subscription_id(deck, subscription_id):
     configured with only the webhook secret can still absorb events that sync
     straight from their payloads, but it cannot retrieve, and an exception here
     would turn into a 500 that Stripe retries for days (review find on #2110).
+
+    Args:
+        deck (Tenant): The deck whose billing state the subscription drives.
+        subscription_id (str): The Stripe subscription id (sub_...) to retrieve.
+
+    Returns:
+        str: A short human-readable summary for the caller's log/audit trail.
     """
     if not settings.STRIPE_SECRET_KEY:
         return 'STRIPE_SECRET_KEY unset; retrieve skipped'
-    subscription = stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY)
+    subscription = to_plain_dict(stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY))
     return deck.sync_from_stripe_subscription(subscription)
 
 
@@ -308,6 +337,10 @@ def handle_webhook_event(event):
     event types are logged and acknowledged. Idempotence (duplicate delivery)
     is enforced by the caller via StripeEventLog before this runs.
 
+    Args:
+        event: The verified Stripe Event, as the SDK's Event object or an
+            equivalent plain dict (converted internally via to_plain_dict).
+
     Returns:
         tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema
         (empty string when no deck resolved) as structured data for the event
@@ -315,6 +348,9 @@ def handle_webhook_event(event):
     """
     from django_tenants.utils import tenant_context
 
+    # accept the SDK's Event object as well as a plain dict: everything below
+    # (and every handler) speaks dict
+    event = to_plain_dict(event)
     event_type = event.get('type', '')
     obj = (event.get('data') or {}).get('object') or {}
     metadata = obj.get('metadata') or {}

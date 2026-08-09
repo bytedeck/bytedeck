@@ -199,6 +199,33 @@ class StripeBackfillReportTest(ByteDeckTenantTestCase):
         # read-only: the matched deck was NOT linked
         self.assertEqual(Tenant.objects.get(pk=self.tenant.pk).stripe_subscription_id, '')
 
+    def test_report__handles_the_sdks_real_subscription_objects(self):
+        """The listing yields the SDK's Subscription objects, which are NOT dicts
+        on stripe-python 15.x (.get() raises): the report's dict-style reads only
+        worked in tests because the doubles were plain dicts (the same drift that
+        500ed staging's webhook, 2026-08-09). Pins the seam with the real type."""
+        from unittest.mock import MagicMock, patch
+
+        import stripe as stripe_lib
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(owner_email_cached='owner@example.com')
+        sdk_sub = stripe_lib.Subscription.construct_from(
+            {'id': 'sub_sdk', 'customer': {'id': 'cus_sdk', 'email': 'OWNER@example.com'}}, 'sk_test_x')
+        self.assertFalse(hasattr(sdk_sub, 'get'))  # the very property that broke staging
+
+        listing = MagicMock()
+        listing.auto_paging_iter.return_value = [sdk_sub]
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('stripe.Subscription.list', return_value=listing):
+                output = self.call()
+
+        self.assertIn('sub_sdk', output)
+        self.assertIn(f"deck '{self.tenant.schema_name}'", output)
+
     def test_report__skips_already_linked_subscriptions(self):
         """A subscription some deck already carries doesn't reappear in the report."""
         from unittest.mock import MagicMock, patch
