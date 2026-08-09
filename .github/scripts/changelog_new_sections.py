@@ -11,12 +11,17 @@ re-posted on later pushes.
 
 Outputs (for the workflow):
   * ``discussion_body.md`` : the post body (new sections, oldest first), if any.
-  * ``$GITHUB_OUTPUT`` gets ``has_new`` (true/false) and, when true, ``title``.
+  * ``$GITHUB_OUTPUT`` gets ``has_new`` (true/false) and, when true, ``title``
+    plus ``versions`` (the announced version numbers, comma-separated, ascending)
+    for the workflow's per-version duplicate guard.
 
 Env:
-  * ``BEFORE_SHA``   : the ``github.event.before`` commit (may be all-zeros for a
-                       brand-new branch, in which case the "old" changelog is
-                       treated as empty so every version reads as new).
+  * ``BEFORE_SHA``   : the ``github.event.before`` commit to diff against. An
+                       all-zeros SHA (a force-push / rewritten history) or an
+                       unreachable commit means there is no reliable baseline; in
+                       that case only the single newest changelog section is
+                       announced (never the whole history), and the workflow's
+                       per-version duplicate guard prevents a repost.
   * ``CHANGELOG``    : path to the changelog (default ``CHANGELOG.md``).
   * ``GITHUB_OUTPUT``: set by Actions; if absent (local testing) it is skipped.
 """
@@ -163,6 +168,7 @@ def main():
     title = format_title(versions)
     write_output("has_new", "true")
     write_output("title", title)
+    write_output("versions", ",".join(versions))
     print(f"New version(s) detected: {', '.join(versions)}")
     print(f"Discussion title: {title}")
 

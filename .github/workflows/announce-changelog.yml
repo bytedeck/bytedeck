@@ -53,11 +53,15 @@ jobs:
         uses: actions/github-script@v7
         env:
           DISCUSSION_TITLE: ${{ steps.extract.outputs.title }}
+          DISCUSSION_VERSIONS: ${{ steps.extract.outputs.versions }}
         with:
           github-token: ${{ secrets.DISCUSSIONS_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
             const title = process.env.DISCUSSION_TITLE;
+            const versions = (process.env.DISCUSSION_VERSIONS || '')
+              .split(',')
+              .filter(Boolean);
             const body = fs.readFileSync('discussion_body.md', 'utf8');
             const { owner, repo } = context.repo;
 
@@ -87,19 +91,32 @@ jobs:
               return;
             }
 
-            // Best-effort duplicate guard: if a discussion with this exact title
-            // already exists (e.g. a re-run or a force-push), don't post again.
-            const found = await github.graphql(
-              `query($q: String!) {
-                 search(query: $q, type: DISCUSSION, first: 20) {
-                   nodes { ... on Discussion { title url } }
-                 }
-               }`,
-              { q: `repo:${owner}/${repo} in:title ${JSON.stringify(title)}` }
-            );
-            const duplicate = found.search.nodes.find((n) => n && n.title === title);
-            if (duplicate) {
-              core.info(`Discussion already exists, skipping: ${duplicate.url}`);
+            // Best-effort duplicate guard, keyed on the version number(s) rather
+            // than the exact title. A version number is the stable identity of an
+            // announcement and always appears in the discussion title, so this
+            // still recognizes a version a previous post announced alongside
+            // others under a different aggregate title (e.g. a later force-push
+            // fallback re-announcing just the newest). If every version in this
+            // post is already announced, skip; otherwise post.
+            const titleHasVersion = (discussionTitle, version) => {
+              // Bounded match so "1.3.0" doesn't match "1.30.0" or "11.3.0".
+              const escaped = version.replace(/\./g, '\\.');
+              return new RegExp(`(^|[^0-9.])${escaped}([^0-9.]|$)`).test(discussionTitle);
+            };
+            const versionAnnounced = async (version) => {
+              const res = await github.graphql(
+                `query($q: String!) {
+                   search(query: $q, type: DISCUSSION, first: 20) {
+                     nodes { ... on Discussion { title } }
+                   }
+                 }`,
+                { q: `repo:${owner}/${repo} in:title ${JSON.stringify(version)}` }
+              );
+              return res.search.nodes.some((n) => n && titleHasVersion(n.title, version));
+            };
+            const announced = await Promise.all(versions.map(versionAnnounced));
+            if (versions.length && announced.every(Boolean)) {
+              core.info(`Version(s) already announced, skipping: ${versions.join(', ')}`);
               return;
             }
 
