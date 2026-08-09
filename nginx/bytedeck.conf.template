@@ -8,8 +8,8 @@
 # source of truth instead of maintaining divergent copies. Do not edit the
 # generated /etc/nginx/sites-available/bytedeck.conf directly.
 
-# Resolve the `web` service name through Docker's embedded DNS (127.0.0.11) on
-# every request rather than once at startup, so nginx follows the app container
+# Resolve the `web` service name through Docker's embedded DNS (127.0.0.11) at
+# request time rather than once at startup, so nginx follows the app container
 # to whatever address it currently has.
 #
 # nginx caches a hostname it resolves at config-load time for the whole life of
@@ -19,8 +19,9 @@
 # `connect() failed (111: Connection refused) ... upstream: "uwsgi://<old-ip>:8000"`,
 # i.e. a 502 on every request until nginx itself is reloaded.
 #
-# `valid=10s` bounds how long a resolved address is reused. Docker's DNS returns
-# no TTL of its own, so without it nginx would cache indefinitely again.
+# `valid=10s` bounds how long a resolved address is reused, so the lookup is not
+# literally once per request. Docker's DNS returns no TTL of its own, so without
+# it nginx would fall back to caching indefinitely again.
 #
 # None of this applies to a unix socket (`uwsgi_pass unix:/bytedeck-volume/app.sock;`,
 # the alternative the commented-out socket_data mounts in the compose files are
