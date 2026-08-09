@@ -273,27 +273,28 @@ request, so it redirects every request forever).
 
 ## Troubleshooting
 
-- **502 right after a restart:** expected for a minute or two. The `web`
-  container runs `migrate_schemas` over every tenant schema and then
-  `collectstatic` before uwsgi binds :8000, and nginx has nothing to talk to
-  until it does. Watch for `spawned uWSGI master process` in
-  `docker compose ... logs web`.
-- **502 that does not clear:** check that nginx is dialling the address `web`
-  actually has:
+- **502 right after a restart:** expected while the `web` container runs
+  `migrate_schemas` over every tenant schema and then `collectstatic`, since
+  uwsgi does not bind :8000 until those finish and nginx has nothing to talk to
+  before then. How long that takes grows with the number of tenants, so go by
+  the log rather than the clock: it is normal until `spawned uWSGI master
+  process` appears in `docker compose ... logs web`.
+- **502 that does not clear:** compare the address nginx dialled with the one it
+  resolves `web` to now. Ask nginx for both, rather than inspecting the
+  container: `web` is on `backend-network` and `frontend-network` while nginx
+  shares only `backend-network`, so listing web's addresses invites comparing
+  against the wrong one.
   ```bash
   cd ~/bytedeck
   C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
-  $C logs nginx | grep -o 'upstream: "uwsgi://[^"]*"' | tail -1   # who nginx calls
-  $C ps -q web | xargs docker inspect \
-      -f '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}'  # where web is
+  $C logs nginx | grep -o 'upstream: "uwsgi://[^"]*"' | tail -1  # who nginx dialled
+  $C exec nginx getent hosts web                                 # where web is now
   ```
-  These must match. If they do not, nginx is holding a stale address: confirm
-  the site config still carries the `resolver` line and the `$web_upstream`
-  variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping
-  either one restores the old resolve-once-at-startup behaviour.
+  A mismatch means nginx is holding a stale address: confirm the site config
+  still carries the `resolver` line and the `$web_upstream` variable in
+  `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping either one
+  restores the old resolve-once-at-startup behaviour.
   `$C exec nginx nginx -s reload` clears it until the next recreation.
-- **Check nginx and web share a network:** `$C exec nginx getent hosts web`
-  should print the current web IP.
 - **Which user is each container running as:**
   `docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'`
 - **Logs:** `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs -f`
