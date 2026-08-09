@@ -79,7 +79,7 @@ class GetLatestReleaseAnnouncementTests(SimpleTestCase):
         with patch("tenant.github.requests.post", return_value=_github_response(nodes)):
             self.assertEqual(github.get_latest_release_announcement(), ("1.31.0", DISCUSSION_URL))
 
-    def test_ignores_non_announcement_discussions(self):
+    def test_get_latest__ignores_non_announcement_discussions(self):
         """Newest-first: a non-announcement discussion (wrong category or title) is
         skipped in favour of the first real announcement below it."""
         nodes = [
@@ -194,7 +194,7 @@ class PollReleaseAnnouncementTests(ByteDeckTenantTestCase):
 class NotifyAllDecksOfReleaseTests(ByteDeckTenantTestCase):
     """The per-deck fan-out targets staff only and tolerates a bad deck."""
 
-    def test_notifies_only_active_staff_excluding_system_account(self):
+    def test_notify_all_decks__only_active_staff_excluding_system_account(self):
         """Active staff get the notice; the deck's ByteDeck support account (the
         sender) and inactive staff do not."""
         staff = baker.make(User, is_staff=True, is_active=True)
