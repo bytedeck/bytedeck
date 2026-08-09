@@ -611,7 +611,7 @@ def stripe_webhook(request):
 
     from django.db import transaction
 
-    from .billing import handle_webhook_event
+    from .billing import handle_webhook_event, to_plain_dict
     from .models import StripeEventLog
 
     if not settings.STRIPE_WEBHOOK_SECRET:
@@ -622,6 +622,10 @@ def stripe_webhook(request):
         )
     except (ValueError, stripe_lib.SignatureVerificationError):
         return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
+    # construct_event returns the SDK's Event object, which is not a dict
+    # (.get() raises on stripe-python 15.x, caught live on staging 2026-08-09);
+    # everything below speaks dict, so convert once at the boundary
+    event = to_plain_dict(event)
 
     with transaction.atomic():
         _, created = StripeEventLog.objects.get_or_create(
