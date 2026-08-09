@@ -826,6 +826,28 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def test_ajax_save_draft__non_numeric_submission_id_returns_404(self):
+        """A non-numeric submission id is a 404, not the ValueError the pk lookup would raise (a 500)."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'comment': "I am a test", 'submission_id': 'not-a-number'},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_save_draft__missing_submission_id_returns_404(self):
+        """A POST with no submission id at all is a 404 rather than a crash."""
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'comment': "I am a test"},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(response.status_code, 404)
+
     def test_ajax_save_draft__another_students_draft_is_not_overwritten(self):
         """A student can't save over another student's draft: it 404s and the draft text is unchanged."""
         self.client.force_login(self.test_student1)

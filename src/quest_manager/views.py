@@ -2063,7 +2063,12 @@ def ajax_save_draft(request):
         }
 
         submission_comment = request.POST.get("comment")
-        submission_id = request.POST.get("submission_id")
+        # the id is client-supplied: a missing or non-numeric one would raise ValueError
+        # in the pk lookup below (a 500), so turn it away as a 404 first.
+        try:
+            submission_id = int(request.POST.get("submission_id", ""))
+        except (TypeError, ValueError):
+            raise Http404("No valid submission id provided.")
         # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)

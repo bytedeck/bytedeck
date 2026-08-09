@@ -556,6 +556,12 @@ class VideosViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(VideoResource.objects.filter(title='Anonymous Clip').exists())
 
+    def test_videos__student_get_is_forbidden(self):
+        """A logged-in student can't even read the page: it is the staff upload form."""
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('utilities:videos'))
+        self.assertEqual(response.status_code, 403)
+
     def test_videos__student_post_does_not_upload(self):
         """A logged-in student gets a 403 and their upload is not saved."""
         self.client.force_login(self.test_student)
