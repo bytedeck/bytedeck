@@ -91,24 +91,10 @@ class Tenant(TenantMixin):
     )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
-    owner_full_name = models.CharField(
-        max_length=255, blank=True, null=True,
-        help_text="DEPRECATED: the full name of the Deck Owner (set in each deck's Site Config) will be used. \
-        This field will be removed in a future update",
-    )
-    owner_email = models.EmailField(
-        null=True, blank=True,
-        help_text="DEPRECATED: the verified email address of the Deck Owner (set in each deck's Site Config) will be used. \
-        This field will be removed in a future update",
-    )
     max_active_users = models.SmallIntegerField(
         default=5,
         help_text="The maximum number of CURRENT students (registered in a course in the active semester) \
             on this deck; -1 = unlimited. Staff and merely-active (unregistered) students don't count."
-    )
-    max_quests = models.SmallIntegerField(
-        default=100,
-        help_text="The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited."
     )
     trial_end_date = models.DateField(
         null=True,
@@ -168,7 +154,9 @@ class Tenant(TenantMixin):
 
     quest_count = models.PositiveSmallIntegerField(
         default=0,
-        help_text="This is a cached field: the number of non-archived quests in the deck"
+        help_text="This is a cached field: the number of quests currently available on the deck "
+                  "(published, past their start date, not expired, not archived, and in an active "
+                  "campaign or no campaign)"
     )
 
     last_staff_login = models.DateTimeField(
@@ -469,7 +457,7 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -517,6 +505,12 @@ class Tenant(TenantMixin):
 
             if updates:
                 Tenant.objects.filter(pk=self.pk).update(**updates)
+
+        # The subscription page's cached plan summary can go stale even when no
+        # Tenant field changes (a portal plan switch can keep the period end and
+        # cap while changing the product/price on display), so it is cleared on
+        # every sync, for the event's subscription and the previously linked one.
+        clear_plan_summary_cache(self.schema_name, sub_id, current.stripe_subscription_id)
 
         if updates:
             for field, value in updates.items():
@@ -628,11 +622,15 @@ class Tenant(TenantMixin):
         )
 
     def get_quest_count(self):
-        """
-        Returns the number of un-archived quests.
+        """The number of quests currently AVAILABLE on the deck: published, past
+        their start date, not expired, not archived, and in an active campaign
+        (or no campaign). This is the pool the students' Available quests tab
+        draws from, before per-student filtering (prerequisites, submissions),
+        so the deck stat matches what the deck actually offers rather than
+        counting drafts and expired quests.
         """
         Quest = apps.get_model('quest_manager', 'Quest')
-        return Quest.objects.filter(archived=False).count()
+        return Quest.objects.get_active().count()
 
     def get_last_staff_login(self):
         """

@@ -27,13 +27,18 @@
 {% elif deck.is_on_maintenance %}
   {# the countdown pairs with the PAID date it sits beside (days_until_expiry can track a longer leftover trial clock) #}
   <p><span class="label label-primary">Maintenance</span>
-    This deck is on a maintenance subscription through <strong>{{ deck.paid_until }}</strong>
+    This deck is on a maintenance subscription{% if plan_summary %}
+    (<strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %}, {{ plan_summary.renewal_phrase }}{% endif %}){% endif %}
+    through <strong>{{ deck.paid_until }}</strong>
     ({{ paid_until_phrase }}): it won't expire,
     be suspended, or time out for deletion, but registration stays capped at the trial limit
     (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
     Upgrade any time to raise the cap.</p>
 {% elif deck.subscription_active %}
+  {# what the money buys, straight from the linked Stripe plan (maintainer request, 2026-08-09); omitted when Stripe can't say #}
   <p><span class="label label-success">Subscribed</span>
+    {% if plan_summary %}to <strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %},
+    {{ plan_summary.renewal_phrase }}{% endif %}.{% endif %}
     Paid through <strong>{{ deck.paid_until }}</strong>
     ({{ paid_until_phrase }}).</p>
 {% elif deck.is_on_trial %}
@@ -42,8 +47,13 @@
     ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).</p>
 {% else %}
   <p><span class="label label-default">Managed manually</span>
-    This deck has no trial or subscription end date, so it never expires on its own. Contact ByteDeck
-    if this doesn't look right.</p>
+    This deck has no trial or subscription end date, so it never expires on its own.
+    <a href="mailto:{{ support_email }}">Contact ByteDeck</a> if this doesn't look right.</p>
+{% endif %}
+
+{# the manage action right under the status (maintainer request, 2026-08-09); the same button anchors Upgrade-or-renew below #}
+{% if stripe_configured and not manually_subscribed %}
+  {% include "tenant/_subscription_manage_button.html" %}
 {% endif %}
 
 <h3>Dates</h3>
@@ -105,16 +115,11 @@
 {% if stripe_configured %}
   {% if manually_subscribed %}
     <p>This deck's subscription is <strong>managed manually</strong>: starting a new online
-      subscription here would double-bill you. Contact ByteDeck to renew, upgrade, or switch this
+      subscription here would double-bill you.
+      <a href="mailto:{{ support_email }}">Contact ByteDeck</a> to renew, upgrade, or switch this
       deck to online billing.</p>
   {% else %}
-  <form method="post" action="{% url 'decks:subscription' %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary">
-      <i class="fa fa-credit-card"></i>&nbsp;
-      {% if deck.stripe_customer_id %}Manage subscription{% else %}Subscribe now{% endif %}
-    </button>
-  </form>
+  {% include "tenant/_subscription_manage_button.html" %}
   <p class="help-block" style="margin-top: 0.5em;">
     {% if deck.stripe_customer_id %}
       Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
