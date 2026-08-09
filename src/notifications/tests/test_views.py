@@ -14,6 +14,7 @@ User = get_user_model()
 
 
 class NotificationViewTests(ByteDeckTenantTestCase):
+    """Tests access to the notification pages for anonymous users, students, and teachers."""
 
     # includes some basic model data
     # fixtures = ['initial_data.json']

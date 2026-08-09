@@ -866,7 +866,7 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Create a teacher (required before other users, as profile creation notifies staff),
-        a local user with an unverified email, the Google SocialApp, and a tenant client."""
+        a local user with an unverified email, and the Google SocialApp."""
         self.User = get_user_model()
         self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
         self.user = self.User.objects.create_user('existing_student', email='student@example.com')

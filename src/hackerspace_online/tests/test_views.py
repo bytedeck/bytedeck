@@ -15,6 +15,8 @@ User = get_user_model()
 
 
 class ViewsTest(ByteDeckTenantTestCase):
+    """Tests the project-level views: the home-page redirects per role, the favicon, and the secret page."""
+
     def test_secret_view__returns_200(self):
         """The 'simple' secret view responds with 200."""
         self.assert200('simple')
@@ -86,6 +88,7 @@ class ViewsTest(ByteDeckTenantTestCase):
 
 
 class GoogleSigninViewTest(ByteDeckTenantTestCase):
+    """Tests that the login page shows or hides the Google sign-in button per the siteconfig setting."""
 
     def test_enable_google_signin__False_hides_button(self):
         """

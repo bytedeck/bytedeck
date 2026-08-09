@@ -126,6 +126,7 @@ class SuspendedDeckSignupTests(ByteDeckTenantTestCase):
 
 
 class ResetPasswordViewTests(ByteDeckTenantTestCase):
+    """Tests the password-reset request flow, including users who registered without an email."""
 
     @classmethod
     def setUpTestData(cls):

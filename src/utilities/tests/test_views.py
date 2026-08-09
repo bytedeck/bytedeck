@@ -54,6 +54,7 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
 
 
 class TestAutoResponseView(ByteDeckTenantTestCase):
+    """Tests the generic autocomplete endpoint: field-id validation, 404s, and pagination."""
 
     @classmethod
     def setUpTestData(cls):
@@ -181,6 +182,7 @@ class TestAutoResponseView(ByteDeckTenantTestCase):
 
 
 class MenuItemViewTests(ByteDeckTenantTestCase):
+    """Tests the menu-item CRUD views, their access rules, and the leading-slash validation error."""
 
     @classmethod
     def setUpTestData(cls):
@@ -281,6 +283,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
 
 
 class FlatPageViewTests(ByteDeckTenantTestCase):
+    """Tests access to the flat-page views for anonymous users and students."""
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
