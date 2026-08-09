@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.utils import OperationalError
 from django.test import TestCase
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
@@ -178,6 +179,11 @@ class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
         self.assertEqual(Quest.objects.count(), expected_quest_count)
         self.assertEqual(Category.objects.count(), expected_campaign_count)
         self.assertEqual(User.objects.count(), expected_user_count)
+
+    def test_generate_content__nonexistent_schema_raises_command_error(self):
+        """A schema name with no matching tenant raises CommandError instead of failing obscurely."""
+        with self.assertRaises(CommandError):
+            self.call_command('does_not_exist_schema')
 
 
 class FullCleanTest(TestCase, CommandMixin):

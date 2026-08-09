@@ -114,6 +114,14 @@ class TenantAdminMixinInlineDisplayTest(ByteDeckTenantTestCase):
         tenant.trial_end_date = None
         self.assertIsNone(model_admin.trial_end_date_text(tenant))
 
+    def test_get_actions__omits_delete_selected_without_delete_permission(self):
+        """A user lacking the tenant delete permission never gets the bulk 'delete_selected'
+        action, so get_actions' removal branch is skipped and it isn't among the returned actions."""
+        request = RequestFactory().get("/")
+        request.user = User.objects.create_user(username="noperms", is_staff=True)  # no delete permission
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        self.assertNotIn("delete_selected", model_admin.get_actions(request))
+
 
 class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
     """TenantTestCase comes with a tenant: tenant.test.com"""
@@ -280,6 +288,16 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
+
+    def test_owner_email_verified_boolean__false_when_verified_email_differs_from_owner_email(self):
+        """A verified primary EmailAddress whose address no longer matches the owner's
+        User.email doesn't count: the loop finds no match and the column reports False
+        (the loop-continues-without-matching branch)."""
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.get().deck_owner
+            owner.email = "changed@doe.com"  # diverge from the verified john@doe.com EmailAddress
+            owner.save()
+        self.assertFalse(self.tenant_model_admin.owner_email_verified_boolean(self.extra_tenant))
 
     def test_owner_email_text__shown_in_changelist(self):
         """
@@ -1161,3 +1179,104 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
             self.assertRedirects(response, url, fetch_redirect_response=False)
             response = self.client.get(response.url)
         self.assertContains(response, "No recipients found.")
+
+    def test_message_selected__skips_owner_whose_verified_email_no_longer_matches(self):
+        """A selected tenant whose owner's verified primary EmailAddress no longer matches the
+        owner's User.email yields no recipient (the address-mismatch branch of the recipient loop)."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # anonymous first (schema dance)
+        self.client.force_login(self.superuser)
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.get().deck_owner
+            owner.email = "changed@doe.com"  # diverge from the verified john@doe.com EmailAddress
+            owner.save()
+
+        action_data = {
+            ACTION_CHECKBOX_NAME: [self.extra_tenant.pk],
+            "action": "message_verified",
+            "index": 0,
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        response = self.client.post(url, action_data)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        response = self.client.get(response.url)
+        self.assertContains(response, "No recipients found.")
+
+    def test_message_selected__invalid_compose_form_rerenders_intermediate_page(self):
+        """Submitting the compose step with an invalid form (no subject/message) re-renders the
+        intermediate page instead of sending, so the admin can correct and resubmit."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # anonymous first (schema dance)
+        self.client.force_login(self.superuser)
+
+        compose_data = {
+            ACTION_CHECKBOX_NAME: [self.extra_tenant.pk],  # a valid (verified) recipient, so the form is reached
+            "action": "message_verified",
+            "post": "yes",  # confirm the compose step, but with no subject/message -> invalid form
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        response = self.client.post(url, compose_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response, TemplateResponse)
+        self.assertContains(response, "<h1>Write your message here</h1>")
+        self.assertEqual(len(mail.outbox), 0)  # nothing was sent
+
+
+class SyncFromStripeActionTest(ByteDeckTenantTestCase):
+    """Tests for the "Sync selected deck(s) from Stripe" changelist action
+    (epic #1729 PR 7, plan §5.3 -- missed-webhook recovery + #2043 hand-linking)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Build the public schema and a superuser (the admin lives on public)."""
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            cls.superuser = User.objects.create_superuser(
+                username="admin", password=settings.TENANT_DEFAULT_ADMIN_PASSWORD,
+            )
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
+            cls.public_tenant.domains.create(domain="localhost", is_primary=True)
+
+    def post_action(self, pks):
+        """Log in (public-schema dance) and POST the sync action for the given decks."""
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema before force_login
+        self.client.force_login(self.superuser)
+        action_data = {"action": "sync_from_stripe", ACTION_CHECKBOX_NAME: pks}
+        return self.client.post(url, action_data, follow=True)
+
+    def test_action__errors_when_stripe_not_configured(self):
+        """Without a secret key the action reports Stripe isn't configured."""
+        response = self.post_action([self.tenant.pk])
+        self.assertContains(response, "Stripe isn&#x27;t configured")
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_action__syncs_linked_decks_and_skips_unlinked(self):
+        """Linked decks re-sync through the single write path; unlinked decks are
+        skipped with pointers to link them first."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+
+        from django.utils.timezone import localdate
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_adm', paid_until=None)
+        period_end = int((datetime.now(tz=dt_timezone.utc) + timedelta(days=200)).timestamp())
+        subscription = {'id': 'sub_adm', 'status': 'active',
+                        'items': {'data': [{'current_period_end': period_end, 'price': {'id': 'p', 'metadata': {}}}]}}
+        public_pk = Tenant.objects.get(schema_name='public').pk  # no sub id: skipped
+
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=subscription):
+            response = self.post_action([self.tenant.pk, public_pk])
+
+        self.assertContains(response, "paid_until")
+        self.assertContains(response, "Skipped 1 deck(s) with no stripe_subscription_id")
+        refreshed = Tenant.objects.get(pk=self.tenant.pk)
+        self.assertGreater(refreshed.paid_until, localdate() + timedelta(days=150))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_action__stripe_error_reported_per_deck(self):
+        """A Stripe API failure surfaces as an error message, not a crash."""
+        import stripe as stripe_lib
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_adm')
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('nope')):
+            response = self.post_action([self.tenant.pk])
+        self.assertContains(response, "Stripe error")
