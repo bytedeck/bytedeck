@@ -3,6 +3,7 @@ import random
 import string
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -182,16 +183,21 @@ class TenantFormTest(ByteDeckTenantTestCase):
         self.assertIn("name", form.errors)
 
     def test_clean_email__disabled_without_verified_email_raises(self):
-        """When the email field is disabled (verified session present) but no verified email is
-        available, clean_email raises rather than saving a tenant with an empty owner email."""
-        # verified_data is truthy but carries no email, so __init__ disables the field with an
-        # empty initial and clean_email finds nothing to fall back on.
+        """clean_email guards against a disabled email field with no verified address on record.
+
+        It is called directly here: through full form validation the disabled required email
+        field's own field-level clean raises 'This field is required.' first, so clean_email is
+        never reached with an empty value. The guard exists as defense in depth, so we exercise
+        the method itself.
+        """
+        # verified_data is truthy (so __init__ disables the field) but carries no email, and no
+        # form-level initial email is supplied either, so clean_email has nothing to fall back on.
         form = TenantForm(
             data={"name": "noemaildeck", "first_name": "John", "last_name": "Doe"},
             verified_data={"first_name": "John", "last_name": "Doe"},
         )
-        self.assertFalse(form.is_valid())
-        self.assertIn("email", form.errors)
+        with self.assertRaises(ValidationError):
+            form.clean_email()
 
     def test_save__commit_false_returns_unsaved_tenant(self):
         """save(commit=False) returns the built-but-unsaved Tenant (no pk, no schema build)."""
