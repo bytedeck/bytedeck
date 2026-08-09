@@ -1,13 +1,17 @@
 import functools
 import hashlib
 
+from django.conf import settings
+
 from django.contrib.sites.models import Site
 from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
@@ -578,3 +582,54 @@ def subscription_status(request):
             pass  # transient; the page polls again in a few seconds
         deck.refresh_from_db()
     return JsonResponse({'active': deck.subscription_active})
+
+
+@csrf_exempt
+@require_POST
+@public_only_view
+def stripe_webhook(request):
+    """Stripe webhook endpoint (epic #1729 PR 7, plan §5.2) -- the repo's only
+    csrf_exempt view.
+
+    Public-schema only; under the single ROOT_URLCONF it resolves on every host
+    (and SHOW_PUBLIC_IF_NO_TENANT_FOUND=True means unknown-host probes reach it
+    too), so an invalid signature must fail fast: signature verification happens
+    before any database work. Duplicate deliveries are absorbed by the unique
+    StripeEventLog before any handler runs; handler crashes return 500 so Stripe
+    retries the event (the log row rolls back with the transaction).
+
+    Args:
+        request (HttpRequest): The POST carrying Stripe's raw JSON event payload
+            in the body and the ``Stripe-Signature`` header it is verified with.
+
+    Returns:
+        HttpResponse: 200 acknowledged (handled, duplicate, or ignored type),
+        400 for a bad/unverifiable payload, 503 when no webhook secret is
+        configured.
+    """
+    import stripe as stripe_lib
+
+    from django.db import transaction
+
+    from .billing import handle_webhook_event
+    from .models import StripeEventLog
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        return HttpResponse('webhook secret not configured', status=503, content_type='text/plain')
+    try:
+        event = stripe_lib.Webhook.construct_event(
+            request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
+        )
+    except (ValueError, stripe_lib.SignatureVerificationError):
+        return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
+
+    with transaction.atomic():
+        _, created = StripeEventLog.objects.get_or_create(
+            event_id=event['id'], defaults={'event_type': event.get('type', '')},
+        )
+        if not created:  # duplicate delivery: acknowledged without re-running the handler
+            return HttpResponse('duplicate event', status=200, content_type='text/plain')
+        schema_name, summary = handle_webhook_event(event)
+        # record which deck the event resolved to, for the audit trail
+        StripeEventLog.objects.filter(event_id=event['id']).update(schema_name=schema_name)
+    return HttpResponse(summary, status=200, content_type='text/plain')

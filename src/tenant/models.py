@@ -3,7 +3,7 @@ from datetime import date
 
 from django.apps import apps
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
@@ -432,6 +432,101 @@ class Tenant(TenantMixin):
             return False
         return localdate() >= self.deletion_date
 
+    def sync_from_stripe_subscription(self, subscription):
+        """The SINGLE write path from a Stripe Subscription object to this deck (plan §5.2).
+
+        Every webhook handler, the admin "Sync from Stripe" action, and the
+        nightly reconcile funnel through here -- handlers never write billing
+        fields directly. All guards are evaluated against the row's FRESH state
+        under ``select_for_update()`` (this instance may have been loaded before
+        a concurrent sync), then applied as a targeted ``QuerySet.update()`` --
+        which bypasses ``save()`` hooks and model validation -- plus cache
+        invalidation. Events for a subscription OTHER than the deck's currently
+        linked one are ignored outright: webhook resolution can fall back to the
+        customer id, so a delayed event for a superseded subscription could
+        otherwise unlink or relink the wrong one (legitimate link switches go
+        through the checkout reconciler or the admin, which change the linked id
+        itself). Applies:
+
+        * ``paid_until`` = the subscription's current period end -- **monotonic**
+          (a re-delivered or out-of-order older event can never LOWER it) and
+          **only while the subscription is active/trialing**: an incomplete
+          first payment or a past_due renewal never extends access (Stripe rolls
+          the period forward at renewal even while payment is failing; the grace
+          period covers that window). A canceled subscription keeps its
+          paid_until (the deck is paid through the period end).
+        * ``max_active_users`` from the Price's ``metadata.max_active_users``
+          (dashboard-editable tiers), falling back to
+          ``settings.STRIPE_PRICE_TIER_MAP[price_id]`` -- likewise only while
+          active/trialing; untouched when neither source is set.
+        * ``stripe_subscription_id`` linked while the subscription lives, and
+          cleared when it is canceled/expired (the customer link is kept for
+          the billing portal and future checkouts).
+
+        Args:
+            subscription (dict): A Stripe Subscription object (or test double).
+
+        Returns:
+            str: A short human-readable summary of what changed, for logs.
+        """
+        from tenant.billing import subscription_max_active_users, subscription_period_end_date
+        from tenant.utils import invalidate_current_deck_cache
+
+        status = subscription.get('status')
+        # Only a PAID subscription grants anything: an 'incomplete' first payment
+        # (failed 3DS) must not grant a paid period, and a 'past_due' renewal must
+        # not either -- Stripe rolls current_period_end forward at renewal even
+        # while the payment is still failing, and the grace period exists exactly
+        # to cover that window. paid_until therefore only advances on
+        # active/trialing (i.e. on payment), matching the checkout reconciler.
+        grants_access = status in ('active', 'trialing')
+        sub_id = subscription.get('id') or ''
+
+        with transaction.atomic():
+            # Lock the row and evaluate every guard against its FRESH state: this
+            # instance can be stale (loaded before a concurrent sync committed),
+            # and deciding from stale state would let an out-of-order event lower
+            # paid_until past the monotonic guard.
+            current = Tenant.objects.select_for_update().get(pk=self.pk)
+
+            # Identity guard: only the deck's linked subscription may change its
+            # billing state. A delayed event for a superseded subscription reaches
+            # this deck via the customer-id fallback and must not unlink or relink
+            # anything. An unlinked deck accepts any subscription (initial link).
+            if current.stripe_subscription_id and sub_id and sub_id != current.stripe_subscription_id:
+                return f"ignored: {sub_id} is not this deck's linked subscription"
+
+            updates = {}
+            if grants_access:
+                period_end = subscription_period_end_date(subscription)
+                if period_end is not None and (current.paid_until is None or period_end > current.paid_until):
+                    updates['paid_until'] = period_end
+
+                cap = subscription_max_active_users(subscription)
+                if cap is not None and cap != current.max_active_users:
+                    updates['max_active_users'] = cap
+
+            if status in ('canceled', 'incomplete_expired'):
+                # unlink strictly on an id match: with the identity guard above this
+                # means the event's own sub, and a malformed id-less payload (which
+                # the guard cannot see) unlinks nothing (review find on #2110)
+                if current.stripe_subscription_id and sub_id == current.stripe_subscription_id:
+                    updates['stripe_subscription_id'] = ''
+            elif sub_id and sub_id != current.stripe_subscription_id:
+                updates['stripe_subscription_id'] = sub_id
+
+            if updates:
+                Tenant.objects.filter(pk=self.pk).update(**updates)
+
+        if updates:
+            for field, value in updates.items():
+                setattr(self, field, value)
+            # invalidate after the write is committed/queued, so a concurrent
+            # request can't re-cache the pre-update row between the two steps
+            invalidate_current_deck_cache(self.schema_name)
+            return 'updated ' + ', '.join(f'{field}={value}' for field, value in updates.items())
+        return 'no changes'
+
     # END BILLING / LIFECYCLE STATUS ##################################
 
     def update_cached_fields(self):
@@ -627,3 +722,24 @@ class DeckNotice(models.Model):
 
 class TenantDomain(DomainMixin):
     pass
+
+
+class StripeEventLog(models.Model):
+    """Idempotence and audit log for received Stripe webhook events (plan §5.2).
+
+    ``event_id`` is unique, so a duplicate webhook delivery fails get_or_create
+    and returns 200 before any handler runs. Rows double as an audit trail for
+    the repo's only csrf_exempt endpoint. Lives in the public schema (tenant
+    app), like the Tenant registry itself.
+    """
+    event_id = models.CharField(max_length=255, unique=True)
+    event_type = models.CharField(max_length=100)
+    schema_name = models.CharField(
+        max_length=63, blank=True, default='',
+        help_text="The deck this event was resolved to, when it could be resolved."
+    )
+    received_on = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Audit identifier: the Stripe event id, its type, and the resolved deck."""
+        return f'{self.event_id} ({self.event_type}) -> {self.schema_name or "unresolved"}'

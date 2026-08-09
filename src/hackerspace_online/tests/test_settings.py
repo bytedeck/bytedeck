@@ -202,3 +202,36 @@ class LoggingConfigTest(SimpleTestCase):
         # DB_LOGS_ENABLED is off under the test runner, so the base pin applies.
         self.assertFalse(settings.DB_LOGS_ENABLED)
         self.assertEqual(settings.LOGGING["loggers"]["django.db.backends"]["level"], "WARNING")
+
+
+class StripeSettingsGuardTest(SimpleTestCase):
+    """A real deployment that enables Stripe checkout must also configure the
+    webhook secret (epic #1729 PR 7); `_validate_stripe_settings` raises to
+    prevent silently-unsynced renewals, while local development is untouched."""
+
+    def test_local_development__is_never_blocked(self):
+        """localhost may run any Stripe combination, including key-without-webhook."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('localhost', 'sk_test_123', None)  # no exception
+
+    def test_deployment_without_stripe__is_allowed(self):
+        """A real deployment with Stripe entirely unset boots fine (manual billing)."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('bytedeck.com', None, None)  # no exception
+
+    def test_deployment_with_key_but_no_webhook_secret__refuses_to_boot(self):
+        """Checkout without webhooks leaves renewals unsynced -- refuse the config."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        with self.assertRaises(ImproperlyConfigured):
+            _validate_stripe_settings('bytedeck.com', 'sk_live_123', None)
+
+    def test_deployment_with_key_and_webhook_secret__is_allowed(self):
+        """The complete Stripe configuration boots."""
+        from hackerspace_online.settings import _validate_stripe_settings
+
+        _validate_stripe_settings('bytedeck.com', 'sk_live_123', 'whsec_123')  # no exception

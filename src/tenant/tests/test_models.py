@@ -537,12 +537,15 @@ class TenantCountingAndCachingTest(ByteDeckTenantTestCase):
         live = baseline + 2
 
         # cached count deliberately left stale at 0 in every case: it must not matter
-        def deck(**fields):
-            Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=0, **fields)
+        def deck(trial_end_date=None, paid_until=None, **fields):
+            # reset both clocks every call: update() is cumulative on the same row, and a
+            # leaked date would silently change which billing branch an assertion exercises
+            Tenant.objects.filter(pk=self.tenant.pk).update(
+                active_user_count=0, trial_end_date=trial_end_date, paid_until=paid_until, **fields)
             return Tenant.objects.get(pk=self.tenant.pk)
 
         self.assertTrue(deck(trial_end_date=localdate(), max_active_users=live - 1).is_over_user_limit)
-        self.assertFalse(deck(max_active_users=live).is_over_user_limit)  # at the cap is not over it
+        self.assertFalse(deck(trial_end_date=localdate(), max_active_users=live).is_over_user_limit)  # at the cap is not over it
         # subscribed deck uses its own (tier) cap, not the trial cap
         self.assertFalse(deck(paid_until=localdate(), max_active_users=40).is_over_user_limit)
         self.assertTrue(deck(paid_until=localdate(), max_active_users=live - 1).is_over_user_limit)
@@ -659,3 +662,203 @@ class DeckNoticeModelTest(ByteDeckTenantTestCase):
             tenant=self.tenant, kind=DeckNotice.KIND_LIMIT, threshold='pct80', period_key='2026-08'
         )
         self.assertEqual(str(notice), f'{self.tenant.schema_name}: limit/pct80 for 2026-08')
+
+
+class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
+    """Tests for Tenant.sync_from_stripe_subscription -- the single billing write
+    path used by every webhook handler, the admin sync action, and the nightly
+    reconcile (epic #1729 PR 7, plan §5.2)."""
+
+    # 2027-01-15 12:00 UTC -> 2027-01-15 in America/Vancouver
+    PERIOD_END = date(2027, 1, 15)
+    PERIOD_END_TS = 1800014400
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def make_subscription(self, **overrides):
+        """A minimal Stripe Subscription test double (newer items-based shape)."""
+        subscription = {
+            'id': 'sub_sync', 'status': 'active', 'customer': 'cus_sync',
+            'items': {'data': [{'current_period_end': self.PERIOD_END_TS, 'price': {'id': 'price_x', 'metadata': {}}}]},
+        }
+        subscription.update(overrides)
+        return subscription
+
+    def test_sync__advances_paid_until_and_links_subscription(self):
+        """A fresh sync advances paid_until to the period end and links the sub id."""
+        self.set_deck(paid_until=None, stripe_subscription_id='')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription())
+        self.assertIn('paid_until', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_sync')
+
+    def test_sync__monotonic_never_lowers_paid_until(self):
+        """A re-delivered or out-of-order older event can never LOWER paid_until."""
+        later = self.PERIOD_END + timedelta(days=365)
+        self.set_deck(paid_until=later, stripe_subscription_id='sub_sync')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription())
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, later)
+
+    def test_sync__stale_instance_cannot_lower_paid_until(self):
+        """The monotonic guard is evaluated against the LOCKED database row, not this
+        instance's in-memory state: a sync through an instance loaded before a
+        concurrent sync advanced paid_until must not lower it back (the stale
+        instance reproduces exactly what a lost race between two workers reads)."""
+        self.set_deck(paid_until=None, stripe_subscription_id='')
+        stale = Tenant.objects.get(pk=self.tenant.pk)  # loaded BEFORE the newer sync
+
+        later_ts = self.PERIOD_END_TS + 100 * 86400
+        self.tenant.sync_from_stripe_subscription(self.make_subscription(
+            items={'data': [{'current_period_end': later_ts, 'price': {'id': 'price_x', 'metadata': {}}}]},
+        ))
+        self.tenant.refresh_from_db()
+        advanced = self.tenant.paid_until
+
+        # the older event passes the STALE in-memory check (None < older date) but
+        # must be rejected against the fresh row
+        summary = stale.sync_from_stripe_subscription(self.make_subscription())
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, advanced)
+
+    def test_sync__stale_cancellation_for_other_subscription_ignored(self):
+        """A delayed cancellation for a SUPERSEDED subscription (resolved to this
+        deck via the customer-id fallback) must not unlink the deck's current
+        subscription."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_new')
+        summary = self.tenant.sync_from_stripe_subscription(
+            self.make_subscription(id='sub_old', status='canceled'))
+        self.assertIn('ignored', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_new')
+
+    def test_sync__active_event_for_other_subscription_ignored(self):
+        """A delayed ACTIVE event for a superseded subscription must not relink it
+        (or touch billing state) on a deck now linked to a different subscription --
+        link switches only happen via the checkout reconciler or the admin."""
+        self.set_deck(paid_until=None, stripe_subscription_id='sub_new')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription(id='sub_old'))
+        self.assertIn('ignored', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_new')
+        self.assertIsNone(self.tenant.paid_until)
+
+    def test_sync__cap_from_price_metadata_and_fallback_map(self):
+        """max_active_users comes from the Price's metadata; the settings tier map
+        is the fallback; with neither, the cap is left alone."""
+        from django.test import override_settings as override
+
+        self.set_deck(max_active_users=5)
+        sub = self.make_subscription()
+        sub['items']['data'][0]['price']['metadata'] = {'max_active_users': '40'}
+        self.tenant.sync_from_stripe_subscription(sub)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 40)
+
+        with override(STRIPE_PRICE_TIER_MAP={'price_x': 80}):
+            self.tenant.sync_from_stripe_subscription(self.make_subscription())
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 80)
+
+        self.tenant.sync_from_stripe_subscription(self.make_subscription())  # no metadata, no map
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.max_active_users, 80)  # untouched
+
+    def test_sync__canceled_event_without_an_id_unlinks_nothing(self):
+        """A malformed cancellation payload with no subscription id (which the
+        identity guard cannot see) must not unlink the deck's current
+        subscription: unlinking requires an exact id match."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_sync')
+        summary = self.tenant.sync_from_stripe_subscription(
+            self.make_subscription(id='', status='canceled'))
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_sync')
+
+    def test_sync__canceled_when_already_unlinked_is_a_no_op(self):
+        """A cancellation event for a deck already unlinked changes nothing (a
+        re-delivered deletion after the admin cleared the link, for example)."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription(status='canceled'))
+        self.assertEqual(summary, 'no changes')
+
+    def test_sync__canceled_subscription_unlinks_but_keeps_paid_until(self):
+        """A canceled subscription clears the sub id (it's gone) but keeps paid_until:
+        the deck is paid through its period end; it just stops renewing."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_sync', stripe_customer_id='cus_sync')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription(status='canceled'))
+        self.assertIn('stripe_subscription_id=', summary)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_subscription_id, '')
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_sync')  # kept for the portal
+        self.assertEqual(self.tenant.paid_until, self.PERIOD_END)
+
+
+class StripeEventLogModelTest(ByteDeckTenantTestCase):
+    """Tests for the StripeEventLog webhook idempotence/audit model (PR 7)."""
+
+    def test_str__identifies_event_and_resolved_deck(self):
+        """The string form names the event, its type, and the resolved deck (or not)."""
+        from tenant.models import StripeEventLog
+
+        log = StripeEventLog.objects.create(event_id='evt_1', event_type='invoice.paid', schema_name='test')
+        self.assertEqual(str(log), 'evt_1 (invoice.paid) -> test')
+        log = StripeEventLog.objects.create(event_id='evt_2', event_type='ping')
+        self.assertEqual(str(log), 'evt_2 (ping) -> unresolved')
+
+
+class SyncPaymentGatingTest(ByteDeckTenantTestCase):
+    """Regression tests: sync must never grant access for unpaid subscription states
+    (self-review of #1729 PR 7 -- the webhook path must gate like the checkout
+    reconciler does)."""
+
+    PERIOD_END_TS = 1800014400  # 2027-01-15 12:00 UTC
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def make_subscription(self, status):
+        """A subscription double in the given status, with a period end and a tier cap."""
+        return {
+            'id': 'sub_gate', 'status': status, 'customer': 'cus_gate',
+            'items': {'data': [{'current_period_end': self.PERIOD_END_TS,
+                                'price': {'id': 'p', 'metadata': {'max_active_users': '40'}}}]},
+        }
+
+    def test_sync__incomplete_first_payment_grants_nothing(self):
+        """An 'incomplete' subscription (failed 3DS at checkout) links the sub id for
+        later reconciliation but grants no paid period and no tier cap."""
+        self.set_deck(paid_until=None, max_active_users=5, stripe_subscription_id='')
+        self.tenant.sync_from_stripe_subscription(self.make_subscription('incomplete'))
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.paid_until)
+        self.assertEqual(self.tenant.max_active_users, 5)
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_gate')  # identifiable for later sync
+
+    def test_sync__past_due_renewal_does_not_extend_access(self):
+        """Stripe rolls current_period_end forward at renewal even while payment is
+        failing (past_due); paid_until must NOT follow -- the grace period covers
+        this window until invoice.paid actually lands."""
+        original = date(2026, 9, 1)
+        self.set_deck(paid_until=original, stripe_subscription_id='sub_gate')
+        summary = self.tenant.sync_from_stripe_subscription(self.make_subscription('past_due'))
+        self.assertEqual(summary, 'no changes')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, original)
+
+    def test_sync__payment_recovery_extends_access(self):
+        """Once the same subscription recovers to 'active' (invoice.paid), the held-back
+        period end applies."""
+        self.set_deck(paid_until=date(2026, 9, 1), stripe_subscription_id='sub_gate')
+        self.tenant.sync_from_stripe_subscription(self.make_subscription('active'))
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.paid_until, date(2027, 1, 15))
+        self.assertEqual(self.tenant.max_active_users, 40)
