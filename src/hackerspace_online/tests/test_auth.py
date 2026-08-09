@@ -126,7 +126,7 @@ class SuspendedDeckSignupTests(ByteDeckTenantTestCase):
 
 
 class ResetPasswordViewTests(ByteDeckTenantTestCase):
-    """Tests the password-reset request flow, including users who registered without an email."""
+    """Tests the password-reset request flow, including requests for unassigned email addresses."""
 
     @classmethod
     def setUpTestData(cls):
@@ -136,7 +136,7 @@ class ResetPasswordViewTests(ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student', email=cls.test_email, password=cls.test_password)
 
     def test_request_password_reset__fails_for_unassigned_email(self):
-        """ User should not be able to request password reset if they registered without an email """
+        """ User should not be able to request a password reset for an email address no account uses """
         data = {
             'email': 'nonexistentemail@gmail.com'
         }
