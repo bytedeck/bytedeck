@@ -1465,6 +1465,31 @@ class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(StripeEventLog.objects.count(), 1)
 
     @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__handles_the_sdks_real_event_object(self):
+        """construct_event returns the SDK's Event object, which is NOT a dict on
+        stripe-python 15.x (.get() raises AttributeError): the first real staging
+        delivery 500ed on every event while tests passed with plain-dict doubles
+        (2026-08-09). This pins the seam with the SDK's actual object type."""
+        import stripe as stripe_lib
+
+        from tenant.models import StripeEventLog
+
+        payload = {'id': 'evt_sdk', 'type': 'customer.subscription.updated',
+                   'data': {'object': {'id': 'sub_sdk', 'status': 'active', 'customer': 'cus_sdk',
+                                       'metadata': {'schema_name': self.tenant.schema_name},
+                                       'items': {'data': [{'price': {'id': 'price_x', 'metadata': {}}}]}}}}
+        sdk_event = stripe_lib.Event.construct_from(payload, 'sk_test_x')
+        self.assertFalse(hasattr(sdk_event, 'get'))  # the very property that broke staging
+
+        with patch('stripe.Webhook.construct_event', return_value=sdk_event):
+            response = self.post_webhook()
+
+        self.assertEqual(response.status_code, 200)
+        log = StripeEventLog.objects.get(event_id='evt_sdk')
+        self.assertEqual(log.event_type, 'customer.subscription.updated')
+        self.assertEqual(log.schema_name, self.tenant.schema_name)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
     def test_webhook__404_on_tenant_schemas(self):
         """The endpoint only exists on the public schema (public_only_view)."""
         tenant_client = TenantClient(self.tenant)  # requests on the deck's own domain

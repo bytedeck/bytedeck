@@ -268,6 +268,28 @@ class ReconcileCheckoutSessionTest(ByteDeckTenantTestCase):
 
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_9')
+    def test_reconcile__handles_the_sdks_real_session_object(self):
+        """Session.retrieve returns the SDK's object, which is NOT a dict on
+        stripe-python 15.x (.get() raises): the reconciler's dict-style reads only
+        worked in tests because the doubles were plain dicts (the same drift that
+        500ed staging's webhook, 2026-08-09). Pins the seam with the real type."""
+        import stripe as stripe_lib
+
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            stripe_customer_id='', stripe_subscription_id='')
+        self.tenant.refresh_from_db()
+        sdk_session = stripe_lib.checkout.Session.construct_from({
+            'status': 'complete', 'client_reference_id': self.tenant.schema_name,
+            'customer': 'cus_sdk', 'subscription': {'id': 'sub_sdk', 'status': 'active'},
+        }, 'sk_test_x')
+        self.assertFalse(hasattr(sdk_session, 'get'))  # the very property that broke staging
+
+        with patch('tenant.billing.stripe.checkout.Session.retrieve', return_value=sdk_session):
+            self.assertTrue(reconcile_checkout_session(self.tenant, 'cs_sdk'))
+
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_customer_id, 'cus_sdk')
+        self.assertEqual(self.tenant.stripe_subscription_id, 'sub_sdk')
 
 
 class SubscriptionMaxActiveUsersTest(SimpleTestCase):
