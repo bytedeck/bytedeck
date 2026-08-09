@@ -10,6 +10,14 @@ cd "$(dirname "$0")/.."
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 
+# Reclaim disk before building so image layers and BuildKit cache left by earlier
+# deploys can't fill the host and fail the build mid-`pip install` ([Errno 28] No
+# space left on device). Only unused data is removed: dangling images (a previous
+# deploy's now-superseded image) and build cache. Named volumes (the Postgres
+# data) are never touched. Best-effort: a prune hiccup shouldn't fail the deploy.
+docker image prune -f || echo "WARN: docker image prune failed; continuing."
+docker builder prune -f || echo "WARN: docker builder prune failed; continuing."
+
 $COMPOSE build
 
 # Update the web app's systemd unit file
