@@ -3,7 +3,6 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
@@ -21,10 +20,6 @@ class Utils_generate_form_data_Test(ByteDeckTenantTestCase):
     def setUpTestData(cls):
         """Create a teacher used to authenticate the form-submission requests."""
         cls.teacher = get_user_model().objects.create(username="teacher", is_staff=True,)
-
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_generate_form_data__valid_SiteConfig_model(self):
         """

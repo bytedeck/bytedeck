@@ -862,3 +862,27 @@ class SyncPaymentGatingTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, date(2027, 1, 15))
         self.assertEqual(self.tenant.max_active_users, 40)
+
+
+class TenantQuestCountTest(ByteDeckTenantTestCase):
+    """Tests for the cached quest-count stat's AVAILABLE-quests semantics
+    (maintainer request, 2026-08-09)."""
+
+    def test_get_quest_count__counts_only_the_available_quest_pool(self):
+        """get_quest_count() counts the pool the students' Available quests tab
+        draws from (published, past its start date, not expired, active campaign
+        or none), and excludes drafts, archived, expired, not-yet-started, and
+        inactive-campaign quests, which the old un-archived count included."""
+        from django.utils.timezone import localdate
+
+        baseline = self.tenant.get_quest_count()  # the seeded test deck may ship quests
+
+        baker.make('quest_manager.Quest', published=True)  # the one countable quest
+        inactive_campaign = baker.make('quest_manager.Category', published=False)
+        baker.make('quest_manager.Quest', published=True, campaign=inactive_campaign)
+        baker.make('quest_manager.Quest', published=False)  # draft
+        baker.make('quest_manager.Quest', published=True, archived=True)
+        baker.make('quest_manager.Quest', published=True, date_expired=localdate() - timedelta(days=1))
+        baker.make('quest_manager.Quest', published=True, date_available=localdate() + timedelta(days=1))
+
+        self.assertEqual(self.tenant.get_quest_count(), baseline + 1)

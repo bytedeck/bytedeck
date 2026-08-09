@@ -3,10 +3,9 @@ import json
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from questions.models import Question, QuestionSubmission
 from questions.utils import sync_draft_question_submissions
@@ -14,7 +13,7 @@ from questions.utils import sync_draft_question_submissions
 User = get_user_model()
 
 
-class QuestionSubmissionFlowTestBase(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestionSubmissionFlowTestBase(ByteDeckTenantTestCase):
     """Shared fixtures for the submission-flow integration tests: a quest with a required
     short answer + an optional long answer, and a student mid-submission."""
 
@@ -37,7 +36,6 @@ class QuestionSubmissionFlowTestBase(ViewTestUtilsMixin, ByteDeckTenantTestCase)
     def setUp(self):
         """Tenant client, and a fresh in-progress submission with its draft comment (created
         the same way the submission view does)."""
-        self.client = TenantClient(self.tenant)
         self.submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
         # visiting the submission page creates the draft comment and the draft answer
         # rows; do it through the view so tests exercise the real flow

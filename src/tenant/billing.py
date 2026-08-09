@@ -15,14 +15,19 @@ Two flows feed deck billing state, both defined here:
   handler is a thin translator that resolves the deck and funnels through
   ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
+import json
+import logging
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
 
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localdate
+
+logger = logging.getLogger(__name__)
 
 # Cap outbound Stripe HTTP time: webhook handlers retrieve subscriptions inside
 # the request's DB transaction (needed for the StripeEventLog dedupe + rollback
@@ -41,6 +46,41 @@ except (ImportError, AttributeError):  # pragma: no cover -- requires a differen
 # hour absorbs clock skew and request latency so a boundary-day checkout can't
 # fail at Stripe after passing our check
 CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
+
+# How long the subscription page's plan summary (product name, price, cadence)
+# may serve from cache before re-asking Stripe. The billing write paths clear
+# the cache on sync, so this only bounds staleness for dashboard-side edits
+# (e.g. a renamed product) that fire no event we act on.
+PLAN_SUMMARY_CACHE_SECONDS = 60 * 15
+
+# Currencies whose Stripe amounts are already whole units rather than cents
+# (https://docs.stripe.com/currencies#zero-decimal): dividing by 100 would
+# display a hundredth of the real price.
+ZERO_DECIMAL_CURRENCIES = frozenset((
+    'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga',
+    'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+))
+
+
+def to_plain_dict(stripe_obj):
+    """A stripe-python object (or a dict) as plain nested dicts/lists.
+
+    stripe-python 15.x objects support indexing but are NOT dicts: ``.get()``
+    raises AttributeError. The handlers and sync code are written dict-style,
+    which every test exercised with plain-dict doubles, so the mismatch only
+    surfaced on staging's first real webhook delivery (500 on every event,
+    2026-08-09). Converting at each SDK boundary keeps the dict-style code and
+    the test doubles honest; ``str()`` of a Stripe object is its full JSON.
+
+    Args:
+        stripe_obj: A stripe-python object, or an already-plain dict.
+
+    Returns:
+        dict: The same data as plain nested dicts/lists.
+    """
+    if isinstance(stripe_obj, dict):
+        return stripe_obj
+    return json.loads(str(stripe_obj))
 
 
 def billing_configured():
@@ -157,6 +197,154 @@ def create_portal_session(deck):
     return session.url
 
 
+def stamp_customer_description(deck, customer_id):
+    """Best-effort: label the Stripe Customer with the deck it pays for.
+
+    Checkout creates the Customer with only the payer's email, so the dashboard's
+    Customers list gives no hint which deck a customer belongs to (maintainer
+    request, 2026-08-09). Stamping the schema name into the description (and
+    searchable metadata) fixes that at the moment a customer is
+    first linked to a deck. Purely cosmetic, so a Stripe error is logged and
+    swallowed: it must never fail the webhook or the post-checkout reconcile
+    that calls it.
+
+    Args:
+        deck (Tenant): The deck the customer was just linked to.
+        customer_id (str): The Stripe customer id (cus_...).
+    """
+    try:
+        stripe.Customer.modify(
+            customer_id,
+            api_key=settings.STRIPE_SECRET_KEY,
+            description=deck.schema_name,
+            metadata={'schema_name': deck.schema_name},
+        )
+    except stripe.StripeError as e:
+        logger.warning('could not stamp deck description on Stripe customer %s: %s', customer_id, e)
+
+
+def _plan_summary_cache_key(schema_name, subscription_id):
+    """Cache key for one deck's plan summary, keyed on the linked subscription."""
+    return f'stripe-plan-summary:{schema_name}:{subscription_id}'
+
+
+def clear_plan_summary_cache(schema_name, *subscription_ids):
+    """Drop cached plan summaries so the subscription page re-fetches from Stripe.
+
+    Called from the billing write paths (checkout reconciliation and
+    ``Tenant.sync_from_stripe_subscription``) so a plan switched in the billing
+    portal shows on the page as soon as its webhook syncs, rather than after the
+    cache TTL runs out.
+
+    Args:
+        schema_name (str): The deck's schema.
+        *subscription_ids: Subscription ids whose cached summaries may exist
+            (typically the event's and the previously linked one); falsy and
+            duplicate entries are skipped.
+    """
+    for subscription_id in set(subscription_ids):
+        if subscription_id:
+            cache.delete(_plan_summary_cache_key(schema_name, subscription_id))
+
+
+def _plan_summary_from_subscription(subscription):
+    """Condense a retrieved subscription (price + product expanded) to display parts.
+
+    Args:
+        subscription (dict): A Stripe Subscription with ``items.data.price.product``
+            expanded (or an equivalent test double).
+
+    Returns:
+        dict | None: ``{'name': ..., 'renewal_phrase': ...}`` -- the Product's name
+        and a cadence-plus-price phrase like "renewed annually at $75.00 per year"
+        or "renewed every 6 months at $50.00" (empty string when the price has no
+        recurrence). None when there's no expanded product name to show.
+    """
+    data = (subscription.get('items') or {}).get('data') or []
+    price = (data[0].get('price') or {}) if data else {}
+    product = price.get('product')
+    name = product.get('name') if isinstance(product, dict) else None
+    if not name:
+        return None
+
+    recurring = price.get('recurring') or {}
+    interval = recurring.get('interval')
+    count = recurring.get('interval_count') or 1
+    if interval == 'year' and count == 1:
+        cadence, per_suffix = 'renewed annually', ' per year'
+    elif interval == 'month' and count == 1:
+        cadence, per_suffix = 'renewed monthly', ' per month'
+    elif interval and count == 1:
+        # a singular day/week cadence reads without the count ("renewed every week")
+        cadence, per_suffix = f'renewed every {interval}', ''
+    elif interval:
+        cadence, per_suffix = f'renewed every {count} {interval}s', ''
+    else:  # a one-time price shouldn't arise on a subscription, but Stripe allows odd data
+        cadence, per_suffix = '', ''
+
+    amount = price.get('unit_amount')
+    money = ''
+    if amount is not None:
+        currency = (price.get('currency') or '').lower()
+        # Stripe amounts are in the currency's SMALLEST unit: cents for most
+        # currencies, but zero-decimal currencies (Stripe's documented list)
+        # carry the whole amount already, so 7500 JPY is 7,500, not 75.00.
+        if currency in ZERO_DECIMAL_CURRENCIES:
+            rendered = f'{amount:,.0f}'
+        else:
+            rendered = f'{amount / 100:,.2f}'
+        money = f'${rendered}' if currency in ('', 'usd') else f'{rendered} {currency.upper()}'
+
+    if cadence and money:
+        phrase = f'{cadence} at {money}{per_suffix}'
+    else:
+        # a cadence alone still reads fine; a price with no cadence would dangle, so drop it
+        phrase = cadence
+    return {'name': name, 'renewal_phrase': phrase}
+
+
+def subscription_plan_summary(deck):
+    """What the deck's linked Stripe subscription buys, for the status line, or None.
+
+    Retrieves the subscription with its price and product expanded and condenses
+    it via :func:`_plan_summary_from_subscription` to the Product name plus a
+    renewal phrase (e.g. "Bytedeck Subscription - 40 Students" / "renewed
+    annually at $75.00 per year"). The result is cached for
+    PLAN_SUMMARY_CACHE_SECONDS per (deck, subscription) and cleared by the
+    billing write paths, so the page doesn't call Stripe on every load yet shows
+    a portal plan switch as soon as its webhook syncs.
+
+    Returns None -- the page then renders its usual copy with no plan info --
+    when the deck has no linked subscription, no secret key is configured, the
+    retrieve fails (logged, swallowed: a Stripe hiccup must not break the page),
+    or the data carries no product name.
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        dict | None: ``{'name': str, 'renewal_phrase': str}`` or None.
+    """
+    if not deck.stripe_subscription_id or not settings.STRIPE_SECRET_KEY:
+        return None
+    cache_key = _plan_summary_cache_key(deck.schema_name, deck.stripe_subscription_id)
+    summary = cache.get(cache_key)
+    if summary is not None:
+        return summary
+    try:
+        subscription = to_plain_dict(stripe.Subscription.retrieve(
+            deck.stripe_subscription_id, api_key=settings.STRIPE_SECRET_KEY,
+            expand=['items.data.price.product'],
+        ))
+    except stripe.StripeError as e:
+        logger.warning('could not fetch the plan summary for %s: %s', deck.schema_name, e)
+        return None
+    summary = _plan_summary_from_subscription(subscription)
+    if summary is not None:
+        cache.set(cache_key, summary, PLAN_SUMMARY_CACHE_SECONDS)
+    return summary
+
+
 def subscription_period_end_date(subscription):
     """The subscription's current period end as a local date, or None.
 
@@ -193,9 +381,9 @@ def reconcile_checkout_session(deck, session_id):
     from tenant.models import Tenant
     from tenant.utils import invalidate_current_deck_cache
 
-    session = stripe.checkout.Session.retrieve(
+    session = to_plain_dict(stripe.checkout.Session.retrieve(
         session_id, api_key=settings.STRIPE_SECRET_KEY, expand=['subscription'],
-    )
+    ))
     # The session id arrives via the success-URL query string, so never trust it
     # blindly: the session must be one THIS deck's checkout created (bound via
     # client_reference_id/metadata), or a session id from some other deck's
@@ -218,8 +406,14 @@ def reconcile_checkout_session(deck, session_id):
     paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
+    # stamp only on a fresh link, so repeat polls of the status endpoint don't
+    # re-write the customer on every poll
+    newly_linked = bool(updates['stripe_customer_id']) and deck.stripe_customer_id != updates['stripe_customer_id']
     Tenant.objects.filter(schema_name=deck.schema_name).update(**updates)
     invalidate_current_deck_cache(deck.schema_name)  # the banner should update immediately
+    clear_plan_summary_cache(deck.schema_name, deck.stripe_subscription_id, updates['stripe_subscription_id'])
+    if newly_linked:
+        stamp_customer_description(deck, updates['stripe_customer_id'])
     return True
 
 
@@ -292,10 +486,17 @@ def _sync_deck_from_subscription_id(deck, subscription_id):
     configured with only the webhook secret can still absorb events that sync
     straight from their payloads, but it cannot retrieve, and an exception here
     would turn into a 500 that Stripe retries for days (review find on #2110).
+
+    Args:
+        deck (Tenant): The deck whose billing state the subscription drives.
+        subscription_id (str): The Stripe subscription id (sub_...) to retrieve.
+
+    Returns:
+        str: A short human-readable summary for the caller's log/audit trail.
     """
     if not settings.STRIPE_SECRET_KEY:
         return 'STRIPE_SECRET_KEY unset; retrieve skipped'
-    subscription = stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY)
+    subscription = to_plain_dict(stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY))
     return deck.sync_from_stripe_subscription(subscription)
 
 
@@ -308,6 +509,10 @@ def handle_webhook_event(event):
     event types are logged and acknowledged. Idempotence (duplicate delivery)
     is enforced by the caller via StripeEventLog before this runs.
 
+    Args:
+        event: The verified Stripe Event, as the SDK's Event object or an
+            equivalent plain dict (converted internally via to_plain_dict).
+
     Returns:
         tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema
         (empty string when no deck resolved) as structured data for the event
@@ -315,6 +520,9 @@ def handle_webhook_event(event):
     """
     from django_tenants.utils import tenant_context
 
+    # accept the SDK's Event object as well as a plain dict: everything below
+    # (and every handler) speaks dict
+    event = to_plain_dict(event)
     event_type = event.get('type', '')
     obj = (event.get('data') or {}).get('object') or {}
     metadata = obj.get('metadata') or {}
@@ -347,6 +555,10 @@ def handle_webhook_event(event):
             if session_sub:
                 guard |= Q(stripe_subscription_id=session_sub)
             linked = Tenant.objects.filter(guard, pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            if linked and deck.stripe_customer_id != obj['customer']:
+                # a fresh link (not a re-delivery rewriting the same id): label the
+                # customer with its deck so the dashboard's Customers list is legible
+                stamp_customer_description(deck, obj['customer'])
             parts.append('linked customer' if linked else 'customer link kept (session not for the linked subscription)')
         else:
             # a session without a customer must not CLEAR a stored link
