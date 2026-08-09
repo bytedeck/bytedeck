@@ -229,17 +229,12 @@ def regenerate(request, scape_id):
 @non_public_only_view
 @staff_member_required
 def regenerate_all(request):
-    scapes = CytoScape.objects.all()
-    if scapes.count() > 5:
-        messages.warning(request, "You have a lot of maps, so the map regeneration is being processed in the background. It may take a few minutes.")  # noqa
-        regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
-    else:
-        for scape in CytoScape.objects.all():
-            try:
-                scape.regenerate()
-            except scape.InitialObjectDoesNotExist:
-                messages.warning(request, f"The initial object for the '{scape.name} Map' no longer exists. The map has now been removed too.")
-
-        messages.success(request, "All valid quest maps have been regenerated.")
+    # Offload to celery: regenerating maps builds each map's full graph JSON in memory, so
+    # doing it in the request would scale a single web request's memory with the number and
+    # size of maps -- one of the per-request memory blowups tracked in #2081. The task
+    # regenerates each map, deletes any whose initial object no longer exists, and notifies
+    # the requesting user of failures and completion.
+    messages.info(request, "Map regeneration is being processed in the background. You'll be notified when it's complete.")
+    regenerate_all_maps.apply_async(args=[request.user.id], queue='default')
 
     return redirect('djcytoscape:primary')

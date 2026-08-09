@@ -36,6 +36,15 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """Set up a tenant test client for each test."""
         self.client = TenantClient(self.tenant)
 
+    def test_announcement_form__has_unsaved_changes_guard(self):
+        """The announcement create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
+        self.client.force_login(self.test_teacher)
+
+        for url in (reverse('announcements:create'), reverse('announcements:update', args=[self.ann_pk])):
+            response = self.client.get(url)
+            self.assertContains(response, 'data-warn-unsaved')
+            self.assertContains(response, 'warn-unsaved-changes.js')
+
     def test_all_announcement_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login page '''
 
@@ -289,6 +298,38 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             new_ann.get_absolute_url()
         )
 
+    @patch('announcements.views.send_notifications.apply_async')
+    def test_copy_announcement__draft_copy_sends_no_notification(self, mock_send):
+        """Copying to a draft announcement queues no notification (only a published copy does)."""
+        self.client.force_login(self.test_teacher)
+        form_data = {
+            'title': "Draft copy",
+            'content': "test content",
+            'datetime_released': "2006-10-25 14:30:59",
+            'draft': True,
+        }
+
+        response = self.client.post(
+            reverse('announcements:copy', args=[self.test_announcement.id]),
+            data=form_data,
+        )
+
+        new_ann = Announcement.objects.latest('datetime_created')
+        self.assertTrue(new_ann.draft)
+        self.assertRedirects(response, new_ann.get_absolute_url())
+        mock_send.assert_not_called()
+
+    def test_list__anchor_absent_from_student_list_still_renders(self):
+        """Requesting the list anchored to a draft announcement (which students can't see) walks
+        the whole page range without finding it, then falls back and still renders."""
+        draft = baker.make(Announcement)  # draft defaults to True, archived False
+        self.assertTrue(draft.draft)
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('announcements:list', args=[draft.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
     # Custom label tests
     def test_announcement_views__header_custom_label_displayed(self):
         """
@@ -428,28 +469,27 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, oldest_announcement.title)
 
-    def test_announcement_draft__not_archived_after_semester_close(self):
-        """ Draft announcements should not be archived when a semester is closed """
+    def test_announcement_draft__not_archived_after_semester_archive(self):
+        """ Draft announcements should not be archived when a semester is archived """
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 
         self.client.force_login(self.test_teacher)
-        self.client.get(reverse('courses:end_active_semester'))
+        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
 
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
 
-    # TODO Fix this, announcements only archive if semester closing is successful, which its not here maybe?
-    # def test_announcements_archived_after_semester_close(self):
-    #     """ All unarchived (non-draft) announcements should be archived when a semester is closed"""
+    def test_announcements__archived_after_semester_archive(self):
+        """ All unarchived (non-draft) announcements should be archived when a semester is
+        archived with the archive_announcements box checked """
+        announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
 
-    #     announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
+        self.client.force_login(self.test_teacher)
+        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
 
-    #     self.client.force_login(self.test_teacher)
-    #     self.client.get(reverse('courses:end_active_semester'))
-
-    #     for announcement in announcements:
-    #         announcement.refresh_from_db()
-    #         self.assertTrue(announcement.archived)
+        for announcement in announcements:
+            announcement.refresh_from_db()
+            self.assertTrue(announcement.archived)
 
 
 class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):

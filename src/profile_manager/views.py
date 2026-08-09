@@ -9,6 +9,7 @@ from django.http import Http404, HttpResponseForbidden, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
+from django.utils.html import format_html
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView, DeleteView
 
@@ -17,6 +18,7 @@ from siteconfig.models import SiteConfig
 
 from .models import Profile
 from .forms import ProfileForm, UserForm
+from .tasks import invalidate_profile_xp_cache_on_schema
 from badges.models import BadgeAssertion
 from courses.models import CourseStudent, Block
 from notifications.signals import notify
@@ -478,18 +480,19 @@ def oauth_merge_account(request):
 @non_public_only_view
 @staff_member_required
 def recalculate_current_xp(request):
-    profiles_qs = Profile.objects.all_for_active_semester()
-    for profile in profiles_qs:
-        profile.xp_invalidate_cache()
+    # Recalculating XP for every current student invalidates and recomputes a cache per
+    # profile; on a busy deck that is hundreds of profiles in one request, which has grown a
+    # uwsgi worker large enough to get OOM-killed and time out the page (issue #2081). Hand it
+    # to the existing background task instead -- it does the same all_for_active_semester()
+    # recompute (with per-profile error handling) and, dispatched from this request, runs in
+    # this tenant's schema via tenant-schemas-celery.
+    invalidate_profile_xp_cache_on_schema.apply_async(queue='default')
+    messages.success(
+        request,
+        "Recalculating XP for all current students in the background. "
+        "It may take a minute; refresh the page to see updated totals.",
+    )
     return redirect_to_previous_page(request)
-
-
-@login_required
-def tour_complete(request):
-    profile = request.user.profile
-    profile.intro_tour_completed = True
-    profile.save()
-    return redirect('quests:quests')
 
 
 @non_public_only_view
@@ -498,6 +501,58 @@ def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
     profile.save()
+    return redirect_to_previous_page(request)
+
+
+@non_public_only_view
+@staff_member_required
+def profile_archive(request, profile_id):
+    """Archive a student by deactivating their account (``User.is_active = False``).
+
+    Archiving is the safe, reversible replacement for deleting a student
+    (issue #2182): the student can no longer log in and moves to the Inactive
+    list, but all of their data is kept and staff can later restore or delete
+    them from there. Staff-only; staff accounts can't be archived this way.
+    """
+    profile = get_object_or_404(Profile, id=profile_id)
+    user = profile.user
+
+    if user.is_staff:
+        messages.error(request, "Staff accounts cannot be archived.")
+        return redirect_to_previous_page(request)
+
+    user.is_active = False
+    user.save()
+
+    messages.success(
+        request,
+        format_html(
+            "<a href='{}'>{}</a> has been archived. You can restore or delete them from the Inactive list.",
+            profile.get_absolute_url(),
+            user.username,
+        ),
+    )
+    return redirect_to_previous_page(request)
+
+
+@non_public_only_view
+@staff_member_required
+def profile_restore(request, profile_id):
+    """Restore an archived student by reactivating their account (``User.is_active = True``).
+
+    The reverse of :func:`profile_archive`: the student can log in again and
+    returns to the active student lists. Staff-only.
+    """
+    profile = get_object_or_404(Profile, id=profile_id)
+    user = profile.user
+
+    user.is_active = True
+    user.save()
+
+    messages.success(
+        request,
+        format_html("<a href='{}'>{}</a> has been restored.", profile.get_absolute_url(), user.username),
+    )
     return redirect_to_previous_page(request)
 
 

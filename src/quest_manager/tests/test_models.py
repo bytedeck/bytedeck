@@ -34,6 +34,11 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         self.assertIsInstance(self.category, Category)
         self.assertEqual(str(self.category), self.category.title)
 
+    def test_get_icon_url__returns_category_icon_when_set(self):
+        """Category.get_icon_url returns the campaign's own icon url when it has one."""
+        self.category.icon = 'icons/campaign.png'
+        self.assertEqual(self.category.get_icon_url(), self.category.icon.url)
+
     def test_condition_met_as_prerequisite__all_unique_quests_completed(self):
         """ Test that all unique quests in a campaign are completed before the campaign is considered completed
         for prerequisite purposes. Make sure multiple completions of repeatable quests don't count. """
@@ -171,6 +176,35 @@ class QuestTestModel(ByteDeckTenantTestCase):
         self.quest.icon = ''
         self.quest.campaign = baker.make('quest_manager.Category', icon='icons/campaign.png')
         self.assertEqual(self.quest.get_icon_url(), self.quest.campaign.icon.url)
+
+    def test_icon_url__returns_icon_url_when_set(self):
+        """XPItem.icon_url returns the quest's own icon url when it has one."""
+        self.quest.icon = 'icons/quest.png'
+        self.assertEqual(self.quest.icon_url(), self.quest.icon.url)
+
+    def test_icon_url__returns_none_when_no_icon(self):
+        """XPItem.icon_url returns None when the quest has no icon (used by templates via default_if_none)."""
+        self.quest.icon = ''
+        self.assertIsNone(self.quest.icon_url())
+
+    def test_is_repeatable__reflects_max_repeats(self):
+        """XPItem.is_repeatable is True when max_repeats is non-zero (a finite or unlimited cap), False when 0."""
+        self.quest.max_repeats = 0
+        self.assertFalse(self.quest.is_repeatable())
+        self.quest.max_repeats = 3
+        self.assertTrue(self.quest.is_repeatable())
+        self.quest.max_repeats = -1  # unlimited repeats
+        self.assertTrue(self.quest.is_repeatable())
+
+    def test_is_repeat_available__false_during_cooldown(self):
+        """is_repeat_available is False when a repeatable quest has been completed but its
+        hours_between_repeats cooldown has not yet elapsed (issue #57)."""
+        student = baker.make(User)
+        quest = baker.make(Quest, max_repeats=-1, hours_between_repeats=24)
+        sub = QuestSubmission.objects.create_submission(student, quest)
+        sub.mark_completed()
+        # Completed just now, so fewer than 24 hours have passed: still on cooldown.
+        self.assertFalse(quest.is_repeat_available(student))
 
     def test_active__false_for_unavailable_expired_or_hidden_quests(self):
         """
@@ -669,6 +703,49 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
+
+    def test_mark_returned__moves_submission_to_active_semester(self):
+        """A submission returned in a later semester is re-attached to the current semester (issue #1231).
+
+        A quest completed in a past (now closed) semester and returned for a redo in a new semester used
+        to stay linked to the old semester, so it never showed up in the student's current in-progress
+        list and, once re-approved, granted its XP in the closed semester. Returning it now moves it to
+        the active semester so the redo behaves like any other current submission.
+        """
+        past_semester = baker.make(
+            Semester, name="Past", first_day=datetime.date(2020, 1, 1),
+            last_day=datetime.date(2020, 6, 1), closed=True,
+        )
+        active_semester = SiteConfig.get().active_semester
+        self.assertNotEqual(past_semester, active_semester)
+
+        # A quest completed and approved back in the past (closed) semester.
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=past_semester,
+            is_completed=True, is_approved=True,
+        )
+        self.assertEqual(sub.semester, past_semester)
+
+        # Teacher returns it in the current semester -- it should move to the active semester.
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
+
+    def test_mark_returned__keeps_active_semester_submission_on_active_semester(self):
+        """Returning a submission already in the active semester leaves it there (issue #1231).
+
+        The common case -- a teacher returning a submission for revision in the same semester it was
+        made -- must not be disturbed by the re-attachment above.
+        """
+        active_semester = SiteConfig.get().active_semester
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=active_semester,
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, active_semester)
 
 
 class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):

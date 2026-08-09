@@ -119,6 +119,30 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(instance=answer)
         self.assertFalse(form.fields["response_text"].required)
 
+    def test_short_answer__distinct_aria_labels_in_formset(self):
+        """Each short-answer input in a formset gets a position-based aria-label matching its
+        visible 'Question N:' heading, so screen-reader users can tell multiple short-answer
+        inputs apart (they'd otherwise all announce the identical 'Response')."""
+        # a second short-answer question so the formset renders two short-answer inputs
+        second_short = baker.make(
+            Question, quest=self.quest, ordinal=6, type="short_answer", required=True,
+        )
+        baker.make(QuestionSubmission, quest_submission=self.submission, question=second_short)
+
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission, question__type="short_answer",
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+
+        labels = [form.fields["response_text"].widget.attrs["aria-label"] for form in formset.forms]
+        self.assertEqual(labels, ["Response to question 1", "Response to question 2"])
+
+    def test_short_answer__aria_label_fallback_without_formset(self):
+        """A standalone short-answer form (no numeric formset prefix) falls back to a generic
+        'Response' aria-label rather than erroring on the missing position."""
+        form = QuestionSubmissionForm(instance=self.short_answer)
+        self.assertEqual(form.fields["response_text"].widget.attrs["aria-label"], "Response")
+
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and
         accepts a filled one."""
@@ -209,3 +233,44 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         }
         formset = QuestionSubmissionFormsetFactory(data, instance=self.submission, queryset=queryset)
         self.assertFalse(formset.is_valid())
+
+
+class QuestionSubmissionFormSanitizationTest(ByteDeckTenantTestCase):
+    """Answer text is sanitized on clean: it renders with |safe in the marking display, so
+    script vectors must be stripped while legitimate formatting is kept (issues #1343/#2113)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A quest with a required short answer and a required long answer, each with a draft row."""
+        cls.quest = baker.make(Quest)
+        cls.short_question = baker.make(
+            Question, quest=cls.quest, ordinal=1, type="short_answer", required=True,
+        )
+        cls.long_question = baker.make(
+            Question, quest=cls.quest, ordinal=2, type="long_answer", required=True,
+        )
+        cls.submission = baker.make(QuestSubmission, quest=cls.quest)
+        cls.short_answer = baker.make(
+            QuestionSubmission, quest_submission=cls.submission, question=cls.short_question,
+        )
+        cls.long_answer = baker.make(
+            QuestionSubmission, quest_submission=cls.submission, question=cls.long_question,
+        )
+
+    def test_clean__short_answer_script_neutralized(self):
+        """A script tag typed into the plain short answer field can't survive as markup."""
+        form = QuestionSubmissionForm(
+            data={"response_text": "<script>alert(1)</script>hi"}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertNotIn("<script>", form.cleaned_data["response_text"])
+        self.assertIn("hi", form.cleaned_data["response_text"])
+
+    def test_clean__long_answer_event_handler_stripped_formatting_kept(self):
+        """Rich-text answers keep allowed formatting but lose inline event handlers, which the
+        'safe' summernote widget alone would let through."""
+        form = QuestionSubmissionForm(
+            data={"response_text": '<p onclick="evil()"><b>bold</b> answer</p>'}, instance=self.long_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        cleaned = form.cleaned_data["response_text"]
+        self.assertNotIn("onclick", cleaned)
+        self.assertIn("<b>bold</b>", cleaned)

@@ -575,6 +575,13 @@ iframe.summernotewidget.form-control {
     margin-right: 15px;
 }
 
+/* The "Additional Submission Comments" heading sits directly inside the padding-less
+   .panel-summernote, so it needs the same 15px left inset as the summernote form fields to line
+   up with the question labels above it instead of jamming against the panel's left edge. */
+.submission-comments-heading {
+    margin-left: 15px;
+}
+
 .multifileinput {
     border: none;
     box-shadow: none !important;
@@ -1198,4 +1205,51 @@ table[data-toggle="table"].bt-reveal {
 }
 .user-content ul ul ul {
     list-style-type: square;
+}
+
+/* Answer tables (questions/snippets/comment_answers.html): keep a long unbroken answer or URL
+   from widening its column and overflowing the panel. table-layout: fixed pins the
+   Question / answer columns to their set widths so content wraps to fit, and pre blocks wrap
+   long code lines instead of overflowing. */
+.question-answers {
+    table-layout: fixed;
+}
+.question-answers th,
+.question-answers td {
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+.question-answers pre {
+    white-space: pre-wrap;
+}
+
+/* Submission question blocks (quest_manager/submission.html) render as a Bootstrap list-group, so
+   the questions read as one connected list (single hairline borders between items, no inter-item
+   gaps) rather than separate padded .well cards. Trim the answer field's trailing form-group
+   margin so each item closes up right after the field instead of carrying a tall empty band. */
+.question-submission-form .form-group {
+    margin-bottom: 0;
+}
+
+/* Inline stacked icon: renders a two-glyph fa-stack (e.g. the archive + up-arrow
+   "restore from archive" button) at the same 1em footprint as the single-glyph
+   icons beside it, instead of the default 2em fa-stack that would make its button
+   taller and wider than its neighbours. Both stacked glyphs stay at fa-stack-1x. */
+.fa-stack.fa-stack-inline {
+    width: 1em;
+    height: 1em;
+    line-height: 1em;
+    vertical-align: -0.075em;
+}
+/* "Restore from archive" icon: a dark up arrow sits inside the white archive box
+   so restore is visibly distinct from a plain archive icon. FontAwesome's archive
+   glyph is a solid lid over a hollow (outlined) box body, so the box interior is
+   just the button colour showing through; a dark arrow reads clearly against both
+   the white lid and the coloured interior (a same-colour arrow would disappear).
+   Shrunk and nudged down so the arrow sits within the box. Both glyphs stay
+   fa-stack-1x. */
+.fa-stack.fa-stack-inline .fa-stack-1x:last-child {
+    color: #1a1a1a;
+    font-size: 0.7em;
+    top: 0.12em;
 }

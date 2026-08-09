@@ -45,7 +45,7 @@
         </h3>
         <div class="comment-heading-divider"></div>
 
-        <div class="comment-content">{{comment.text|safe}}</div>
+        <div class="comment-content user-content">{{comment.text|safe}}</div>
         {% with comment.document_set.all as docs %}{% if docs %}
         <hr class="tighter">
         <p>Attached files:</p>
@@ -61,6 +61,9 @@
           </li>
           {% endfor %}
         </ul>
+        {% endif %}{% endwith %}
+        {% with comment.question_submissions.all as answers %}{% if answers %}
+          {% include "questions/snippets/comment_answers.html" %}
         {% endif %}{% endwith %}
       </li>
     {% endif %}

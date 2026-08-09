@@ -2,13 +2,14 @@ from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
 from django_tenants.test.client import TenantClient
-from django.core.files.uploadedfile import InMemoryUploadedFile
+from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
-from portfolios.models import Portfolio
+from portfolios.models import Artwork, Portfolio
+from portfolios.views import is_acceptable_vid_type
 
 User = get_user_model()
 
@@ -50,6 +51,29 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         url(r'^art/(?P<pk>[0-9]+)/delete/$', views.ArtworkDelete.as_view(), name='art_delete'),
         url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
     """
+
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir before any uploads happen.
+
+        The uploads these tests make (e.g. clip.mp4) otherwise land in the
+        project's real _media_uploads and stay there: on the NEXT run Django's
+        storage dedupes the repeat filename to clip_XXXX.mp4, so the view titles
+        the Artwork "clip_XXXX" and the get(title="clip") assertions error --
+        the suite passes once, then fails on every rerun in the same workspace.
+        A throwaway MEDIA_ROOT keeps runs deterministic and the repo clean.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-portfolios-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
 
     @classmethod
     def setUpTestData(cls):
@@ -212,3 +236,61 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+
+    def test_ArtworkUpdateView__post(self):
+        """A valid ArtworkUpdate POST saves and redirects to the owner's portfolio edit page."""
+        self.client.force_login(self.test_student)
+        form_data = {
+            'title': "Updated Title",
+            'portfolio': self.portfolio,
+            'date': timezone.now().date(),
+            'video_url': 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        }
+        response = self.client.post(reverse('portfolios:art_update', args=[self.art.pk]), data=form_data)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+        self.art.refresh_from_db()
+        self.assertEqual(self.art.title, "Updated Title")
+
+    def test_ArtworkDeleteView__post(self):
+        """An ArtworkDelete POST removes the art and redirects to the owner's portfolio edit page."""
+        self.client.force_login(self.test_student)
+        response = self.client.post(reverse('portfolios:art_delete', args=[self.art.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
+        self.assertFalse(Artwork.objects.filter(pk=self.art.pk).exists())
+
+    def test_is_acceptable_vid_type__accepts_video_extensions_only(self):
+        """is_acceptable_vid_type recognises video file extensions and rejects others."""
+        self.assertTrue(is_acceptable_vid_type("clip.mp4"))
+        self.assertTrue(is_acceptable_vid_type("clip.webm"))
+        self.assertFalse(is_acceptable_vid_type("picture.png"))
+
+    def test_art_add__video_document_creates_video_artwork(self):
+        """Adding art from a video-file comment document creates an Artwork with a video (not image)."""
+        self.client.force_login(self.test_student)
+        video_doc = baker.make(
+            'comments.Document',
+            docfile=SimpleUploadedFile("clip.mp4", b"fake-video-bytes", content_type="video/mp4"),
+            comment=baker.make('comments.Comment', user=self.test_student),
+        )
+
+        response = self.client.get(reverse('portfolios:art_add', args=[video_doc.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        artwork = Artwork.objects.get(title="clip")
+        self.assertTrue(artwork.video_file)
+        self.assertFalse(artwork.image_file)
+
+    def test_art_add__unsupported_format_returns_404(self):
+        """Adding art from a comment document that is neither an image nor a video is rejected (404)."""
+        self.client.force_login(self.test_student)
+        text_doc = baker.make(
+            'comments.Document',
+            docfile=SimpleUploadedFile("notes.txt", b"not media", content_type="text/plain"),
+            comment=baker.make('comments.Comment', user=self.test_student),
+        )
+
+        self.assert404('portfolios:art_add', args=[text_doc.pk])

@@ -1,0 +1,26 @@
+{% comment %}
+Semester status banner (#2157, #1177): rendered on every tenant page via base.html,
+staff only. Nudges the two states the semester workflow can silently sit in:
+- no open semester (the active one is archived or missing), so students can't join a course;
+- the active semester's last day has passed, so it's probably time to archive it
+  (archiving records final marks and frees the students' deck seats).
+`config` comes from the config context processor; it is None on the public schema,
+which hides the banner entirely.
+{% endcomment %}
+{% if config and request.user.is_staff %}
+    {% if config.has_no_open_semester %}
+        <div class="alert alert-warning" id="semester-status-banner">
+            <i class="fa fa-fw fa-calendar-times-o"></i>
+            <strong>No semester is open:</strong> students can't join a course until you create and
+            activate a new semester.
+            <a href="{% url 'courses:semester_list' %}" class="alert-link">Manage semesters</a>.
+        </div>
+    {% elif config.active_semester.has_ended %}
+        <div class="alert alert-warning" id="semester-status-banner">
+            <i class="fa fa-fw fa-calendar-o"></i>
+            <strong>Semester {{ config.active_semester }} ended on {{ config.active_semester.last_day }}.</strong>
+            <a href="{% url 'courses:semester_archive' %}" class="alert-link">Archive it</a>
+            to record final marks and free up your students' seats.
+        </div>
+    {% endif %}
+{% endif %}

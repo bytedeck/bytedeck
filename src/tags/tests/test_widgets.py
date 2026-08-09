@@ -23,3 +23,13 @@ class TestTaggitSelect2Widget(ByteDeckTenantTestCase):
         widget = TaggitSelect2Widget(attrs={'data-minimum-input-length': '3'})
         output = widget.render('name', 'value')
         assert 'data-minimum-input-length="3"' in output
+
+    def test_options__splits_raw_comma_separated_string(self):
+        """A raw (unvalidated) comma-separated string is split into individual tag option values."""
+        widget = TaggitSelect2Widget()
+        self.assertEqual(list(widget.options('tags', 'alpha,beta')), ['alpha', 'beta'])
+
+    def test_options__skips_empty_values(self):
+        """Empty entries in the value list are skipped, yielding only the non-empty tag option values."""
+        widget = TaggitSelect2Widget()
+        self.assertEqual(list(widget.options('tags', ['', 'gamma'])), ['gamma'])

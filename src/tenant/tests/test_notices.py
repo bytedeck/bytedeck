@@ -8,83 +8,13 @@ from freezegun import freeze_time
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
-from tenant.models import DeckNotice, Tenant
+from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
 from tenant.notices import evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
 
 # Frozen mid-day UTC so timezone.localdate() (America/Vancouver) is the same calendar date.
 TODAY = date(2026, 8, 15)
 NOW = "2026-08-15 20:00:00"
-
-
-@freeze_time(NOW)
-@override_settings(DECK_NOTICES_ENABLED=False)  # the reset is enforcement: NOT gated by the notices rollout flag
-class SuspensionCapResetTest(ByteDeckTenantTestCase):
-    """Tests for reset_cap_on_new_suspension (#2178): when a suspension episode
-    begins, the cap is written back to the trial default exactly once, and any
-    admin adjustment afterwards -- lower or higher -- sticks."""
-
-    def setUp(self):
-        """Clear the cached deck row so each test reads its own billing state."""
-        cache.delete(deck_cache_key(self.tenant.schema_name))
-
-    def set_deck(self, **fields):
-        """Persist billing fields via update() + refresh (the reset reads the instance)."""
-        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
-        self.tenant.refresh_from_db()
-
-    def reset(self):
-        """Shorthand: run the reset for this deck and return its log summary."""
-        from tenant.notices import reset_cap_on_new_suspension
-        return reset_cap_on_new_suspension(self.tenant)
-
-    def test_reset__fresh_suspension_reverts_cap_once_then_admin_wins(self):
-        """A deck whose trial lapsed yesterday gets its cap written back to the
-        trial default exactly once; an admin adjustment made afterwards (e.g.
-        lowering to 1 for a wind-down, or raising for a comp) is never clobbered
-        by later runs of the same episode."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None, max_active_users=80)
-        self.assertEqual(self.reset(), 'cap reset 80 -> 5')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
-
-        self.set_deck(max_active_users=1)  # admin wind-down after the reset
-        self.assertEqual(self.reset(), 'cap already reset this episode')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 1)
-
-    def test_reset__paid_deck_episode_starts_after_the_grace_window(self):
-        """A paid deck's suspension episode begins the day after its grace window
-        ends (paid_until + 30 + 1), so the reset fires on the task's first run
-        after that day -- and -1 unlimited decks revert like any other."""
-        self.set_deck(trial_end_date=None, paid_until=TODAY - timedelta(days=31), max_active_users=-1)
-        self.assertEqual(self.reset(), 'cap reset -1 -> 5')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-
-    def test_reset__old_episodes_are_grandfathered(self):
-        """A deck already suspended for longer than the catch-up window keeps its
-        cap (its admin may have hand-set it since -- the production case that
-        motivated #2178); the episode is recorded so it is never revisited."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=60), paid_until=None, max_active_users=1)
-        self.assertIn('cap left alone', self.reset())
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 1)
-        self.assertEqual(self.reset(), 'cap already reset this episode')
-
-    def test_reset__no_op_paths(self):
-        """Unsuspended decks are untouched (no ledger row), and a fresh suspension
-        whose cap is already the trial default records the episode without a write."""
-        self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None, max_active_users=80)
-        self.assertEqual(self.reset(), 'not suspended')
-        self.assertFalse(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
-
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), max_active_users=5)
-        self.assertEqual(self.reset(), 'cap already at the trial default')
-        self.tenant.refresh_from_db()
-        self.assertEqual(self.tenant.max_active_users, 5)
-        self.assertTrue(DeckNotice.objects.filter(tenant=self.tenant, threshold='cap-reset').exists())
 
 
 @freeze_time(NOW)
@@ -182,15 +112,42 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1, paid_until=TODAY + timedelta(days=90), active_user_count=999)
         self.assertEqual(self.due(), [])
 
+    def test_evaluate__expiry_key_uses_the_governing_trial_deadline(self):
+        """With an in-grace paid date and a LATER governing trial date, the expiry
+        notice is keyed to the governing trial deadline (the one the email
+        reports), so milestones recorded under the stale paid key can never
+        suppress reminders for the clock that actually governs (#1734 B4
+        review find)."""
+        trial = TODAY + timedelta(days=20)
+        self.set_deck(trial_end_date=trial, paid_until=TODAY - timedelta(days=10))
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd30', str(trial))])
+        process_deck_notices(self.tenant)
+        self.assertTrue(DeckNotice.objects.filter(
+            tenant=self.tenant, kind=DeckNotice.KIND_EXPIRY, threshold='d30', period_key=str(trial)).exists())
+        self.assertEqual(self.due(), [])  # recorded under the governing key: nothing more due
+
     def test_evaluate__suspension_notice_once_per_episode(self):
         """A suspended deck gets exactly one suspension notice (keyed to the lapsed deadline),
-        and no expiry cadence."""
-        self.set_deck(trial_end_date=TODAY - timedelta(days=1), paid_until=None)
-        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(TODAY - timedelta(days=1)))])
+        and no expiry cadence. The trial must be lapsed past the unified grace
+        window (#1734 B4) to be suspended at all."""
+        lapsed = TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)
+        self.set_deck(trial_end_date=lapsed, paid_until=None)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(lapsed))])
         process_deck_notices(self.tenant)
         self.assertEqual(self.due(), [])
         with freeze_time("2026-09-15 20:00:00"):
             self.assertEqual(self.due(), [])  # still just the one
+
+    def test_evaluate__lapsed_trial_stays_on_expiry_cadence_through_grace(self):
+        """A lapsed trial inside its grace window is NOT suspended: it stays on the
+        expiry-reminder cadence (daily after the milestone), exactly like a lapsed
+        paid deck (#1734 B4)."""
+        lapsed = TODAY - timedelta(days=10)
+        self.set_deck(trial_end_date=lapsed, paid_until=None)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(lapsed))])  # no suspension notice
+        process_deck_notices(self.tenant)
+        with freeze_time("2026-08-16 20:00:00"):
+            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(lapsed))])
 
 
 @freeze_time(NOW)
@@ -277,7 +234,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         from siteconfig.models import SiteConfig
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
-        self.assertEqual(notification.verb, 'sent a current-student limit warning.')
+        # the notification carries the notice's key fact and links the subscription
+        # page (maintainer request, 2026-08-08: the bare label wasn't actionable)
+        self.assertEqual(
+            notification.verb,
+            'sent a current-student limit warning: 5 of 5 current-student seats are used. See your')
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
+        self.assertEqual(notification.target_link_text, 'subscription details page.')
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__notification_comes_from_support_admin_when_present(self):
@@ -296,7 +259,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
         self.assertEqual(notification.sender_object, support_admin)
-        self.assertIn('Bytedeck sent a current-student limit warning.', notification.get_link())
+        self.assertIn('Bytedeck sent a current-student limit warning:', notification.get_link())
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__notification_sender_falls_back_to_deck_ai(self):
@@ -315,6 +278,73 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         notification = Notification.objects.get(recipient=owner, verb__contains='limit warning')
         self.assertEqual(notification.sender_object, SiteConfig.get().deck_ai)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__notification_names_the_governing_deadline(self):
+        """The expiry notification names the governing clock's deadline while it
+        approaches, switches to the grace-window wording once it has passed, and
+        the suspended notice adds the deletion horizon: the owner sees the date
+        that matters without opening the email (maintainer request, 2026-08-08)."""
+        from unittest.mock import patch
+
+        from django.urls import reverse
+
+        from siteconfig.models import SiteConfig
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        owner = SiteConfig.get().deck_owner
+        inline_email = patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        )
+
+        # approaching: trial ends Aug 22 (7 days from frozen TODAY Aug 15)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY + timedelta(days=7), paid_until=None)
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ends on Aug. 22, 2026 (7 days left). See your")
+        self.assertEqual(notification.target_url, reverse('decks:subscription'))
+
+        # lapsed into grace: ended Aug 10, grace runs to Sep 9 (30 days)
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY - timedelta(days=5))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a subscription expiry reminder: this deck's free trial ended on Aug. 10, 2026 "
+            "and the grace period ends on Sept. 9, 2026. See your")
+
+        # suspended: lapsed past the grace window; the deletion horizon is named
+        # (warned today, so a year from frozen TODAY)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
+        self.tenant.refresh_from_db()
+        with inline_email:
+            _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
+        notification = Notification.objects.filter(recipient=owner).latest('id')
+        self.assertEqual(
+            notification.verb,
+            "sent a deck suspended warning: this deck's free trial ended on July 15, 2026 "
+            "and the grace period has run out; without a subscription the deck may be "
+            "deleted after Aug. 15, 2027. See your")
+
+        # defensive fall-through: a deck with no running deletion clock (it isn't
+        # actually suspended, so Tenant.deletion_date is None) still gets a
+        # coherent sentence, just without the deletion clause
+        from tenant.notices import _notification_detail
+        Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=TODAY + timedelta(days=60))
+        self.tenant.refresh_from_db()
+        detail = _notification_detail(self.tenant, DeckNotice.KIND_SUSPENDED)
+        self.assertNotIn('deleted after', detail)
+        self.assertTrue(detail.endswith('the grace period has run out.'))
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__second_run_sends_nothing_new(self):
@@ -463,13 +493,38 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__limit_email_names_the_grace_state(self):
+        """The limit email on an in-grace deck says the governing clock already
+        ran out and the deck is in its grace period, rather than quoting a
+        pre-lapse deadline (#1734 B5)."""
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=5), paid_until=None,
+            max_active_users=5, active_user_count=5)
+        self.tenant.refresh_from_db()
+
+        with patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            _deliver(self.tenant, DeckNotice.KIND_LIMIT)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('free trial ended on <strong>Aug. 10, 2026</strong> and the deck is in its grace period', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_states_when_and_why_with_logo(self):
         """The suspension email says when the suspension began, which clock ran
-        out (trial vs paid + grace), current seat usage, and carries the logo."""
+        out (trial or paid, plus the unified grace window, #1734 B4), current
+        seat usage, and carries the logo."""
         from datetime import date
 
         Tenant.objects.filter(pk=self.tenant.pk).update(
-            trial_end_date=date(2026, 8, 1), paid_until=None,  # trial lapsed -> suspended Aug 2
+            # trial ended Jul 1 + 30-day grace ended Jul 31 -> suspended Aug 1
+            trial_end_date=date(2026, 7, 1), paid_until=None,
             max_active_users=5, active_user_count=0,
         )
         self.tenant.refresh_from_db()
@@ -482,12 +537,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # deletion date with the countdown, and the deck name links to the deck
         # itself. The deletion clock starts at the FIRST WARNING (this email,
         # sent on frozen TODAY Aug 15), never at the earlier lapse date
-        # (maintainer decision, 2026-07-31).
+        # (maintainer decision, 2026-07-31; Tenant.deletion_date).
         self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
         self.assertIn('365 days from now', html)
         self.assertIn(f'<a href="{self.tenant.get_root_url()}">', html)
-        self.assertIn('since <strong>Aug. 2, 2026</strong>', html)
-        self.assertIn('free trial ended on Aug. 1, 2026', html)
+        self.assertIn('since <strong>Aug. 1, 2026</strong>', html)
+        self.assertIn('free trial ended on July 1, 2026', html)
+        self.assertIn('grace period ended on July 31, 2026', html)
         # the new suspension rules (redesign, 2026-07-30): owner-only sign-in,
         # data intact, and the Maintenance escape hatch
         self.assertIn('only the deck owner can sign in', html)
@@ -498,6 +554,55 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
         self.assertIn('<p>Bytedeck</p>', html)
         self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__suspended_email_follows_the_governing_trial_clock(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed earlier), the suspension email
+        explains the TRIAL clock: the governing deadline picks the wording, not
+        whether a paid date exists (#1734 B4 review find)."""
+        from datetime import date
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            # paid lapsed May 1; trial extended to Jul 1 -> grace ended Jul 31 -> suspended Aug 1
+            trial_end_date=date(2026, 7, 1), paid_until=date(2026, 5, 1),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        summary = self.run_engine_with_inline_email()
+        self.assertEqual(len(mail.outbox), 1, summary)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('since <strong>Aug. 1, 2026</strong>', html)
+        self.assertIn('free trial ended on July 1, 2026', html)
+        self.assertIn('grace period ended on July 31, 2026', html)
+        self.assertNotIn('paid through', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_deliver__expiry_email_follows_the_governing_trial_clock(self):
+        """With BOTH dates set and the trial the LATER clock, the expiry
+        reminder's grace-window variant reports the TRIAL date and wording
+        (#1734 B4 review find)."""
+        from unittest.mock import patch
+
+        from tenant import tasks
+        from tenant.notices import _deliver
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=TODAY - timedelta(days=5), paid_until=TODAY - timedelta(days=100),
+            max_active_users=5, active_user_count=0,
+        )
+        self.tenant.refresh_from_db()
+
+        with patch.object(
+            tasks.send_email_message, 'apply_async',
+            side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
+        ):
+            _deliver(self.tenant, DeckNotice.KIND_EXPIRY)
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('free trial ended on <strong>Aug. 10, 2026</strong>', html)
+        self.assertIn('(5 days ago)', html)
+        self.assertNotIn('subscription expired', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_paid_clock_and_legacy_full_year(self):
@@ -545,7 +650,6 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         notice's ledger row is the durable warned-on record, so a deck warned days
         ago keeps that original clock, and with no ledger row yet the deck counts
         as warned today."""
-        from datetime import date
         from unittest.mock import patch
 
         from tenant import tasks
@@ -556,7 +660,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             side_effect=lambda kwargs=None, queue=None: tasks.send_email_message.apply(kwargs=kwargs),
         )
 
-        # suspended Aug 6 (paid through Jul 6 + 30-day grace), warned Aug 10
+        # suspended Aug 6 (paid through Jul 6 + 30-day grace), warned Aug 10. The
+        # planted row carries the key the engine really writes: the lapsed
+        # deadline itself (str(paid_until)), not the grace window's end.
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=40),
             max_active_users=5, active_user_count=0,
@@ -564,7 +670,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         row = DeckNotice.objects.create(
             tenant=self.tenant, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
-            period_key=str(date(2026, 8, 5)),
+            period_key=str(TODAY - timedelta(days=40)),
         )
         # backdate past auto_now_add: the row records the warning sent on Aug 10
         DeckNotice.objects.filter(pk=row.pk).update(sent_on=date(2026, 8, 10))
@@ -581,3 +687,113 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             _deliver(self.tenant, DeckNotice.KIND_SUSPENDED)
         html = ' '.join(mail.outbox[0].alternatives[0][0].split())
         self.assertIn('scheduled for deletion on Aug. 15, 2027', html)
+
+
+@freeze_time(NOW)
+@override_settings(DECK_NOTICES_ENABLED=False)  # the close is enforcement: NOT gated by the notices rollout flag
+class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
+    """Tests for close_semester_on_new_suspension (#1734 redesign B2): a fresh
+    suspension closes the deck's open semester exactly once per episode, returning
+    awaiting-approval submissions first and clamping negative XP, so current
+    students drop to zero."""
+
+    def setUp(self):
+        """Clear the cached deck row so each test reads its own billing state."""
+        cache.delete(deck_cache_key(self.tenant.schema_name))
+
+    def set_deck(self, **fields):
+        """Persist billing fields via update() + refresh (the close reads the instance)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def close(self):
+        """Shorthand: run the semester close for this deck and return its log summary."""
+        from tenant.notices import close_semester_on_new_suspension
+        return close_semester_on_new_suspension(self.tenant)
+
+    def test_close__fresh_suspension_closes_semester_once(self):
+        """A fresh suspension returns the awaiting-approval submission (unblocking
+        the close, which then sweeps it with the rest of the in-progress work, as
+        any semester close does), closes the semester, and drops the
+        current-student count to zero -- all with the notices flag off. The
+        episode is recorded, so a second run is a no-op."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from quest_manager.models import QuestSubmission
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        submission = baker.make(
+            QuestSubmission, user=student, is_completed=True, is_approved=False,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertGreater(self.tenant.get_active_user_count(), 0)
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
+        summary = self.close()
+        self.assertIn('closed semester', summary)
+        self.assertIn('returned 1 awaiting-approval submission(s)', summary)
+
+        self.assertTrue(SiteConfig.get().active_semester.closed)
+        self.assertEqual(self.tenant.get_active_user_count(), 0)
+        # the returned submission was then swept by the close's normal
+        # in-progress cleanup: nothing stays stuck in a teacher's queue
+        self.assertFalse(QuestSubmission.objects.filter(pk=submission.pk).exists())
+
+        self.assertEqual(self.close(), 'semester close already handled this episode')
+
+    def test_close__no_op_paths(self):
+        """Unsuspended decks are untouched (no ledger row); a suspended deck whose
+        semester is already closed records the episode without changes."""
+        from siteconfig.models import SiteConfig
+
+        self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None)
+        self.assertEqual(self.close(), 'not suspended')
+        self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())
+
+        sem = SiteConfig.get().active_semester
+        sem.closed = True
+        sem.save()
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
+        self.assertEqual(self.close(), 'semester was already closed')
+        self.assertEqual(self.close(), 'semester close already handled this episode')
+
+    def test_close__clamps_negative_xp_to_zero(self):
+        """A student with a negative XP balance doesn't block the auto-close: the
+        final XP is recorded as zero (maintainer decision, 2026-07-30)."""
+        from unittest.mock import patch
+
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from courses.models import CourseStudent
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
+        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+            summary = self.close()
+        self.assertIn('closed semester', summary)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
+
+    def test_close__failed_close_rolls_back_the_episode_ledger(self):
+        """If the close unexpectedly refuses (the defensive sentinel path), the
+        episode's ledger row rolls back with it, so the next nightly run retries
+        instead of recording a close that never happened."""
+        from unittest.mock import patch
+
+        from courses.models import Semester
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
+        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+            with self.assertRaises(RuntimeError):
+                self.close()
+        self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())

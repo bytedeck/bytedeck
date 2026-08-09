@@ -120,6 +120,20 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
         self.assertNotContains(response, 'One btn-group keeps every action button')
 
+    def test_badge_detail_all__login_required_and_renders_for_authenticated_users(self):
+        """badge_detail_all (assertions of all students) redirects anonymous users to login and renders for any logged-in user."""
+        b_pk = self.test_badge.pk
+
+        # anonymous -> redirected to login
+        self.assertRedirectsLogin('badges:badge_detail_all', args=[b_pk])
+
+        # students and teachers can both view it (login_required, no staff gate)
+        self.client.force_login(self.test_student1)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
+        self.client.force_login(self.test_teacher)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
     def test_badge_create__creates_badge(self):
         """Posting valid data to the create view creates a new badge and redirects to the list."""
         # log in a teacher
@@ -221,6 +235,28 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # make sure the student's xp cache was recalculated and deleted badge xp removed
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
+
+    def test_assertion_create__zero_ids_render_empty_initial_form(self):
+        """Calling assertion_create with user_id=0 and badge_id=0 (no pre-selected user/badge)
+        renders the grant form without pre-filling either, then a valid POST still grants."""
+        self.client.force_login(self.test_teacher)
+
+        # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
+        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
+        self.assertEqual(response.status_code, 200)
+        # neither field is pre-filled because both id lookups were skipped
+        self.assertNotIn('user', response.context['form'].initial)
+        self.assertNotIn('badge', response.context['form'].initial)
+
+        form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}),
+            data=form_data,
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+        self.assertTrue(
+            BadgeAssertion.objects.filter(user=self.test_student1, badge=self.test_badge).exists()
+        )
 
     def test_assertion_create__no_xp(self):
         """Don't grant XP for this badge assertion"""

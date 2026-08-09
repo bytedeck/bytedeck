@@ -24,12 +24,13 @@ from django.conf import settings
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
-from django.utils.timezone import localdate
+from django.utils.formats import date_format
+from django.utils.timezone import localdate, timedelta
 
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import DeckNotice, TRIAL_MAX_ACTIVE_USERS
+from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -39,69 +40,59 @@ EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
 
 LIMIT_WARNING_FRACTION = 0.8
 
-# How far back a suspension episode may have begun and still get its one-time
-# cap reset when the nightly task first sees it: covers multi-day beat outages
-# without rewriting caps on decks that were already suspended long before (whose
-# admins may have hand-adjusted the cap since -- exactly what the reset must
-# never clobber).
-CAP_RESET_CATCHUP_DAYS = 7
-
-
 def _unfired(deck, kind, threshold, period_key):
     """Whether this exact notice hasn't been recorded yet."""
     return not DeckNotice.objects.filter(tenant=deck, kind=kind, threshold=threshold, period_key=period_key).exists()
 
 
-def reset_cap_on_new_suspension(deck):
-    """Once per suspension episode, write the trial default back into the deck's
-    ``max_active_users`` -- the "revert to trial limits" moment (#1734).
+def close_semester_on_new_suspension(deck):
+    """Once per suspension episode, close the deck's open semester (#1734 redesign
+    B2): the suspension moment ends the school term, so current students drop to
+    zero. Every submission awaiting approval is returned first (maintainer
+    decision, 2026-07-30: nothing stays stuck in a teacher's queue, and the
+    normal close then works as-is), and a student's negative XP balance is
+    recorded as zero rather than blocking the close.
 
-    Enforcement, not communication: unlike the notices below this is NOT gated
-    by ``settings.DECK_NOTICES_ENABLED``. The cap is applied exactly once per
-    episode (a `DeckNotice` ledger row with threshold 'cap-reset' keyed to the
-    episode's first suspended day), so an admin adjustment made afterwards --
-    lower for a wind-down, higher for a comp -- always sticks
-    (maintainer decision on #2178). Episodes that began more than
-    CAP_RESET_CATCHUP_DAYS ago are recorded but NOT reset: they predate this
-    feature (or a long beat outage), and their caps may already be deliberate.
+    Enforcement, not communication: like the owner-only middleware (#2210) this
+    is NOT gated by ``settings.DECK_NOTICES_ENABLED``. It runs exactly once per
+    suspension episode (a DeckNotice ledger row with threshold
+    'semester-close', keyed like the suspended notice to the episode's lapsed
+    deadline), so an owner who deliberately opens a new semester while still
+    suspended is not fought with. The ledger row and the close commit
+    atomically: a crash rolls both back and the next nightly run retries.
 
-    Runs inside the deck's tenant context via ``deck_status_check``. Returns a
-    short summary string for the worker log.
+    Runs inside the deck's tenant context; returns a short summary string for
+    the worker log.
     """
-    from django.utils.timezone import timedelta
-
-    from tenant.models import GRACE_PERIOD_DAYS, Tenant
-    from tenant.utils import invalidate_current_deck_cache
+    from courses.models import Semester
+    from quest_manager.models import QuestSubmission
 
     if not deck.is_suspended:
         return 'not suspended'
 
-    # First day of this suspension episode: the day after the LAST clock lapsed
-    # (trials end at trial_end_date; paid access ends after the grace window).
-    last_covered_days = []
-    if deck.trial_end_date:
-        last_covered_days.append(deck.trial_end_date)
-    if deck.paid_until:
-        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
-    episode_start = max(last_covered_days) + timedelta(days=1)
+    period_key = str(deck.governing_deadline)
+    with transaction.atomic():
+        _, created = DeckNotice.objects.get_or_create(
+            tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='semester-close', period_key=period_key,
+        )
+        if not created:
+            return 'semester close already handled this episode'
 
-    _, created = DeckNotice.objects.get_or_create(
-        tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='cap-reset', period_key=str(episode_start),
-    )
-    if not created:
-        return 'cap already reset this episode'
-    if localdate() - episode_start > timedelta(days=CAP_RESET_CATCHUP_DAYS):
-        return f'episode began {episode_start}, before the catch-up window; cap left alone'
-    if deck.max_active_users == TRIAL_MAX_ACTIVE_USERS:
-        return 'cap already at the trial default'
+        returned = 0
+        for submission in QuestSubmission.objects.all_awaiting_approval():
+            submission.mark_returned()
+            returned += 1
 
-    old_cap = deck.max_active_users
-    # targeted update (not save()) so a concurrent admin edit to another column
-    # can't be clobbered by this stale instance
-    Tenant.objects.filter(pk=deck.pk).update(max_active_users=TRIAL_MAX_ACTIVE_USERS)
-    deck.max_active_users = TRIAL_MAX_ACTIVE_USERS
-    invalidate_current_deck_cache(deck.schema_name)
-    return f'cap reset {old_cap} -> {TRIAL_MAX_ACTIVE_USERS}'
+        result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+        if result == Semester.CLOSED:
+            # nothing was open; the episode is recorded so this isn't re-checked
+            return 'semester was already closed'
+        if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
+            # can't happen (submissions were just returned; negative XP is clamped),
+            # but if it ever does, roll everything back and retry next run instead
+            # of recording a close that didn't happen
+            raise RuntimeError(f'semester close failed with sentinel {result}')
+    return f'closed semester "{result}" (returned {returned} awaiting-approval submission(s))'
 
 
 def evaluate_deck_notices(deck):
@@ -115,16 +106,17 @@ def evaluate_deck_notices(deck):
 
     # --- suspension: once per suspension episode ---------------------------------
     if deck.is_suspended:
-        lapsed_clocks = [d for d in (deck.trial_end_date, deck.paid_until) if d is not None]
-        period_key = str(max(lapsed_clocks))
+        period_key = str(deck.governing_deadline)
         if _unfired(deck, DeckNotice.KIND_SUSPENDED, 'suspended', period_key):
             due.append((DeckNotice.KIND_SUSPENDED, 'suspended', period_key))
     else:
         # --- expiry cadence (not for suspended decks; their deadline is history) --
         days = deck.days_until_expiry
         if days is not None and days <= EXPIRY_THRESHOLDS[-1][1]:
-            deadline = deck.paid_until if deck.subscription_active else deck.trial_end_date
-            period_key = str(deadline)
+            # keyed to the GOVERNING deadline (the one days_until_expiry counts to
+            # and the email reports), so a stale paid key can never suppress
+            # reminders for a later governing trial date (#1734 B4)
+            period_key = str(deck.governing_deadline)
             # the first (most specific) milestone whose window we're inside governs --
             # broader milestones are superseded, never fired late. The guard above
             # guarantees at least the broadest window matches.
@@ -185,56 +177,74 @@ def process_deck_notices(deck):
     return f"sent {sent} notice(s): [{labels}]"
 
 
+def _notification_detail(deck, kind):
+    """The key fact for one notice's in-app notification, as a short sentence.
+
+    The email tells the full story; the notification names the date or count the
+    owner needs at a glance: the governing deadline (#1734 B4: the LATER of the
+    trial and paid clocks, which drives all lifecycle wording), the grace end, or
+    the seat usage. Assumes the notice is actually due, so the dates its branches
+    read exist (e.g. a suspended deck always has a lapsed governing deadline).
+
+    Args:
+        deck (Tenant): The deck the notice is about.
+        kind (str): The DeckNotice KIND_* being delivered.
+
+    Returns:
+        str: One sentence, ready to append after the notice's label.
+    """
+    clock = 'free trial' if deck.governing_clock_is_trial else 'subscription'
+    deadline = date_format(deck.governing_deadline) if deck.governing_deadline else None
+    if kind == DeckNotice.KIND_SUSPENDED:
+        detail = f"this deck's {clock} ended on {deadline} and the grace period has run out"
+        if deck.deletion_date:
+            detail += f'; without a subscription the deck may be deleted after {date_format(deck.deletion_date)}'
+        return detail + '.'
+    if kind == DeckNotice.KIND_LIMIT:
+        return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+    # expiry cadence: approaching the deadline, or already inside the grace window
+    days = deck.days_until_expiry
+    if days is not None and days < 0:
+        grace_end = date_format(deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS))
+        return f"this deck's {clock} ended on {deadline} and the grace period ends on {grace_end}."
+    return f"this deck's {clock} ends on {deadline} ({days} day{'s' if days != 1 else ''} left)."
+
+
 def _deliver(deck, kind):
     """Send one notice through both channels: owner email + in-app notification."""
-    from django.utils.timezone import timedelta
-
-    from tenant.models import GRACE_PERIOD_DAYS, INACTIVE_DELETE_DAYS
-
     from tenant.tasks import send_email_message
 
     config = SiteConfig.get()
     days = deck.days_until_expiry
-    # the day the deck's suspension began (or would begin): the day after its LAST
-    # covered day -- trials end at trial_end_date, paid access after the grace window
-    last_covered_days = []
-    if deck.trial_end_date:
-        last_covered_days.append(deck.trial_end_date)
-    if deck.paid_until:
-        last_covered_days.append(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS))
-    # is_suspended requires at least one date field, so the list is never empty here
-    suspended_since = max(last_covered_days) + timedelta(days=1) if deck.is_suspended else None
-    # The scheduled deletion day under the suspension policy: INACTIVE_DELETE_DAYS
-    # after the deletion CLOCK starts; the suspended email LEADS with it (maintainer
-    # request, 2026-07-30: put the bottom line up front). The clock never starts
-    # before the deck was actually WARNED (maintainer decision, 2026-07-31): a
-    # legacy deck whose dates lapsed long before this machinery went live gets its
-    # full year measured from its first suspended notice (this episode's ledger
-    # row, written moments before delivery; sent-today fallback covers a
-    # not-yet-committed row), never from a backdated lapse date.
-    deletion_date = None
-    if suspended_since:
-        first_warned_row = DeckNotice.objects.filter(
-            tenant=deck, kind=DeckNotice.KIND_SUSPENDED, threshold='suspended',
-            period_key=str(max(last_covered_days)),
-        ).order_by('sent_on').first()
-        warned_on = first_warned_row.sent_on if first_warned_row else localdate()
-        deletion_date = max(suspended_since, warned_on) + timedelta(days=INACTIVE_DELETE_DAYS)
+    # the deck's scheduled deletion day (Tenant.deletion_date: a year of
+    # suspension, never counted from before the episode's first suspended
+    # notice); the suspended email LEADS with it (maintainer request,
+    # 2026-07-30: put the bottom line up front). The suspended notice's own
+    # ledger row is written moments before delivery in the same transaction, so
+    # the first send already reads its real warned-on day.
+    suspended_since = deck.suspended_since
+    deletion_date = deck.deletion_date
     context = {
         'deck': deck,
         'config': config,
         'days': days,
         'cap': deck.effective_max_active_users,
-        # what a fresh suspension will RESET the cap to (reset_cap_on_new_suspension)
-        # -- the grace email predicts it, and can't derive it from `cap`, which is
-        # still the paid cap during grace
+        # the trial/Maintenance student cap, for email copy that references it
+        # (the deck's own `cap` can differ, e.g. a paid cap during grace)
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
         # every date the owner could want (maintainer request, 2026-07-25): when the
         # paid period ended/ends, how long ago, when the grace window closes, and --
         # for suspended decks -- the day the suspension began. None when not applicable.
         'grace_days': GRACE_PERIOD_DAYS,
-        'grace_end_date': deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS) if deck.paid_until else None,
+        # the unified grace window closes GRACE_PERIOD_DAYS after the deck's
+        # governing (latest) deadline, trial and paid clocks alike (#1734 B4);
+        # templates read the deadline and its origin from the deck itself
+        # (governing_deadline / governing_clock_is_trial)
+        'grace_end_date': (
+            deck.governing_deadline + timedelta(days=GRACE_PERIOD_DAYS)
+            if deck.governing_deadline else None
+        ),
         'grace_days_left': deck.grace_days_remaining,
         'expired_days_ago': -days if days is not None and days < 0 else None,
         'suspended_since': suspended_since,
@@ -253,6 +263,7 @@ def _deliver(deck, kind):
         DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'subscription expiry reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
         DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended warning'),
+        DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"
@@ -275,8 +286,13 @@ def _deliver(deck, kind):
         sender,
         recipient=config.deck_owner,
         affected_users=staff,
-        verb=f'sent a {verb}.',
+        # the label plus the notice's key fact (deadline or seat count), then one
+        # small "subscription details page" link: the bare "sent a reminder" line
+        # told the owner nothing actionable (maintainer requests, 2026-08-08)
+        verb=f'sent a {verb}: {_notification_detail(deck, kind)} See your',
         icon="<i class='fa fa-lg fa-fw fa-credit-card text-warning'></i>",
+        url=reverse('decks:subscription'),
+        link_text='subscription details page.',
     )
 
     # Email enqueue last: it can't be rolled back, so it only runs once everything
@@ -290,3 +306,33 @@ def _deliver(deck, kind):
             kwargs={'subject': subject, 'message': message, 'recipient_list': [owner_email]},
             queue='default',
         )
+
+
+def record_and_deliver_payment_failure(deck, invoice_id):
+    """Record and deliver a payment-failure notice (Stripe webhook, plan §5.2 PR 7).
+
+    Keyed by the failing invoice, so Stripe's own retries of the same invoice
+    produce ONE notice, while next month's failing invoice produces a fresh one.
+    No billing state changes -- the grace period already covers a failed renewal;
+    this is purely the owner heads-up. Respects the same DECK_NOTICES_ENABLED
+    report-only gate as the reminder engine. Must run inside the deck's tenant
+    context (delivery resolves the owner and staff from the schema).
+
+    Args:
+        deck (Tenant): The deck whose renewal payment failed.
+        invoice_id (str): The Stripe invoice id (in_...) that failed.
+
+    Returns:
+        str: A short summary string for the webhook log.
+    """
+    period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
+    if not settings.DECK_NOTICES_ENABLED:
+        return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"
+    with transaction.atomic():
+        _, created = DeckNotice.objects.get_or_create(
+            tenant=deck, kind=DeckNotice.KIND_PAYMENT_FAILED, threshold='invoice', period_key=period_key,
+        )
+        if not created:  # a Stripe retry of the same invoice; already notified
+            return 'payment-failure notice already sent for this invoice'
+        _deliver(deck, DeckNotice.KIND_PAYMENT_FAILED)
+    return 'sent payment-failure notice'

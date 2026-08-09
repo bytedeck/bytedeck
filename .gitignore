@@ -111,3 +111,6 @@ target/
 
 # Claude Code hook runtime state (per-session mtime cache)
 .claude/.cache/
+
+# redis persistence file dropped by a locally-run redis-server
+dump.rdb

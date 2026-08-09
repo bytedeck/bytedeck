@@ -46,6 +46,132 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         notification.mark_read()
         self.assertFalse(notification.unread)
 
+    def test_recent__returns_at_most_five_unread(self):
+        """recent() returns only the five most recent unread notifications."""
+        Notification.objects.all().delete()  # clear any created as a side effect of user setup
+        for _ in range(6):
+            Notification.objects.create(
+                recipient=self.student,
+                sender_content_type=ContentType.objects.get_for_model(self.teacher),
+                sender_object_id=self.teacher.id,
+                verb="pinged you",
+                unread=True,
+            )
+        recent = Notification.objects.all().recent()
+        self.assertEqual(len(recent), 5)
+        self.assertTrue(all(note.unread for note in recent))
+
+    def _latest_notification(self):
+        """Return the most recently created Notification (new_notification returns nothing)."""
+        return Notification.objects.order_by('id').last()
+
+    def test_get_link__with_target_and_action_renders_both(self):
+        """get_link() emphasises the target and quotes the action when the notification has both."""
+        target = baker.make('announcements.Announcement')
+        action = baker.make('comments.Comment')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            action=action,
+            verb="commented on",
+        )
+        link = self._latest_notification().get_link()
+        self.assertIn(f"<em>{target}</em>", link)
+        self.assertIn('with "', link)
+
+    def test_get_link__with_target_no_action_renders_target_only(self):
+        """get_link() emphasises the target but omits the 'with ...' clause when there is no action object."""
+        target = baker.make('announcements.Announcement')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            verb="posted",
+        )
+        link = self._latest_notification().get_link()
+        self.assertIn(f"<em>{target}</em>", link)
+        self.assertNotIn('with "', link)
+
+    def test_get_link__without_target_has_no_emphasis(self):
+        """get_link() renders only the sender/verb (no <em> target) when there is no target object."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent you a notification",
+        )
+        link = self._latest_notification().get_link()
+        self.assertNotIn("<em>", link)
+        self.assertTrue(link.endswith("</a>"))
+
+    def test_new_notification__explicit_url_becomes_the_destination(self):
+        """A notification created with url= stores it and links there (through the
+        read-tracking redirect) from both the dropdown and the list page."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder about this deck.",
+            url='/decks/subscription/',
+        )
+        note = self._latest_notification()
+        self.assertEqual(note.target_url, '/decks/subscription/')
+        self.assertTrue(note.get_url().endswith('?next=/decks/subscription/'))
+        self.assertIn("?next=/decks/subscription/", note.get_link())
+
+    def test_str__url_only_notification_links_the_verb_text(self):
+        """With an explicit url and no target object, the list page renders the verb
+        itself as the link text: the anchor would otherwise be empty, leaving the
+        destination unreachable from the notifications list."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder about this deck.",
+            url='/decks/subscription/',
+        )
+        text = str(self._latest_notification())
+        self.assertIn("?next=/decks/subscription/'>sent a reminder about this deck.</a>", text)
+
+    def test_str__link_text_keeps_the_verb_plain_with_one_small_link(self):
+        """With url= and link_text=, the list page renders the verb as plain text
+        followed by one small link (maintainer request, 2026-08-08), and the
+        dropdown's single-anchor row completes the sentence with the link text."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder. See your",
+            url='/decks/subscription/',
+            link_text='subscription details page.',
+        )
+        note = self._latest_notification()
+        self.assertEqual(note.target_link_text, 'subscription details page.')
+        text = str(note)
+        # the verb sits OUTSIDE the anchor; only the link text is inside it
+        self.assertIn("sent a reminder. See your <a href=", text)
+        self.assertIn("?next=/decks/subscription/'>subscription details page.</a>", text)
+        self.assertIn(" See your subscription details page.</a>", note.get_link())
+
+    def test_get_url__explicit_url_overrides_the_targets_own_page(self):
+        """When both a target object and an explicit url are given, the explicit url
+        wins as the destination while the target still provides the link text."""
+        target = baker.make('announcements.Announcement')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            verb="posted",
+            url='/decks/subscription/',
+        )
+        note = self._latest_notification()
+        self.assertTrue(note.get_url().endswith('?next=/decks/subscription/'))
+        self.assertIn(f"<em>{target}</em>", str(note))
+
     def test_new_notification__creates_unread_for_recipient(self):
         """new_notification() creates a single unread notification for the recipient."""
         # make sure the student doesn't have any notifications yet

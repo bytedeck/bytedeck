@@ -1,10 +1,11 @@
+from django.db import transaction
+from django.db.models import Max
 from django.http import Http404
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from hackerspace_online.decorators import StaffMemberRequiredMixin
-from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin
 from quest_manager.models import Quest
 
@@ -12,23 +13,7 @@ from .forms import QuestionForm
 from .models import Question, QuestionType
 
 
-class SubmissionQuestionsEnabledMixin:
-    """404 unless the deck has opted into submission questions via
-    SiteConfig.enable_submission_questions (a deck-level feature flag, default off).
-
-    Sits after NonPublicOnlyViewMixin (SiteConfig is a tenant-schema singleton, so the
-    tenant check must run first) and before StaffMemberRequiredMixin, so on a deck with
-    the feature off these URLs don't exist for anyone — no login redirect breadcrumbs.
-    """
-
-    def dispatch(self, request, *args, **kwargs):
-        """404 the request when the feature flag is off."""
-        if not SiteConfig.get().enable_submission_questions:
-            raise Http404("Submission questions are not enabled on this deck.")
-        return super().dispatch(request, *args, **kwargs)
-
-
-class QuestionListView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, ListView):
+class QuestionListView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, ListView):
     """Staff-only list of a quest's questions, with buttons to create each question type."""
 
     model = Question
@@ -65,7 +50,7 @@ class QuestionFormViewMixin:
         return kwargs
 
 
-class QuestionCreateView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, QuestionFormViewMixin, CreateView):
+class QuestionCreateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionFormViewMixin, CreateView):
     """Staff-only creation of a question of the type named in the URL."""
 
     model = Question
@@ -106,10 +91,7 @@ class QuestionQuestScopedMixin:
         return Question.objects.filter(quest_id=self.kwargs['quest_id'])
 
 
-class QuestionUpdateView(
-    NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin,
-    QuestionQuestScopedMixin, QuestionFormViewMixin, UpdateView,
-):
+class QuestionUpdateView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, QuestionFormViewMixin, UpdateView):
     """Staff-only editing of an existing question (its type is fixed at creation)."""
 
     model = Question
@@ -132,7 +114,7 @@ class QuestionUpdateView(
         return self.object.get_list_url()
 
 
-class QuestionDeleteView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, DeleteView):
+class QuestionDeleteView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, DeleteView):
     """Staff-only deletion of a question, with confirmation page.
 
     Students' existing answers survive (QuestionSubmission.question is SET_NULL) so markers
@@ -145,3 +127,58 @@ class QuestionDeleteView(NonPublicOnlyViewMixin, SubmissionQuestionsEnabledMixin
     def get_success_url(self):
         """Back to the quest's question list."""
         return reverse('questions:list', kwargs={'quest_id': self.kwargs['quest_id']})
+
+
+class QuestionMoveView(
+    NonPublicOnlyViewMixin, StaffMemberRequiredMixin, QuestionQuestScopedMixin, View,
+):
+    """Staff-only POST endpoint that moves a question up or down within its quest's ordering.
+
+    Students see a quest's questions in ascending ``ordinal`` order, so reordering is just
+    swapping ordinals. The question swaps with the nearest question in the requested direction;
+    ordinals aren't necessarily contiguous (deleting a question leaves a gap), so the neighbour is
+    found by ordering rather than by ``ordinal ± 1``. Moving the first question up or the last
+    question down is a no-op. Always redirects back to the quest's question list.
+    """
+
+    http_method_names = ['post']
+
+    def post(self, request, *args, **kwargs):
+        """Swap the question's ordinal with its up/down neighbour (if any), then redirect to
+        the list. `direction` comes from the URL and must be 'up' or 'down' (else 404)."""
+        direction = self.kwargs['direction']
+        if direction not in ('up', 'down'):
+            raise Http404(f"Cannot move a question '{direction}'.")
+
+        # get_queryset() (QuestionQuestScopedMixin) scopes to the URL's quest, so a question
+        # can only be moved through its own quest's URL.
+        question = get_object_or_404(self.get_queryset(), pk=self.kwargs['pk'])
+        siblings = Question.objects.filter(quest_id=question.quest_id)
+        if direction == 'up':
+            neighbour = siblings.filter(ordinal__lt=question.ordinal).order_by('-ordinal').first()
+        else:
+            neighbour = siblings.filter(ordinal__gt=question.ordinal).order_by('ordinal').first()
+
+        if neighbour is not None:
+            self._swap_ordinals(question, neighbour)
+
+        return redirect('questions:list', quest_id=question.quest_id)
+
+    @staticmethod
+    def _swap_ordinals(question, neighbour):
+        """Swap two questions' ordinals inside a transaction, parking one at a temporary
+        out-of-range ordinal first so the (quest, ordinal) unique constraint is never violated
+        mid-swap (Postgres enforces it per statement, not just at commit)."""
+        question_ordinal, neighbour_ordinal = question.ordinal, neighbour.ordinal
+        # a value guaranteed not to collide with any existing ordinal in this quest
+        temp_ordinal = Question.objects.filter(quest_id=question.quest_id).aggregate(Max('ordinal'))['ordinal__max'] + 1
+        with transaction.atomic():
+            question.ordinal = temp_ordinal
+            question.full_clean()
+            question.save()
+            neighbour.ordinal = question_ordinal
+            neighbour.full_clean()
+            neighbour.save()
+            question.ordinal = neighbour_ordinal
+            question.full_clean()
+            question.save()

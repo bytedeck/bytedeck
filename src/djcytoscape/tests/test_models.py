@@ -73,6 +73,13 @@ class CleanJSONTest(JSONTestCaseMixin, SimpleTestCase):
         """A braced object with a trailing comma is cleaned into valid JSON."""
         self.assertValidJSON(clean_JSON('{"key": true,}'))
 
+    def test_clean_JSON__already_valid_braced_object_unchanged(self):
+        """A string that is already a braced object with no trailing comma is returned
+        unchanged, exercising the branch where the closing brace is already present."""
+        value = '{"key": true}'
+        self.assertEqual(clean_JSON(value), value)
+        self.assertValidJSON(clean_JSON(value))
+
     def test_clean_JSON__unquoted_key(self):
         """An unquoted key is quoted so the result is valid JSON."""
         self.assertValidJSON(clean_JSON('key: true'))
@@ -281,6 +288,24 @@ class TempCampaignTest(ByteDeckTenantTestCase):
         # node 11's reliant is an external id -> not internal
         tc.add_reliant(node_id=11, reliant_node_id=999)
         self.assertFalse(tc.has_internal_reliant(tc.get_node(11)))
+
+    def test_get_common_reliant_node_ids__only_returns_reliants_shared_by_every_node(self):
+        """A reliant depended on by every campaign node is 'common'; a reliant of only some
+        nodes is excluded.
+
+        Covers both directions of the per-node membership check and the count == len(nodes)
+        check in get_common_reliant_node_ids.
+        """
+        tc = TempCampaign(parent_node_id=1)
+        tc.add_node(node_id=10, prereq_node_id=None)
+        tc.add_node(node_id=11, prereq_node_id=None)
+        # 500 is a reliant of BOTH nodes -> common to the whole campaign
+        tc.add_reliant(node_id=10, reliant_node_id=500)
+        tc.add_reliant(node_id=11, reliant_node_id=500)
+        # 600 is a reliant of node 10 only -> not shared, so not common
+        tc.add_reliant(node_id=10, reliant_node_id=600)
+
+        self.assertEqual(set(tc.get_common_reliant_node_ids()), {500})
 
     def test_is_non_sequential__always_false_due_to_is_true_comparison(self):
         """is_non_sequential runs over a campaign whose nodes share a common prereq.
@@ -635,6 +660,161 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         for index, expected in enumerate(expected_results):
             result = scapes[0:index].get_maps_as_formatted_string()
             self.assertEqual(result, expected)
+
+
+class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
+    """Targeted tests for previously-uncovered CytoScape map-generation branches."""
+
+    def test_generate_map__repeatable_reliant_quest_gets_repeat_edge_label(self):
+        """A repeatable reliant quest (max_repeats > 0) gets a circular 'x<n>' repeat edge."""
+        start = baker.make(Quest, name="Start")
+        repeatable = baker.make(Quest, name="Repeatable", max_repeats=3)
+        repeatable.add_simple_prereqs([start])
+
+        scape = CytoScape.generate_map(start, "repeat-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, label='x3', classes='repeat-edge').exists()
+        )
+
+    def test_generate_map__child_map_links_back_to_parent_scape(self):
+        """A map generated with a parent_scape gets a node linking back to the parent map."""
+        parent_quest = baker.make(Quest, name="ParentInit")
+        parent_scape = CytoScape.generate_map(parent_quest, "Parent Map")
+
+        child_quest = baker.make(Quest, name="ChildInit")
+        child_scape = CytoScape.generate_map(child_quest, "Child Map", parent_scape=parent_scape)
+
+        self.assertTrue(
+            CytoElement.objects.filter(
+                scape=child_scape,
+                label=f"{parent_scape.name} Quest Map",
+                classes__contains='parent-map',
+            ).exists()
+        )
+
+    def test_get_temp_campaign__returns_none_when_id_not_found(self):
+        """get_temp_campaign returns None when no TempCampaign matches the given node id."""
+        scape = bake_scape(name="temp-campaign-test")
+        scape.init_temp_campaign_list()
+        self.assertIsNone(scape.get_temp_campaign(999999))
+
+    def test_generate_map__quest_with_or_prereq_gets_complicated_prereqs_edge(self):
+        """An edge to a reliant quest that has an OR (alternate) prerequisite is tagged with the
+        'complicated-prereqs' class so the map can style alternate-prereq edges differently."""
+        start = baker.make(Quest, name="Start")
+        child = baker.make(Quest, name="Child")
+        alt = baker.make(Quest, name="Alt")
+        # child is unlocked by (start OR alt): it relies on start, and carries an OR prereq
+        Prereq.objects.create(parent_object=child, prereq_object=start, or_prereq_object=alt)
+
+        scape = CytoScape.generate_map(start, "or-prereq-test")
+
+        self.assertTrue(
+            CytoElement.objects.filter(scape=scape, classes__contains='complicated-prereqs').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_rewrites_common_prereq_edges(self):
+        """A campaign whose members are concurrently available (they share a common external
+        prerequisite) is non-sequential: fix_nonsequential_campaign_edges joins the members with
+        hidden edges and moves the shared-prereq edge onto the compound campaign node.
+
+        A member with an internal prerequisite (relying on another member rather than the shared
+        Start) still counts toward the common prereq but has no direct Start edge to remove, so
+        that member exercises the 'unless quest has internal prereq' branch of step 2.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Concurrent Campaign")
+        q1 = baker.make(Quest, name="Concurrent1", campaign=campaign)
+        q2 = baker.make(Quest, name="Concurrent2", campaign=campaign)
+        q3 = baker.make(Quest, name="Concurrent3", campaign=campaign)
+        q1.add_simple_prereqs([start])
+        q2.add_simple_prereqs([start])
+        # q3's only prereq is internal to the campaign (q1), so it holds no direct Start edge
+        q3.add_simple_prereqs([q1])
+
+        scape = CytoScape.generate_map(start, "nonseq-test")
+
+        for name in ("Concurrent1", "Concurrent2", "Concurrent3"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
+
+        def node_id_for(obj):
+            return scape.cytoelement_set.get(
+                group=CytoElement.NODES, selector_id=CytoElement.generate_selector_id(obj)
+            ).id
+
+        start_node_id = node_id_for(start)
+        campaign_node_id = node_id_for(campaign)
+
+        def visible_edge_exists(source_id, target_id):
+            """A non-hidden (styled) edge from source to target."""
+            return scape.cytoelement_set.filter(
+                group=CytoElement.EDGES, data_source_id=source_id, data_target_id=target_id
+            ).exclude(classes__contains='hidden').exists()
+
+        # step 3: the shared Start prerequisite edge is moved onto the compound campaign node
+        self.assertTrue(visible_edge_exists(start_node_id, campaign_node_id))
+        # step 2: the direct visible Start -> member prerequisite edges are removed (a hidden
+        # structural edge to the campaign's first node may be re-added in step 4, but no visible one)
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q1)))
+        self.assertFalse(visible_edge_exists(start_node_id, node_id_for(q2)))
+        # step 1: hidden campaign-layout edges are added to join the members
+        self.assertTrue(
+            scape.cytoelement_set.filter(group=CytoElement.EDGES, classes__contains='hidden').exists()
+        )
+
+    def test_generate_map__nonsequential_campaign_with_internal_reliant_keeps_common_reliant_edge(self):
+        """The deprecated common-reliant cleanup handles a non-sequential campaign that also has a
+        common reliant where one member holds it only via an internal reliant (not directly).
+
+        A common reliant can be shared by the whole campaign through has_internal_reliant() even
+        for a member that does not directly depend on it; for that member there is no direct
+        member -> reliant edge to remove, so the membership check's false arc is exercised. The
+        map still generates and represents every quest.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Reliant Campaign")
+        r1 = baker.make(Quest, name="Reliant1", campaign=campaign)
+        r2 = baker.make(Quest, name="Reliant2", campaign=campaign)
+        r3 = baker.make(Quest, name="Reliant3", campaign=campaign)
+        r1.add_simple_prereqs([start])
+        r2.add_simple_prereqs([start])
+        # r3 depends internally on r1, so r1 gains an internal reliant (r3)
+        r3.add_simple_prereqs([r1])
+        # an external quest depends on r2 and r3 (not r1): it is a reliant common to the campaign,
+        # but r1 holds it only through its internal reliant r3, not directly
+        external = baker.make(Quest, name="ExternalReliant")
+        external.add_simple_prereqs([r2, r3])
+
+        scape = CytoScape.generate_map(start, "reliant-internal-test")
+
+        for name in ("Reliant1", "Reliant2", "Reliant3", "ExternalReliant"):
+            self.assertTrue(
+                CytoElement.objects.filter(scape=scape, label__contains=name).exists(),
+                f"{name} should be represented on the map",
+            )
+
+    def test_generate_map__campaign_as_prerequisite_adds_campaign_reliant(self):
+        """A quest whose prerequisite is a Campaign (Category) exercises the campaign-reliant path.
+
+        The campaign node is a compound/parent node, and a quest that relies on the whole
+        campaign is registered as a campaign-reliant during the recursive edge build, so map
+        generation completes and both quests are represented.
+        """
+        start = baker.make(Quest, name="Start")
+        campaign = baker.make(Category, title="Test Campaign")
+        in_campaign = baker.make(Quest, name="InCampaign", campaign=campaign)
+        in_campaign.add_simple_prereqs([start])
+        reliant_on_campaign = baker.make(Quest, name="ReliantOnCampaign")
+        reliant_on_campaign.add_simple_prereqs([campaign])
+
+        scape = CytoScape.generate_map(start, "campaign-reliant-test")
+
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="InCampaign").exists())
+        self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="ReliantOnCampaign").exists())
 
 
 class CampaignMapOrderTest(ByteDeckTenantTestCase):

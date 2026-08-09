@@ -232,6 +232,47 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "one deck")
         self.assertContains(response, "5 minutes")
 
+    def test_RequestNewDeckSubmitted_get__renders_trial_terms(self):
+        """The confirmation page's info box states the free-trial terms (length,
+        student cap, grace window), sourced from the constants that enforce them
+        (maintainer request, 2026-08-08)."""
+        from tenant.models import GRACE_PERIOD_DAYS, TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck_submitted"))
+        self.assertContains(response, f"free {TRIAL_LENGTH_DAYS}-day trial")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} current student")
+        self.assertContains(response, f"{GRACE_PERIOD_DAYS}-day grace period")
+        # the info box is an ordinary in-flow alert; the public stylesheet's
+        # fixed-toast styling is reserved for the BD-flash flash banner
+        self.assertContains(response, "alert alert-warning")
+        self.assertNotContains(response, "BD-flash")
+
+    def test_RequestNewDeck_get__outlines_the_flow_steps(self):
+        """The request form page outlines the whole flow (verify email, emailed
+        credentials, trial terms with a subscribe link, demo-deck preview)
+        instead of showing a bare email form (maintainer request, 2026-08-08)."""
+        from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Verify your email")
+        self.assertContains(response, "login credentials")
+        self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
+        self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} student")
+        self.assertContains(response, 'href="/pages/subscribe/"')
+        self.assertContains(response, 'href="https://learn.bytedeck.com"')
+        # the demo course code is unset by default, so no code is printed
+        self.assertNotContains(response, "course code")
+
+    @override_settings(DEMO_DECK_COURSE_CODE="join-us-123")
+    def test_RequestNewDeck_get__demo_course_code_comes_from_the_environment(self):
+        """The demo deck's course code renders only when configured: it lives in
+        the deployment's environment rather than the repo, so bots scraping the
+        codebase can't harvest it (maintainer request, 2026-08-08)."""
+        response = self.client.get(reverse("decks:request_new_deck"))
+        self.assertContains(response, "course code")
+        self.assertContains(response, "join-us-123")
+
     def test_RequestNewDeckSubmitted_get_context_data__timeouts_track_configured_values(self):
         """The timeout copy is derived from DeckRequestService's settings, not
         hard-coded: changing the configured values changes the rendered page."""
@@ -322,6 +363,33 @@ class TenantCreateViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             site_config = SiteConfig.objects.get()
             self.assertIsInstance(site_config.deck_owner, User)
             self.assertEqual(site_config.deck_owner.email, "john.doe@example.com")
+
+    @patch("tenant.models.Tenant.full_clean")
+    @patch("tenant.views.EmailAddress.objects.get_or_create")
+    def test_form_valid__existing_email_address_marked_verified_and_primary(self, mock_get_or_create, mock_full_clean):
+        """When the owner already has an EmailAddress, form_valid explicitly marks that
+        record verified and primary (the get_or_create created=False branch)."""
+        existing_email = Mock()
+        mock_get_or_create.return_value = (existing_email, False)
+
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+        request = self.factory.post(reverse("tenant:new"), data=self.form_data)
+        request.user = AnonymousUser()
+        request.session = {"verified_deck_request": {**self.form_data, "nonce": nonce}}
+
+        view = TenantCreate()
+        view.setup(request)
+
+        form = TenantForm(data=self.form_data, verified_data=self.form_data)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        with tenant_context(self.public_tenant):
+            view.form_valid(form)
+
+        self.assertTrue(existing_email.verified)
+        self.assertTrue(existing_email.primary)
+        existing_email.full_clean.assert_called_once()
+        existing_email.save.assert_called_once()
 
     @patch("tenant.models.Tenant.full_clean")
     def test_form_valid__verification_nonce_is_single_use(self, mock_full_clean):
@@ -471,6 +539,65 @@ class DeckRequestServiceTest(TestCase):
         self.assertNotIn("john.doe", link.lower())
         self.assertNotIn("example.com", link.lower())
 
+    def test_build_verification_link__returns_absolute_url_for_nonce(self):
+        """build_verification_link turns the nonce's verify path into a fully-qualified URL."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        link = DeckRequestService.build_verification_link(request, nonce)
+
+        self.assertEqual(link, request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])))
+        self.assertIn(nonce, link)
+        self.assertTrue(link.startswith("http"))
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__with_request_uses_absolute_link(self, mock_apply_async):
+        """With a request, the emailed verification link is absolute, and the message is queued."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=request)
+
+        mock_apply_async.assert_called_once()
+        subject, message, recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertEqual(subject, "Verify your email to confirm your deck request")
+        self.assertEqual(recipients, ["john.doe@example.com"])
+        self.assertIn(request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce])), message)
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__html_body_with_validity_and_logo(self, mock_apply_async):
+        """The verification email is a real HTML message: paragraphs, a clickable
+        link, the validity window sourced from TOKEN_MAX_AGE rather than
+        hard-coded copy, and the platform logo in the standard sigblock.
+        send_email_message derives the plain-text part from the HTML, so both
+        parts render with formatting instead of one collapsed line."""
+        request = RequestFactory().get("/")
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=request)
+
+        _subject, message, _recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertIn("<p>Hello John,</p>", message)
+        link = request.build_absolute_uri(reverse("decks:verify_deck_request", args=[nonce]))
+        self.assertIn(f'<a href="{link}">', message)
+        self.assertIn("1 hour", message)  # TOKEN_MAX_AGE = 3600, humanized
+        # the platform wordmark at half its 510x128 natural size, by absolute URL
+        # so it renders inside email clients (maintainer request, 2026-08-08)
+        self.assertIn('alt="[Logo]"', message)
+        self.assertIn(f'src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', message)
+
+    @patch("tenant.utils.send_email_message.apply_async")
+    def test_send_verification_email__without_request_uses_relative_link(self, mock_apply_async):
+        """Without a request, the emailed verification link is the relative path (no host)."""
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+
+        DeckRequestService.send_verification_email("John", "john.doe@example.com", nonce, request=None)
+
+        mock_apply_async.assert_called_once()
+        _subject, message, _recipients = mock_apply_async.call_args.kwargs["args"]
+        self.assertIn(reverse("decks:verify_deck_request", args=[nonce]), message)
+        self.assertNotIn("testserver", message)  # relative link, so no absolute host
+
 
 class DummyView(EmailVerificationRequiredMixin, View):
     """Minimal view used to exercise EmailVerificationRequiredMixin.dispatch."""
@@ -522,6 +649,20 @@ class EmailVerificationRequiredMixinTest(TestCase):
         request = make_request(stale_ts)
         response = self.view(request)
         self.assertEqual(response.status_code, 403)
+
+    @patch("tenant.views.render")  # patch render to avoid template DB queries
+    def test_dispatch__verified_request_without_timestamp_is_cleared_and_denied(self, mock_render):
+        """A verified_deck_request carrying no verified_at is treated as malformed: it's dropped from the session and access is denied (403)."""
+        mock_render.side_effect = lambda request, template_name, context=None, status=None: HttpResponse(status=status or 200)
+
+        request = self.factory.get("/dummy/")
+        request.user = self.user
+        request.session = {"verified_deck_request": {"email": "john.doe@example.com"}}  # no verified_at
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("verified_deck_request", request.session)
 
 
 class DeckStatusBannerTest(ByteDeckTenantTestCase):
@@ -618,25 +759,32 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         response = self.get_quests_page(self.student)
         self.assertNotContains(response, 'deck-status-banner')
 
-    def test_banner__suspended_deck_warns_everyone(self):
-        """On a suspended deck, staff get the subscribe call-to-action (with the
-        owner-only sign-in rule and the 365-day deletion countdown), and students
-        are told only the deck owner can sign in (suspension redesign, 2026-07-30)."""
+    def test_banner__suspended_deck_warns_owner_and_visitors(self):
+        """On a suspended deck the banner reaches the two audiences who can still
+        load pages: the deck owner (the staff variant with the owner-only sign-in
+        rule, the 365-day deletion countdown, and the subscribe link) and
+        anonymous visitors on the sign-in page (the everyone-else variant).
+        Signed-in non-owners are signed out by the suspension middleware before
+        any page renders; that path is exercised in test_middleware.py
+        (test_bounce__non_owner_is_signed_out_and_redirected_with_message)."""
         from datetime import date
+
+        from siteconfig.models import SiteConfig
 
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None)
 
-        response = self.get_quests_page(self.student)
-        self.assertContains(response, 'This deck is suspended')
-        self.assertContains(response, 'Only the deck owner can sign in')
-
-        response = self.get_quests_page(self.staff)
+        response = self.get_quests_page(SiteConfig.get().deck_owner)
         self.assertContains(response, 'This deck is suspended')
         text = ' '.join(response.content.decode().split())  # template line-wraps mid-phrase
         self.assertIn('Only the deck owner can sign in', text)  # owner-only sign-in rule
         self.assertIn('suspended for 365 days', text)  # deletion countdown
         self.assertContains(response, 'fa-ban')  # danger-level banner icon
         self.assertContains(response, reverse('decks:subscription'))
+
+        self.client.logout()
+        response = self.client.get(reverse('account_login'))
+        self.assertContains(response, 'This deck is suspended')
+        self.assertContains(response, 'Only the deck owner can sign in')
 
     def test_banner__over_limit_warns_staff_from_live_count(self):
         """Staff see the over-limit warning from the LIVE current-student count --
@@ -693,6 +841,22 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.assertContains(self.get_quests_page(self.staff), 'alert-warning')
         # self.tenant is shared across the class in memory and set_deck saves the
         # whole object, so clear the paid date or it leaks into later tests
+        self.set_deck(paid_until=None)
+
+    def test_banner__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed long ago), the expired-into-grace
+        banner speaks about the TRIAL: the governing clock picks the wording
+        (#1734 B4 review find), not whether a paid date exists."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=localdate() - timedelta(days=100))
+        response = self.get_quests_page(self.staff)
+        self.assertContains(response, 'Trial ended')
+        self.assertNotContains(response, 'Subscription expired')
+        # clear the paid date so it doesn't leak into later tests (shared instance)
         self.set_deck(paid_until=None)
 
 
@@ -794,14 +958,15 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
 
     def test_page__dates_show_only_the_governing_deadline(self):
-        """The Dates table shows ONE deadline row -- Paid until when a paid date
-        exists (it supersedes the trial date, even while lapsed), Trial ends on a
-        trial-only deck, and a never-expires row on a managed-manually deck."""
+        """The Dates table shows ONE deadline row -- the governing (LATEST) clock's
+        (#1734 B4): Paid until when the paid clock governs, Trial ends when the
+        trial clock governs (even with both dates set), and a never-expires row
+        on a managed-manually deck."""
         from datetime import timedelta
 
         from django.utils.timezone import localdate
 
-        # subscribed decks keep their old trial date; only the paid row shows
+        # subscribed decks keep their old trial date; the paid clock governs
         self.set_deck(trial_end_date=localdate() - timedelta(days=300))
         response = self.get_page()
         self.assertContains(response, 'Paid until')
@@ -816,6 +981,25 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.get_page()
         self.assertContains(response, 'Never')
         self.assertNotContains(response, 'Trial ends')
+        self.assertNotContains(response, 'Paid until')
+
+    def test_page__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+        """With BOTH dates set and the trial the LATER clock (an admin-extended
+        trial on a deck whose paid period lapsed earlier), the grace status and
+        the Dates table follow the governing trial clock: trial wording,
+        subscribe (not renew), the Trial ends row, and no Paid until row
+        (#1734 B4 review find)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=localdate() - timedelta(days=100))
+        response = self.get_page()
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('free trial ended on', text)
+        self.assertIn('subscribe to keep full access', text)
+        self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
+        self.assertContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
     def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
@@ -855,14 +1039,36 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
                       'and the 365-day countdown to deck deletion begins)', text)
 
+    def test_page__lapsed_trial_gets_the_same_grace_status(self):
+        """A lapsed trial lands in the SAME grace state (#1734 B4): the danger
+        "Grace period" label, trial-specific wording ("free trial ended",
+        subscribe rather than renew), and the trial Dates rows with the grace
+        row's countdown."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=localdate() - timedelta(days=5), paid_until=None)
+        response = self.get_page()
+        self.assertContains(response, 'Grace period</span>')
+        self.assertContains(response, 'label-danger')
+        text = ' '.join(response.content.decode().split())
+        self.assertIn('free trial ended on', text)
+        self.assertIn('subscribe to keep full access', text)
+        self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
+
     def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
-        """A suspended deck's status copy states the new suspension rules -- only
+        """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
-        the seats table still shows the ADMIN-SET cap, whatever it is (the field
-        stays authoritative; production find, 2026-07-24)."""
+        the seats table still shows the ADMIN-SET cap, whatever it is (the
+        field stays authoritative; production find, 2026-07-24). Viewed as the
+        deck owner: the suspension middleware signs everyone else out (#1734)."""
         from datetime import date
 
+        from siteconfig.models import SiteConfig
+
         self.set_deck(trial_end_date=date(2020, 1, 1), paid_until=None, max_active_users=1)
+        self.client.force_login(SiteConfig.get().deck_owner)
         response = self.get_page()
         self.assertContains(response, 'only the deck owner can sign in')
         self.assertContains(response, 'suspended for 365 days')
@@ -924,6 +1130,26 @@ class SubscriptionDetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """The -1 unlimited sentinel renders as "Unlimited" rather than -1."""
         self.set_deck(max_active_users=-1)
         self.assertContains(self.get_page(), 'Unlimited')
+
+    def test_page__mid_trial_checkout_note_promises_no_lost_trial_time(self):
+        """While the deck is on trial (with enough trial left for checkout to
+        preserve it), the subscribe button's help text says the card isn't
+        charged until the trial ends; a paid deck gets the plain portal/checkout
+        copy with no trial note (maintainer decision, 2026-08-06)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123'):
+            self.set_deck(trial_end_date=localdate() + timedelta(days=30), paid_until=None)
+            text = ' '.join(self.get_page().content.decode().split())
+            self.assertIn("won't cut your free trial short", text)
+            self.assertIn('renews automatically', text)
+
+            # subscribed deck: no trial note
+            self.set_deck(trial_end_date=None, paid_until=localdate() + timedelta(days=100))
+            text = ' '.join(self.get_page().content.decode().split())
+            self.assertNotIn("won't cut your free trial short", text)
 
     def test_page__not_configured_falls_back_to_public_subscribe_page(self):
         """Without Stripe keys the page says billing isn't configured and links the
@@ -1161,3 +1387,99 @@ class SubscriptionCheckoutTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.json(), {'active': False})
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, '')
+
+
+class StripeWebhookViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+    """Tests for the Stripe webhook endpoint (epic #1729 PR 7, plan §5.2).
+
+    The endpoint is public-schema-only, so these tests build the public tenant
+    (as TenantCreateViewTest does) and POST against it. Signature verification is
+    mocked at the SDK seam -- its real crypto is Stripe's to test.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Build the public schema on the 'testserver' domain."""
+        cls.public_tenant = Tenant(schema_name="public", name="public")
+        with tenant_context(cls.public_tenant):
+            Tenant.objects.bulk_create([cls.public_tenant])
+            cls.public_tenant.refresh_from_db()
+            cls.public_tenant.domains.create(domain="testserver", is_primary=True)
+
+    def setUp(self):
+        """Keep the default tenant client (super) and add a public-host client."""
+        super().setUp()
+        self.public_client = TenantClient(self.public_tenant, host="testserver")
+
+    def post_webhook(self, **kwargs):
+        """POST an (empty) payload to the webhook with a dummy signature header."""
+        return self.public_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json',
+            headers={'stripe-signature': 't=1,v1=dummy'}, **kwargs,
+        )
+
+    def test_webhook__503_when_secret_not_configured(self):
+        """Without STRIPE_WEBHOOK_SECRET the endpoint refuses (nothing to verify with)."""
+        self.assertEqual(self.post_webhook().status_code, 503)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__400_on_bad_signature_before_any_db_work(self):
+        """An unverifiable payload fails fast with 400 -- unknown-host probes reach
+        this endpoint (SHOW_PUBLIC_IF_NO_TENANT_FOUND), so no DB work happens first."""
+        import stripe as stripe_lib
+
+        from tenant.models import StripeEventLog
+
+        with patch('stripe.Webhook.construct_event',
+                   side_effect=stripe_lib.SignatureVerificationError('bad', 'sig')):
+            response = self.post_webhook()
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(StripeEventLog.objects.exists())
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__dispatches_verified_event_and_logs_it(self):
+        """A verified event is logged (with its resolved deck) and dispatched once;
+        a duplicate delivery is acknowledged without re-running the handler."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_hook', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_hook', 'status': 'active', 'customer': 'cus_hook',
+                                     'metadata': {'schema_name': self.tenant.schema_name}}}}
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            response = self.post_webhook()
+            self.assertEqual(response.status_code, 200)
+            log = StripeEventLog.objects.get(event_id='evt_hook')
+            self.assertEqual(log.event_type, 'customer.subscription.updated')
+            self.assertEqual(log.schema_name, self.tenant.schema_name)
+
+            with patch('tenant.billing.handle_webhook_event') as mock_handler:
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b'duplicate', response.content)
+        mock_handler.assert_not_called()
+        self.assertEqual(StripeEventLog.objects.count(), 1)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__404_on_tenant_schemas(self):
+        """The endpoint only exists on the public schema (public_only_view)."""
+        tenant_client = TenantClient(self.tenant)  # requests on the deck's own domain
+        response = tenant_client.post(
+            reverse('decks:stripe_webhook'), data=b'{}', content_type='application/json')
+        self.assertEqual(response.status_code, 404)
+
+    @override_settings(STRIPE_WEBHOOK_SECRET='whsec_123')
+    def test_webhook__handler_crash_rolls_back_event_log_so_stripe_retries(self):
+        """A handler crash returns 500 and rolls the StripeEventLog row back with the
+        transaction, so Stripe's retry of the event is re-processed, not absorbed
+        as a duplicate."""
+        from tenant.models import StripeEventLog
+
+        event = {'id': 'evt_crash', 'type': 'customer.subscription.updated',
+                 'data': {'object': {'id': 'sub_crash'}}}
+        # surface the 500 as a response instead of re-raising into the test
+        self.public_client.raise_request_exception = False
+        with patch('stripe.Webhook.construct_event', return_value=event):
+            with patch('tenant.billing.handle_webhook_event', side_effect=RuntimeError('handler boom')):
+                response = self.post_webhook()
+        self.assertEqual(response.status_code, 500)
+        self.assertFalse(StripeEventLog.objects.filter(event_id='evt_crash').exists())

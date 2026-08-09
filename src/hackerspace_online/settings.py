@@ -35,7 +35,9 @@ DEBUG = env('DEBUG')
 ROOT_DOMAIN = env('ROOT_DOMAIN', default='localhost')
 
 ALLOWED_HOSTS = env('ALLOWED_HOSTS', default=[])
-if not ALLOWED_HOSTS:
+# ALLOWED_HOSTS is unset under the test harness, so the fallback always runs; the
+# "already provided via env" arc is only taken in real deployments.
+if not ALLOWED_HOSTS:  # pragma: no branch
     ALLOWED_HOSTS = [f".{ROOT_DOMAIN}"]
 
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[])
@@ -276,6 +278,10 @@ MIDDLEWARE = [
     'django.middleware.locale.LocaleMiddleware',  # used by django-date-time-widget
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    # Suspension policy: owner-only sign-in (#1734). Needs auth + messages above, and
+    # sits BELOW the clickjacking/security layers so its short-circuit redirects still
+    # pass back through them and pick up their response headers (review find on #2210).
+    'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
 ]
 
@@ -361,7 +367,7 @@ LOGGING = {
 # default). Augments the base LOGGING above rather than replacing it.
 DB_LOGS_ENABLED = env('DB_LOGS_ENABLED', default=False)
 
-if DB_LOGS_ENABLED:
+if DB_LOGS_ENABLED:  # pragma: no cover -- opt-in dev query tracer, disabled (env default) under the test harness
     MIDDLEWARE.insert(0, 'hackerspace_online.middleware.ForceDebugCursorMiddleware')
     LOGS_PATH = os.path.join(os.sep, 'tmp', 'bytedeck')
 
@@ -563,7 +569,7 @@ DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 
 # SERVER ERRORS EMAIL
 admins_raw = env('ADMINS', default=[])
-if admins_raw:
+if admins_raw:  # pragma: no cover -- ADMINS env unset under the test harness
     # https://django-environ.readthedocs.io/en/latest/index.html?highlight=ADMINS#nested-lists
     ADMINS = [tuple(entry.split(':')) for entry in env.list('ADMINS')]
 SERVER_EMAIL = env('SERVER_EMAIL', default=None)
@@ -577,7 +583,7 @@ MEDIA_URL = '/media/'
 STATIC_URL = '/static/'
 
 USE_S3 = env('USE_S3', default='0') == '1'
-if USE_S3:
+if USE_S3:  # pragma: no cover -- production S3 storage config, disabled (env default) under the test harness
 
     # AWS settings
     AWS_ACCESS_KEY_ID = env('AWS_ACCESS_KEY_ID')
@@ -690,14 +696,63 @@ DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
 # and self-hosted environments boot clean without a Stripe account.
 STRIPE_PUBLISHABLE_KEY = env('STRIPE_PUBLISHABLE_KEY', default=None)
 STRIPE_SECRET_KEY = env('STRIPE_SECRET_KEY', default=None)
-STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # used by the webhook endpoint (plan PR 7)
+STRIPE_WEBHOOK_SECRET = env('STRIPE_WEBHOOK_SECRET', default=None)  # verifies every webhook delivery (plan §5.2)
 STRIPE_PRICE_ID = env('STRIPE_PRICE_ID', default=None)  # the recurring Price (price_...) checkout subscribes decks to
+
+# Fallback tier map (price_id -> current-student cap) for Prices whose
+# metadata.max_active_users was never set in the Stripe dashboard (plan §2).
+# JSON in the env, e.g. STRIPE_PRICE_TIER_MAP={"price_abc": 40, "price_def": 80}
+STRIPE_PRICE_TIER_MAP = env.json('STRIPE_PRICE_TIER_MAP', default={})
+
+
+def _validate_stripe_settings(root_domain, stripe_secret_key, stripe_webhook_secret):
+    """Refuse to boot a real deployment that enables Stripe checkout without the
+    webhook secret: without webhooks, renewals never sync and every Stripe-billed
+    deck drifts toward suspension at its stale ``paid_until``. Local development
+    (``localhost``) is never blocked. Raises ``ImproperlyConfigured``.
+    """
+    from django.core.exceptions import ImproperlyConfigured
+
+    if root_domain == 'localhost':
+        return
+    if stripe_secret_key and not stripe_webhook_secret:
+        raise ImproperlyConfigured(
+            "STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is not. Register the webhook "
+            "endpoint in the Stripe dashboard and set its signing secret, or unset the Stripe "
+            "keys entirely -- checkout without webhooks leaves renewals unsynced."
+        )
+
+
+# Same bootstrap pattern as _validate_deployment_settings above: skipped during
+# tests (where settings are exercised directly by tests instead).
+if 'test' not in sys.argv:  # pragma: no cover -- bootstrap line; the logic is covered by StripeSettingsGuardTest
+    _validate_stripe_settings(ROOT_DOMAIN, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET)
+
+
+# DEMO DECK #######################################################
+
+# Course code for the public demo deck (learn.bytedeck.com), shown on the
+# deck-request page so visitors can preview ByteDeck as a student. Set only in
+# the deployment's .env: keeping it out of the repo means bots scraping the
+# codebase can't harvest it, and it can be rotated without a release. When
+# unset, the page links the demo deck without printing a code.
+DEMO_DECK_COURSE_CODE = env('DEMO_DECK_COURSE_CODE', default='')
+
+# Logo for the sigblock of platform emails (the public-tenant sends: deck-request
+# verification and welcome). Must be an ABSOLUTE URL: mail clients resolve the
+# email body with no origin, so a schema-relative static path renders as a broken
+# image. The default is the production static host's copy of
+# static/public/images/wordmark-v2.png (maintainer request, 2026-08-08).
+PUBLIC_EMAIL_LOGO_URL = env(
+    'PUBLIC_EMAIL_LOGO_URL',
+    default='https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png',
+)
 
 
 # RECAPTCHA #######################################################
 
 recaptcha_keys_available = env('RECAPTCHA_PRIVATE_KEY', default=None)
-if recaptcha_keys_available:
+if recaptcha_keys_available:  # pragma: no cover -- real reCAPTCHA keys env unset under the test harness (test keys used)
     RECAPTCHA_PUBLIC_KEY = env('RECAPTCHA_PUBLIC_KEY')
     RECAPTCHA_PRIVATE_KEY = env('RECAPTCHA_PRIVATE_KEY')
 else:
@@ -981,7 +1036,7 @@ TAGGIT_CASE_INSENSITIVE = True
 # TESTING ##################################################
 
 TESTING = 'test' in sys.argv
-if TESTING:
+if TESTING:  # pragma: no branch -- always true under the test runner ('test' in sys.argv)
     # Custom runner installs a model_bakery patch so baker.make(Prereq) builds
     # valid GenericForeignKey targets instead of random dangling ones (which
     # made the prerequisites signal tests intermittently crash). See
@@ -1010,7 +1065,7 @@ if TESTING:
 
 # DEBUG / DEVELOPMENT SPECIFIC SETTINGS #################################
 
-if DEBUG and not TESTING:
+if DEBUG and not TESTING:  # pragma: no cover -- dev-only debug toolbar setup, never runs under the test harness
 
     import socket
     INTERNAL_IPS = ['127.0.0.1', '0.0.0.0']

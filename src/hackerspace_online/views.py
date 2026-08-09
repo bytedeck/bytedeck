@@ -1,11 +1,9 @@
 from django.contrib import messages
-from django.contrib.messages.views import SuccessMessageMixin
 from django.db import connection
 from django.shortcuts import redirect, render
 from django.templatetags.static import static
 from django.urls import reverse, reverse_lazy
 from django.views.generic.base import RedirectView
-from django.views.generic.edit import FormView
 
 from allauth.account.views import PasswordResetFromKeyView, PasswordResetView
 from django_tenants.utils import get_public_schema_name
@@ -13,7 +11,7 @@ from django_tenants.utils import get_public_schema_name
 from siteconfig.models import SiteConfig
 from tenant.views import PublicOnlyViewMixin, NonPublicOnlyViewMixin, non_public_only_view
 
-from .forms import CustomResetPasswordForm, PublicContactForm
+from .forms import CustomResetPasswordForm
 
 
 def home(request):
@@ -66,26 +64,6 @@ class LandingRedirectView(PublicOnlyViewMixin, RedirectView):
         return reverse('django.contrib.flatpages.views.flatpage', args=['home'])
 
 
-class LandingPageView(PublicOnlyViewMixin, SuccessMessageMixin, FormView):
-    template_name = 'public/index.html'
-    form_class = PublicContactForm
-
-    def form_valid(self, form):
-        # This method is called when valid form data has been POSTed.
-        # It should return an HttpResponse.
-        success = form.send_email()
-
-        if success:
-            self.success_message = "Thank you for contacting us!  We'll be in touch soon."
-        else:
-            self.success_message = "There was an error submitting the form.  Please try contacting us direct by email at <a href=\"mailto:contact@bytedeck.com\">contact@bytedeck.com</a>"  # noqa
-
-        return super().form_valid(form)
-
-    def get_success_url(self):
-        return reverse('home')
-
-
 # apply `NonPublicOnlyViewMixin` mixin, fix #1214
 class CustomPasswordResetView(NonPublicOnlyViewMixin, PasswordResetView):
 
@@ -95,7 +73,3 @@ class CustomPasswordResetView(NonPublicOnlyViewMixin, PasswordResetView):
 # apply `NonPublicOnlyViewMixin` mixin, fix #1214
 class CustomPasswordResetFromKeyView(NonPublicOnlyViewMixin, PasswordResetFromKeyView):
     success_url = reverse_lazy('account_login')
-
-
-def landing(request):
-    return render(request, "index.html", {})
