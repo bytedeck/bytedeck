@@ -8,12 +8,11 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
 from courses.models import Block, CourseStudent
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
@@ -22,7 +21,7 @@ from profile_manager.models import Profile
 from hackerspace_online.tests.utils import generate_form_data
 
 
-class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ProfileViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -44,10 +43,6 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
         cls.active_sem = SiteConfig.get().active_semester
-
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def tearDown(self):
         """Clear the cache after each test."""
@@ -739,10 +734,6 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         # URL for deleting the student's profile
         cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
 
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_profile_delete__teacher_can_delete(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""
         self.client.force_login(self.teacher)
@@ -797,10 +788,6 @@ class ProfileArchiveTests(ByteDeckTenantTestCase):
         cls.restore_url = reverse("profiles:profile_restore", args=[cls.student.profile.pk])
         cls.detail_url = reverse("profiles:profile_detail", args=[cls.student.profile.pk])
         cls.delete_url = reverse("profiles:profile_delete", args=[cls.student.profile.pk])
-
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_profile_archive__staff_deactivates_student(self):
         """A staff request to profile_archive deactivates the student (is_active=False) and redirects."""
@@ -880,7 +867,6 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     def setUp(self):
         """Create a teacher (required before other users, as profile creation notifies staff),
         a local user with an unverified email, the Google SocialApp, and a tenant client."""
-        self.client = TenantClient(self.tenant)
         self.User = get_user_model()
         self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
         self.user = self.User.objects.create_user('existing_student', email='student@example.com')

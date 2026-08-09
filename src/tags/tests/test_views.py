@@ -9,7 +9,6 @@ from django.urls import reverse
 
 from django.utils.text import slugify
 
-from django_tenants.test.client import TenantClient
 
 from model_bakery import baker
 from tags.forms import TagForm
@@ -19,7 +18,7 @@ from taggit.forms import TagField
 from taggit.models import Tag
 from siteconfig.models import SiteConfig
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
 
@@ -30,16 +29,12 @@ class TaggitSelect2WidgetForm(forms.Form):
     )
 
 
-class AutoResponseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AutoResponseViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
         """Create a tag for the autocomplete view tests."""
         Tag.objects.create(name="test-tag")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_autocomplete_view__accessible(self):
         """ Make sure our custom django-select2 view for tag widget is accessible"""
@@ -76,7 +71,7 @@ class AutoResponseViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(data['results'][0]['text'], 'test-tag')
 
 
-class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class TagCRUDViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -85,10 +80,6 @@ class TagCRUDViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student = User.objects.create_user('test_student')
 
         cls.tag = Tag.objects.create(name="test-tag")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""

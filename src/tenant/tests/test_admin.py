@@ -114,6 +114,14 @@ class TenantAdminMixinInlineDisplayTest(ByteDeckTenantTestCase):
         tenant.trial_end_date = None
         self.assertIsNone(model_admin.trial_end_date_text(tenant))
 
+    def test_get_actions__omits_delete_selected_without_delete_permission(self):
+        """A user lacking the tenant delete permission never gets the bulk 'delete_selected'
+        action, so get_actions' removal branch is skipped and it isn't among the returned actions."""
+        request = RequestFactory().get("/")
+        request.user = User.objects.create_user(username="noperms", is_staff=True)  # no delete permission
+        model_admin = TenantAdmin(Tenant, AdminSite())
+        self.assertNotIn("delete_selected", model_admin.get_actions(request))
+
 
 class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
     """TenantTestCase comes with a tenant: tenant.test.com"""
@@ -280,6 +288,16 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
+
+    def test_owner_email_verified_boolean__false_when_verified_email_differs_from_owner_email(self):
+        """A verified primary EmailAddress whose address no longer matches the owner's
+        User.email doesn't count: the loop finds no match and the column reports False
+        (the loop-continues-without-matching branch)."""
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.get().deck_owner
+            owner.email = "changed@doe.com"  # diverge from the verified john@doe.com EmailAddress
+            owner.save()
+        self.assertFalse(self.tenant_model_admin.owner_email_verified_boolean(self.extra_tenant))
 
     def test_owner_email_text__shown_in_changelist(self):
         """
@@ -1159,10 +1177,53 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
             response = self.client.get(response.url)
         self.assertContains(response, "No recipients found.")
 
+    def test_message_selected__skips_owner_whose_verified_email_no_longer_matches(self):
+        """A selected tenant whose owner's verified primary EmailAddress no longer matches the
+        owner's User.email yields no recipient (the address-mismatch branch of the recipient loop)."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # anonymous first (schema dance)
+        self.client.force_login(self.superuser)
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.get().deck_owner
+            owner.email = "changed@doe.com"  # diverge from the verified john@doe.com EmailAddress
+            owner.save()
+
+        action_data = {
+            ACTION_CHECKBOX_NAME: [self.extra_tenant.pk],
+            "action": "message_verified",
+            "index": 0,
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        response = self.client.post(url, action_data)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        response = self.client.get(response.url)
+        self.assertContains(response, "No recipients found.")
+
+    def test_message_selected__invalid_compose_form_rerenders_intermediate_page(self):
+        """Submitting the compose step with an invalid form (no subject/message) re-renders the
+        intermediate page instead of sending, so the admin can correct and resubmit."""
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # anonymous first (schema dance)
+        self.client.force_login(self.superuser)
+
+        compose_data = {
+            ACTION_CHECKBOX_NAME: [self.extra_tenant.pk],  # a valid (verified) recipient, so the form is reached
+            "action": "message_verified",
+            "post": "yes",  # confirm the compose step, but with no subject/message -> invalid form
+        }
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        response = self.client.post(url, compose_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertIsInstance(response, TemplateResponse)
+        self.assertContains(response, "<h1>Write your message here</h1>")
+        self.assertEqual(len(mail.outbox), 0)  # nothing was sent
+
 
 class SyncFromStripeActionTest(ByteDeckTenantTestCase):
     """Tests for the "Sync selected deck(s) from Stripe" changelist action
     (epic #1729 PR 7, plan §5.3 -- missed-webhook recovery + #2043 hand-linking)."""
+
+    # The superuser driving these actions lives on the public schema, so the requests
+    # must not be addressed to this tenant's domain (see ByteDeckTenantTestCase).
+    tenant_client = False
 
     @classmethod
     def setUpTestData(cls):
@@ -1220,3 +1281,130 @@ class SyncFromStripeActionTest(ByteDeckTenantTestCase):
         with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('nope')):
             response = self.post_action([self.tenant.pk])
         self.assertContains(response, "Stripe error")
+
+
+class TenantAdminOwnerActionsTest(PublicTenantTestAdminPublic):
+    """Tests for the tenant changelist's legacy owner cleanup actions
+    (maintainer request, 2026-08-09: these run from the admin, not SSH)."""
+
+    def login_admin(self):
+        """Move the client to the public schema, sign the superuser in, and
+        return the changelist URL the actions post to."""
+        url = reverse("admin:tenant_tenant_changelist")
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+        return url
+
+    def test_verify_owner_email_action__verifies_the_owners_address(self):
+        """The action normalizes the selected deck owner's EmailAddress to
+        verified+primary (the state deck creation produces), reports the fix,
+        reports already-verified on a second run, and silently ignores a
+        selected public row (not a deck)."""
+        url = self.login_admin()
+        public_pk = Tenant.objects.get(schema_name=get_public_schema_name()).pk
+        with tenant_context(self.tenant):
+            owner = SiteConfig.get().deck_owner
+            self.assertFalse(EmailAddress.objects.get(user=owner, email='jane@doe.com').verified)
+
+        action_data = {"action": "verify_owner_email", ACTION_CHECKBOX_NAME: [self.tenant.pk, public_pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "verified the owner")
+        self.assertContains(response, "jane@doe.com")
+        with tenant_context(self.tenant):
+            row = EmailAddress.objects.get(user=owner, email='jane@doe.com')
+            self.assertTrue(row.verified)
+            self.assertTrue(row.primary)
+
+        response = self.client.post(url, {"action": "verify_owner_email",
+                                          ACTION_CHECKBOX_NAME: [self.tenant.pk]}, follow=True)
+        self.assertContains(response, "already verified")
+
+    def test_verify_owner_email_action__error_reported_not_raised(self):
+        """A deck that blows up mid-normalize (e.g. a broken schema) gets an
+        ERROR message for that deck instead of the whole action 500ing."""
+        url = self.login_admin()
+        action_data = {"action": "verify_owner_email", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        with patch('tenant.utils.normalize_owner_email', side_effect=RuntimeError('boom')):
+            response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "ERROR RuntimeError: boom")
+
+    def test_change_deck_owner_action__intermediate_page_then_switch(self):
+        """One selected deck: the intermediate page lists the deck's staff users
+        (minus the current owner), and confirming hands the deck over through the
+        shared write path: SiteConfig.deck_owner switches, the new owner is
+        promoted to superuser, and the cached owner fields land immediately."""
+        from model_bakery import baker
+
+        url = self.login_admin()
+        with tenant_context(self.tenant):
+            baker.make(User, is_staff=True, is_superuser=False, username='handover',
+                       first_name='Hand', last_name='Over', email='hand.over@example.com')
+
+        # step 1: the intermediate picker page
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        response = self.client.post(url, action_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Change the owner of deck")
+        self.assertContains(response, "handover")
+
+        # step 2: confirm the handover
+        action_data.update({"post": "yes", "new_owner": "handover"})
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "owner changed from")
+
+        with tenant_context(self.tenant):
+            new_owner = User.objects.get(username='handover')
+            self.assertEqual(SiteConfig.objects.get().deck_owner, new_owner)
+            self.assertTrue(new_owner.is_superuser)
+        self.assertEqual(Tenant.objects.get(pk=self.tenant.pk).owner_email_cached, 'hand.over@example.com')
+
+    def test_change_deck_owner_action__invalid_choice_rerenders_with_errors(self):
+        """Confirming with a username that isn't one of the deck's staff choices
+        re-renders the picker with a form error instead of writing anything."""
+        url = self.login_admin()
+        with tenant_context(self.tenant):
+            owner_before = SiteConfig.objects.get().deck_owner
+
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk],
+                       "post": "yes", "new_owner": "nobody-here"}
+        response = self.client.post(url, action_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Change the owner of deck")
+        self.assertContains(response, "Select a valid choice")
+
+        with tenant_context(self.tenant):
+            self.assertEqual(SiteConfig.objects.get().deck_owner, owner_before)
+
+    def test_change_deck_owner_action__requires_exactly_one_deck(self):
+        """Selecting two decks errors out with guidance instead of guessing
+        which deck to hand over."""
+        url = self.login_admin()
+        action_data = {"action": "change_deck_owner",
+                       ACTION_CHECKBOX_NAME: [self.tenant.pk, self.extra_tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "Select exactly ONE deck")
+
+    def test_change_deck_owner_action__ownerless_deck_reported_not_500(self):
+        """A deck whose SiteConfig has no owner (the field is NOT NULL, so this
+        is a defensive guard matching message_selected's caution) gets an ERROR
+        message instead of a 500 on the missing owner's pk (review find)."""
+        from unittest.mock import Mock
+
+        url = self.login_admin()
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        with patch('tenant.admin.SiteConfig.get', return_value=Mock(deck_owner=None)):
+            response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "no owner set in its SiteConfig")
+
+    def test_change_deck_owner_action__warns_when_no_other_staff(self):
+        """A deck whose only staff user is the current owner has nobody to hand
+        the deck to: the action says so instead of rendering an empty picker."""
+        url = self.login_admin()
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.objects.get().deck_owner
+            User.objects.filter(is_staff=True).exclude(pk=owner.pk).update(is_staff=False)
+
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.extra_tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "no other staff users")

@@ -1,8 +1,6 @@
-from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from allauth.account.models import EmailAddress
 from django_tenants.utils import get_public_schema_name, get_tenant_model, tenant_context
 
 from library.utils import get_library_schema_name
@@ -25,7 +23,8 @@ class Command(BaseCommand):
     Dry-run by default: pass ``--apply`` to write. In apply mode each fixed
     deck's cached fields are refreshed immediately so ``owner_email_cached`` (the
     address the notice engine and the Stripe backfill report use) is correct
-    without waiting for the nightly task.
+    without waiting for the nightly task. ``--schema <deck>`` narrows the run to
+    a single deck, for cleaning up one legacy deck by hand.
 
     Every run also audits the owners that need a human: owners with no email at
     all, owners whose address is already verified by a different account on the
@@ -36,13 +35,17 @@ class Command(BaseCommand):
 
     help = (
         "Normalize every deck owner's allauth EmailAddress to verified+primary, matching "
-        "what deck creation sets up. Dry-run by default; pass --apply to write. Also "
-        "audits owners with no email, addresses already verified by another account, "
-        "and decks still on the heuristic default owner."
+        "what deck creation sets up. Dry-run by default; pass --apply to write and "
+        "--schema <deck> to process a single deck. Also audits owners with no email, "
+        "addresses already verified by another account, and decks still on the "
+        "heuristic default owner."
     )
 
     def add_arguments(self, parser):
-        """Register the --apply flag (without it the command only reports).
+        """Register the --apply flag and the --schema option.
+
+        Without --apply the command only reports; without --schema every deck
+        is processed.
 
         Args:
             parser (argparse.ArgumentParser): The command's argument parser,
@@ -53,13 +56,25 @@ class Command(BaseCommand):
             help="Write the EmailAddress fixes and refresh each fixed deck's cached fields. "
                  "Without this flag nothing is written.",
         )
+        parser.add_argument(
+            '--schema', default=None,
+            help="Only process this one deck (its schema name), e.g. a single legacy deck "
+                 "being cleaned up by hand. Without it every deck is processed.",
+        )
 
     def handle(self, *args, **options):
-        """Iterate every billable tenant, print one audit line each, then a summary."""
+        """Iterate the selected billable tenant(s), print one audit line each, then a summary."""
         apply_changes = options['apply']
         tenants = get_tenant_model().objects.exclude(
             schema_name__in=[get_public_schema_name(), get_library_schema_name()]
         ).order_by('schema_name')
+        if options['schema']:
+            tenants = tenants.filter(schema_name=options['schema'])
+            if not tenants.exists():
+                raise CommandError(
+                    f"No deck with schema name '{options['schema']}' "
+                    "(the public and library schemas are not decks)."
+                )
 
         header = f"{'deck':<24} {'status':<10} {'owner':<20} {'email':<32} notes"
         self.stdout.write(header)
@@ -102,7 +117,9 @@ class Command(BaseCommand):
     def _process_deck(self, tenant, apply_changes):
         """Audit (and in apply mode normalize) one deck's owner email bookkeeping.
 
-        Must run inside the deck's tenant context.
+        Thin wrapper over :func:`tenant.utils.normalize_owner_email` (the single
+        write path this command shares with the tenant admin's "Verify owner
+        email" action). Must run inside the deck's tenant context.
 
         Args:
             tenant (Tenant): The deck being processed (its public-schema row).
@@ -110,69 +127,8 @@ class Command(BaseCommand):
                 refresh the deck's cached fields; when False, only report.
 
         Returns:
-            tuple: ``(status, owner_name, email, notes)`` where ``status`` is
-            ``ok`` (nothing to do), ``fixed`` (bookkeeping created or corrected;
-            in dry-run mode this means it WOULD be), ``no-email`` (needs a
-            human), or ``skipped`` (a different account already verified the
-            address, so no write can succeed: needs a human); ``owner_name`` is
-            the owner's username; ``email`` is the owner's address or None;
-            ``notes`` is the semicolon-joined audit remarks for the report line.
+            tuple: The helper's ``(status, owner_name, email, notes)``.
         """
-        from siteconfig.models import SiteConfig
+        from tenant.utils import normalize_owner_email
 
-        owner = SiteConfig.get().deck_owner
-        notes = []
-        # the initial deck_owner default was a heuristic (oldest non-admin staff
-        # user, else a bare created account): flag decks that never chose for real
-        if owner.username == settings.TENANT_DEFAULT_OWNER_USERNAME:
-            notes.append("default owner account (heuristic guess, never chosen)")
-
-        if not owner.email:
-            return 'no-email', owner.username, None, '; '.join(notes)
-
-        # deterministic target row, preferring the form a save lands on:
-        # EmailAddress.clean() lowercases the address, so normalizing any other
-        # row rewrites it to the lowercase form; targeting the lowercase row
-        # first means that rewrite can never collide with a case-variant sibling
-        # under the unique (user, email) constraint. Fall back to the exact-case
-        # match, then the oldest case-variant duplicate.
-        canonical = owner.email.lower()
-        matches = list(EmailAddress.objects.filter(user=owner, email__iexact=owner.email).order_by('pk'))
-        email_address = next(
-            (row for row in matches if row.email == canonical),
-            next((row for row in matches if row.email == owner.email), matches[0] if matches else None),
-        )
-        already_ok = (
-            email_address is not None and email_address.verified and email_address.primary
-            and not EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).exists()
-        )
-        if already_ok:
-            return 'ok', owner.username, owner.email, '; '.join(notes)
-
-        # the DB allows one VERIFIED row per address across the whole schema
-        # (unique_verified_email, from ACCOUNT_UNIQUE_EMAIL): if a different
-        # account already verified this address, no write can succeed, and which
-        # account is really the owner's is a human call. Report and leave it.
-        if EmailAddress.objects.exclude(user=owner).filter(email=canonical, verified=True).exists():
-            notes.append("address already verified by another account on this deck")
-            return 'skipped', owner.username, owner.email, '; '.join(notes)
-
-        if apply_changes:
-            # mirror TenantCreate.form_valid: the owner's address exists, verified
-            # and primary. Every OTHER primary row is demoted BEFORE the target
-            # saves: the DB allows at most one primary per user
-            # (unique_primary_email), so the demote must come first, and excluding
-            # by pk (a brand-new target has none, so nothing is spared) also
-            # demotes a case-variant duplicate of the owner's own address.
-            if email_address is None:
-                email_address = EmailAddress(user=owner, email=owner.email, verified=True, primary=True)
-            else:
-                email_address.verified = True
-                email_address.primary = True
-            EmailAddress.objects.filter(user=owner, primary=True).exclude(pk=email_address.pk).update(primary=False)
-            email_address.full_clean()
-            email_address.save()
-            # land owner_email_cached now; the notice engine and the Stripe
-            # backfill report read the cache, not the schema
-            tenant.update_cached_fields()
-        return 'fixed', owner.username, owner.email, '; '.join(notes)
+        return normalize_owner_email(tenant, apply_changes)

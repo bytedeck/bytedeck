@@ -423,6 +423,32 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         # the healthy test deck was still processed after the broken one
         self.deck_line(output)
 
+    def test_backfill__schema_option_narrows_the_run_to_one_deck(self):
+        """--schema processes only the named deck (maintainer request, 2026-08-09:
+        clean up a single legacy deck by hand): another tenant row is not touched
+        or reported, and the summary counts one deck."""
+        with schema_context(get_public_schema_name()):
+            other = Tenant(name='otherdeck', schema_name='otherdeck')
+            other.auto_create_schema = False
+            other.full_clean()
+            other.save()
+        self.set_owner(email='legacy.owner@example.com')
+
+        output = self.run_command('--schema', self.tenant.schema_name, '--apply')
+        self.deck_line(output)  # exactly one line for the named deck
+        self.assertNotIn('otherdeck', output)  # the schema-less row would have been an ERROR line
+        self.assertIn('1 deck(s)', output)
+
+    def test_backfill__schema_option_rejects_unknown_and_non_deck_schemas(self):
+        """--schema with an unknown schema name, or the public schema (not a deck),
+        fails loudly instead of silently processing nothing."""
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            self.run_command('--schema', 'no_such_deck')
+        with self.assertRaises(CommandError):
+            self.run_command('--schema', get_public_schema_name())
+
     def test_backfill__case_variant_primary_demoted_in_favor_of_exact_match(self):
         """When a case-variant duplicate of the owner's address holds primary, --apply
         demotes it (by pk, before the promote saves: the DB's unique_primary_email
@@ -440,3 +466,84 @@ class BackfillOwnerEmailsTest(ByteDeckTenantTestCase):
         self.assertTrue(exact.verified)
         self.assertFalse(variant.primary)
         self.assertEqual(EmailAddress.objects.filter(user=owner, primary=True).count(), 1)
+
+
+class ChangeDeckOwnerTest(ByteDeckTenantTestCase):
+    """Tests for the `change_deck_owner` management command (maintainer request,
+    2026-08-09: legacy decks whose owner is the wrong account)."""
+
+    def run_command(self, *args):
+        """Run change_deck_owner and capture its output.
+
+        Args:
+            *args: The command's positional arguments (schema_name, username).
+
+        Returns:
+            str: The command's full stdout.
+        """
+        out = StringIO()
+        call_command('change_deck_owner', *args, stdout=out)
+        return out.getvalue()
+
+    def test_change__switches_owner_promotes_superuser_and_refreshes_caches(self):
+        """The named staff user becomes SiteConfig.deck_owner, is promoted to
+        superuser (mirroring the SiteConfig admin), the deck's cached owner
+        fields land immediately, and the output names the handover plus the
+        backfill_owner_emails reminder. The previous owner keeps their account."""
+        old_owner = SiteConfig.get().deck_owner
+        new_owner = baker.make(User, is_staff=True, is_superuser=False,
+                               username='newowner', email='new.owner@example.com', first_name='New', last_name='Owner')
+
+        output = self.run_command(self.tenant.schema_name, 'newowner')
+
+        self.assertEqual(SiteConfig.objects.get().deck_owner, new_owner)
+        new_owner.refresh_from_db()
+        self.assertTrue(new_owner.is_superuser)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.owner_email_cached, 'new.owner@example.com')
+        self.assertIn(f'{old_owner.username} -> newowner', output)
+        self.assertIn('backfill_owner_emails --schema', output)
+
+    def test_change__already_superuser_new_owner_is_left_as_is(self):
+        """A new owner who is already a superuser is simply set as owner."""
+        new_owner = baker.make(User, is_staff=True, is_superuser=True, username='superstaff')
+        self.run_command(self.tenant.schema_name, 'superstaff')
+        self.assertEqual(SiteConfig.objects.get().deck_owner, new_owner)
+
+    def test_change__same_owner_is_a_noop(self):
+        """Naming the current owner reports nothing-to-do and changes nothing."""
+        owner = SiteConfig.get().deck_owner
+        output = self.run_command(self.tenant.schema_name, owner.username)
+        self.assertIn('already owns', output)
+        self.assertEqual(SiteConfig.objects.get().deck_owner, owner)
+
+    def test_change__ownerless_deck_raises_the_callers_error_channel(self):
+        """A deck whose SiteConfig has no owner (defensive: the field is NOT
+        NULL) surfaces as the ValueError/CommandError the callers already handle,
+        never an AttributeError on the missing owner (review find)."""
+        from unittest.mock import Mock, patch
+
+        from django.core.management.base import CommandError
+
+        baker.make(User, is_staff=True, username='wouldbe')
+        with patch('tenant.utils.SiteConfig.get', return_value=Mock(deck_owner=None)):
+            with self.assertRaisesMessage(CommandError, 'no owner set in its SiteConfig'):
+                self.run_command(self.tenant.schema_name, 'wouldbe')
+
+    def test_change__rejects_non_staff_unknown_user_and_non_deck_schemas(self):
+        """A non-staff user, an unknown username, an unknown schema, and the
+        public schema (not a deck) each fail loudly with the owner unchanged."""
+        from django.core.management.base import CommandError
+
+        owner = SiteConfig.get().deck_owner
+        baker.make(User, is_staff=False, username='student')
+
+        with self.assertRaises(CommandError):
+            self.run_command(self.tenant.schema_name, 'student')
+        with self.assertRaises(CommandError):
+            self.run_command(self.tenant.schema_name, 'no_such_user')
+        with self.assertRaises(CommandError):
+            self.run_command('no_such_deck', 'whoever')
+        with self.assertRaises(CommandError):
+            self.run_command(get_public_schema_name(), 'whoever')
+        self.assertEqual(SiteConfig.objects.get().deck_owner, owner)

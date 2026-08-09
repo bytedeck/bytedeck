@@ -1,18 +1,17 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker
 from comments.models import Comment
 from bs4 import BeautifulSoup
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CommentViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -30,10 +29,6 @@ class CommentViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             target_content_type=None,
         )
         cls.comment_decoy = baker.make('comments.Comment', target_content_type=None)
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     @patch('comments.models.Comment.unflag')
     def test_unflag__staff_only_calls_unflag(self, mock_unflag):
