@@ -5,24 +5,16 @@ from django.contrib.sites.models import Site
 from django.shortcuts import reverse
 from django.templatetags.static import static
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 from unittest.mock import patch
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        # Every test needs access to the request factory.
-        # https://docs.djangoproject.com/en/5.2/topics/testing/advanced/#the-request-factory
-        # self.factory = RequestFactory()
-        self.client = TenantClient(self.tenant)
-
+class ViewsTest(ByteDeckTenantTestCase):
     def test_secret_view__returns_200(self):
         """The 'simple' secret view responds with 200."""
         self.assert200('simple')
@@ -93,11 +85,7 @@ class ViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertRedirects(self.client.get('/achievements/1/delete/'), reverse('badges:badge_delete', args=[1]))
 
 
-class GoogleSigninViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        self.client = TenantClient(self.tenant)
+class GoogleSigninViewTest(ByteDeckTenantTestCase):
 
     def test_enable_google_signin__False_hides_button(self):
         """

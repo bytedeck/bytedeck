@@ -6,7 +6,6 @@ from django.core.cache import cache
 from django.shortcuts import reverse
 from django.utils.timezone import localdate
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -27,7 +26,6 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Build per-role users and clear the cached deck row (the cache backend
         outlives each test's transaction)."""
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         self.owner = SiteConfig.get().deck_owner

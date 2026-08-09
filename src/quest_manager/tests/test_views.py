@@ -25,12 +25,11 @@ from django.http import JsonResponse
 from django.utils import timezone
 
 
-from django_tenants.test.client import TenantClient
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
 from courses.models import Block, Rank
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from prerequisites.models import Prereq
@@ -61,7 +60,7 @@ def create_two_test_files():
     return [test_file1, test_file2]
 
 
-class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestViewQuickTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -85,10 +84,6 @@ class QuestViewQuickTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # cls.sub1 = baker.make(QuestSubmission, user=cls.test_student1, quest=cls.quest1)
         # cls.sub2 = baker.make(QuestSubmission, quest=cls.quest1)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_quest_pages__anonymous_redirected_to_login(self):
         """ If not logged in then all views should redirect to home page  """
@@ -383,10 +378,6 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
             is_completed=True,
             semester=SiteConfig.get().active_semester
         )
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_submission_pages__student_access_codes(self):
         """Students can reach their own submission pages but are forbidden or 404 on others' and staff-only actions."""
@@ -910,7 +901,7 @@ class PaginateHelperTest(SimpleTestCase):
         self.assertEqual(page.number, page.paginator.num_pages)
 
 
-class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
     """ Tests for view.py :
 
         def complete(request, submission_id)
@@ -935,8 +926,6 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the student for all tests."""
-        self.client = TenantClient(self.tenant)
-
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
@@ -1431,7 +1420,7 @@ class SubmissionCompleteViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestBulkEditViewTests(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
         """Create a teacher and an unpublished and a published quest shared across the tests."""
@@ -1444,7 +1433,6 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
     def test_bulk_edit__get_renders_with_bulk_edit_mode(self):
@@ -1611,7 +1599,7 @@ class QuestBulkEditViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "Delete All Selected")
 
 
-class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestUserStatusViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -1631,7 +1619,6 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
     def test_quest_user_status__displays_users_and_statuses(self):
@@ -1841,7 +1828,7 @@ class QuestUserStatusViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.context['scope'], 'active')
 
 
-class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     """ Tests for:
 
         class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, CreateView)
@@ -1866,10 +1853,6 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             'date_available': "2006-10-25",
             'time_available': "14:30:59",
         }
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest_form__quick_reply_field_below_tags(self):
         """The Quick Reply Text field renders below the Tags field on the quest form (#2114)."""
@@ -2117,7 +2100,7 @@ class QuestCRUDViewsTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
 
 # Can't test any forms with this DAL widget because content_types isn't available yet.
-class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestPrereqsUpdate(ByteDeckTenantTestCase):
     """ These tests are mostly of the prerequisites app's ObjectPrereqsFormView and PrereqFormInline,
     However, the QuestPrereqsUpdate view is where those are both used.
 
@@ -2138,10 +2121,6 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # parent_quest.pk on a fresh schema (aligned sequences); on a reused
         # schema the two diverge, so capture the real value here.
         cls.existing_prereq = cls.parent_quest.prereqs().first()
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def build_formset_form_data(self, form_prefix, form_number, **data):
         """ https://stackoverflow.com/a/62744916/2700631
@@ -2337,7 +2316,7 @@ class QuestPrereqsUpdate(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
 
 
-class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestCopyViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
             def quest_copy(request, quest_id):
@@ -2374,10 +2353,6 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             # validation error
             'date_available': '2006-10-25',
         })
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest_copy__teacher_get_initial_values(self):
         """ initial values in form GET is the same as the self.quest (quest that is being copied)  """
@@ -2579,7 +2554,7 @@ class QuestCopyViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(Quest.objects.count(), quests_before)
 
 
-class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestListViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
         def quest_list(request, quest_id=None, submission_id=None, template="quest_manager/quests.html"):
@@ -2592,10 +2567,6 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student = User.objects.create_user('test_student')
 
         cls.quest1 = baker.make(Quest)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest_list__quest_id_provided_to_view(self):
         """
@@ -2802,7 +2773,7 @@ class QuestListViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertListEqual(intended_order, displayed_order)
 
 
-class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CategoryViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -2812,10 +2783,6 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student')
 
         # cls.category = baker.make('quests_manager.category', name="testcat")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_category_pages__anonymous_redirected_to_login(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -3204,7 +3171,7 @@ class CategoryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotIn(archived_quest, displayed_quests)
 
 
-class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxSubmissionCountTest(ByteDeckTenantTestCase):
     """ Tests for:
     def ajax_submission_count(request, quest_id=None)
 
@@ -3223,10 +3190,6 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         teacher_block = baker.make('courses.Block', current_teacher=cls.test_teacher)
         baker.make('courses.CourseStudent', block=teacher_block,
                    user=cls.test_student, semester=SiteConfig.get().active_semester)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_ajax_submission_count__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -3304,7 +3267,7 @@ class AjaxSubmissionCountTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.json()['count'], 2)
 
 
-class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxQuestInfoTest(ByteDeckTenantTestCase):
 
     """Tests for:
     def ajax_quest_info(request, quest_id=None)
@@ -3325,7 +3288,6 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the student."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
     def test_ajax_quest_info__get_returns_403(self):
@@ -3427,7 +3389,7 @@ class AjaxQuestInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertNotIn('id="export-quest"', html)
 
 
-class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxApprovalInfoTest(ByteDeckTenantTestCase):
     """Tests for:
     def ajax_approval_info(request, submission_id=None)
 
@@ -3451,10 +3413,6 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.another_student = User.objects.create_user('another_student')
         cls.quest = baker.make(Quest, instructor_notes=cls.INSTRUCTOR_NOTES)
         cls.submission = baker.make(QuestSubmission, user=cls.test_student, quest=cls.quest)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_ajax_approval_info__get_returns_403(self):
         """ This view is only accessible by an ajax POST request """
@@ -3541,7 +3499,7 @@ class AjaxApprovalInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertIn(reverse(settings.LOGIN_URL), response.url)
 
 
-class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
     """Tests for:
     def ajax_submission_info(request, submission_id=None)
 
@@ -3564,7 +3522,6 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the student."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
     def test_ajax_submission_info__get_returns_403(self):
@@ -3689,7 +3646,7 @@ class AjaxSubmissionInfoTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
 
 
-class AjaxFlagTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AjaxFlagTest(ByteDeckTenantTestCase):
     """Tests for:
     def ajax_flag(request)
 
@@ -3706,7 +3663,6 @@ class AjaxFlagTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
     def test_ajax_flag__ajax_post_flags_submission(self):
@@ -3732,7 +3688,7 @@ class AjaxFlagTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class DetailViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
             def detail(request, quest_id):
@@ -3752,7 +3708,6 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the student."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_student)
 
     def test_detail__quest_is_available(self):
@@ -3842,7 +3797,7 @@ class DetailViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(response.context['can_export'])
 
 
-class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ApproveViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
             def approve(request, submission_id):
@@ -3863,7 +3818,6 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.test_teacher)
 
     def test_approve__get_returns_404(self):
@@ -4233,7 +4187,7 @@ class ApproveViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
-class QuestSubmissionSummaryTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
 
     @classmethod
@@ -4244,7 +4198,6 @@ class QuestSubmissionSummaryTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.teacher)
 
     def test_summary__with_approved_submission_computes_stats(self):
@@ -4264,7 +4217,7 @@ class QuestSubmissionSummaryTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertEqual(response.context['percent_returned'], 0)  # none returned -> 0%
 
 
-class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ApprovalsViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
             def approvals(request, quest_id=None):
@@ -4308,7 +4261,6 @@ class ApprovalsViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.current_teacher)
 
     def test_approvals__submitted_tab(self):
@@ -4541,7 +4493,7 @@ class Is_staff_or_TA_test(ByteDeckTenantTestCase):
         self.assertFalse(is_staff_or_TA(AnonymousUser()))
 
 
-class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class CommonDataViewTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -4549,10 +4501,6 @@ class CommonDataViewTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.teacher = baker.make(User, is_staff=True)
 
         cls.cqi = baker.make(CommonData)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_page_status_code__anonymous(self):
         """Anonymous users are redirected to login for all CommonData views."""
@@ -4657,7 +4605,6 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant-aware test client and log in the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
     def test_get_context__includes_prereq_of(self):

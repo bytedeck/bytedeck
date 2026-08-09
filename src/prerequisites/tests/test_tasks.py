@@ -6,7 +6,6 @@ from django.core.cache import cache
 from django.db.utils import OperationalError
 from django.test import override_settings
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from tenant_schemas_celery.task import TenantTask
 
@@ -35,7 +34,6 @@ class GrantBadgeAssertionsForBadgeTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a teacher, a current-semester student who has completed a quest, and a badge."""
-        self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         baker.make('courses.CourseStudent', user=self.student,

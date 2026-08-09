@@ -1224,6 +1224,10 @@ class SyncFromStripeActionTest(ByteDeckTenantTestCase):
     """Tests for the "Sync selected deck(s) from Stripe" changelist action
     (epic #1729 PR 7, plan §5.3 -- missed-webhook recovery + #2043 hand-linking)."""
 
+    # The superuser driving these actions lives on the public schema, so the requests
+    # must not be addressed to this tenant's domain (see ByteDeckTenantTestCase).
+    tenant_client = False
+
     @classmethod
     def setUpTestData(cls):
         """Build the public schema and a superuser (the admin lives on public)."""
