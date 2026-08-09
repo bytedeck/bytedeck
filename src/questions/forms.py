@@ -148,8 +148,10 @@ class QuestionSubmissionForm(forms.ModelForm):
         form_fields = Div("response_text")
         if self.question.type == QuestionType.SHORT_ANSWER:
             del self.fields["response_file"]
-            # replace the model's TextField default with a CharField so the 200-character
-            # limit is enforced server-side, not just by the widget's maxlength attribute.
+            # replace the model's TextField default with a CharField so the 200-character limit
+            # on the raw text the student types is enforced server-side, not just by the widget's
+            # maxlength attribute. The cap is on the raw input (validated before clean_response_text
+            # runs); see that method for why the stored value can be longer (#2170).
             # A short answer is a single line, so use a text input (not a textarea).
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); a distinct aria-label per question keeps each
@@ -232,6 +234,15 @@ class QuestionSubmissionForm(forms.ModelForm):
         summernote widget filters tags but allows every attribute (so onclick etc. survive).
         Sanitizing here keeps legitimate formatting while stripping script vectors, matching
         how comment text is handled.
+
+        The short-answer 200-character limit is on the *raw* text the student types: the
+        CharField's max_length is validated before this runs, matching the input's maxlength,
+        so the student can never type more than 200 characters. HTML-escaping here (``<`` ->
+        ``&lt;``, ``&`` -> ``&amp;``) can make the *stored* value longer than 200, but that
+        escaped value renders back to the same <=200 typed characters via |safe, so the
+        advertised limit still holds from the student's point of view. Capping the escaped
+        length instead would reject <=200-character answers the browser accepted (e.g. one
+        with a few ``<``/``&``), which would be a confusing client/server mismatch (#2170).
         """
         return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 

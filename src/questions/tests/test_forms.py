@@ -152,10 +152,26 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": "An answer"}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_clean__short_answer_over_200_chars_is_invalid(self):
-        """The 200-character short answer limit is enforced server-side, not just by the widget."""
+    def test_clean__short_answer_limit_is_on_raw_input_not_escaped_length(self):
+        """The 200-character short-answer limit is on the raw text the student types (matching the
+        input's maxlength), enforced server-side by the field's max_length before sanitization:
+
+        - raw input over 200 characters is rejected, whatever its content;
+        - an answer within the 200-char raw cap is accepted even when HTML-escaping expands it past
+          200 stored characters ('<' -> '&lt;'). Regression for #2170: the old test used only
+          'x'*201, which doesn't entity-expand, so this gap was uncovered.
+        """
+        # Over the raw cap: rejected.
         form = QuestionSubmissionForm(data={"response_text": "x" * 201}, instance=self.short_answer)
         self.assertFalse(form.is_valid())
+
+        # Within the raw cap but entity-expanding: accepted, and the stored value is longer than
+        # 200 (each '<' escapes to '&lt;'), which is expected: it renders back to the typed text.
+        expanding = "<3 " * 66  # 198 raw characters
+        self.assertEqual(len(expanding), 198)
+        form = QuestionSubmissionForm(data={"response_text": expanding}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertGreater(len(form.cleaned_data["response_text"]), 200)
 
     def test_clean__required_file_missing_is_invalid(self):
         """A required file question rejects a POST with no file, and accepts an allowed one."""
