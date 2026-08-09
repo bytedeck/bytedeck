@@ -77,7 +77,9 @@ urlpatterns += [
 ]
 
 
-if settings.DEBUG:
+# Dev-only wiring (static/media serving + debug toolbar). Tests run with DEBUG=False,
+# so this block never executes under the test harness -- excluded from coverage.
+if settings.DEBUG:  # pragma: no cover
     urlpatterns += static(settings.STATIC_URL,
                           document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL,

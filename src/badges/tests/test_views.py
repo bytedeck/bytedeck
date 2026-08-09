@@ -6,11 +6,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion, BadgeType
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -23,7 +22,7 @@ import json
 User = get_user_model()
 
 
-class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -40,10 +39,6 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_badge.tags.add('tag')
         cls.test_badge_type = baker.make(BadgeType)
         cls.test_assertion = baker.make(BadgeAssertion)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_badge_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home  '''
@@ -119,6 +114,20 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
         self.assertNotContains(response, 'One btn-group keeps every action button')
+
+    def test_badge_detail_all__login_required_and_renders_for_authenticated_users(self):
+        """badge_detail_all (assertions of all students) redirects anonymous users to login and renders for any logged-in user."""
+        b_pk = self.test_badge.pk
+
+        # anonymous -> redirected to login
+        self.assertRedirectsLogin('badges:badge_detail_all', args=[b_pk])
+
+        # students and teachers can both view it (login_required, no staff gate)
+        self.client.force_login(self.test_student1)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
+
+        self.client.force_login(self.test_teacher)
+        self.assert200('badges:badge_detail_all', args=[b_pk])
 
     def test_badge_create__creates_badge(self):
         """Posting valid data to the create view creates a new badge and redirects to the list."""
@@ -221,6 +230,28 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # make sure the student's xp cache was recalculated and deleted badge xp removed
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
+
+    def test_assertion_create__zero_ids_render_empty_initial_form(self):
+        """Calling assertion_create with user_id=0 and badge_id=0 (no pre-selected user/badge)
+        renders the grant form without pre-filling either, then a valid POST still grants."""
+        self.client.force_login(self.test_teacher)
+
+        # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
+        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
+        self.assertEqual(response.status_code, 200)
+        # neither field is pre-filled because both id lookups were skipped
+        self.assertNotIn('user', response.context['form'].initial)
+        self.assertNotIn('badge', response.context['form'].initial)
+
+        form_data = {'badge': self.test_badge.id, 'user': self.test_student1.id}
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}),
+            data=form_data,
+        )
+        self.assertRedirects(response, reverse("badges:list"))
+        self.assertTrue(
+            BadgeAssertion.objects.filter(user=self.test_student1, badge=self.test_badge).exists()
+        )
 
     def test_assertion_create__no_xp(self):
         """Don't grant XP for this badge assertion"""
@@ -508,7 +539,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(request, "CustomBadge Type")
 
 
-class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeTypeViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -518,10 +549,6 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student')
 
         cls.badge_type = baker.make(BadgeType)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -631,7 +658,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(request, 'Delete CustomBadge Type')
 
 
-class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeAjaxTests(ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_badge_popup/
     + ajax/on_close_badge_popup/
@@ -666,10 +693,6 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.badge_type2 = baker.make(BadgeType)
         cls.badge_single = baker.make(Badge, badge_type=cls.badge_type2)
         cls.create_assertion_notification(cls.badge_single)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_status_codes__badge_popup_endpoints(self):
         ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`

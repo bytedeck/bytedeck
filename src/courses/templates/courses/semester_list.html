@@ -15,7 +15,8 @@
 
 <h3>Current Active Semester: {{ config.active_semester }}</h3>
 
-<p>When students join a course it will be connected to the active semester.</p>
+<p>When students join a course it will be connected to the active semester.
+  When a semester is over, archive it to record final marks and free up your students' seats.</p>
 <p>The first and last day of the semester are only relevant if you are using the
   <a href="{% url 'courses:my_marks' %}">mark calculations</a> page, activated
   with the "Use mark percentages" setting in your
@@ -31,8 +32,7 @@
       <th>Total Days</th>
       <th># Excluded Dates</th>
       <th># Students</th>
-      <th>Closed</th>
-      <!-- <th>Active</th> -->
+      <th>Status</th>
       <th>Action</th>
     </tr>
   </thead>
@@ -45,24 +45,37 @@
       <td>{{ object.num_days }}</td>
       <td>{{ object.excludeddate_set.count }}</td>
       <td>{{ object.coursestudent_set.count }}</td>
-      <td>{{ object.closed }}</td>
-      <!-- <td>{% if object == config.active_semester %}True{% else %}False{% endif %}</td> -->
+      <td>
+        {% if object.closed %}
+        <span class="label label-default">Archived</span>
+        {% elif object == config.active_semester %}
+          {% if object.has_ended %}
+          <span class="label label-success" title="This semester's last day has passed. Archive it to record final marks and free up student seats.">Active - ended</span>
+          {% else %}
+          <span class="label label-success">Active</span>
+          {% endif %}
+        {% else %}
+        <span class="label label-info" title="Students can't join this semester unless you activate it.">Inactive</span>
+        {% endif %}
+      </td>
       <td>
         {% if not object.closed %}
         <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
           <i class="fa fa-edit"></i>
         </a>
         {% endif %}
-        {% if not object.closed and object == config.active_semester%}
-        <a class="btn btn-danger" href="{% url 'courses:end_active_semester' %}" role="button" id="end-semester"
-          title="Close this semester. WARNING!  Once a semester is closed, it can't be re-opened. This will permanently record all student XP for the semester. Which means changing or deleting quests, submissions, or badges will no longer affect their marks.  It will also archive all announcements and delete any in-progress submissions.">
-          <i class="fa fa-calendar-times-o"></i>
+        {% if not object.closed and object == config.active_semester %}
+        <a class="btn btn-danger" href="{% url 'courses:semester_archive' %}" role="button"
+          title="Archive this semester: record all students' final XP and free up their seats.">
+          <i class="fa fa-archive"></i>
         </a>
         {% endif %}
         {% if not object.closed and object != config.active_semester %}
-        <a class="btn btn-success" href="{% url 'courses:semester_activate' object.id %}" role="button" title="Activate this semester">
-          <i class="fa fa-calendar-check-o"></i>
-        </a>
+        <form class="preview-action-form" action="{% url 'courses:semester_activate' object.id %}" method="post">{% csrf_token %}
+          <button type="submit" class="btn btn-success" title="Activate this semester">
+            <i class="fa fa-calendar-check-o"></i>
+          </button>
+        </form>
         <a class="btn btn-danger" href="{% url 'courses:semester_delete' object.id %}" role="button" title="Delete this semester">
           <i class="fa fa-trash-o"></i>
         </a>
@@ -73,16 +86,4 @@
   </tbody>
 </table>
 
-{% endblock %}
-
-{% block js %}
-
-<script>
-  $('body').on('click', '#end-semester', function(e) {
-      if(!confirm("WARNING!  Once a semester is closed, it can't be re-opened. It will archive all announcements and delete any in-progress submissions. Are you sure you want to do this?")) {
-          e.preventDefault();
-          return;
-      }
-  })
-</script>
 {% endblock %}

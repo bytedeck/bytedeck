@@ -1,0 +1,59 @@
+{% extends "courses/base.html" %}
+
+{% block head_title %}Semesters | {% endblock %}
+{% block head %}{% endblock %}
+
+{% block heading_inner %} Archive Semester {% endblock %}
+
+{% block content %}
+  <div class="well">
+    <p>Name: {{ semester }}</p>
+    <p>First Day: {{ semester.first_day }}</p>
+    <p>Last Day: {{ semester.last_day }}</p>
+  </div>
+
+  {% if semester.closed %}
+  <p class="text-danger"><b>This semester has already been archived.</b></p>
+  <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-info">Back to Semesters</a>
+  {% else %}
+
+  <p>Archiving a semester ends it permanently and records final marks. This is what will happen:</p>
+  <ul>
+    <li><b>{{ num_registrations }}</b> course registration{{ num_registrations|pluralize }} will have final XP recorded and be closed,
+      freeing up <b>{{ num_seats_freed }}</b> student seat{{ num_seats_freed|pluralize }} on your deck.</li>
+    <li>Student XP will be reset to 0, ready for the next semester.</li>
+    <li><b>{{ num_in_progress }}</b> in-progress quest submission{{ num_in_progress|pluralize }} will be permanently deleted.</li>
+    <li>All published announcements ({{ num_announcements }}) will be archived, unless you uncheck the box below.</li>
+  </ul>
+  <p class="text-danger"><b>Once a semester is archived it can't be re-opened</b>: changing or deleting quests,
+    submissions, or badges will no longer affect students' recorded marks.</p>
+
+  {% if blocked %}
+    <div class="alert alert-warning">
+      <p><b>This semester can't be archived yet:</b></p>
+      <ul>
+        {% if num_awaiting_approval %}
+        <li>{{ num_awaiting_approval }} quest submission{{ num_awaiting_approval|pluralize }} still awaiting approval:
+          <a href="{% url 'quests:approvals' %}">approve or return them</a> first.</li>
+        {% endif %}
+        {% for user in negative_xp_users %}
+        <li>{{ user.profile }} has negative XP ({{ user.profile.xp_cached }}); fix it before archiving.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-info">Back to Semesters</a>
+  {% else %}
+    <form action="" method="post">{% csrf_token %}
+      <div class="checkbox">
+        <label>
+          <input type="checkbox" name="archive_announcements" checked> Also archive all published announcements
+        </label>
+      </div>
+
+      <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-info">Cancel</a>
+      <input type="submit" value="Archive Semester" class="btn btn-danger" />
+    </form>
+  {% endif %}
+
+  {% endif %}
+{% endblock %}

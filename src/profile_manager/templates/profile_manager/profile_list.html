@@ -3,6 +3,10 @@
 {% load static %}
 {% load utility_tags %}
 
+{% block head %}
+<link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
+{% endblock %}
+
 {% block head_css %}
 {% endblock %}
 
@@ -263,17 +267,14 @@ data-classes="table table-no-bordered table-hover"
 
 {% block js %}
 
-<!-- http://bootstrap-table.wenzhixin.net.cn/getting-started/ -->
-<!-- <script src="//cdnjs.cloudflare.com/ajax/libs/bootstrap-table/1.8.1/bootstrap-table.min.js"></script> -->
-<script src="{% static 'js/bootstrap-table.min.js' %}"></script>
-<script src="{% static 'js/tableExport.min.js' %}"></script>
-<script src="{% static 'js/bootstrap-table-export.js' %}"></script>
+<!-- https://bootstrap-table.com/ -->
+<script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>
+<script src="{% static 'js/tableExport-1.9.8.min.js' %}"></script>
+<script src="{% static 'js/bootstrap-table-export-1.20.2.min.js' %}"></script>
 <script>
   window.icons = {
       export: 'fa-share',
       columns: 'fa-th-list',
   }
 </script>
-
-{#  <script src="{% static 'js/bootstrap-table-filter-control.js'%}"></script>#}
 {% endblock %}

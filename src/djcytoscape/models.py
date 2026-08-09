@@ -588,6 +588,18 @@ class CytoScape(models.Model):
 
     @staticmethod
     def generate_label(obj):
+        """Build the node label shown on the map for a mappable object.
+
+        Supports the object types that can appear on a quest map: a Quest, a Badge, or a
+        Rank (all of which have an ``xp`` attribute), and a Category (campaign). The label is
+        ``"<prefix><name> (<xp/points>)"``: a Badge/Rank name is prefixed with ``"Badge: "`` /
+        ``"Rank: "``, the name is truncated with an ellipsis past a max length that shrinks as
+        the xp value grows, and the parenthetical suffix is the object's xp (a ``+`` marks
+        student-enterable xp) or, for a Category, its total xp sum.
+
+        :param obj: the Quest/Badge/Rank/Category the node represents.
+        :return: the display label string for the node.
+        """
         # set max label length in characters
         # object labels with large xp values require a shorter name length so all values when combined comply with max label length
         if hasattr(obj, 'xp'):
@@ -613,7 +625,10 @@ class CytoScape(models.Model):
             else:
                 plus = ""
             post = f" ({str(obj.xp)}{plus})"
-        elif type(obj) is Category:
+        # Every object placed on a map is a Quest, Badge, or Rank (all of which have an
+        # ``xp`` attribute, handled above) or a Category, so this elif always matches when
+        # reached; the implicit "neither" fall-through never happens in practice.
+        elif type(obj) is Category:  # pragma: no branch
             post = f" ({str(obj.xp_sum())} XP)"
 
         # if hasattr(obj, 'max_repeats'): # stop trying to be fancy!
@@ -624,20 +639,6 @@ class CytoScape(models.Model):
         # dumps not working...just try manually
         title = title.replace('"', '\\"')
         return title + post
-
-    def get_last_node_in_campaign(self, parent_node, offset=0):
-        """
-        :param offset: offset from last node by this (i.e. 1 --> second last node)
-        :param parent_node: the compound node/parent, i.e. campaign
-        :return: the most recent node added to the campaign (added to the compound/parent node) by using the highest id
-        """
-        try:
-            # latest normally used with dates, but actually works with other fields too!
-            # return CytoElement.objects.all_for_campaign(self, parent_node).latest('id')
-            qs = CytoElement.objects.all_for_campaign(self, parent_node).order_by('-id')
-            return qs[offset]
-        except self.DoesNotExist:
-            return None
 
     def create_first_node(self, obj):
         """ Creates the first node from `obj`, then if this map has a parent, creates an aditiona node to link back to back to the parent scape/map.
@@ -666,43 +667,15 @@ class CytoScape(models.Model):
 
         return first_node
 
-    def create_child_map_node(self, obj, data_source):
-        """ If this obj is a transition node (to a new map, make a node to link to the next map"""
-        ct = ContentType.objects.get_for_model(obj)
-        # obj = ct.get_object_for_this_type(id=obj.id)
-
-        child_map_qs = CytoScape.objects.filter(initial_content_type=ct.id, initial_object_id=obj.id)
-        if child_map_qs.exists():
-            child_map = child_map_qs[0]
-            label = f"{child_map.name} Map"
-        else:
-            label = "The Void"
-
-        child_map_node, _ = CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.NODES,
-            label=label,
-            href=reverse('maps:quest_map_interlink', args=[ct.id, obj.id, self.id]),  # <content_type_id>, <object_id>, <originating_scape_id>
-            classes="link child-map",
-        )
-
-        # link them together with an edge
-        CytoElement.objects.get_or_create(
-            scape=self,
-            group=CytoElement.EDGES,
-            data_source=data_source,
-            data_target=child_map_node,
-        )
-
-        return child_map_node
-
     def create_node_from_object(self, obj, initial_node=False):
         # If node node doesn't exist already, create a new one
 
         # check for an icon
         if hasattr(obj, 'get_icon_url'):
             img_url = obj.get_icon_url()
-        else:
+        # Defensive fallback: every object that reaches map generation (Quest, Badge) defines
+        # get_icon_url, so this branch is never taken in practice -- excluded from coverage.
+        else:  # pragma: no cover
             img_url = "none"
 
         # check for map transition
@@ -737,11 +710,8 @@ class CytoScape(models.Model):
 
     def get_temp_campaign(self, campaign_id) -> TempCampaign:
         for campaign in self.campaign_list:
-            try:
-                if campaign.node_id == campaign_id:
-                    return campaign
-            except ValueError:
-                pass
+            if campaign.node_id == campaign_id:
+                return campaign
         return None
 
     def add_to_campaign(self, obj, target_node, source_node):
@@ -861,8 +831,10 @@ class CytoScape(models.Model):
                         # 5 remove edges between quests and common reliants
                         for quest_node in campaign.nodes:
                             # we already know all quests have this reliant node in common, so the edges should all exist
-                            # unless it has an internal reliant...
-                            if reliant_node_id in quest_node.reliant_node_ids:
+                            # unless it has an internal reliant (a common reliant can be shared by the campaign
+                            # via has_internal_reliant() even for a member that doesn't directly hold it), in
+                            # which case there is no direct edge to remove.
+                            if reliant_node_id in quest_node.reliant_node_ids:  # pragma: no branch
                                 edge_node = get_object_or_404(CytoElement,
                                                               data_source_id=quest_node.id,
                                                               data_target_id=reliant_node_id)

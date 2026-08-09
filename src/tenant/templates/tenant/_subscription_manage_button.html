@@ -1,0 +1,26 @@
+{% comment %}
+The Manage subscription / Subscribe now action button, shared by the top of the
+subscription page (under Status) and its Upgrade-or-renew section. The help text
+lives in the button's native title popup (project convention for action buttons).
+Managing the subscription is the deck owner's action alone: everyone else gets
+the button disabled, with the owner's name in the popup. Context: deck,
+is_deck_owner, deck_owner_name (from SubscriptionDetail).
+{% endcomment %}
+{% if is_deck_owner %}
+  <form method="post" action="{% url 'decks:subscription' %}">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-primary"
+      title="{% if deck.stripe_customer_id %}Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.{% else %}Opens Stripe's secure checkout to start a subscription for this deck.{% endif %}">
+      <i class="fa fa-credit-card"></i>&nbsp;
+      {% if deck.stripe_customer_id %}Manage subscription{% else %}Subscribe now{% endif %}
+    </button>
+  </form>
+{% else %}
+  {# disabled controls swallow hover events in some browsers, so the wrapping span carries the popup #}
+  <span title="Only the deck owner, {{ deck_owner_name }}, can manage the subscription.">
+    <button type="button" class="btn btn-primary" disabled>
+      <i class="fa fa-credit-card"></i>&nbsp;
+      {% if deck.stripe_customer_id %}Manage subscription{% else %}Subscribe now{% endif %}
+    </button>
+  </span>
+{% endif %}

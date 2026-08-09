@@ -1,9 +1,11 @@
 import json
 import random
 import string
+from unittest.mock import Mock
 
 from django import forms
 from django.core import signing
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.utils.encoding import smart_str
@@ -12,13 +14,13 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.sites.models import Site
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
-from utilities.models import MenuItem
+from utilities.models import MenuItem, VideoResource
 from utilities.fields import GFKChoiceField
+from utilities.views import QuerySetSequenceAutoResponseView
 from utilities.widgets import GFKSelect2Widget
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
@@ -51,7 +53,7 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
         return str(obj.name).upper()
 
 
-class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class TestAutoResponseView(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -59,10 +61,6 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.groups = Group.objects.bulk_create(
             [Group(pk=pk, name=random_string(50)) for pk in range(100)]
         )
-
-    def setUp(self):
-        """Build a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def _ct_pk(self, obj):
         """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""
@@ -162,8 +160,27 @@ class TestAutoResponseView(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         response = self.client.get(url, {'field_id': field_id, 'term': group.name})
         assert response.status_code == 404
 
+    def test_get_model_name__proxy_model_uses_concrete_parents_verbose_name(self):
+        """For a proxy model, get_model_name resolves to the concrete parent's verbose_name.
 
-class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+        No real proxy model exists in the codebase, so the proxy is simulated with a
+        stand-in whose ._meta reports proxy=True and a concrete parent (Group).
+        """
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {Group: object()}
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), Group._meta.verbose_name)
+
+    def test_get_model_name__proxy_without_parents_falls_back_to_own_verbose_name(self):
+        """A proxy model with no parents falls through the IndexError guard and keeps its own verbose_name."""
+        proxy = Mock()
+        proxy._meta.proxy = True
+        proxy._meta.parents = {}
+        proxy._meta.verbose_name = "widget thing"
+        self.assertEqual(QuerySetSequenceAutoResponseView().get_model_name(proxy), "widget thing")
+
+
+class MenuItemViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -173,10 +190,6 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
-
-    def setUp(self):
-        """Build a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to login '''
@@ -267,7 +280,7 @@ class MenuItemViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, leading_slash_error)
 
 
-class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class FlatPageViewTests(ByteDeckTenantTestCase):
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
@@ -305,10 +318,6 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         cls.flatpage_nonlogin = [FlatPageViewTests.create_flatpage(registration_required=False) for i in range(3)]
         cls.flatpage_login = [FlatPageViewTests.create_flatpage(registration_required=True) for i in range(3)]
-
-    def setUp(self):
-        """Build a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous(self):
         """
@@ -486,3 +495,86 @@ class FlatPageViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         # page does not exist
         self.assert404URL(absolute_url)
+
+
+class VideosViewTests(ByteDeckTenantTestCase):
+    """The Video Resources page (utilities:videos): lists videos and accepts uploads from staff."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Isolate MEDIA_ROOT in a per-run temp dir so uploaded videos don't leak into the repo.
+
+        The upload test writes a clip file; without a throwaway MEDIA_ROOT it would land
+        in the project's real media dir and Django would dedupe the filename on reruns.
+        """
+        import shutil
+        import tempfile
+
+        from django.test import override_settings
+
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-utilities-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher (who may manage videos) and a student (who may not)."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+    def test_videos__anonymous_is_redirected_to_login(self):
+        """An anonymous visitor can't reach the page: the upload form writes to the deck's storage."""
+        self.assertRedirectsLogin('utilities:videos')
+
+    def test_videos__anonymous_post_does_not_upload(self):
+        """An anonymous POST is turned away at the login redirect without saving the file."""
+        upload = SimpleUploadedFile("anon.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Anonymous Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(VideoResource.objects.filter(title='Anonymous Clip').exists())
+
+    def test_videos__student_get_is_forbidden(self):
+        """A logged-in student can't even read the page: it is the staff upload form."""
+        self.client.force_login(self.test_student)
+        response = self.client.get(reverse('utilities:videos'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_videos__student_post_does_not_upload(self):
+        """A logged-in student gets a 403 and their upload is not saved."""
+        self.client.force_login(self.test_student)
+        upload = SimpleUploadedFile("student.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'Student Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(VideoResource.objects.filter(title='Student Clip').exists())
+
+    def test_videos__get_lists_existing_video_resources(self):
+        """A teacher's GET renders the videos page and includes existing VideoResources in the context."""
+        self.client.force_login(self.test_teacher)
+        video = VideoResource.objects.create(
+            title="Intro Video",
+            video_file=SimpleUploadedFile("intro.mp4", b"fake video bytes", content_type="video/mp4"),
+        )
+        response = self.client.get(reverse('utilities:videos'))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'utilities/videos.html')
+        self.assertIn(video, list(response.context['videos']))
+
+    def test_videos__post_valid_form_creates_video_resource(self):
+        """A teacher's POST with a title and an uploaded file saves a new VideoResource and re-renders the page."""
+        self.client.force_login(self.test_teacher)
+        upload = SimpleUploadedFile("clip.mp4", b"fake video bytes", content_type="video/mp4")
+        response = self.client.post(
+            reverse('utilities:videos'),
+            data={'title': 'My Clip', 'video_file': upload},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(VideoResource.objects.filter(title='My Clip').exists())

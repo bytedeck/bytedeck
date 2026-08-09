@@ -1,13 +1,18 @@
 import functools
 import hashlib
 
+from django.conf import settings
+
 from django.contrib.sites.models import Site
 from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.utils.html import format_html
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
@@ -25,7 +30,7 @@ from siteconfig.models import SiteConfig
 
 from .forms import TenantForm, DeckRequestForm
 from .models import Tenant
-from .utils import DeckRequestService, generate_default_owner_password
+from .utils import DeckRequestService, _humanize_seconds, generate_default_owner_password
 
 
 def public_only_view(f):
@@ -175,7 +180,11 @@ class TenantCreate(PublicOnlyViewMixin, EmailVerificationRequiredMixin, CreateVi
         # Normalize: valid Postgres schema and subdomain
         name_slug = slugify(form.instance.name)
         schema = name_slug.replace("-", "_")[:63]
-        if not schema or not schema[0].isalpha():
+        # check_tenant_name (the Tenant.name validator, already run by the form) requires the
+        # name to start with a lowercase letter, so the slug -- and thus the schema -- always
+        # does too. This t_ prefix is defensive normalization that can't trigger for validated
+        # input, so it's excluded from coverage.
+        if not schema or not schema[0].isalpha():  # pragma: no cover
             schema = f"t_{schema}"[:63]
         form.instance.schema_name = schema
         current_domain = Site.objects.get_current().domain
@@ -244,6 +253,33 @@ class RequestNewDeck(PublicOnlyViewMixin, FormView):
     # Redirect to a dedicated confirmation page that explains the next steps,
     # instead of dropping the user back on the form with a thin flash banner.
     success_url = reverse_lazy("decks:request_new_deck_submitted")
+
+    def get_context_data(self, **kwargs):
+        """Add the flow-outline facts to the template context.
+
+        The page walks the requester through the whole flow (maintainer request,
+        2026-08-08), so it quotes the trial terms from the constants that enforce
+        them, and the demo deck's course code from settings: the code lives only
+        in the deployment's environment (never the repo) so bots can't harvest
+        it, and the template omits the code sentence when it is unset.
+
+        Args:
+            **kwargs: Keyword arguments from the URLconf, passed through to the
+                base ``FormView`` implementation.
+
+        Returns:
+            dict: The template context, with ``trial_days``, ``trial_cap`` and
+            ``demo_course_code`` added.
+        """
+        from django.conf import settings
+
+        from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+
+        context = super().get_context_data(**kwargs)
+        context["trial_days"] = TRIAL_LENGTH_DAYS
+        context["trial_cap"] = TRIAL_MAX_ACTIVE_USERS
+        context["demo_course_code"] = settings.DEMO_DECK_COURSE_CODE
+        return context
 
     def form_valid(self, form):
         """
@@ -327,28 +363,6 @@ def verify_deck_request(request, nonce):
     return redirect("decks:new")
 
 
-def _humanize_seconds(seconds):
-    """Render a whole number of seconds as a friendly duration string.
-
-    Used to surface the deck-request timeouts (``TOKEN_MAX_AGE`` /
-    ``REQUEST_COOLDOWN``) on the confirmation page from their actual configured
-    values, so the on-page copy can't drift. Examples: ``3600 -> "1 hour"``,
-    ``300 -> "5 minutes"``, ``90 -> "90 seconds"``.
-
-    Args:
-        seconds (int): A non-negative number of seconds.
-
-    Returns:
-        str: The duration in the largest whole unit (hours, then minutes, then
-        seconds) with correct singular/plural wording.
-    """
-    for unit_seconds, unit_name in ((3600, "hour"), (60, "minute"), (1, "second")):
-        if seconds >= unit_seconds and seconds % unit_seconds == 0:
-            value = seconds // unit_seconds
-            return f"{value} {unit_name}{'s' if value != 1 else ''}"
-    return f"{seconds} seconds"
-
-
 class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
     """Confirmation page shown after a deck request is submitted.
 
@@ -380,6 +394,12 @@ class RequestNewDeckSubmitted(PublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         context["verification_validity"] = _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE)
         context["resend_cooldown"] = _humanize_seconds(DeckRequestService.REQUEST_COOLDOWN)
+        # the free-trial terms quoted beside the verification steps (maintainer
+        # request, 2026-08-08), sourced from the same constants that enforce them
+        from tenant.models import GRACE_PERIOD_DAYS, TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
+        context["trial_days"] = TRIAL_LENGTH_DAYS
+        context["trial_cap"] = TRIAL_MAX_ACTIVE_USERS
+        context["grace_days"] = GRACE_PERIOD_DAYS
         return context
 
 
@@ -435,12 +455,13 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         from datetime import timedelta
 
-        from .billing import billing_configured
+        from .billing import billing_configured, checkout_trial_end, subscription_plan_summary
         from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
         from .utils import get_public_subscribe_url
 
         context = super().get_context_data(**kwargs)
         deck = self.request.tenant
+        deck_owner = SiteConfig.get().deck_owner
         current_student_count = deck.get_active_user_count()  # live, not cached
         cap = deck.effective_max_active_users
         context.update({
@@ -448,9 +469,14 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # "(expired 24 days ago)"); None when the corresponding date is unset
             'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
             'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
+            # the unified grace window closes after the LATEST deadline, trial and
+            # paid clocks alike (#1734 B4)
             'grace_end_phrase': (
-                _relative_date_phrase(deck.paid_until + timedelta(days=GRACE_PERIOD_DAYS), 'ends')
-                if deck.paid_until else None
+                _relative_date_phrase(
+                    max(d for d in (deck.trial_end_date, deck.paid_until) if d is not None) + timedelta(days=GRACE_PERIOD_DAYS),
+                    'ends',
+                )
+                if (deck.trial_end_date or deck.paid_until) else None
             ),
         })
         context.update({
@@ -470,7 +496,20 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             'manually_subscribed': bool(
                 deck.subscription_active and not deck.in_grace_period and not deck.stripe_customer_id
             ),
+            # set (the Stripe trial's end moment) when checkout would preserve the
+            # deck's remaining free trial; drives the "card isn't charged until
+            # your trial ends" note beside the subscribe button
+            'checkout_trial_end': checkout_trial_end(deck),
             'public_subscribe_url': get_public_subscribe_url(),
+            # what the linked subscription buys (product name, price, cadence),
+            # for the status line; None (no plan info shown) on unlinked decks
+            # or when Stripe can't say
+            'plan_summary': subscription_plan_summary(deck),
+            # managing the subscription is the deck OWNER's action alone; other
+            # staff see the button disabled with the owner's name in its popup
+            'is_deck_owner': self.request.user == deck_owner,
+            'deck_owner_name': deck_owner.get_username(),
+            'support_email': settings.SUPPORT_EMAIL,
         })
         return context
 
@@ -489,15 +528,32 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         if not billing_configured():
             messages.error(request, "Online billing isn't configured on this server.")
             return redirect('decks:subscription')
+        # Managing the subscription (checkout or the billing portal, where the
+        # card lives) is the deck OWNER's action alone; the page renders the
+        # button disabled for other staff, and this guard enforces it server-side.
+        deck_owner = SiteConfig.get().deck_owner
+        if request.user != deck_owner:
+            messages.error(
+                request,
+                f"Only the deck owner, {deck_owner.get_username()}, can manage the subscription."
+            )
+            return redirect('decks:subscription')
         # An unlinked deck that is still inside its PAID period has a manually
         # managed subscription -- starting a Stripe checkout would double-bill it.
         # (Grace-period decks are past paid_until, so renewing via checkout is
         # exactly what they should do.)
         if not deck.stripe_customer_id and deck.subscription_active and not deck.in_grace_period:
+            # format_html marks the message safe so the message banner (which
+            # renders message HTML) shows a clickable contact link, while still
+            # escaping the interpolated address itself
             messages.error(
                 request,
-                "This deck's subscription is managed manually -- starting a new online "
-                "subscription would double-bill you. Contact ByteDeck to switch to online billing."
+                format_html(
+                    "This deck's subscription is managed manually -- starting a new online "
+                    'subscription would double-bill you. <a href="mailto:{0}">Contact ByteDeck</a> ({0}) '
+                    "to switch to online billing.",
+                    settings.SUPPORT_EMAIL,
+                )
             )
             return redirect('decks:subscription')
         try:
@@ -527,6 +583,12 @@ class SubscriptionActivating(NonPublicOnlyViewMixin, TemplateView):
         """Require staff, like the subscription page it forwards back to."""
         return super().dispatch(*args, **kwargs)
 
+    def get_context_data(self, **kwargs):
+        """Add the support address for the check-later copy's contact link."""
+        context = super().get_context_data(**kwargs)
+        context['support_email'] = settings.SUPPORT_EMAIL
+        return context
+
 
 @non_public_only_view
 @staff_member_required
@@ -554,3 +616,58 @@ def subscription_status(request):
             pass  # transient; the page polls again in a few seconds
         deck.refresh_from_db()
     return JsonResponse({'active': deck.subscription_active})
+
+
+@csrf_exempt
+@require_POST
+@public_only_view
+def stripe_webhook(request):
+    """Stripe webhook endpoint (epic #1729 PR 7, plan §5.2) -- the repo's only
+    csrf_exempt view.
+
+    Public-schema only; under the single ROOT_URLCONF it resolves on every host
+    (and SHOW_PUBLIC_IF_NO_TENANT_FOUND=True means unknown-host probes reach it
+    too), so an invalid signature must fail fast: signature verification happens
+    before any database work. Duplicate deliveries are absorbed by the unique
+    StripeEventLog before any handler runs; handler crashes return 500 so Stripe
+    retries the event (the log row rolls back with the transaction).
+
+    Args:
+        request (HttpRequest): The POST carrying Stripe's raw JSON event payload
+            in the body and the ``Stripe-Signature`` header it is verified with.
+
+    Returns:
+        HttpResponse: 200 acknowledged (handled, duplicate, or ignored type),
+        400 for a bad/unverifiable payload, 503 when no webhook secret is
+        configured.
+    """
+    import stripe as stripe_lib
+
+    from django.db import transaction
+
+    from .billing import handle_webhook_event, to_plain_dict
+    from .models import StripeEventLog
+
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        return HttpResponse('webhook secret not configured', status=503, content_type='text/plain')
+    try:
+        event = stripe_lib.Webhook.construct_event(
+            request.body, request.headers.get('Stripe-Signature', ''), settings.STRIPE_WEBHOOK_SECRET,
+        )
+    except (ValueError, stripe_lib.SignatureVerificationError):
+        return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
+    # construct_event returns the SDK's Event object, which is not a dict
+    # (.get() raises on stripe-python 15.x, caught live on staging 2026-08-09);
+    # everything below speaks dict, so convert once at the boundary
+    event = to_plain_dict(event)
+
+    with transaction.atomic():
+        _, created = StripeEventLog.objects.get_or_create(
+            event_id=event['id'], defaults={'event_type': event.get('type', '')},
+        )
+        if not created:  # duplicate delivery: acknowledged without re-running the handler
+            return HttpResponse('duplicate event', status=200, content_type='text/plain')
+        schema_name, summary = handle_webhook_event(event)
+        # record which deck the event resolved to, for the audit trail
+        StripeEventLog.objects.filter(event_id=event['id']).update(schema_name=schema_name)
+    return HttpResponse(summary, status=200, content_type='text/plain')

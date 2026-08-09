@@ -3,14 +3,14 @@ from copy import deepcopy
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.db import connection
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, connection
 from django.urls import reverse
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import schema_exists
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.importer import import_quest_to, import_campaign_to
-from library.exporter import export_campaign_and_copy_quests
+from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
 from model_bakery import baker
 from notifications.models import Notification
 from quest_manager.models import Category, Quest
@@ -22,7 +22,7 @@ from tenant.models import TenantDomain
 User = get_user_model()
 
 
-class LibraryTenantTestCaseMixin(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
     library_tenant = None
     library_domain = None
 
@@ -76,7 +76,6 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up a tenant client, site config, and active semester."""
-        self.client = TenantClient(self.tenant)
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
@@ -250,6 +249,21 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         expected_link = f'<a href="{imported_quest.get_absolute_url()}">{imported_quest.name}</a>'
 
         self.assertIn(expected_link, message)
+
+    def test_import_quest__post_when_quest_exists_locally_is_denied(self):
+        """POSTing to import a quest whose import_id already exists on the local deck is blocked (403), not duplicated."""
+        self.client.force_login(self.test_teacher)
+
+        local_quest = baker.make(Quest)
+        with library_schema_context():
+            library_quest = baker.make(Quest, import_id=local_quest.import_id)
+
+        url = reverse('library:import_quest', args=[library_quest.import_id])
+        response = self.client.post(url)
+
+        self.assertEqual(response.status_code, 403)
+        # the local quest was not duplicated by the blocked import
+        self.assertEqual(Quest.objects.all_including_archived().filter(import_id=local_quest.import_id).count(), 1)
 
     def test_quest_library_list__shows_correct_badge_count(self):
         """
@@ -486,7 +500,6 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up a tenant client, active semester, site config, and deck owner."""
-        self.client = TenantClient(self.tenant)
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()
@@ -540,6 +553,35 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
+
+    def test_import_campaign__post_when_campaign_exists_locally_is_denied(self):
+        """POSTing to import a campaign whose import_id already exists on the local deck is blocked (403), not duplicated."""
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            library_category = baker.make(Category)
+        # a local campaign already shares the import_id
+        baker.make(Category, import_id=library_category.import_id)
+
+        import_url = reverse('library:import_category', args=[library_category.import_id])
+        response = self.client.post(import_url)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(Category.objects.filter(import_id=library_category.import_id).count(), 1)
+
+    def test_category_detail__with_no_displayed_quests_has_empty_quest_info(self):
+        """The campaign detail view returns an empty quest_info list for a library campaign with no displayable quests."""
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            empty_category = baker.make(Category)  # a campaign with no quests
+
+        url = reverse('library:category_detail_view', args=[empty_category.import_id])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['quest_info'], [])
+        self.assertEqual(list(response.context['category_displayed_quests']), [])
 
     def test_import_campaign___success(self):
         """Importing a library campaign copies it and its quests as unpublished onto the deck."""
@@ -689,6 +731,20 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertFalse(unpublished_local_quest.published)
         self.assertTrue(published_local_quest.published)
+
+    def test_import_campaign_to__unknown_campaign_id_skips_deactivation(self):
+        """When no local Category matches the given campaign_import_id, the importer finishes
+        without trying to deactivate a campaign (the `if category` false branch)."""
+        with library_schema_context():
+            library_quests = baker.make(Quest, published=True, _quantity=1)
+
+        result = import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[q.import_id for q in library_quests],
+            campaign_import_id=uuid.uuid4(),  # no local Category will match this
+        )
+
+        self.assertIsNotNone(result)
 
     def test_campaigns_library_list__filters_by_current_quests(self):
         """
@@ -1061,10 +1117,6 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_library_overview__redirects_anonymous(self):
         """
         Anonymous users should be redirected to the login page when accessing the library overview.
@@ -1120,3 +1172,37 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
         # "Campaigns" should be the active tab
         self.assertEqual(response.context['tab'], 'campaigns')
+
+
+class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
+    """Error-handling branches of ``library.exporter`` — the cases where a quest or
+    campaign export can't complete and the exporter re-raises a clearer exception."""
+
+    def test_export_quest_to_library__unknown_import_id_raises_does_not_exist(self):
+        """Exporting a quest whose import_id isn't in the source schema raises Quest.DoesNotExist."""
+        with self.assertRaises(Quest.DoesNotExist):
+            export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
+
+    @patch("library.exporter.QuestResource.import_data")
+    def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
+        mock_import_data.side_effect = IntegrityError("duplicate key")
+        quest = baker.make(Quest, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to import quest to library schema"):
+            export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=quest.import_id)
+
+    def test_export_campaign_to_library__no_published_quests_raises_validation_error(self):
+        """Exporting a campaign that has no published quests (and no skip list) is rejected with a ValidationError."""
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign, published=False)
+        with self.assertRaisesMessage(ValidationError, "Cannot export a campaign without any published quests."):
+            export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
+
+    @patch("library.exporter.QuestResource.import_data")
+    def test_export_campaign_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A validation error while importing a campaign is re-raised as a clearer ValidationError with context."""
+        mock_import_data.side_effect = ValidationError("bad data")
+        campaign = baker.make(Category)
+        baker.make(Quest, campaign=campaign, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to import campaign to library schema"):
+            export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)

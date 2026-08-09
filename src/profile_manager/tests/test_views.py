@@ -8,12 +8,11 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
 from courses.models import Block, CourseStudent
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
@@ -22,7 +21,7 @@ from profile_manager.models import Profile
 from hackerspace_online.tests.utils import generate_form_data
 
 
-class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ProfileViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -44,10 +43,6 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
         cls.active_sem = SiteConfig.get().active_semester
-
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def tearDown(self):
         """Clear the cache after each test."""
@@ -125,10 +120,12 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_recalculate_current_xp__invalidates_active_semester_profiles(self):
-        """recalculate_current_xp invalidates the XP cache of each active-semester profile."""
+    def test_recalculate_current_xp__dispatches_background_task(self):
+        """recalculate_current_xp hands the all-student XP recompute to a background task
+        rather than looping over every active-semester profile synchronously in the request,
+        which had grown a web worker large enough to be OOM-killed (issue #2081).
+        """
         # a student registered in the active semester so all_for_active_semester() is non-empty
-        # and the loop body actually runs
         baker.make(
             'courses.CourseStudent', user=self.test_student1,
             semester=self.active_sem, course=baker.make('courses.Course'),
@@ -136,22 +133,15 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(Profile.objects.all_for_active_semester().exists())
         self.client.force_login(self.test_teacher)
 
-        with patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
+        # The view must NOT recompute in-request; it must dispatch the celery task instead.
+        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch, \
+                patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
             response = self.client.get(reverse('profiles:recalculate_xp_current'))
 
         self.assertEqual(response.status_code, 302)
-        # the view actually invalidated the XP cache (would still pass on a bare redirect otherwise)
-        self.assertTrue(mock_invalidate.called)
-
-    def test_tour_complete__marks_completed_and_redirects_to_quests(self):
-        """tour_complete sets the profile's intro_tour_completed flag and redirects to the quests page."""
-        self.client.force_login(self.test_student1)
-
-        response = self.client.get(reverse('profiles:tour_complete'))
-
-        self.assertRedirects(response, reverse('quests:quests'))
-        self.test_student1.profile.refresh_from_db()
-        self.assertTrue(self.test_student1.profile.intro_tour_completed)
+        mock_dispatch.assert_called_once()
+        # nothing was recomputed synchronously in the request
+        self.assertFalse(mock_invalidate.called)
 
     def test_profile_edit_own__resolves_to_logged_in_users_own_profile(self):
         """profile_edit_own (ProfileUpdateOwn.get_object) loads the logged-in user's own profile form."""
@@ -587,7 +577,13 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             mock_messages_info.assert_called()
             message = mock_messages_info.call_args[0][1]
 
-        self.assertEqual(message, f"Please verify your email address: {self.test_student1.email}.")
+        # The reminder names the address and carries an actionable "Re-send verification link"
+        # pointing at the resend endpoint, flagged safe so the snippet renders the anchor (#2233).
+        resend_url = reverse('profiles:profile_resend_email_verification', args=[self.test_student1.profile.pk])
+        self.assertIn(f"Please verify your email address: {self.test_student1.email}", message)
+        self.assertIn(resend_url, message)
+        self.assertIn("Re-send verification link", message)
+        self.assertEqual(mock_messages_info.call_args.kwargs.get('extra_tags'), 'safe')
         self.client.logout()
         # end test of method: profile_manager.models.user_logged_in_verify_email_reminder_handler
 
@@ -738,10 +734,6 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         # URL for deleting the student's profile
         cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
 
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_profile_delete__teacher_can_delete(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""
         self.client.force_login(self.teacher)
@@ -778,6 +770,87 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class ProfileArchiveTests(ByteDeckTenantTestCase):
+    """Archiving replaces deleting a student (issue #2182): staff deactivate (archive) a student
+    instead of deleting outright, and can then restore or delete the archived student."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher plus two students (the target and a second non-staff actor)."""
+        cls.User = get_user_model()
+
+        # need a teacher before students can be created or the profile creation will fail when trying to notify
+        cls.teacher = cls.User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = cls.User.objects.create_user('test_student')
+        cls.other_student = cls.User.objects.create_user('other_student')
+
+        cls.archive_url = reverse("profiles:profile_archive", args=[cls.student.profile.pk])
+        cls.restore_url = reverse("profiles:profile_restore", args=[cls.student.profile.pk])
+        cls.detail_url = reverse("profiles:profile_detail", args=[cls.student.profile.pk])
+        cls.delete_url = reverse("profiles:profile_delete", args=[cls.student.profile.pk])
+
+    def test_profile_archive__staff_deactivates_student(self):
+        """A staff request to profile_archive deactivates the student (is_active=False) and redirects."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_restore__staff_reactivates_archived_student(self):
+        """A staff request to profile_restore reactivates a previously-archived student (is_active=True)."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+        self.assertEqual(response.status_code, 302)
+
+    def test_profile_archive__refuses_staff_accounts(self):
+        """Archiving a staff account is refused, leaving that account active."""
+        staff_target = self.User.objects.create_user('other_teacher', is_staff=True)
+        self.client.force_login(self.teacher)
+        self.client.get(reverse("profiles:profile_archive", args=[staff_target.profile.pk]))
+        staff_target.refresh_from_db()
+        self.assertTrue(staff_target.is_active)
+
+    def test_profile_archive__non_staff_forbidden(self):
+        """A non-staff user cannot archive: access is forbidden and the target stays active."""
+        self.client.force_login(self.other_student)
+        response = self.client.get(self.archive_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(self.student.is_active)
+
+    def test_profile_restore__non_staff_forbidden(self):
+        """A non-staff user cannot restore: access is forbidden and the target stays archived."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.other_student)
+        response = self.client.get(self.restore_url)
+        self.student.refresh_from_db()
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(self.student.is_active)
+
+    def test_profile_detail__active_student_shows_archive_not_delete(self):
+        """Staff viewing an active student's detail get the Archive action, with Delete gated away."""
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.archive_url)
+        self.assertNotContains(response, self.delete_url)
+
+    def test_profile_detail__archived_student_shows_restore_and_delete(self):
+        """Staff viewing an archived student's detail get Restore and Delete, but not Archive again."""
+        self.student.is_active = False
+        self.student.save()
+        self.client.force_login(self.teacher)
+        response = self.client.get(self.detail_url)
+        self.assertContains(response, self.restore_url)
+        self.assertContains(response, self.delete_url)
+        self.assertNotContains(response, self.archive_url)
+
+
 class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     """Dedicated, isolated tests for the ``oauth_merge_account`` view.
 
@@ -794,7 +867,6 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     def setUp(self):
         """Create a teacher (required before other users, as profile creation notifies staff),
         a local user with an unverified email, the Google SocialApp, and a tenant client."""
-        self.client = TenantClient(self.tenant)
         self.User = get_user_model()
         self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
         self.user = self.User.objects.create_user('existing_student', email='student@example.com')

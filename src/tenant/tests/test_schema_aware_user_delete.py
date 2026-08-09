@@ -174,7 +174,6 @@ class SchemaAwareUserDeleteAdminTenantTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Build a tenant-schema client and a superuser to drive the admin."""
-        self.client = TenantClient(self.tenant)
         self.superuser = User.objects.create_superuser(
             username="tenant_admin", email="ta@example.com", password="pw",
         )

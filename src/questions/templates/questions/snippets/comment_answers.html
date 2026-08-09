@@ -1,0 +1,55 @@
+{% load comment_tags question_tags %}
+{# A published comment's question answers. Expects `answers` (QuestionSubmission qs). #}
+{# Staff additionally see each question's solution and marker notes for easy comparison. #}
+<hr class="tighter">
+<table class="table table-condensed question-answers">
+  <thead>
+    <tr>
+      {# same col-sm-* widths as the body cells below so the headers line up with their columns #}
+      <th class="col-sm-5">Question</th>
+      {# staff are marking, so the right column is the student's answer to compare against; the student sees their own answer #}
+      <th class="col-sm-7">{% if request.user.is_staff %}Answer provided{% else %}Your answer{% endif %}</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for answer in answers %}
+    <tr>
+      <td class="col-sm-5">
+        {# number each answer inline, matching the "Question N" heading on the submission form; #}
+        {# unwrap_p strips Summernote's wrapping paragraph element so the number sits right before a one-line prompt. #}
+        <strong>{{ forloop.counter }}.</strong>
+        {% if answer.question %}
+          {# a small type icon (text cursor / paragraph / paperclip) right after the number, so the answer's shape reads at a glance #}
+          <i class="fa fa-fw {{ answer.question.type|question_type_icon }} text-muted" title="{{ answer.question.get_type_display }}"></i>
+          {{ answer.question.instructions|unwrap_p }}
+          {% if request.user.is_staff %}
+            {% if answer.question.solution_text %}
+              <p class="text-muted"><small><b>Solution:</b> {{ answer.question.solution_text|linebreaksbr }}</small></p>
+            {% endif %}
+            {% if answer.question.solution_file %}
+              <p class="text-muted"><small><b>Solution file:</b>
+                <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
+            {% endif %}
+            {% if answer.question.marker_notes %}
+              {# unwrap_p strips Summernote's wrapping paragraph element so a one-line note sits beside its label, like Solution above. #}
+              {# A div wrapper (not a paragraph) holds it, because multi-paragraph notes keep their paragraph tags, which would be invalid nested inside another paragraph. #}
+              <div class="text-muted"><small><b>Marker notes:</b> {{ answer.question.marker_notes|unwrap_p }}</small></div>
+            {% endif %}
+          {% endif %}
+        {% else %}
+          <em>(question was deleted)</em>
+        {% endif %}
+      </td>
+      <td class="col-sm-7">
+        {% if answer.response_file %}
+          <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename|safe }}</a>
+        {% elif answer.response_text %}
+          {{ answer.response_text|safe }}
+        {% else %}
+          <em>(no answer)</em>
+        {% endif %}
+      </td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>

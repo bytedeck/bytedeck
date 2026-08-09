@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
-from django.db import models
+from django.db import models, transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -228,8 +228,13 @@ class SemesterManager(models.Manager):
         else:
             return SiteConfig.get().active_semester
 
-    def complete_active_semester(self):
+    def complete_active_semester(self, clamp_negative_xp=False):
+        """Close the active semester, or return a Semester error sentinel.
 
+        clamp_negative_xp: record a negative final XP as zero instead of refusing
+        to close (the deck-suspension auto-close uses this, #1734 redesign B2;
+        the staff-driven close keeps the refusal so a teacher can investigate).
+        """
         active_sem = self.get_current()
 
         # This semester has already been closed
@@ -240,16 +245,20 @@ class SemesterManager(models.Manager):
         if QuestSubmission.objects.all_awaiting_approval():
             return Semester.QUEST_AWAITING_APPROVAL
 
-        # need to calculate all user XP and store in their Course
+        # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
+        # saves each registration as it iterates and raises on a negative-XP student,
+        # so without the transaction the students processed before it would stay finalized.
         try:
-            CourseStudent.objects.calc_semester_grades(active_sem)
+            with transaction.atomic():
+                # need to calculate all user XP and store in their Course
+                CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
+
+                QuestSubmission.objects.remove_in_progress()
+
+                active_sem.closed = True
+                active_sem.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
-
-        QuestSubmission.objects.remove_in_progress()
-
-        active_sem.closed = True
-        active_sem.save()
 
         return active_sem
 
@@ -299,6 +308,16 @@ class Semester(models.Model):
         # don't use timezone.now().date() because it uses UTC, and might not be the same as
         # the current local date.  Use current local date with date.today()
         return self.first_day <= date.today() <= self.last_day
+
+    def has_ended(self):
+        """Whether the semester's last day is in the past (local date, consistent with
+        is_open()). Used by the semester list to flag an active semester that has run
+        past its end date and is probably due to be archived.
+
+        Returns:
+            bool: True when last_day is set and before today.
+        """
+        return self.last_day is not None and self.last_day < date.today()
 
     def num_days(self, upto_today=False):
         '''The number of classes in the semester (from start date to end date
@@ -537,20 +556,37 @@ class CourseStudentManager(models.Manager):
                 xp += studentcourse.xp_adjustment
         return xp
 
-    def calc_semester_grades(self, semester):
-        coursestudents = self.get_queryset().get_semester(semester)
-        for coursestudent in coursestudents:
-            coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
-            if coursestudent.final_xp < 0:
-                raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                 f"Fix it before closing the semester")
-            coursestudent.active = False
-            coursestudent.save()
+    def calc_semester_grades(self, semester, clamp_negative_xp=False):
+        """Record every registration's final XP and deactivate it.
 
-    def all_for_semester(self, semester, students_only=False):
+        clamp_negative_xp: record a negative XP as zero instead of raising (used
+        by the suspension auto-close, where there is no teacher around to fix
+        the balance first).
+        """
+        coursestudents = self.get_queryset().get_semester(semester)
+        # atomic: a negative-XP refusal mid-loop must roll back the registrations
+        # already deactivated in this call, or they'd sit deactivated while the
+        # semester stays open (CodeRabbit find on the #1734 B2 review)
+        with transaction.atomic():
+            for coursestudent in coursestudents:
+                coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+                if coursestudent.final_xp < 0:
+                    if not clamp_negative_xp:
+                        raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                         f"Fix it before closing the semester")
+                    coursestudent.final_xp = 0
+                coursestudent.active = False
+                coursestudent.save()
+
+    def all_for_semester(self, semester, students_only=False, active_only=False):
+        """All registrations for `semester`; optionally students only, and
+        optionally only registrations still active (a closed semester deactivates
+        its registrations, so active_only excludes them: #1734 redesign B2)."""
         qs = self.get_queryset().get_semester(semester)
         if students_only:
             qs = qs.get_students_only()
+        if active_only:
+            qs = qs.filter(active=True)
         return qs
 
     # pick one of the courses...for now
@@ -560,12 +596,15 @@ class CourseStudentManager(models.Manager):
     def current_courses(self, user):
         return self.all_for_user(user).get_semester(SiteConfig.get().active_semester)
 
-    def all_users_for_active_semester(self, students_only=False):
+    def all_users_for_active_semester(self, students_only=False, active_only=False):
         """
         :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
+
+        active_only limits enrollment to registrations still active, so a closed
+        (e.g. suspension-closed) semester contributes no users.
         """
         try:
-            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only)
+            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only, active_only=active_only)
             user_list = courses.values_list('user', flat=True)
             user_list = set(user_list)  # removes doubles
             return User.objects.filter(id__in=user_list, is_active=True)

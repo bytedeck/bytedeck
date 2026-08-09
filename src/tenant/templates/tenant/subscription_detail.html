@@ -9,45 +9,62 @@
 <h3>Status</h3>
 {% if deck.is_suspended %}
   <p><span class="label label-danger">Suspended</span>
-    This deck's trial and/or subscription period has ended: only the deck owner can sign in, and a deck
+    This deck's trial or subscription ended and the {{ grace_days }}-day grace period has run out:
+    only the deck owner can sign in, and a deck
     suspended for 365 days may be permanently deleted. Nothing has been deleted yet: subscribe
     (any level, including the low-cost Maintenance subscription) to restore access.</p>
 {% elif deck.in_grace_period %}
   {# grace gets its own DANGER label -- a green "Subscribed" badge on an expired deck reads as a bug (maintainer review find) #}
+  {# the GOVERNING clock (the latest one) picks the wording: an admin-extended trial can outlast an old paid date (#1734 B4) #}
   <p><span class="label label-danger">Grace period</span>
-    The paid period ended on <strong>{{ deck.paid_until }}</strong> and the deck is in its
-    {{ grace_days }}-day grace period: renew to keep full access; otherwise the deck will be
+    {% if deck.governing_clock_is_trial %}The free trial ended on
+    <strong>{{ deck.governing_deadline }}</strong>{% else %}The paid period ended on
+    <strong>{{ deck.governing_deadline }}</strong>{% endif %} and the deck is in its
+    {{ grace_days }}-day grace period: {% if deck.governing_clock_is_trial %}subscribe{% else %}renew{% endif %} to
+    keep full access; otherwise the deck will be
     suspended (only the deck owner will be able to sign in, and the 365-day countdown to deck
     deletion begins).</p>
 {% elif deck.is_on_maintenance %}
+  {# the countdown pairs with the PAID date it sits beside (days_until_expiry can track a longer leftover trial clock) #}
   <p><span class="label label-primary">Maintenance</span>
-    This deck is on a maintenance subscription through <strong>{{ deck.paid_until }}</strong>
-    ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining): it won't expire,
+    This deck is on a maintenance subscription{% if plan_summary %}
+    (<strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %}, {{ plan_summary.renewal_phrase }}{% endif %}){% endif %}
+    through <strong>{{ deck.paid_until }}</strong>
+    ({{ paid_until_phrase }}): it won't expire,
     be suspended, or time out for deletion, but registration stays capped at the trial limit
     (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
     Upgrade any time to raise the cap.</p>
 {% elif deck.subscription_active %}
+  {# what the money buys, straight from the linked Stripe plan (maintainer request, 2026-08-09); omitted when Stripe can't say #}
   <p><span class="label label-success">Subscribed</span>
+    {% if plan_summary %}to <strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %},
+    {{ plan_summary.renewal_phrase }}{% endif %}.{% endif %}
     Paid through <strong>{{ deck.paid_until }}</strong>
-    ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).</p>
+    ({{ paid_until_phrase }}).</p>
 {% elif deck.is_on_trial %}
   <p><span class="label label-info">Free trial</span>
     Ends <strong>{{ deck.trial_end_date }}</strong>
     ({{ deck.days_until_expiry }} day{{ deck.days_until_expiry|pluralize }} remaining).</p>
 {% else %}
   <p><span class="label label-default">Managed manually</span>
-    This deck has no trial or subscription end date, so it never expires on its own. Contact ByteDeck
-    if this doesn't look right.</p>
+    This deck has no trial or subscription end date, so it never expires on its own.
+    <a href="mailto:{{ support_email }}">Contact ByteDeck</a> if this doesn't look right.</p>
+{% endif %}
+
+{# the manage action right under the status (maintainer request, 2026-08-09); the same button anchors Upgrade-or-renew below #}
+{% if stripe_configured and not manually_subscribed %}
+  {% include "tenant/_subscription_manage_button.html" %}
 {% endif %}
 
 <h3>Dates</h3>
-{# one governing deadline row, not both: a paid date (even lapsed) supersedes the trial date #}
+{# one governing deadline row, not both: the LATEST clock governs the lifecycle (#1734 B4), so only its row shows #}
 <table class="table" style="max-width: 30em;">
-  {% if deck.paid_until %}
+  {% if deck.governing_clock_is_trial %}
+    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
+    <tr><th>Grace period</th><td>extends {{ grace_days }} days after your trial ends ({{ grace_end_phrase }})</td></tr>
+  {% elif deck.paid_until %}
     <tr><th>Paid until</th><td>{{ deck.paid_until }} ({{ paid_until_phrase }})</td></tr>
     <tr><th>Grace period</th><td>extends {{ grace_days }} days after your subscription ends ({{ grace_end_phrase }})</td></tr>
-  {% elif deck.trial_end_date %}
-    <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
   {% else %}
     <tr><th>Expires</th><td>Never (this deck is managed manually)</td></tr>
   {% endif %}
@@ -82,9 +99,9 @@
 {# the full lifecycle, so an owner always knows what happens next (maintainer request, 2026-07-30) #}
 <ol>
   <li><strong>Valid subscription:</strong> full use of the deck at your subscription level.</li>
-  <li><strong>Grace period:</strong> when a subscription expires, everything keeps working as
-    before for {{ grace_days }} more days while you renew.</li>
-  <li><strong>Suspension:</strong> after the grace period (or when a free trial ends), the deck
+  <li><strong>Grace period:</strong> when a trial or subscription expires, everything keeps working as
+    before for {{ grace_days }} more days while you subscribe or renew.</li>
+  <li><strong>Suspension:</strong> after the grace period, the deck
     is suspended. Only the deck owner can sign in, and the 365-day countdown to deck deletion begins.
     Content and student data stay intact.</li>
   <li><strong>Deletion:</strong> a deck with no valid subscription for 365 days may be
@@ -98,21 +115,21 @@
 {% if stripe_configured %}
   {% if manually_subscribed %}
     <p>This deck's subscription is <strong>managed manually</strong>: starting a new online
-      subscription here would double-bill you. Contact ByteDeck to renew, upgrade, or switch this
+      subscription here would double-bill you.
+      <a href="mailto:{{ support_email }}">Contact ByteDeck</a> to renew, upgrade, or switch this
       deck to online billing.</p>
   {% else %}
-  <form method="post" action="{% url 'decks:subscription' %}">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-primary">
-      <i class="fa fa-credit-card"></i>&nbsp;
-      {% if deck.stripe_customer_id %}Manage subscription{% else %}Subscribe now{% endif %}
-    </button>
-  </form>
+  {% include "tenant/_subscription_manage_button.html" %}
   <p class="help-block" style="margin-top: 0.5em;">
     {% if deck.stripe_customer_id %}
       Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
     {% else %}
       Opens Stripe's secure checkout to start a subscription for this deck.
+      {% if checkout_trial_end %}
+        Subscribing now won't cut your free trial short: your card is charged for the first time
+        when the trial ends on <strong>{{ deck.trial_end_date }}</strong>, and the subscription
+        renews automatically from then on.
+      {% endif %}
     {% endif %}
   </p>
   {% endif %}

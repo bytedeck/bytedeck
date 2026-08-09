@@ -10,6 +10,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase, request_with_
 from prerequisites.models import Prereq
 from quest_manager.admin import (
     QuestAdmin,
+    QuestAdminExportResource,
     QuestResource,
     QuestSubmissionAdmin,
     archive_selected_quests,
@@ -125,6 +126,44 @@ class QuestAdminQuerysetAndFormatsTest(ByteDeckTenantTestCase):
         self.assertEqual([fmt().get_title() for fmt in formats], ['csv'])
 
 
+class QuestAdminExportResourceTest(ByteDeckTenantTestCase):
+    """The admin Export button drops bulky summernote HTML columns to bound per-request
+    memory (#2081), while the full QuestResource used by import / the Shared Library keeps
+    them so cross-deck sharing is unaffected."""
+
+    def test_admin_export_resource__omits_bulky_html_columns(self):
+        """QuestAdminExportResource's export has no instructions/submission_details/instructor_notes columns."""
+        quest = baker.make(Quest, instructions='<p>lots of html</p>', submission_details='<p>details</p>')
+
+        headers = QuestAdminExportResource().export([quest]).headers
+
+        # Assert each bulky column explicitly (not by iterating the constant) so an
+        # incorrect or incomplete QUEST_EXPORT_EXCLUDED_HTML_FIELDS is caught here too.
+        self.assertNotIn('instructions', headers)
+        self.assertNotIn('submission_details', headers)
+        self.assertNotIn('instructor_notes', headers)
+        # Identifying/lightweight columns are still exported.
+        self.assertIn('name', headers)
+
+    def test_full_resource__still_exports_html_columns(self):
+        """The full QuestResource (import + Shared Library) still carries every bulky HTML field."""
+        quest = baker.make(Quest, instructions='<p>keep me</p>')
+
+        dataset = QuestResource().export([quest])
+
+        self.assertIn('instructions', dataset.headers)
+        self.assertIn('submission_details', dataset.headers)
+        self.assertIn('instructor_notes', dataset.headers)
+
+    def test_quest_admin__export_uses_slim_resource_import_uses_full(self):
+        """QuestAdmin exports with the slim resource but imports with the full one."""
+        modeladmin = QuestAdmin(Quest, django_admin.site)
+        request = request_with_messages()
+
+        self.assertEqual(modeladmin.get_export_resource_classes(request), [QuestAdminExportResource])
+        self.assertEqual(modeladmin.get_import_resource_classes(request), [QuestResource])
+
+
 class QuestResourceDehydratePrereqsTest(ByteDeckTenantTestCase):
     """Tests for QuestResource.dehydrate_prereq_import_ids, used when exporting quests."""
 
@@ -198,3 +237,45 @@ class QuestResourceGenerateSimplePrereqsTest(ByteDeckTenantTestCase):
         QuestResource().generate_simple_prereqs(parent, data_dict)
 
         self.assertEqual(parent.prereqs().count(), 0)
+
+
+class QuestResourceGenerateCampaignTest(ByteDeckTenantTestCase):
+    """Tests for QuestResource.generate_campaign, which assigns/creates a campaign on import."""
+
+    def _resource(self):
+        """A QuestResource with an empty visibility map (set on a real import by after_import)."""
+        resource = QuestResource()
+        resource.local_visibility_map = {}
+        return resource
+
+    def test_generate_campaign__no_import_id_falls_back_to_existing_title(self):
+        """With no campaign_import_id, the campaign is matched by title instead (import_id lookup
+        is skipped)."""
+        existing = baker.make(Category, title='Existing Campaign')
+        quest = baker.make(Quest)
+        data_dict = {
+            'campaign_title': 'Existing Campaign',
+            'campaign_icon': None,
+            'campaign_short_description': '',
+            'campaign_import_id': None,
+        }
+
+        self._resource().generate_campaign(quest, data_dict)
+
+        quest.refresh_from_db()
+        self.assertEqual(quest.campaign, existing)
+
+
+class QuestResourceAfterImportTest(ByteDeckTenantTestCase):
+    """Tests for QuestResource.after_import, the post-import hook."""
+
+    def test_after_import__is_a_noop_during_dry_run(self):
+        """On a dry run (the import confirmation step) after_import returns without processing,
+        so it never stores the visibility map."""
+        resource = QuestResource()
+        resource.local_visibility_map = 'SENTINEL'
+
+        resource.after_import(dataset=None, result=None, dry_run=True)
+
+        # the dry-run guard skips the body that would overwrite the visibility map
+        self.assertEqual(resource.local_visibility_map, 'SENTINEL')

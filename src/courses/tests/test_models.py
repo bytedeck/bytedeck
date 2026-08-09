@@ -9,8 +9,9 @@ from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent, ExcludedDate, MarkRange, Rank, Semester
+from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -150,6 +151,91 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
+    def test_complete_active_semester__returns_closed_when_already_closed(self):
+        """Trying to close an already-closed semester short-circuits with the CLOSED sentinel."""
+        active_sem = Semester.objects.get_current()
+        active_sem.closed = True
+        active_sem.save()
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.CLOSED)
+
+    def test_complete_active_semester__returns_awaiting_approval_with_pending_submissions(self):
+        """A semester can't be closed while quests are still awaiting approval."""
+        baker.make(
+            QuestSubmission,
+            is_completed=True,
+            is_approved=False,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.QUEST_AWAITING_APPROVAL)
+
+    def test_complete_active_semester__clamp_records_negative_xp_as_zero(self):
+        """With clamp_negative_xp on (the deck-suspension auto-close, #1734 B2), a
+        student's negative balance is recorded as zero final XP and the semester
+        closes; without it the STUDENTS_WITH_NEGATIVE_XP refusal stands."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
+
+        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+            self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+            result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+
+        self.assertEqual(result, SiteConfig.get().active_semester)
+        self.assertTrue(result.closed)
+        registration.refresh_from_db()
+        self.assertEqual(registration.final_xp, 0)
+        self.assertFalse(registration.active)
+
+
+    def test_calc_semester_grades__refusal_rolls_back_all_registrations(self):
+        """A negative-XP refusal (clamp off) rolls back every registration
+        deactivated earlier in the same call: no student is left deactivated
+        while the semester stays open."""
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        students = [baker.make(User) for _ in range(2)]
+        for student in students:
+            baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
+
+        with patch('profile_manager.models.Profile.xp_per_course', side_effect=[10, -50, 10, -50]):
+            with self.assertRaises(ValueError):
+                CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertFalse(
+            CourseStudent.objects.filter(semester=SiteConfig.get().active_semester, active=False).exists())
+
+    def test_complete_active_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
+        """A negative-XP student aborts the close atomically: registrations finalized before
+        the bad student was reached are rolled back and the semester stays open. Regression
+        test for the pre-transaction behavior, where those students kept their recorded
+        final_xp and active=False while the close itself failed."""
+        active_semester = SiteConfig.get().active_semester
+        course = baker.make(Course)
+
+        # calc_semester_grades() processes registrations in block-name order (CourseStudent
+        # Meta.ordering follows Block.Meta.ordering = ['name']), so the fine student in
+        # block "A" is finalized before the negative-XP student in block "B" raises.
+        fine_registration = baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='A'), semester=active_semester,
+        )
+        baker.make(
+            CourseStudent, user=baker.make(User), course=course,
+            block=baker.make(Block, name='B'), semester=active_semester,
+            xp_adjustment=-10,  # makes this student's XP negative
+        )
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+
+        # the fine student's registration must be untouched, and the semester still open
+        fine_registration.refresh_from_db()
+        self.assertTrue(fine_registration.active)
+        self.assertIsNone(fine_registration.final_xp)
+        active_semester.refresh_from_db()
+        self.assertFalse(active_semester.closed)
+
 
 class SemesterModelTest(ByteDeckTenantTestCase):
 
@@ -219,6 +305,37 @@ class SemesterModelTest(ByteDeckTenantTestCase):
             self.assertTrue(self.semester.is_open())
 
         # Timezone problems?
+
+    def test_has_ended__only_after_last_day(self):
+        """has_ended() is True only once the last day is in the past, and False when the
+        semester has no last day at all."""
+        with freeze_time(self.semester_end, tz_offset=0):
+            self.assertFalse(self.semester.has_ended())
+
+        with freeze_time(self.semester_end + timedelta(days=1), tz_offset=0):
+            self.assertTrue(self.semester.has_ended())
+
+        dateless_semester = baker.make(Semester, name='dateless', first_day=None, last_day=None)
+        self.assertFalse(dateless_semester.has_ended())
+
+    def test_active_by_date__true_inside_padded_window_false_outside(self):
+        """active_by_date() is True from 20 days before the first day to 5 days after the last day,
+        a padded window wider than is_open()."""
+        # comfortably inside the semester: True
+        with freeze_time(self.today_fake, tz_offset=0):
+            self.assertTrue(self.semester.active_by_date())
+
+        # within the leading 20-day / trailing 5-day padding: still True
+        with freeze_time(self.semester_start - timedelta(days=10), tz_offset=0):
+            self.assertTrue(self.semester.active_by_date())
+        with freeze_time(self.semester_end + timedelta(days=4), tz_offset=0):
+            self.assertTrue(self.semester.active_by_date())
+
+        # outside the padded window: False
+        with freeze_time(self.semester_start - timedelta(days=30), tz_offset=0):
+            self.assertFalse(self.semester.active_by_date())
+        with freeze_time(self.semester_end + timedelta(days=10), tz_offset=0):
+            self.assertFalse(self.semester.active_by_date())
 
     def test_num_days__excludes_weekends_and_excluded_dates(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
@@ -435,6 +552,13 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
+    def test_all_users_for_active_semester__returns_empty_on_attribute_error(self):
+        """On the public tenant there is no SiteConfig, so resolving the active semester raises
+        AttributeError; the manager swallows it and returns an empty queryset instead of crashing."""
+        with patch('courses.models.SiteConfig.get', side_effect=AttributeError):
+            result = CourseStudent.objects.all_users_for_active_semester()
+        self.assertEqual(result.count(), 0)
+
     def test_all_users_for_active_semester__excludes_inactive(self):
         """all_users_for_active_semester() counts active-semester students, excluding inactive users."""
         # There should be 1 student in the active semester
@@ -459,6 +583,20 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
     def test_course_student__creation(self):
         """A CourseStudent is created as the expected model instance."""
         self.assertIsInstance(self.course_student, CourseStudent)
+
+    def test_str__includes_username_semester_block_and_course(self):
+        """A CourseStudent's string lists the student's username, semester, block and course."""
+        block = baker.make(Block, name='B1')
+        semester = SiteConfig.get().active_semester
+        course = baker.make(Course, title='Math')
+        course_student = baker.make(CourseStudent, user=self.student, course=course, block=block, semester=semester)
+
+        result = str(course_student)
+
+        self.assertIn(self.student.get_username(), result)
+        self.assertIn(str(semester), result)
+        self.assertIn('B1', result)
+        self.assertIn(str(course), result)
 
     @patch('courses.models.Semester.fraction_complete')
     def test_calc_mark__scales_with_fraction_complete(self, fraction_complete):
@@ -591,6 +729,28 @@ class RankManagerTest(ByteDeckTenantTestCase):
         rank_1000 = Rank.objects.get_next_rank(1000)
         self.assertIsNone(rank_1000)
 
+    def test_get_ranks_lte__returns_ranks_at_or_below_xp(self):
+        """get_ranks_lte(xp) returns the ranks whose xp is <= the given value."""
+        Rank.objects.all().delete()
+        rank_0 = baker.make(Rank, xp=0)
+        rank_100 = baker.make(Rank, xp=100)
+        baker.make(Rank, xp=200)
+
+        result = Rank.objects.all().get_ranks_lte(100)
+
+        self.assertCountEqual(result, [rank_0, rank_100])
+
+    def test_get_ranks_gt__returns_ranks_above_xp(self):
+        """get_ranks_gt(xp) returns the ranks whose xp is strictly greater than the given value."""
+        Rank.objects.all().delete()
+        baker.make(Rank, xp=0)
+        baker.make(Rank, xp=100)
+        rank_200 = baker.make(Rank, xp=200)
+
+        result = Rank.objects.all().get_ranks_gt(100)
+
+        self.assertCountEqual(result, [rank_200])
+
 
 class RankModelTest(ByteDeckTenantTestCase):
 
@@ -617,6 +777,40 @@ class RankModelTest(ByteDeckTenantTestCase):
         self.rank.save()
 
         self.assertEqual(self.rank.get_icon_url(), self.rank.icon.url)
+
+    def test_get_map__falls_back_to_lookup_when_not_cached(self):
+        """Without a pre-populated _map_cached, get_map() looks the map up individually
+        (returning None when the rank has no map)."""
+        self.assertFalse(hasattr(self.rank, '_map_cached'))
+        self.assertIsNone(self.rank.get_map())
+
+
+class GradeModelTest(ByteDeckTenantTestCase):
+    """Tests for the Grade model (used as a prerequisite type)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a grade (with a value that won't collide with the default grades) and a student."""
+        cls.grade = baker.make(Grade, name='Test Grade', value=99)
+        cls.student = baker.make(User)
+
+    def test_str__returns_name(self):
+        """A grade's string representation is its name."""
+        self.assertEqual(str(self.grade), 'Test Grade')
+
+    def test_condition_met_as_prerequisite__true_when_student_registered_in_that_grade(self):
+        """The grade prereq is met when the student has a current course tagged with that grade."""
+        baker.make(
+            CourseStudent,
+            user=self.student,
+            grade_fk=self.grade,
+            semester=SiteConfig.get().active_semester,
+        )
+        self.assertTrue(self.grade.condition_met_as_prerequisite(self.student, 1))
+
+    def test_condition_met_as_prerequisite__false_when_student_not_in_that_grade(self):
+        """The grade prereq is not met when the student has no current course in that grade."""
+        self.assertFalse(self.grade.condition_met_as_prerequisite(self.student, 1))
 
 
 class RankCacheInvalidationTest(ByteDeckTenantTestCase):
@@ -694,3 +888,13 @@ class RankCacheInvalidationTest(ByteDeckTenantTestCase):
         rank.xp = 654321
         Rank.objects.bulk_update([rank], ['xp'])
         self.assert_cache_matches_db()
+
+
+class ExcludedDateModelTest(ByteDeckTenantTestCase):
+    """Tests for the ExcludedDate model (dates excluded from a semester's class-day count)."""
+
+    def test_str__returns_date_formatted_dd_mon_yyyy(self):
+        """An excluded date's string is its date formatted as DD-Mon-YYYY."""
+        semester = baker.make(Semester)
+        excluded = baker.make(ExcludedDate, semester=semester, date=date(2019, 9, 2))
+        self.assertEqual(str(excluded), '02-Sep-2019')

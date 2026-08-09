@@ -1,12 +1,13 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
-from comments.models import Comment, clean_html
+from comments.models import Comment, Document, clean_html
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
@@ -128,12 +129,26 @@ class CleanHTMLTests(TestCase):
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
+    def test_clean_html__orphan_li_after_empty_ul_is_left_in_place(self):
+        """A bare <li> whose previous <li> was skipped (because that one followed a <ul>) hits the
+        'no open <ul> group yet' path and is left where it is rather than re-wrapped."""
+        cleaned = clean_html('<ul></ul><li>A</li><li>B</li>')
+        # the two orphan <li>s are left exactly where they were, not re-wrapped in a new <ul>
+        self.assertEqual(cleaned, '<ul></ul><li>A</li><li>B</li>')
+
     def test_clean_html__removes_script_tags(self):
         """Script tags and their contents are stripped from the html."""
         text = '<p>Some text<script>alert("Hello");</script></p>'
         expected_output = '<p>Some text</p>'
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
+
+    def test_clean_html__convert_newlines_false_keeps_newlines_unbroken(self):
+        """With convert_newlines=False, newlines in the text are preserved rather than turned into <br> tags."""
+        text = "line one\nline two"
+        cleaned = clean_html(text, convert_newlines=False)
+        self.assertNotIn("<br>", cleaned)
+        self.assertIn("\n", cleaned)  # the newline is kept, not dropped or collapsed
 
 
 class CommentModelTest(ByteDeckTenantTestCase):
@@ -240,3 +255,24 @@ class CommentModelTest(ByteDeckTenantTestCase):
         child2 = baker.make(Comment, parent=parent)
         children = parent.get_children()
         self.assertQuerySetEqual(children, [child, child2], ordered=False)
+
+    def test_get_target_object__returns_target_when_set(self):
+        """get_target_object() resolves the comment's generic target via its content type."""
+        target = baker.make('announcements.Announcement')
+        comment = Comment.objects.create_comment(user=self.student, text="hi", path="/some/path/", target=target)
+        self.assertEqual(comment.get_target_object(), target)
+
+    def test_get_target_object__returns_none_when_unset(self):
+        """get_target_object() returns None when the comment has no target object."""
+        comment = Comment.objects.create_comment(user=self.student, text="hi", path="/some/path/")
+        self.assertIsNone(comment.get_target_object())
+
+
+class DocumentModelTest(ByteDeckTenantTestCase):
+    """Tests for the Document model (a file attached to a comment)."""
+
+    def test_is_valid_portfolio_type__true_for_image_and_video_false_otherwise(self):
+        """is_valid_portfolio_type() accepts image/video attachments and rejects other file types."""
+        self.assertTrue(Document(docfile=SimpleUploadedFile("art.png", b"x")).is_valid_portfolio_type())
+        self.assertTrue(Document(docfile=SimpleUploadedFile("clip.mp4", b"x")).is_valid_portfolio_type())
+        self.assertFalse(Document(docfile=SimpleUploadedFile("notes.txt", b"x")).is_valid_portfolio_type())

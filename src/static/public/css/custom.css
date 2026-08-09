@@ -18,8 +18,11 @@
     }
 
 
-  /* Messages/Alerts */
-    .alert {
+  /* Flash messages (the dismissible banner in public/base.html). Scoped to
+     .BD-flash so ordinary in-page alerts (e.g. the deck-request info boxes)
+     keep Bootstrap's in-flow styling instead of becoming a fixed
+     semi-transparent overlay pinned over whatever the page scrolls to. */
+    .alert.BD-flash {
       position: fixed;
       width: 100%;
       z-index: 1030;
