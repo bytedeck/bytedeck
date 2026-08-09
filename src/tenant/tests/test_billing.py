@@ -1,6 +1,7 @@
 from datetime import date, datetime, timezone as dt_timezone
 from unittest.mock import patch
 
+from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
 from django.utils import timezone
 
@@ -12,8 +13,8 @@ from django_tenants.utils import schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.billing import (
-    billing_configured, checkout_trial_end, create_checkout_session, reconcile_checkout_session,
-    subscription_period_end_date,
+    _plan_summary_from_subscription, billing_configured, checkout_trial_end, clear_plan_summary_cache,
+    create_checkout_session, reconcile_checkout_session, subscription_period_end_date, subscription_plan_summary,
 )
 from tenant.models import Tenant
 
@@ -60,6 +61,147 @@ class SubscriptionPeriodEndDateTest(SimpleTestCase):
         """No period end in either shape (or no items at all) -> None."""
         self.assertIsNone(subscription_period_end_date({}))
         self.assertIsNone(subscription_period_end_date({'items': {'data': []}}))
+
+
+class PlanSummaryFromSubscriptionTest(SimpleTestCase):
+    """Tests for condensing an expanded subscription into the status line's plan
+    summary: product name plus a cadence-and-price renewal phrase (maintainer
+    request, 2026-08-09)."""
+
+    def subscription(self, product='Bytedeck Subscription - 40 Students', unit_amount=7500,
+                     currency='usd', interval='year', interval_count=1):
+        """A minimal subscription double shaped like Stripe's expanded retrieve.
+
+        Args:
+            product (str | None): The expanded Product's name; None leaves the
+                product unexpanded (the plain id string Stripe returns without
+                ``expand``).
+            unit_amount (int | None): The price in cents, or None (e.g. metered).
+            currency (str): The price's currency code.
+            interval (str | None): ``recurring.interval``; None makes a one-time
+                price with no recurrence.
+            interval_count (int): ``recurring.interval_count``.
+
+        Returns:
+            dict: The subscription double.
+        """
+        price = {
+            'product': {'name': product} if product is not None else 'prod_123',
+            'unit_amount': unit_amount,
+            'currency': currency,
+        }
+        if interval:
+            price['recurring'] = {'interval': interval, 'interval_count': interval_count}
+        return {'items': {'data': [{'price': price}]}}
+
+    def test_summary__yearly_price_reads_renewed_annually(self):
+        """A $75/year price reads "renewed annually at $75.00 per year"."""
+        self.assertEqual(
+            _plan_summary_from_subscription(self.subscription()),
+            {'name': 'Bytedeck Subscription - 40 Students',
+             'renewal_phrase': 'renewed annually at $75.00 per year'},
+        )
+
+    def test_summary__monthly_price_reads_renewed_monthly(self):
+        """An $8/month price reads "renewed monthly at $8.00 per month"."""
+        summary = _plan_summary_from_subscription(self.subscription(unit_amount=800, interval='month'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed monthly at $8.00 per month')
+
+    def test_summary__multi_month_price_reads_renewed_every_n_months(self):
+        """A $50-per-6-months price reads "renewed every 6 months at $50.00"
+        (the maintainer's half-year plan example)."""
+        summary = _plan_summary_from_subscription(
+            self.subscription(unit_amount=5000, interval='month', interval_count=6)
+        )
+        self.assertEqual(summary['renewal_phrase'], 'renewed every 6 months at $50.00')
+
+    def test_summary__non_usd_currency_is_spelled_out(self):
+        """Only USD gets the $ sign; other currencies read "75.00 CAD" so the
+        amount is never misattributed to the wrong currency."""
+        summary = _plan_summary_from_subscription(self.subscription(currency='cad'))
+        self.assertEqual(summary['renewal_phrase'], 'renewed annually at 75.00 CAD per year')
+
+    def test_summary__no_recurrence_or_no_amount_degrades_gracefully(self):
+        """A one-time price yields an empty renewal phrase (name still shows); a
+        recurring price without a unit amount keeps the cadence alone."""
+        self.assertEqual(_plan_summary_from_subscription(self.subscription(interval=None))['renewal_phrase'], '')
+        self.assertEqual(
+            _plan_summary_from_subscription(self.subscription(unit_amount=None))['renewal_phrase'],
+            'renewed annually',
+        )
+
+    def test_summary__missing_product_name_or_items_returns_none(self):
+        """An unexpanded product (a plain id string) or a subscription without
+        items can't be summarized: None, so the page shows its usual copy."""
+        self.assertIsNone(_plan_summary_from_subscription(self.subscription(product=None)))
+        self.assertIsNone(_plan_summary_from_subscription({}))
+        self.assertIsNone(_plan_summary_from_subscription({'items': {'data': []}}))
+
+
+class SubscriptionPlanSummaryTest(SimpleTestCase):
+    """Tests for the cached Stripe fetch behind the status line's plan summary.
+
+    Deliberately SimpleTestCase (the approved exception for pure in-memory model
+    tests): the deck is an unsaved Tenant carrying only its schema name and
+    linked subscription id, and the Stripe retrieve is mocked at the SDK seam,
+    so no query ever runs."""
+
+    RETRIEVED = {'items': {'data': [{'price': {
+        'product': {'name': 'Bytedeck Subscription - 40 Students'},
+        'unit_amount': 7500, 'currency': 'usd',
+        'recurring': {'interval': 'year', 'interval_count': 1},
+    }}]}}
+
+    def setUp(self):
+        """An in-memory linked deck, with its summary cache entry emptied."""
+        from tenant.billing import _plan_summary_cache_key
+
+        self.deck = Tenant(schema_name='plancache', stripe_subscription_id='sub_1')
+        cache.delete(_plan_summary_cache_key('plancache', 'sub_1'))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__fetches_once_expanded_then_serves_from_cache(self):
+        """The subscription is retrieved once (price and product expanded),
+        condensed, and cached: a second call within the TTL never re-asks Stripe."""
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED) as mock_retrieve:
+            first = subscription_plan_summary(self.deck)
+            second = subscription_plan_summary(self.deck)
+        self.assertEqual(first, {'name': 'Bytedeck Subscription - 40 Students',
+                                 'renewal_phrase': 'renewed annually at $75.00 per year'})
+        self.assertEqual(second, first)
+        self.assertEqual(mock_retrieve.call_count, 1)
+        self.assertEqual(mock_retrieve.call_args.kwargs['expand'], ['items.data.price.product'])
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__clearing_the_cache_refetches(self):
+        """clear_plan_summary_cache drops the entry (the billing write paths call
+        it on every sync, so a portal plan switch shows immediately); falsy ids
+        in the call are skipped harmlessly."""
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED) as mock_retrieve:
+            subscription_plan_summary(self.deck)
+            clear_plan_summary_cache('plancache', 'sub_1', '')
+            subscription_plan_summary(self.deck)
+        self.assertEqual(mock_retrieve.call_count, 2)
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__stripe_error_returns_none_and_caches_nothing(self):
+        """A Stripe failure yields None (the page renders its usual copy, no
+        error) and caches nothing, so a later load can still succeed."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('boom')):
+            self.assertIsNone(subscription_plan_summary(self.deck))
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=self.RETRIEVED):
+            self.assertIsNotNone(subscription_plan_summary(self.deck))
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123')
+    def test_summary__unlinked_deck_or_unconfigured_server_short_circuits(self):
+        """No linked subscription, or no secret key: None without any Stripe call."""
+        with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve:
+            self.assertIsNone(subscription_plan_summary(Tenant(schema_name='x', stripe_subscription_id='')))
+            with override_settings(STRIPE_SECRET_KEY=None):
+                self.assertIsNone(subscription_plan_summary(self.deck))
+        mock_retrieve.assert_not_called()
 
 
 @freeze_time("2026-08-15 20:00:00")  # midday Pacific so localtime dates are stable

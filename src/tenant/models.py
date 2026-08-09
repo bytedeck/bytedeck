@@ -469,7 +469,7 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -517,6 +517,12 @@ class Tenant(TenantMixin):
 
             if updates:
                 Tenant.objects.filter(pk=self.pk).update(**updates)
+
+        # The subscription page's cached plan summary can go stale even when no
+        # Tenant field changes (a portal plan switch can keep the period end and
+        # cap while changing the product/price on display), so it is cleared on
+        # every sync, for the event's subscription and the previously linked one.
+        clear_plan_summary_cache(self.schema_name, sub_id, current.stripe_subscription_id)
 
         if updates:
             for field, value in updates.items():

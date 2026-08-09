@@ -8,7 +8,7 @@
 <p id="activating-message">
   <i class="fa fa-spinner fa-spin"></i>&nbsp;
   Thanks! Your payment went through and we're confirming your subscription with Stripe.
-  This page will update automatically &mdash; it usually takes just a few seconds.
+  This page will update automatically: it usually takes just a few seconds.
 </p>
 <p id="activated-message" style="display: none;" class="text-success">
   <i class="fa fa-check-circle"></i>&nbsp;
@@ -18,12 +18,12 @@
 <p id="poll-timeout-message" style="display: none;" class="text-warning">
   <i class="fa fa-clock-o"></i>&nbsp;
   <strong>This is taking longer than expected.</strong>
-  Your payment is safe &mdash; the subscription can take a little while to register with Stripe.
+  Your payment is safe: the subscription can take a little while to register with Stripe.
 </p>
 <p class="help-block">
-  Taking longer than a minute? Your payment is safe &mdash; the subscription can take a little while to
-  register. Check <a href="{% url 'decks:subscription' %}">subscription details</a> later, and contact
-  ByteDeck if it still hasn't appeared.
+  Taking longer than a minute? Your payment is safe: the subscription can take a little while to
+  register. Check <a href="{% url 'decks:subscription' %}">subscription details</a> later, and
+  <a href="mailto:{{ support_email }}">contact ByteDeck</a> if it still hasn't appeared.
 </p>
 {% endblock %}
 
