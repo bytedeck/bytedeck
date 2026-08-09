@@ -314,6 +314,13 @@ def _sync_deck_from_subscription_id(deck, subscription_id):
     configured with only the webhook secret can still absorb events that sync
     straight from their payloads, but it cannot retrieve, and an exception here
     would turn into a 500 that Stripe retries for days (review find on #2110).
+
+    Args:
+        deck (Tenant): The deck whose billing state the subscription drives.
+        subscription_id (str): The Stripe subscription id (sub_...) to retrieve.
+
+    Returns:
+        str: A short human-readable summary for the caller's log/audit trail.
     """
     if not settings.STRIPE_SECRET_KEY:
         return 'STRIPE_SECRET_KEY unset; retrieve skipped'
@@ -329,6 +336,10 @@ def handle_webhook_event(event):
     changes billing state, the notices machinery for payment failures. Unhandled
     event types are logged and acknowledged. Idempotence (duplicate delivery)
     is enforced by the caller via StripeEventLog before this runs.
+
+    Args:
+        event: The verified Stripe Event, as the SDK's Event object or an
+            equivalent plain dict (converted internally via to_plain_dict).
 
     Returns:
         tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema

@@ -20,7 +20,15 @@ class Command(BaseCommand):
             "'Sync from Stripe' admin action.")
 
     def handle(self, *args, **options):
-        """Fetch active subscriptions and print matched / ambiguous / unmatched sections."""
+        """Fetch active subscriptions and print matched / ambiguous / unmatched sections.
+
+        Args:
+            *args: Unused positional arguments (BaseCommand signature).
+            **options: Unused parsed options (the command takes no arguments).
+
+        Returns:
+            None: The report is written to stdout; nothing is ever modified.
+        """
         import stripe
 
         if not settings.STRIPE_SECRET_KEY:
