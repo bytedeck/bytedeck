@@ -344,6 +344,34 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
+    def test_subscription_status_text__shown_in_changelist(self):
+        """The Subscription column shows each deck's lifecycle status badge in the
+        admin list view, with the deck's status slug as its css class and the same
+        label the deck's subscription page badge shows for that state."""
+        # pin both decks to known, distinct states: a live subscription with a
+        # raised cap (Subscribed) and a live trial with no paid clock (Free trial)
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            paid_until=date(2032, 1, 1), trial_end_date=date(2022, 1, 1), max_active_users=40)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            paid_until=None, trial_end_date=date(2032, 1, 1))
+
+        self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '<span class="deck-status deck-status-subscribed">Subscribed</span>')
+        self.assertContains(response, '<span class="deck-status deck-status-trial">Free trial</span>')
+        # the badge styles ride along via the ModelAdmin's Media declaration
+        self.assertContains(response, "css/admin_deck_status.css")
+
+    def test_subscription_status_text__no_status_for_public_schema(self):
+        """The public schema row isn't a deck, so its Subscription cell is empty
+        (None), while a real deck row renders its status badge."""
+        public_row = Tenant.objects.get(schema_name=get_public_schema_name())
+        self.assertIsNone(self.tenant_model_admin.subscription_status_text(public_row))
+        badge = self.tenant_model_admin.subscription_status_text(self.extra_tenant)
+        self.assertIn("deck-status-", badge)
+
     def test_search__on_custom_fields(self):
         """
         Test whether content of custom fields is searchable in admin list view or not.

@@ -306,6 +306,62 @@ class Tenant(TenantMixin):
             and self.max_active_users <= TRIAL_MAX_ACTIVE_USERS
         )
 
+    # one human label per subscription_status slug; the subscription page's badge
+    # and the tenant admin's Subscription column both render from this map, so
+    # the same state always shows the same word everywhere
+    SUBSCRIPTION_STATUS_LABELS = {
+        'suspended': 'Suspended',
+        'grace': 'Grace period',
+        'maintenance': 'Maintenance',
+        'subscribed': 'Subscribed',
+        'trial': 'Free trial',
+        'manual': 'Managed manually',
+    }
+
+    @property
+    def subscription_status(self):
+        """The deck's lifecycle status as a slug: the single precedence chain
+        behind every status display (the subscription page's badge and the
+        tenant admin's Subscription column), so the two can never disagree.
+
+        Precedence matters: a deck past its grace window is 'suspended' even
+        though its trial dates still exist, and a deck in the paid clock's
+        grace window is 'grace' even though ``subscription_active`` is still
+        True there (access is retained through grace). The LATEST clock governs
+        the lifecycle (#1734 B4), so when the trial clock governs (and hasn't
+        lapsed into the branches above) the deck is 'trial' even if an older
+        ``paid_until`` still keeps ``subscription_active`` True through its
+        grace tail. 'manual' is the both-dates-blank escape hatch for
+        comped/legacy decks managed outside the subscription lifecycle.
+
+        Returns:
+            str: One of the ``SUBSCRIPTION_STATUS_LABELS`` keys: 'suspended',
+            'grace', 'maintenance', 'subscribed', 'trial' or 'manual'.
+        """
+        if self.is_suspended:
+            return 'suspended'
+        if self.in_grace_period:
+            return 'grace'
+        if self.governing_clock_is_trial:
+            # not suspended and not in grace, so the governing trial clock is
+            # still running: the deck is on trial regardless of any older,
+            # still-in-grace paid_until (which would misreport as subscribed)
+            return 'trial'
+        if self.is_on_maintenance:
+            return 'maintenance'
+        if self.subscription_active:
+            return 'subscribed'
+        return 'manual'
+
+    @property
+    def subscription_status_label(self):
+        """The human-readable label for ``subscription_status``, e.g. 'Free trial'.
+
+        Returns:
+            str: The ``SUBSCRIPTION_STATUS_LABELS`` entry for the current status.
+        """
+        return self.SUBSCRIPTION_STATUS_LABELS[self.subscription_status]
+
     @property
     def days_until_expiry(self):
         """Days until the deck's governing deadline: the LATEST of its set clocks
