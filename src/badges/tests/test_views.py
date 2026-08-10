@@ -83,7 +83,7 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.assert403('badges:revoke', args=[s_pk])
         self.assert403('badges:grant_qualifying', args=[b_pk])
 
-        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
+        self.assert403('badges:badge_prereqs_update', args=[b_pk])
 
     def test_all_badge_page_status_codes__teachers(self):
         """Teachers get 200 on every badge view, including create/update/grant/revoke."""
@@ -237,8 +237,7 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
-        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('badges:grant', kwargs={'user_id': 0, 'badge_id': 0})
         # neither field is pre-filled because both id lookups were skipped
         self.assertNotIn('user', response.context['form'].initial)
         self.assertNotIn('badge', response.context['form'].initial)
@@ -570,8 +569,7 @@ class BadgeTypeViewTests(ByteDeckTenantTestCase):
     def test_BadgeTypeList_view__staff_can_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('badges:badge_types'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('badges:badge_types')
 
     def test_BadgeTypeCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """

@@ -199,8 +199,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         since they refresh nightly rather than on page load (#1729 PR 2)."""
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # setUpTestData refreshed the cached fields, so a timestamped message shows
         self.assertContains(response, "were last refreshed")
 
@@ -209,8 +208,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Tenant.objects.update(cached_fields_updated_on=None)
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         self.assertContains(response, "have not been refreshed yet")
 
     def test_changelist_view__freshness_notice_not_duplicated_by_action_posts(self):
@@ -277,15 +275,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
 
@@ -305,15 +301,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page (both verified and unverified emails)
         self.assertContains(response, "john@doe.com")  # verified email
         self.assertContains(response, "jane@doe.com")  # unverified email
@@ -324,15 +318,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
 
@@ -342,15 +334,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
@@ -360,8 +350,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -999,15 +988,13 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "message_unverified" action
         # should returns 200 (intermediate page)
@@ -1086,15 +1073,13 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "send_email_message" action
         # should returns 200 (intermediate page)

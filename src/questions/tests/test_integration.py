@@ -65,8 +65,7 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     def test_submission_page__student_sees_question_formset(self):
         """A student working a quest with questions sees one answer form per question,
         including each question's instructions."""
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         formset = response.context["question_formset"]
         self.assertEqual(len(formset.forms), 2)
         self.assertContains(response, "What is your website URL?")
@@ -100,8 +99,7 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     def test_submission_page__question_deleted_mid_draft_excluded(self):
         """Deleting a question mid-draft removes its form without crashing the page."""
         self.short_question.delete()
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         formset = response.context["question_formset"]
         self.assertEqual(len(formset.forms), 1)
         self.assertEqual(formset.forms[0].question, self.long_question)
@@ -391,8 +389,7 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
     def test_quest_detail__student_sees_no_manage_button(self):
         """Students don't see the staff questions panel (checked on the submission page,
         which embeds the same quest detail content and renders for the owning student)."""
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         self.assertNotContains(response, "Manage Questions")
 
 
