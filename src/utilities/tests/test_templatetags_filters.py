@@ -4,7 +4,7 @@ from django.template import Template, Context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
-from utilities.templatetags.utility_tags import checkcross, favicon_url
+from utilities.templatetags.utility_tags import checkcross, favicon_url, public_email_logo_url
 
 
 class CheckcrossFilterTest(SimpleTestCase):
@@ -55,3 +55,15 @@ class PossessiveFilterTest(TestCase):
         context = Context({"name": "Mary"})
         output = template.render(context)
         self.assertEqual(output, "Mary&#x27;s")
+
+
+class PublicEmailLogoUrlTagTest(SimpleTestCase):
+    """Tests for the platform wordmark tag used in ByteDeck's own emails."""
+
+    def test_public_email_logo_url__returns_the_configured_wordmark(self):
+        """The tag serves settings.PUBLIC_EMAIL_LOGO_URL verbatim: an absolute
+        URL (mail clients cannot resolve relative static paths) read from
+        settings rather than SiteConfig, so it also works on the public schema,
+        which has no SiteConfig."""
+        with self.settings(PUBLIC_EMAIL_LOGO_URL='https://cdn.example.com/wordmark.png'):
+            self.assertEqual(public_email_logo_url(), 'https://cdn.example.com/wordmark.png')

@@ -200,22 +200,19 @@ class DeckRequestService:
         Returns:
             None
         """
-        from django.conf import settings
-
         if request is not None:
             verification_link = DeckRequestService.build_verification_link(request, nonce)
         else:
             verification_link = reverse("decks:verify_deck_request", args=[nonce])
 
         # rendered as the email's HTML part (send_email_message derives the
-        # plain-text part from it); this email goes out on the PUBLIC schema, so
-        # the footer gets the platform wordmark's absolute URL explicitly (no
-        # SiteConfig here, and mail clients can't resolve relative paths)
+        # plain-text part from it); the shared footer supplies Bytedeck's
+        # wordmark, which works here on the PUBLIC schema (no SiteConfig) because
+        # it comes from settings as an absolute URL
         message = get_template("tenant/email/verify_deck_request.html").render({
             "first_name": first_name,
             "verification_link": verification_link,
             "verification_validity": _humanize_seconds(DeckRequestService.TOKEN_MAX_AGE),
-            "logo_url": settings.PUBLIC_EMAIL_LOGO_URL,
         })
 
         # send in the background so the request doesn't block on SMTP
@@ -250,19 +247,16 @@ class DeckRequestService:
         })
         subject = "".join(subject.splitlines())
 
-        from django.conf import settings
-
         # rendered as the email's HTML part (send_email_message derives the
-        # plain-text part from it). A platform email, so the sigblock shows the
-        # ByteDeck wordmark by absolute URL: a brand-new deck's SiteConfig only
-        # holds the seeded default logo as a schema-relative path, which mail
-        # clients render as a broken image.
+        # plain-text part from it). A platform email, so the shared footer signs
+        # it with the ByteDeck wordmark by absolute URL: a brand-new deck's
+        # SiteConfig only holds the seeded default logo as a schema-relative
+        # path, which mail clients render as a broken image.
         message = get_template("tenant/email/welcome_message.html").render({
             "config": SiteConfig.get(),
             "tenant": tenant,
             "user": user,
             "password": password,
-            "logo_url": settings.PUBLIC_EMAIL_LOGO_URL,
         })
 
         # send in the background so the request doesn't block on SMTP

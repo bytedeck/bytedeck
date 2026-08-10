@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.test import override_settings
@@ -8,6 +9,7 @@ from freezegun import freeze_time
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
+from siteconfig.models import SiteConfig
 from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
 from tenant.notices import evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
@@ -470,9 +472,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
         self.assertIn('25 days left', html)    # ...with the countdown
         self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
-        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('non-profit Society registered in British Columbia', html)  # every platform email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
-        self.assertIn('alt="[Logo]"', html)
+        self.assertIn(f'alt="[Logo]" src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__comped_deck_limit_email_renders_without_any_dates(self):
@@ -549,11 +551,20 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('only the deck owner can sign in', html)
         self.assertIn('your content and student data are intact', html)
         self.assertIn('<em>Maintenance</em> subscription', html)
-        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('non-profit Society registered in British Columbia', html)  # every platform email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
         self.assertIn('<p>Bytedeck</p>', html)
-        self.assertIn('alt="[Logo]"', html)
+        # ...and branded by the platform too: the ByteDeck wordmark at half its
+        # natural size, by absolute URL, with the deck's own logo nowhere in the
+        # message (maintainer request, 2026-08-10: a deck's logo belongs on the
+        # mail that deck sends its own users, not on mail from Bytedeck)
+        self.assertIn(f'alt="[Logo]" src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', html)
+        self.assertNotIn(SiteConfig.get().get_site_logo_url(), html)
+        # the Society note closes the email BENEATH the wordmark, and invites the
+        # reader onto the board through a mailto (maintainer request, 2026-08-10)
+        self.assertLess(html.index('alt="[Logo]"'), html.index('non-profit Society'))
+        self.assertIn('<a href="mailto:contact@bytedeck.com">Contact us</a>!', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_follows_the_governing_trial_clock(self):
