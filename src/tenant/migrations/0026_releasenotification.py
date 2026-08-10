@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("tenant", "0024_stripeeventlog"),
+        ("tenant", "0025_remove_tenant_max_quests_remove_tenant_owner_email_and_more"),
     ]
 
     operations = [
