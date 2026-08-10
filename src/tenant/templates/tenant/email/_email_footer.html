@@ -11,7 +11,10 @@
 {# on the public schema. width/height show the 510x128 wordmark at half size (maintainer request, #}
 {# 2026-08-08). #}
 <p><img alt="[Logo]" src="{% public_email_logo_url %}" width="255" height="64"></p>
+{# the emphasis run CLOSES before the link and reopens around it: html2text (which derives the #}
+{# email's plain-text part) drops the space in front of a link that sits inside an <em>, which #}
+{# reads as "awesome app?[Contact us]" for text-only clients. Rendered HTML is unchanged. #}
 <p><em>Bytedeck is a non-profit Society registered in British Columbia. The board members are
   volunteers, and put many hours into running and further developing Bytedeck. Interested in
-  joining our board and helping us steer the direction of this awesome app?
-  <a href="mailto:contact@bytedeck.com">Contact us</a>!</em></p>
+  joining our board and helping us steer the direction of this awesome app?</em>
+  <em><a href="mailto:contact@bytedeck.com">Contact us</a>!</em></p>

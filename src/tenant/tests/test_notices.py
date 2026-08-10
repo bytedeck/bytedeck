@@ -564,7 +564,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # the Society note closes the email BENEATH the wordmark, and invites the
         # reader onto the board through a mailto (maintainer request, 2026-08-10)
         self.assertLess(html.index('alt="[Logo]"'), html.index('non-profit Society'))
-        self.assertIn('<a href="mailto:contact@bytedeck.com">Contact us</a>!', html)
+        self.assertIn('awesome app?</em> <em><a href="mailto:contact@bytedeck.com">Contact us</a>!</em>', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_follows_the_governing_trial_clock(self):
