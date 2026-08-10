@@ -240,8 +240,7 @@ class QuestMapAccessAndInterlinkTests(ByteDeckTenantTestCase):
         # A map exists (so the welcome-quest auto-generation is skipped), but none is primary.
         CytoScape.objects.update(is_the_primary_scape=False)
         self.client.force_login(self.teacher)
-        response = self.client.get(reverse('djcytoscape:primary'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('djcytoscape:primary')
         self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
 
 

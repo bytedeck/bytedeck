@@ -46,8 +46,8 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
@@ -67,8 +67,8 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         # Bad id notification read request should redirect to list view
         self.assertRedirects(

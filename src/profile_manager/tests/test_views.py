@@ -82,9 +82,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
 
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 403)
+        self.assert403('profiles:comment_ban', args=[s_pk])
+        self.assert403('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert403('profiles:xp_toggle', args=[s_pk])
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
         self.assert404('profiles:profile_update', args=[s2_pk])
@@ -108,9 +108,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert200('profiles:profile_list_inactive')
         self.assert200('profiles:tag_chart', args=[s_pk])
         self.assert200('profiles:profile_delete', args=[s_pk])
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
+        self.assert302('profiles:comment_ban', args=[s_pk])
+        self.assert302('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert302('profiles:xp_toggle', args=[s_pk])
         # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
     def test_profile_recalculate_xp__status_codes(self):
@@ -118,7 +118,7 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         # why testing this here?
         self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
 
-        self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assert302('profiles:recalculate_xp_current')
 
     def test_recalculate_current_xp__dispatches_background_task(self):
         """recalculate_current_xp hands the all-student XP recompute to a background task
@@ -910,8 +910,7 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     def test_oauth_merge_account__get_renders_merge_page(self):
         """GET shows the merge confirmation page with the matched account's username and email."""
         self._seed_merge_session()
-        response = self.client.get(reverse('profiles:oauth_merge_account'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('profiles:oauth_merge_account')
         self.assertEqual(response.context['other_account_username'], self.user.username)
         self.assertEqual(response.context['email_address'], self.user.email)
 
@@ -951,5 +950,4 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
         """With no ``merge_with_user_id`` in the session, ``get_object_or_404`` short-circuits to a
         404 before any POST handling — which is why the view's own ``if not merge_with_user_id``
         guard can never be reached."""
-        response = self.client.get(reverse('profiles:oauth_merge_account'))
-        self.assertEqual(response.status_code, 404)
+        self.assert404('profiles:oauth_merge_account')

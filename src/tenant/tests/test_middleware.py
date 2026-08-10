@@ -73,8 +73,7 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Anonymous requests pass through: the sign-in page renders normally on a
         suspended deck (with the suspended status banner, no redirect loop)."""
         self.suspend_deck()
-        response = self.client.get(reverse('account_login'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('account_login')
         self.assertContains(response, 'This deck is suspended')
 
     def test_bounce__nobody_bounced_while_not_suspended(self):

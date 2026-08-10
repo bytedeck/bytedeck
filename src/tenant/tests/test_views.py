@@ -115,8 +115,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
 
     def test_get__anonymous_denied_without_verified_deck_request(self):
         """Anonymous users without a verified deck request are denied access."""
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 403)
+        response = self.assert403("tenant:new")
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
     def test_get__create_deck_page_extends_public_base_and_keeps_progress_modal(self):
@@ -126,8 +125,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         deck-generation progress modal that animates on submit. Staff bypass the
         email-verification gate, so the superuser can load the form directly."""
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("tenant:new")
         # rendered through the shared public base template (the extension), not standalone
         self.assertTemplateUsed(response, "tenant/tenant_form.html")
         self.assertTemplateUsed(response, "public/base.html")
@@ -217,8 +215,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         """The confirmation page renders through the public base template and lays
         out the 3-step onboarding workflow plus the validity window, single-use
         constraint, spam reminder, and resend cooldown."""
-        response = self.client.get(reverse("decks:request_new_deck_submitted"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck_submitted")
         self.assertTemplateUsed(response, "tenant/request_new_deck_submitted.html")
         self.assertTemplateUsed(response, "public/base.html")
 
@@ -255,8 +252,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         instead of showing a bare email form (maintainer request, 2026-08-08)."""
         from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
 
-        response = self.client.get(reverse("decks:request_new_deck"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck")
         self.assertContains(response, "Verify your email")
         self.assertContains(response, "login credentials")
         self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
@@ -692,8 +688,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
     def get_quests_page(self, user):
         """Return the quest-list page (which extends base.html) as the given user."""
         self.client.force_login(user)
-        response = self.client.get(reverse('quests:quests'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quests')
         return response
 
     def test_banner__renders_inside_messages_container(self):
@@ -889,19 +884,17 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
 
     def get_page(self):
         """GET the subscription page, asserting 200."""
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription')
         return response
 
     def test_page__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 302)
+        response = self.assert302('decks:subscription')
         self.assertIn('login', response.url)
 
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse('decks:subscription')).status_code, 403)
+        self.assert403('decks:subscription')
 
         self.client.force_login(self.staff)
         self.get_page()
@@ -1389,8 +1382,7 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
     def test_activating_page__renders_for_staff_with_polling_script(self):
         """The post-checkout page renders the activating message and polls the
         status endpoint."""
-        response = self.client.get(reverse('decks:subscription_activating'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription_activating')
         self.assertContains(response, 'Activating your subscription')
         self.assertContains(response, reverse('decks:subscription_status'))
         # polling is capped so an abandoned checkout can't hammer Stripe forever
