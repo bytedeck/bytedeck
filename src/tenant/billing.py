@@ -214,19 +214,26 @@ def has_manageable_subscription(deck):
         longer exists on this Stripe account/mode, or its status is terminal).
 
     Raises:
-        stripe.StripeError: On Stripe/network failures other than the
-        subscription not existing (the caller's existing error handling shows
-        the try-again message).
+        stripe.StripeError: On any Stripe failure that leaves the
+        subscription's state unknown (transport errors, and invalid requests
+        other than the subscription not existing), so the caller shows its
+        try-again message rather than starting a checkout.
     """
     if not deck.stripe_subscription_id:
         return False
     try:
         subscription = stripe.Subscription.retrieve(
             deck.stripe_subscription_id, api_key=settings.STRIPE_SECRET_KEY)
-    except stripe.InvalidRequestError:
-        # no such subscription for this key (deleted upstream, or a test/live
-        # mode mismatch): nothing for the portal to manage
-        return False
+    except stripe.InvalidRequestError as error:
+        # resource_missing means no such subscription for this key (deleted
+        # upstream, or a test/live mode mismatch): nothing for the portal to
+        # manage. Every OTHER invalid request (a malformed id, a bad parameter)
+        # leaves the subscription's real state unknown, and treating unknown as
+        # "gone" would offer a checkout that could duplicate a live
+        # subscription, so those propagate to the caller's error handling.
+        if error.code == 'resource_missing':
+            return False
+        raise
     return subscription.status not in ('canceled', 'incomplete_expired')
 
 

@@ -354,7 +354,12 @@ class HasManageableSubscriptionTest(ByteDeckTenantTestCase):
     2026-08-09: an expired deck's portal offered nothing but old invoices)."""
 
     def set_deck(self, **fields):
-        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        """Persist billing fields on this deck's Tenant row and refresh the instance.
+
+        Args:
+            **fields: Tenant field values to write on this deck's row (e.g.
+                ``stripe_subscription_id``), then reloaded into ``self.tenant``.
+        """
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
         self.tenant.refresh_from_db()
 
@@ -388,13 +393,29 @@ class HasManageableSubscriptionTest(ByteDeckTenantTestCase):
     def test_has_manageable_subscription__false_when_stripe_has_no_such_subscription(self):
         """A subscription id this key can't see (deleted upstream, or a
         test/live mode mismatch on a hand-linked legacy deck) is not
-        manageable, rather than a 500."""
+        manageable, rather than a 500. Stripe signals exactly that case with
+        the resource_missing error code."""
         import stripe as stripe_lib
 
         self.set_deck(stripe_subscription_id='sub_gone')
         with patch('tenant.billing.stripe.Subscription.retrieve',
-                   side_effect=stripe_lib.InvalidRequestError('No such subscription', param='id')):
+                   side_effect=stripe_lib.InvalidRequestError(
+                       'No such subscription', param='id', code='resource_missing')):
             self.assertFalse(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__other_invalid_requests_propagate(self):
+        """An InvalidRequestError that is NOT resource_missing (a malformed id,
+        a rejected parameter) leaves the subscription's real state unknown, so
+        it propagates rather than being read as "gone": reading unknown as gone
+        would offer a checkout that could duplicate a live subscription."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_1')
+        with patch('tenant.billing.stripe.Subscription.retrieve',
+                   side_effect=stripe_lib.InvalidRequestError(
+                       'Invalid expand parameter', param='expand', code='parameter_unknown')):
+            with self.assertRaises(stripe_lib.InvalidRequestError):
+                has_manageable_subscription(self.tenant)
 
     def test_has_manageable_subscription__other_stripe_errors_propagate(self):
         """A transport/API failure is NOT silently read as "no subscription":

@@ -527,6 +527,13 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         dead end exactly when the deck is trying to come back (production find,
         2026-08-09).
 
+        Args:
+            request (HttpRequest): The POST from the manage/subscribe button;
+                its ``tenant`` is the deck being billed and its ``user`` must be
+                that deck's owner.
+            *args: Positional URL arguments (this route takes none).
+            **kwargs: Keyword URL arguments (this route takes none).
+
         Returns:
             HttpResponse: A redirect to the Stripe-hosted page, or back to this
             page with an error message when Stripe isn't configured or errors out.
