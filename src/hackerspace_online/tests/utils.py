@@ -17,6 +17,20 @@ import json
 import re
 import warnings
 
+from urllib.parse import urlencode
+
+
+def login_url_with_next(next_url):
+    """
+    Build the url Django redirects an unauthenticated request to: the login page carrying next_url
+    in its ?next=.
+
+    The query is encoded rather than pasted together, so a next_url with a query string of its own
+    ("/tags/?page=2&sort=name") stays inside ?next= instead of its & starting another parameter of
+    the login url.
+    """
+    return f'{reverse(settings.LOGIN_URL)}?{urlencode({"next": next_url})}'
+
 
 class ViewTestUtilsMixin():
     """
@@ -62,7 +76,7 @@ class ViewTestUtilsMixin():
         """
         self.assertRedirects(
             response=self.client.get(reverse(url_name, *args, **kwargs)),
-            expected_url=f'{reverse(settings.LOGIN_URL)}?next={reverse(url_name, *args, **kwargs)}'
+            expected_url=login_url_with_next(reverse(url_name, *args, **kwargs))
         )
 
     def assertRedirectsLoginURL(self, url_name):
@@ -74,7 +88,22 @@ class ViewTestUtilsMixin():
         """
         self.assertRedirects(
             response=self.client.get(url_name),
-            expected_url=f'{reverse(settings.LOGIN_URL)}?next={url_name}'
+            expected_url=login_url_with_next(url_name)
+        )
+
+    def assertLoginRedirect(self, response, next_url):
+        """
+        Assert that a response the test already obtained redirected to the login page, with next_url
+        in its ?next= query string.
+
+        Takes the response rather than a url name, so it can check requests the other helpers cannot
+        make: an ajax request (``HTTP_X_REQUESTED_WITH``), a POST, or anything else with extra
+        arguments. When a plain GET is all that is needed, prefer assertRedirectsLogin, which makes
+        the request itself.
+        """
+        self.assertRedirects(
+            response=response,
+            expected_url=login_url_with_next(next_url)
         )
 
     def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):

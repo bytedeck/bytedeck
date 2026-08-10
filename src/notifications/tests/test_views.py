@@ -37,8 +37,10 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         self.assert403('notifications:ajax')
         self.assert403('notifications:ajax_mark_read')
-        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
-        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
+        # an ajax request clears the 403 above, so these reach LoginRequiredMixin and go to the login page
+        for url_name in ('notifications:ajax_mark_read', 'notifications:ajax'):
+            url = reverse(url_name)
+            self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_notification_page_status_codes__students(self):
         """A logged-in student can view list pages but not the ajax-only endpoints."""

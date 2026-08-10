@@ -12,7 +12,6 @@ or they could be moved into a `test_urls.py` module.
 
 import re
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -3477,13 +3476,9 @@ class AjaxApprovalInfoTest(ByteDeckTenantTestCase):
 
     def test_ajax_approval_info__anonymous_is_redirected_to_login(self):
         """An anonymous ajax POST is sent to the login page rather than served the submission."""
-        response = self.client.post(
-            reverse('quests:ajax_approval_info', args=[self.submission.id]),
-            content_type='application/json',
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn(reverse(settings.LOGIN_URL), response.url)
+        url = reverse('quests:ajax_approval_info', args=[self.submission.id])
+        response = self.client.post(url, content_type='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.assertLoginRedirect(response, url)
 
 
 class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
