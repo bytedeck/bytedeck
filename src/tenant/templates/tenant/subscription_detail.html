@@ -123,7 +123,13 @@
   {% include "tenant/_subscription_manage_button.html" %}
   <p class="help-block" style="margin-top: 0.5em;">
     {% if deck.stripe_customer_id %}
-      Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
+      {% if deck.is_suspended or deck.in_grace_period %}
+        Opens Stripe's secure billing page to renew this deck's subscription: checkout for a fresh
+        subscription if your old one has fully ended, or the billing portal while it can still be
+        renewed there. Your saved card and invoice history carry over either way.
+      {% else %}
+        Opens Stripe's secure billing portal, where you can renew, upgrade, update your card, or cancel.
+      {% endif %}
     {% else %}
       Opens Stripe's secure checkout to start a subscription for this deck.
       {% if checkout_trial_end %}

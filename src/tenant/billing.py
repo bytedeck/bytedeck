@@ -130,18 +130,21 @@ def checkout_trial_end(deck):
 
 
 def create_checkout_session(deck):
-    """Create a subscription Checkout Session for an unlinked deck; return its URL.
+    """Create a subscription Checkout Session for the deck; return its URL.
 
     The deck is identified to Stripe three ways (client_reference_id, metadata,
-    and the customer email), so the webhook (PR 7) and manual reconciliation can
-    always find their way back to the schema. A mid-trial deck's remaining free
-    time rides along as ``subscription_data.trial_end`` (see
-    :func:`checkout_trial_end`). The idempotency key means a double-click or
-    same-day retry with identical parameters reuses the same session instead of
-    minting duplicates.
+    and the customer identity), so the webhook (PR 7) and manual reconciliation
+    can always find their way back to the schema. A first-time deck checks out
+    under the owner's email (Stripe mints the customer); a deck that already
+    has a ``stripe_customer_id`` (renewing after its old subscription fully
+    ended) checks out AS that customer, keeping its saved cards and invoice
+    history. A mid-trial deck's remaining free time rides along as
+    ``subscription_data.trial_end`` (see :func:`checkout_trial_end`). The
+    idempotency key means a double-click or same-day retry with identical
+    parameters reuses the same session instead of minting duplicates.
 
     Args:
-        deck (Tenant): The current deck; must not already have a stripe_customer_id.
+        deck (Tenant): The current deck.
 
     Returns:
         str: The Stripe-hosted checkout URL to redirect the owner to.
@@ -152,7 +155,15 @@ def create_checkout_session(deck):
         mode='subscription',
         line_items=[{'price': settings.STRIPE_PRICE_ID, 'quantity': 1}],
         client_reference_id=deck.schema_name,
-        customer_email=deck.get_owner_email_cached() or None,
+        # a returning deck checks out as its EXISTING Stripe customer, so the
+        # saved cards and invoice history carry over and the dashboard shows one
+        # customer per deck; Stripe forbids passing customer and customer_email
+        # together, so a first-time deck is identified by the owner's email
+        **(
+            {'customer': deck.stripe_customer_id}
+            if deck.stripe_customer_id
+            else {'customer_email': deck.get_owner_email_cached() or None}
+        ),
         metadata={'schema_name': deck.schema_name},
         # stamp the subscription too, so webhook subscription events (PR 7)
         # self-identify without a lookup; a mid-trial deck's remaining free time
@@ -169,12 +180,61 @@ def create_checkout_session(deck):
         # trial variant carries the trial-end timestamp: a same-day retry after the
         # cutoff passed, or after an admin moved trial_end_date, gets a fresh key
         # while an identical retry still reuses the session
+        # a customer-bound (renewal) session has different parameters than an
+        # email-identified one, so it gets its own key: a deck that abandoned an
+        # unlinked checkout earlier the same day can still renew after linking
         idempotency_key=(
             f'deck-checkout-{deck.schema_name}-{localdate()}'
             + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
+            + (f'-{deck.stripe_customer_id}' if deck.stripe_customer_id else '')
         ),
     )
     return session.url
+
+
+def has_manageable_subscription(deck):
+    """Whether the deck's linked Stripe subscription is one the Billing Portal
+    can still act on (renew, fix the card, switch plans, cancel).
+
+    The portal manages LIVE subscriptions only. A fully canceled (or absent)
+    subscription cannot be restarted there: the portal home shows just payment
+    methods and invoice history, a dead end for an expired deck trying to come
+    back (production find, 2026-08-09). Those decks need a fresh Checkout
+    instead. Stripe is asked at call time so the answer matches what the portal
+    will actually offer: ``past_due``/``unpaid`` subscriptions count as
+    manageable (fixing the card in the portal is their cure), while
+    ``canceled`` and ``incomplete_expired`` are dead ends.
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        bool: True when the portal is the right destination for the manage
+        button; False when a new Checkout is (no linked subscription, it no
+        longer exists on this Stripe account/mode, or its status is terminal).
+
+    Raises:
+        stripe.StripeError: On any Stripe failure that leaves the
+        subscription's state unknown (transport errors, and invalid requests
+        other than the subscription not existing), so the caller shows its
+        try-again message rather than starting a checkout.
+    """
+    if not deck.stripe_subscription_id:
+        return False
+    try:
+        subscription = stripe.Subscription.retrieve(
+            deck.stripe_subscription_id, api_key=settings.STRIPE_SECRET_KEY)
+    except stripe.InvalidRequestError as error:
+        # resource_missing means no such subscription for this key (deleted
+        # upstream, or a test/live mode mismatch): nothing for the portal to
+        # manage. Every OTHER invalid request (a malformed id, a bad parameter)
+        # leaves the subscription's real state unknown, and treating unknown as
+        # "gone" would offer a checkout that could duplicate a live
+        # subscription, so those propagate to the caller's error handling.
+        if error.code == 'resource_missing':
+            return False
+        raise
+    return subscription.status not in ('canceled', 'incomplete_expired')
 
 
 def create_portal_session(deck):
