@@ -455,9 +455,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     def test_process__grace_email_includes_dates_seats_and_logo(self):
         """The grace-period expiry email states every date the owner needs -- when
         the subscription expired and how long ago, when the grace period ends and
-        how many days remain -- plus current seat usage and the site logo
-        (maintainer request from staging live testing, 2026-07-25: the old email
-        gave no dates at all)."""
+        how many days remain -- plus current seat usage and the ByteDeck wordmark
+        (settings.PUBLIC_EMAIL_LOGO_URL) that signs every platform email
+        (maintainer request from staging live testing, 2026-07-25)."""
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
             max_active_users=30, active_user_count=2,
@@ -565,6 +565,11 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # reader onto the board through a mailto (maintainer request, 2026-08-10)
         self.assertLess(html.index('alt="[Logo]"'), html.index('non-profit Society'))
         self.assertIn('awesome app?</em> <em><a href="mailto:contact@bytedeck.com">Contact us</a>!</em>', html)
+        # the same separator in the PLAIN-TEXT part, which is what the split
+        # emphasis run buys: html2text drops the space in front of a link that
+        # sits inside an <em>, leaving text-only clients "awesome app?[Contact us]"
+        plain_text = ' '.join(mail.outbox[0].body.split())
+        self.assertIn('awesome app?_ _[Contact us](mailto:contact@bytedeck.com)!_', plain_text)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_follows_the_governing_trial_clock(self):
