@@ -109,6 +109,27 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.set_deck(active_user_count=4, trial_end_date=TODAY + timedelta(days=365))
             self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-09')])
 
+    def test_evaluate__suspended_deck_gets_no_limit_warnings(self):
+        """A suspended deck never warns about student seats: students cannot sign
+        in there at all, so the warning is wrong, and it would reach an owner who
+        may have walked away. Suspension closes the semester (#1734 B2), which
+        zeroes the count on decks suspended since; a LEGACY deck carrying a stale
+        count over its cap kept warning every month (maintainer find,
+        2026-08-10). The same deck warns once it is no longer suspended."""
+        # suspended: trial ended, and the 30-day grace window closed too
+        self.set_deck(
+            trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
+            max_active_users=5, active_user_count=5,  # the stale over-cap count
+        )
+        self.assertTrue(self.tenant.is_suspended)
+        # the suspension notice itself is still due; only the seat warning is gone
+        self.assertEqual(
+            self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(self.tenant.governing_deadline))])
+
+        # the same over-cap deck, subscribed again: the warning is due
+        self.set_deck(paid_until=TODAY + timedelta(days=90))
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
+
     def test_evaluate__unlimited_deck_gets_no_limit_warnings(self):
         """The -1 unlimited sentinel disables limit warnings entirely."""
         self.set_deck(max_active_users=-1, paid_until=TODAY + timedelta(days=90), active_user_count=999)
