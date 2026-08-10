@@ -158,6 +158,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         profile.refresh_from_db()
         self.assertTrue(profile.banned_from_comments)
         self.assertWarningMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn(self.test_student1.username, message)
+        self.assertIn('banned from commenting publicly', message)
 
         self.client.get(reverse('profiles:comment_ban', args=[profile.pk]))
         profile.refresh_from_db()
@@ -186,6 +189,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
 
         self.assertSuccessMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn('Commenting ban removed for', message)
+        self.assertIn(self.test_student1.username, message)
 
     def test_comment_ban__notifies_the_banned_student(self):
         """A banned student is told they were banned, so the ban is not silent to them."""

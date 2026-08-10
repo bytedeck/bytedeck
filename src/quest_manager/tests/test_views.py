@@ -2568,6 +2568,10 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         self.test_student.profile.refresh_from_db()
         self.assertTrue(self.test_student.profile.is_quest_hidden(self.quest))
         self.assertWarningMessage(response)
+        self.assertIn(
+            f'{self.quest.name}</strong> has been added to your list of hidden quests.',
+            self.get_message_list(response)[0].message,
+        )
 
     def test_hide__leaves_the_quest_visible_to_other_students(self):
         """One student hiding a quest does not hide it for anyone else."""
@@ -2588,6 +2592,10 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         self.test_student.profile.refresh_from_db()
         self.assertFalse(self.test_student.profile.is_quest_hidden(self.quest))
         self.assertSuccessMessage(response)
+        self.assertIn(
+            f'{self.quest.name}</strong> has been removed from your list of hidden quests.',
+            self.get_message_list(response)[0].message,
+        )
 
     def test_hide__404_for_a_quest_that_does_not_exist(self):
         """A hide url for a missing quest is a 404 rather than an entry for a nonexistent quest."""
