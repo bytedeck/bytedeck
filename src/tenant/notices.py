@@ -135,9 +135,9 @@ def evaluate_deck_notices(deck):
     # not for suspended decks: students cannot sign in there at all, so a
     # "you are running out of student seats" nag is both wrong and unwelcome on a
     # deck whose owner may have walked away. Suspension closes the semester
-    # (#1734 B2), which zeroes the count on decks suspended since, but legacy
-    # decks kept a stale count and kept warning every month (maintainer find,
-    # 2026-08-10)
+    # (#1734 B2), which zeroes the count, but a suspended deck can still carry a
+    # stale count above its cap, so this guard is explicit rather than relying on
+    # the count being zero
     cap = deck.effective_max_active_users
     if cap > 0 and not deck.is_suspended:
         count = deck.active_user_count  # cached, refreshed moments earlier by the task

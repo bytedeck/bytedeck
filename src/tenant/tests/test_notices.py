@@ -112,14 +112,14 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
     def test_evaluate__suspended_deck_gets_no_limit_warnings(self):
         """A suspended deck never warns about student seats: students cannot sign
         in there at all, so the warning is wrong, and it would reach an owner who
-        may have walked away. Suspension closes the semester (#1734 B2), which
-        zeroes the count on decks suspended since; a LEGACY deck carrying a stale
-        count over its cap kept warning every month (maintainer find,
-        2026-08-10). The same deck warns once it is no longer suspended."""
+        may have walked away. The deck here is suspended while carrying a stale
+        student count above its cap, which is the case the guard exists for, so
+        only the suspension notice is due. The same deck warns again once it is no
+        longer suspended."""
         # suspended: trial ended, and the 30-day grace window closed too
         self.set_deck(
             trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
-            max_active_users=5, active_user_count=5,  # the stale over-cap count
+            max_active_users=5, active_user_count=6,  # a stale count above the cap
         )
         self.assertTrue(self.tenant.is_suspended)
         # the suspension notice itself is still due; only the seat warning is gone
