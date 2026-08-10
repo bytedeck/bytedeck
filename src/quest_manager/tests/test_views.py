@@ -156,7 +156,11 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assert200('quests:quest_copy', args=[q_pk])
         self.assert200('quests:quest_user_status', args=[q_pk])
         self.assert200('quests:quest_prereqs_update', args=[q_pk])
-        self.assert302('quests:unarchive', args=[archived_quest_pk])
+        # unarchiving unpublishes the quest, so it lands on the Drafts tab where the quest now is
+        self.assertRedirects(
+            response=self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])),
+            expected_url=reverse('quests:drafts'),
+        )
 
         self.assert200('quests:summary', args=[q_pk])
         self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
@@ -401,11 +405,11 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assert403('quests:unflag', args=[s1_pk])
         self.assert404('quests:complete', args=[s1_pk])
 
-        # Not this student's submission
-        self.assert302('quests:submission', args=[s2_pk])
-        self.assert302('quests:drop', args=[s2_pk])
+        # Not this student's submission: sent back to their own quests page, not shown someone else's work
+        self.assertRedirectsQuests('quests:submission', args=[s2_pk])
+        self.assertRedirectsQuests('quests:drop', args=[s2_pk])
         self.assert404('quests:skip', args=[s2_pk])
-        self.assert302('quests:submission_past', args=[s2_pk])
+        self.assertRedirectsQuests('quests:submission_past', args=[s2_pk])
         self.assert404('quests:complete', args=[s2_pk])
 
         # Non existent submissions
@@ -666,7 +670,11 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         # These Needs to be completed via POST
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
-        self.assert302('quests:skip', args=[s1_pk])
+        # skipping is a staff transfer, so it returns the teacher to the approvals queue
+        self.assertRedirects(
+            response=self.client.get(reverse('quests:skip', args=[s1_pk])),
+            expected_url=reverse('quests:approvals'),
+        )
         self.assert404('quests:approve', args=[s1_pk])
 
     def test_submission__quest_not_visible_returns_404(self):
