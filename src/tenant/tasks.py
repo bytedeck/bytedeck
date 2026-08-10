@@ -87,9 +87,10 @@ def poll_release_announcement():
 
     Runs hourly via celery beat. Queries GitHub for the latest changelog
     announcement (``tenant.github.get_latest_release_announcement``); if it names a
-    version newer than any this project has recorded, creates one in-app
-    notification per deck for all of that deck's active staff, linking to the
-    GitHub announcement, then records the version so it is never re-notified.
+    version newer than any this project has recorded, it claims the version, creates
+    one in-app notification per deck for all of that deck's active staff (linking to
+    the GitHub announcement), and marks the version notified once the fan-out has run
+    so it is never re-notified.
 
     Two safety layers keep a rollout quiet: the task no-ops unless
     ``settings.RELEASE_NOTIFICATIONS_ENABLED`` is on (and a GitHub token is set,
@@ -115,26 +116,46 @@ def poll_release_announcement():
     version, url = latest
 
     with schema_context(get_public_schema_name()):
-        if ReleaseNotification.objects.filter(version=version).exists():
+        recorded = list(ReleaseNotification.objects.values_list("version", flat=True))
+        if version in recorded:
             return f"Release {version} already handled; skipped"
 
         # First poll ever: record a baseline without notifying, so enabling the
         # feature doesn't blast staff about a release they already run.
-        if not ReleaseNotification.objects.exists():
-            ReleaseNotification.objects.create(version=version, discussion_url=url, notified=False)
+        if not recorded:
+            ReleaseNotification.objects.get_or_create(
+                version=version, defaults={"discussion_url": url, "notified": False}
+            )
             return f"Recorded baseline release {version}; no notification sent"
 
         # Only move forward: a version at or below the newest recorded one (e.g. an
         # older announcement discussion re-created after a delete) is recorded but
         # not re-announced.
-        highest = max((rn.version for rn in ReleaseNotification.objects.all()), key=version_key)
+        highest = max(recorded, key=version_key)
         if version_key(version) <= version_key(highest):
-            ReleaseNotification.objects.create(version=version, discussion_url=url, notified=False)
+            ReleaseNotification.objects.get_or_create(
+                version=version, defaults={"discussion_url": url, "notified": False}
+            )
             return f"Release {version} not newer than {highest}; recorded, no notification"
 
-        ReleaseNotification.objects.create(version=version, discussion_url=url, notified=True)
+        # Claim the version (notified=False) BEFORE the fan-out. get_or_create lets
+        # the unique `version` constraint settle a race between two concurrent polls
+        # (only the creator proceeds); and leaving notified=False until the fan-out
+        # succeeds means a crash mid-fan-out leaves an accurate "not notified" row
+        # rather than a silent notified=True that would suppress a retry.
+        release, created = ReleaseNotification.objects.get_or_create(
+            version=version, defaults={"discussion_url": url, "notified": False}
+        )
+        if not created:
+            return f"Release {version} already handled; skipped"
 
     deck_count, staff_count = notify_all_decks_of_release(version, url)
+
+    # Mark notified only after the fan-out has actually run.
+    with schema_context(get_public_schema_name()):
+        release.notified = True
+        release.full_clean()
+        release.save(update_fields=["notified"])
     return f"Notified {staff_count} staff across {deck_count} deck(s) about release {version}"
 
 
@@ -143,9 +164,12 @@ def notify_all_decks_of_release(version, url):
 
     Iterates each deck schema (excluding the public and shared-library schemas,
     which aren't decks) and sends a single ``notify.send`` per deck to all of its
-    active staff, from the deck's ByteDeck support account (displayed as
-    "Bytedeck"). Best-effort per deck: a failure on one deck is logged and skipped
-    so the rest still get notified. Returns ``(deck_count, staff_count)``.
+    active staff. The sender is the deck's ByteDeck support account
+    (``TENANT_DEFAULT_ADMIN_USERNAME``, displayed as "Bytedeck"), falling back to the
+    deck's ``deck_ai`` user when that account is missing or inactive; either way
+    ``notify.send`` skips the sender if it would otherwise be one of the recipients.
+    Best-effort per deck: a failure on one deck is logged and skipped so the rest
+    still get notified. Returns ``(deck_count, staff_count)``.
     """
     from django.contrib.auth import get_user_model
 
@@ -161,26 +185,31 @@ def notify_all_decks_of_release(version, url):
     for tenant in tenants:
         with tenant_context(tenant):
             try:
-                staff = User.objects.filter(is_staff=True, is_active=True).exclude(
-                    username=settings.TENANT_DEFAULT_ADMIN_USERNAME
+                # Materialize once: the same rows drive the empty-check, the
+                # recipients, and the count.
+                staff = list(
+                    User.objects.filter(is_staff=True, is_active=True).exclude(
+                        username=settings.TENANT_DEFAULT_ADMIN_USERNAME
+                    )
                 )
-                if not staff.exists():
+                if not staff:
                     continue
-                config = SiteConfig.get()
+                # Only read SiteConfig for the fallback, when the support account
+                # isn't the (active) sender.
                 sender = User.objects.filter(
                     username=settings.TENANT_DEFAULT_ADMIN_USERNAME, is_active=True
-                ).first() or config.deck_ai
+                ).first() or SiteConfig.get().deck_ai
                 notify.send(
                     sender,
-                    recipient=staff.first(),
-                    affected_users=list(staff),
+                    recipient=staff[0],
+                    affected_users=staff,
                     verb=f'released a new version of ByteDeck ({version}). See',
                     icon="<i class='fa fa-lg fa-fw fa-bullhorn text-info'></i>",
                     url=url,
                     link_text="what's new.",
                 )
                 deck_count += 1
-                staff_count += staff.count()
+                staff_count += len(staff)
             # One malformed deck (e.g. a missing SiteConfig on the public tenant if the
             # exclusions ever regressed) must not abort the fan-out to every other deck.
             except Exception as error:  # noqa: BLE001

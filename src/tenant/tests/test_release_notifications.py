@@ -9,6 +9,7 @@ gating/baseline/dedup logic, and the per-deck fan-out.
 
 from unittest.mock import Mock, patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, override_settings
 
@@ -39,7 +40,11 @@ def _announcement_node(title, url=DISCUSSION_URL, category="Announcements"):
 
 
 class ReleaseNotificationModelTests(SimpleTestCase):
-    """ReleaseNotification.__str__ labels a real notification vs a baseline row."""
+    """ReleaseNotification.__str__ labels a real notification vs a baseline row.
+
+    SimpleTestCase is deliberate: __str__ is pure string formatting, so the model
+    is instantiated purely in memory (never saved) and no database is touched.
+    """
 
     def test_str__distinguishes_notified_from_baseline(self):
         """The audit string reports whether staff were actually notified."""
@@ -176,6 +181,19 @@ class PollReleaseAnnouncementTests(ByteDeckTenantTestCase):
         self.assertIn(("1.30.0", False), self._public_releases())
         self.assertFalse(Notification.objects.filter(verb__contains="new version of ByteDeck").exists())
 
+    def test_new_version__concurrent_claim_lost_skips_without_notifying(self):
+        """If a concurrent poll already claimed the version (get_or_create returns
+        created=False), this poll skips the fan-out instead of double-notifying."""
+        self._record_release("1.30.0")
+        baker.make(User, is_staff=True)
+        # The claiming get_or_create finds the row already inserted by the winner.
+        existing = ReleaseNotification(version="1.31.0", notified=False)
+        with patch("tenant.github.get_latest_release_announcement", return_value=("1.31.0", DISCUSSION_URL)):
+            with patch("tenant.models.ReleaseNotification.objects.get_or_create", return_value=(existing, False)):
+                result = tasks.poll_release_announcement.apply()
+        self.assertIn("already handled", result.result)
+        self.assertFalse(Notification.objects.filter(verb__contains="new version of ByteDeck").exists())
+
     def test_new_version__notifies_all_staff_and_links_to_discussion(self):
         """A newer release notifies every active staff user, from the Bytedeck
         support account, with a link to the GitHub announcement; and records the
@@ -206,13 +224,18 @@ class NotifyAllDecksOfReleaseTests(ByteDeckTenantTestCase):
     def test_notify_all_decks__only_active_staff_excluding_system_account(self):
         """Active staff get the notice; the deck's ByteDeck support account (the
         sender) and inactive staff do not."""
+        # Isolate the count: make the one staff user we create the sole active,
+        # non-system staff on the deck, so the assertion pins the exclude filter.
+        User.objects.filter(is_staff=True).exclude(
+            username=settings.TENANT_DEFAULT_ADMIN_USERNAME
+        ).update(is_active=False)
         staff = baker.make(User, is_staff=True, is_active=True)
         baker.make(User, is_staff=True, is_active=False)  # inactive: skipped
 
         deck_count, staff_count = tasks.notify_all_decks_of_release("1.31.0", DISCUSSION_URL)
 
         self.assertEqual(deck_count, 1)
-        self.assertGreaterEqual(staff_count, 1)
+        self.assertEqual(staff_count, 1)  # exactly the one active, non-system staff user
         self.assertTrue(Notification.objects.filter(recipient=staff, target_url=DISCUSSION_URL).exists())
 
     def test_deck_with_no_staff__is_skipped_cleanly(self):
