@@ -567,6 +567,11 @@ EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
 
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 
+# Where "Contact ByteDeck" copy points (subscription page, activation flow):
+# rendered as a mailto: link so users always have a way to actually reach us
+# (maintainer request, 2026-08-09).
+SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='contact@bytedeck.com')
+
 # SERVER ERRORS EMAIL
 admins_raw = env('ADMINS', default=[])
 if admins_raw:  # pragma: no cover -- ADMINS env unset under the test harness

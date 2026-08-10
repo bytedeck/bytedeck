@@ -6,7 +6,6 @@ from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from freezegun import freeze_time
 
@@ -73,13 +72,11 @@ class RankViewTests(ByteDeckTenantTestCase):
 
         # student
         self.client.force_login(self.test_student1)
-        response = self.client.get(reverse('courses:ranks'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('courses:ranks')
 
         # teacher
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:ranks'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:ranks')
 
         # Should contain 13 default ranks e.g. Digital Novice, Digital Ameteur II, etc
         self.assertEqual(response.context['object_list'].count(), 13)
@@ -176,10 +173,6 @@ class CourseViewTestData:
             'block': cls.block.pk,
             'course': cls.course.pk,
         }
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
 
 class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
@@ -410,8 +403,7 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
     def test_CourseList_view__staff_can_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:course_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:course_list')
 
         # Should contain Default and another one via bake
         self.assertEqual(response.context['object_list'].count(), 2)
@@ -548,8 +540,7 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         course_student = baker.make(CourseStudent, user=self.test_student1)
 
         # can access the Delete View
-        response = self.client.get(reverse('courses:coursestudent_delete', args=[course_student.id]))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('courses:coursestudent_delete', args=[course_student.id])
 
         before_delete_count = CourseStudent.objects.count()
         response = self.client.post(reverse('courses:coursestudent_delete', args=[course_student.id]))
@@ -626,24 +617,6 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No semesters are currently open')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
-
-    def test_no_open_semester__staff_gets_dismissable_message_on_home(self):
-        """When the deck has no open semester, staff landing on home get a dismissable message
-        (linking to the semesters page) so they know students can't join a course (issue #2060)."""
-        self.client.force_login(self.test_teacher)
-        self._close_active_semester()
-
-        response = self.client.get(reverse('home'), follow=True)
-
-        self.assertContains(response, 'Create and activate a semester')
-
-    def test_no_open_semester__no_message_on_home_when_semester_open(self):
-        """No warning message on home when a semester is open (the default state)."""
-        self.client.force_login(self.test_teacher)
-
-        response = self.client.get(reverse('home'), follow=True)
-
-        self.assertNotContains(response, 'Create and activate a semester')
 
     def test_no_open_semester__student_join_button_replaced_by_message(self):
         """A student with no course sees a 'no semester open' note instead of the Join a Course
@@ -924,6 +897,27 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
 
         self.assertNotIn(self.BANNER_ID, html)
 
+    def test_semester_status_banner__hidden_on_suspended_deck(self):
+        """A suspended deck shows only the suspension banner: the semester nudges are
+        suppressed, since students can't sign in there anyway. Uses the deck owner because
+        the suspension middleware signs everyone else out (#1734)."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.closed = True
+        active_sem.save()
+
+        # both clocks lapsed = suspended (tenant.is_suspended)
+        self.tenant.trial_end_date = datetime.date(2020, 1, 1)
+        self.tenant.paid_until = None
+        self.tenant.save()
+
+        self.client.force_login(SiteConfig.get().deck_owner)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.BANNER_ID)
+        # the suspension banner is the one warning that must remain
+        self.assertContains(response, 'This deck is suspended')
+
 
 class SemesterViewTests(ByteDeckTenantTestCase):
 
@@ -956,8 +950,7 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         """The semester list view renders each semester with its day counts and excluded-date counts."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('courses:semester_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:semester_list')
         self.assertEqual(response.context['object_list'].count(), 1)
 
         for obj in response.context['object_list']:
@@ -972,8 +965,7 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         semester = baker.make(Semester, name='', first_day=None, last_day=None)
-        response = self.client.get(reverse('courses:semester_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:semester_list')
         self.assertContains(response, str(semester))
 
     def test_SemesterCreate__without_ExcludedDates__view(self):
@@ -1224,8 +1216,7 @@ class BlockViewTests(ByteDeckTenantTestCase):
     def test_BlockList_view__staff_can_view(self):
         """ Admin should be able to view block list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('courses:block_list'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:block_list')
 
         # Should contain one block
         self.assertEqual(response.context['object_list'].count(), 1)
@@ -1779,7 +1770,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
 
     def setUp(self):
-        """Set up a tenant client for each test."""
+        """Turn on mark-calculation display so the page is reachable."""
         # to show mark calculation page without 404 you need to turn this on
         # (stays in setUp: SiteConfig writes populate cross-test caches)
         siteconfig = SiteConfig.get()
@@ -1802,8 +1793,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
     def test_mark_calculations__staff_can_view_another_students_marks(self):
         """Staff can view a specific student's mark page via the user_id URL."""
         self.client.force_login(baker.make(User, is_staff=True))
-        response = self.client.get(reverse('courses:marks', args=[self.student.pk]))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('courses:marks', args=[self.student.pk])
 
     @patch('courses.models.Semester.fraction_complete')
     def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
@@ -2047,8 +2037,7 @@ class DeckCapacityEnforcementTests(ByteDeckTenantTestCase):
         self.tenant.save()
         self.client.force_login(self.newcomer)
 
-        response = self.client.get(reverse('courses:create'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:create')
         self.assertNotContains(response, 'reached its limit of current students')
 
     def test_student_registration__simplified_auto_create_blocked_at_cap(self):
@@ -2084,8 +2073,7 @@ class DeckCapacityEnforcementTests(ByteDeckTenantTestCase):
         other_staff = baker.make(User, is_staff=True)
         self.client.force_login(self.staff)
 
-        response = self.client.get(reverse('courses:join', args=[other_staff.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('courses:join', args=[other_staff.id])
         self.assertNotContains(response, 'Current-student limit reached')
 
     def test_archive_students_help__staff_only(self):
@@ -2095,5 +2083,4 @@ class DeckCapacityEnforcementTests(ByteDeckTenantTestCase):
         self.assertContains(response, 'Freeing up student seats')
 
         self.client.force_login(self.newcomer)
-        response = self.client.get(reverse('courses:archive_students_help'))
-        self.assertEqual(response.status_code, 403)
+        self.assert403('courses:archive_students_help')

@@ -38,6 +38,8 @@ def view_accessible_by_non_public_only(request):
 
 
 class ViewsTest(ByteDeckTenantTestCase):
+    """Tests the public-only and non-public-only view guards on both the public and tenant schemas."""
+
     def setUp(self):
         """Build a request factory and an empty request for calling the views directly."""
         self.factory = RequestFactory()
@@ -113,8 +115,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
 
     def test_get__anonymous_denied_without_verified_deck_request(self):
         """Anonymous users without a verified deck request are denied access."""
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 403)
+        response = self.assert403("tenant:new")
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
     def test_get__create_deck_page_extends_public_base_and_keeps_progress_modal(self):
@@ -124,8 +125,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         deck-generation progress modal that animates on submit. Staff bypass the
         email-verification gate, so the superuser can load the form directly."""
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("tenant:new")
         # rendered through the shared public base template (the extension), not standalone
         self.assertTemplateUsed(response, "tenant/tenant_form.html")
         self.assertTemplateUsed(response, "public/base.html")
@@ -215,8 +215,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         """The confirmation page renders through the public base template and lays
         out the 3-step onboarding workflow plus the validity window, single-use
         constraint, spam reminder, and resend cooldown."""
-        response = self.client.get(reverse("decks:request_new_deck_submitted"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck_submitted")
         self.assertTemplateUsed(response, "tenant/request_new_deck_submitted.html")
         self.assertTemplateUsed(response, "public/base.html")
 
@@ -253,8 +252,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         instead of showing a bare email form (maintainer request, 2026-08-08)."""
         from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
 
-        response = self.client.get(reverse("decks:request_new_deck"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck")
         self.assertContains(response, "Verify your email")
         self.assertContains(response, "login credentials")
         self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
@@ -690,8 +688,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
     def get_quests_page(self, user):
         """Return the quest-list page (which extends base.html) as the given user."""
         self.client.force_login(user)
-        response = self.client.get(reverse('quests:quests'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quests')
         return response
 
     def test_banner__renders_inside_messages_container(self):
@@ -887,19 +884,17 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
 
     def get_page(self):
         """GET the subscription page, asserting 200."""
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription')
         return response
 
     def test_page__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 302)
+        response = self.assert302('decks:subscription')
         self.assertIn('login', response.url)
 
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse('decks:subscription')).status_code, 403)
+        self.assert403('decks:subscription')
 
         self.client.force_login(self.staff)
         self.get_page()
@@ -1179,6 +1174,86 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'managed manually')
         self.assertNotContains(response, 'Subscribe now')
 
+    def test_page__status_names_the_plan_after_the_subscribed_badge(self):
+        """A linked, subscribed deck's status line names the Stripe plan and its
+        renewal terms after the badge -- "Subscribed to <product>, renewed
+        annually at $75.00 per year. Paid through ..." (maintainer request,
+        2026-08-09) -- and degrades to the plain paid-through line when Stripe
+        can't say."""
+        self.set_deck(stripe_customer_id='cus_9', stripe_subscription_id='sub_9')
+        summary = {'name': 'Bytedeck Subscription - 40 Students', 'renewal_phrase': 'renewed annually at $75.00 per year'}
+        with patch('tenant.billing.subscription_plan_summary', return_value=summary):
+            text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn(
+            'Subscribed</span> to <strong>Bytedeck Subscription - 40 Students</strong>, '
+            'renewed annually at $75.00 per year. Paid through',
+            text,
+        )
+
+        with patch('tenant.billing.subscription_plan_summary', return_value=None):
+            text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn('Subscribed</span> Paid through', text)
+
+    def test_page__maintenance_status_names_the_plan_when_known(self):
+        """A maintenance deck's status parenthesizes its plan when Stripe data is
+        available: "on a maintenance subscription (<product>, renewed annually
+        at $10.00 per year) through ..."."""
+        self.set_deck(max_active_users=5, stripe_customer_id='cus_9', stripe_subscription_id='sub_9')
+        summary = {'name': 'Bytedeck Maintenance', 'renewal_phrase': 'renewed annually at $10.00 per year'}
+        with patch('tenant.billing.subscription_plan_summary', return_value=summary):
+            text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn(
+            'maintenance subscription (<strong>Bytedeck Maintenance</strong>, '
+            'renewed annually at $10.00 per year) through',
+            text,
+        )
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_page__manage_button_shows_at_top_and_bottom_owner_only(self):
+        """The manage action appears TWICE -- under Status and in Upgrade-or-renew
+        (maintainer request, 2026-08-09). Staff who are not the deck owner get
+        both copies disabled with a popup naming who can act; the owner gets the
+        live forms with the portal/checkout help text as the title popup."""
+        from siteconfig.models import SiteConfig
+
+        owner = SiteConfig.get().deck_owner
+        self.set_deck(stripe_customer_id='cus_9')
+
+        # setUp's staff user is NOT the owner: disabled buttons, owner named in the popup
+        response = self.get_page()
+        self.assertContains(response, 'Manage subscription', count=2)
+        self.assertContains(
+            response, f'Only the deck owner, {owner.get_username()}, can manage the subscription.', count=2
+        )
+        self.assertNotContains(response, '<form method="post"')
+
+        # the owner: two live forms, the help text riding on the buttons' title popups
+        self.client.force_login(owner)
+        response = self.get_page()
+        self.assertContains(response, 'Manage subscription', count=2)
+        self.assertContains(response, '<form method="post"', count=2)
+        self.assertNotContains(response, 'disabled')
+
+    def test_page__contact_copy_links_the_support_address(self):
+        """Copy that says to contact ByteDeck links the support address as a
+        mailto (maintainer request, 2026-08-09): the managed-manually status, the
+        manual-billing note, and the activating page's check-later copy."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(trial_end_date=None, paid_until=None)  # the managed-manually status
+        self.assertContains(self.get_page(), 'mailto:contact@bytedeck.com')
+
+        # actively paid + unlinked with Stripe configured: the manual-billing note
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123'):
+            self.set_deck(paid_until=localdate() + timedelta(days=100))
+            self.assertContains(self.get_page(), 'mailto:contact@bytedeck.com')
+
+        # the activating page's "contact ByteDeck if it still hasn't appeared"
+        response = self.client.get(reverse('decks:subscription_activating'))
+        self.assertContains(response, 'mailto:contact@bytedeck.com')
+
     def test_menu__admin_dropdown_links_subscription_page_for_staff(self):
         """The navbar admin menu contains the Subscription entry for staff."""
         response = self.client.get(reverse('quests:quests'))
@@ -1194,15 +1269,25 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
     """
 
     def setUp(self):
-        """Log in staff on an unlinked deck with billing configured via override in
-        each test (the deck's owner email resolution is exercised as-is)."""
+        """Log in the DECK OWNER (the only user who may start checkout or open the
+        portal) on an unlinked deck with billing configured via override in each
+        test (the deck's owner email resolution is exercised as-is). A non-owner
+        staff member is kept around for the rejection test. The cosmetic
+        customer-description stamp is stubbed so link-path tests never attempt a
+        real Stripe call."""
         from model_bakery import baker
+
+        from siteconfig.models import SiteConfig
 
         from tenant.utils import deck_cache_key
 
         cache.delete(deck_cache_key(self.tenant.schema_name))
         self.staff = baker.make(User, is_staff=True)
-        self.client.force_login(self.staff)
+        self.owner = SiteConfig.get().deck_owner
+        self.client.force_login(self.owner)
+        patcher = patch('tenant.billing.stripe.Customer.modify')
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def set_deck(self, **fields):
         """Persist billing fields on this deck's Tenant row and refresh the instance."""
@@ -1259,6 +1344,8 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
             response = self.client.post(reverse('decks:subscription'), follow=True)
         mock_create.assert_not_called()
         self.assertContains(response, 'double-bill')
+        # the error message renders its contact address as a clickable mailto link
+        self.assertContains(response, 'mailto:contact@bytedeck.com')
         # the page itself shows the manual-subscription note instead of the button
         self.assertContains(self.client.get(reverse('decks:subscription')), 'managed manually')
 
@@ -1268,6 +1355,19 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
                    return_value=Mock(url='https://checkout.stripe.test/cs_g')) as mock_create:
             response = self.client.post(reverse('decks:subscription'))
         self.assertEqual(response.url, 'https://checkout.stripe.test/cs_g')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__non_owner_staff_rejected_with_the_owners_name(self):
+        """POST from staff who are not the deck owner starts nothing: no Stripe
+        call, a redirect back with an error naming who CAN act (the server-side
+        guard behind the disabled button; maintainer request, 2026-08-09)."""
+        self.client.force_login(self.staff)
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            response = self.client.post(reverse('decks:subscription'), follow=True)
+        mock_create.assert_not_called()
+        self.assertContains(
+            response, f'Only the deck owner, {self.owner.get_username()}, can manage the subscription.'
+        )
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
     def test_post__stripe_error_redirects_back_with_message(self):
@@ -1282,8 +1382,7 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
     def test_activating_page__renders_for_staff_with_polling_script(self):
         """The post-checkout page renders the activating message and polls the
         status endpoint."""
-        response = self.client.get(reverse('decks:subscription_activating'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription_activating')
         self.assertContains(response, 'Activating your subscription')
         self.assertContains(response, reverse('decks:subscription_status'))
         # polling is capped so an abandoned checkout can't hammer Stripe forever

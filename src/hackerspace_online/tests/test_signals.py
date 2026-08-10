@@ -17,6 +17,8 @@ User = get_user_model()
 
 
 class SignalTest(ByteDeckTenantTestCase):
+    """Tests the signal handlers that keep the Site record in sync with tenant domain changes."""
+
     def test_handle_tenant_site_domain_update__long_domain_truncates_site_name(self):
         """A tenant whose full domain exceeds Site.name's 50-char limit is still
         created successfully.

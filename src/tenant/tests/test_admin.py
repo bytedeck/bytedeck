@@ -199,8 +199,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         since they refresh nightly rather than on page load (#1729 PR 2)."""
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # setUpTestData refreshed the cached fields, so a timestamped message shows
         self.assertContains(response, "were last refreshed")
 
@@ -209,8 +208,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Tenant.objects.update(cached_fields_updated_on=None)
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         self.assertContains(response, "have not been refreshed yet")
 
     def test_changelist_view__freshness_notice_not_duplicated_by_action_posts(self):
@@ -277,15 +275,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
 
@@ -305,15 +301,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page (both verified and unverified emails)
         self.assertContains(response, "john@doe.com")  # verified email
         self.assertContains(response, "jane@doe.com")  # unverified email
@@ -324,15 +318,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
 
@@ -342,15 +334,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
@@ -360,8 +350,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -554,10 +543,7 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
         """Build baseline valid form data reused across the form validation tests."""
         cls.form_data = {
             'name': 'test',  # This is the name of the already existing test tenant
-            # 'owner_full_name': None,
-            # 'owner_email': None,
             'max_active_users': 50,
-            'max_quests': 100,
             # 'paid_until': None,
             'trial_end_date': timezone.now()
         }
@@ -1002,15 +988,13 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "message_unverified" action
         # should returns 200 (intermediate page)
@@ -1089,15 +1073,13 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         """
         # first case, access /admin/tenant/ page as anonymous user
         # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "send_email_message" action
         # should returns 200 (intermediate page)
@@ -1284,3 +1266,130 @@ class SyncFromStripeActionTest(ByteDeckTenantTestCase):
         with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('nope')):
             response = self.post_action([self.tenant.pk])
         self.assertContains(response, "Stripe error")
+
+
+class TenantAdminOwnerActionsTest(PublicTenantTestAdminPublic):
+    """Tests for the tenant changelist's legacy owner cleanup actions
+    (maintainer request, 2026-08-09: these run from the admin, not SSH)."""
+
+    def login_admin(self):
+        """Move the client to the public schema, sign the superuser in, and
+        return the changelist URL the actions post to."""
+        url = reverse("admin:tenant_tenant_changelist")
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+        return url
+
+    def test_verify_owner_email_action__verifies_the_owners_address(self):
+        """The action normalizes the selected deck owner's EmailAddress to
+        verified+primary (the state deck creation produces), reports the fix,
+        reports already-verified on a second run, and silently ignores a
+        selected public row (not a deck)."""
+        url = self.login_admin()
+        public_pk = Tenant.objects.get(schema_name=get_public_schema_name()).pk
+        with tenant_context(self.tenant):
+            owner = SiteConfig.get().deck_owner
+            self.assertFalse(EmailAddress.objects.get(user=owner, email='jane@doe.com').verified)
+
+        action_data = {"action": "verify_owner_email", ACTION_CHECKBOX_NAME: [self.tenant.pk, public_pk]}
+        response = self.client.post(url, action_data, follow=True)
+
+        self.assertContains(response, "verified the owner")
+        self.assertContains(response, "jane@doe.com")
+        with tenant_context(self.tenant):
+            row = EmailAddress.objects.get(user=owner, email='jane@doe.com')
+            self.assertTrue(row.verified)
+            self.assertTrue(row.primary)
+
+        response = self.client.post(url, {"action": "verify_owner_email",
+                                          ACTION_CHECKBOX_NAME: [self.tenant.pk]}, follow=True)
+        self.assertContains(response, "already verified")
+
+    def test_verify_owner_email_action__error_reported_not_raised(self):
+        """A deck that blows up mid-normalize (e.g. a broken schema) gets an
+        ERROR message for that deck instead of the whole action 500ing."""
+        url = self.login_admin()
+        action_data = {"action": "verify_owner_email", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        with patch('tenant.utils.normalize_owner_email', side_effect=RuntimeError('boom')):
+            response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "ERROR RuntimeError: boom")
+
+    def test_change_deck_owner_action__intermediate_page_then_switch(self):
+        """One selected deck: the intermediate page lists the deck's staff users
+        (minus the current owner), and confirming hands the deck over through the
+        shared write path: SiteConfig.deck_owner switches, the new owner is
+        promoted to superuser, and the cached owner fields land immediately."""
+        from model_bakery import baker
+
+        url = self.login_admin()
+        with tenant_context(self.tenant):
+            baker.make(User, is_staff=True, is_superuser=False, username='handover',
+                       first_name='Hand', last_name='Over', email='hand.over@example.com')
+
+        # step 1: the intermediate picker page
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        response = self.client.post(url, action_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Change the owner of deck")
+        self.assertContains(response, "handover")
+
+        # step 2: confirm the handover
+        action_data.update({"post": "yes", "new_owner": "handover"})
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "owner changed from")
+
+        with tenant_context(self.tenant):
+            new_owner = User.objects.get(username='handover')
+            self.assertEqual(SiteConfig.objects.get().deck_owner, new_owner)
+            self.assertTrue(new_owner.is_superuser)
+        self.assertEqual(Tenant.objects.get(pk=self.tenant.pk).owner_email_cached, 'hand.over@example.com')
+
+    def test_change_deck_owner_action__invalid_choice_rerenders_with_errors(self):
+        """Confirming with a username that isn't one of the deck's staff choices
+        re-renders the picker with a form error instead of writing anything."""
+        url = self.login_admin()
+        with tenant_context(self.tenant):
+            owner_before = SiteConfig.objects.get().deck_owner
+
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk],
+                       "post": "yes", "new_owner": "nobody-here"}
+        response = self.client.post(url, action_data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Change the owner of deck")
+        self.assertContains(response, "Select a valid choice")
+
+        with tenant_context(self.tenant):
+            self.assertEqual(SiteConfig.objects.get().deck_owner, owner_before)
+
+    def test_change_deck_owner_action__requires_exactly_one_deck(self):
+        """Selecting two decks errors out with guidance instead of guessing
+        which deck to hand over."""
+        url = self.login_admin()
+        action_data = {"action": "change_deck_owner",
+                       ACTION_CHECKBOX_NAME: [self.tenant.pk, self.extra_tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "Select exactly ONE deck")
+
+    def test_change_deck_owner_action__ownerless_deck_reported_not_500(self):
+        """A deck whose SiteConfig has no owner (the field is NOT NULL, so this
+        is a defensive guard matching message_selected's caution) gets an ERROR
+        message instead of a 500 on the missing owner's pk (review find)."""
+        from unittest.mock import Mock
+
+        url = self.login_admin()
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.tenant.pk]}
+        with patch('tenant.admin.SiteConfig.get', return_value=Mock(deck_owner=None)):
+            response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "no owner set in its SiteConfig")
+
+    def test_change_deck_owner_action__warns_when_no_other_staff(self):
+        """A deck whose only staff user is the current owner has nobody to hand
+        the deck to: the action says so instead of rendering an empty picker."""
+        url = self.login_admin()
+        with tenant_context(self.extra_tenant):
+            owner = SiteConfig.objects.get().deck_owner
+            User.objects.filter(is_staff=True).exclude(pk=owner.pk).update(is_staff=False)
+
+        action_data = {"action": "change_deck_owner", ACTION_CHECKBOX_NAME: [self.extra_tenant.pk]}
+        response = self.client.post(url, action_data, follow=True)
+        self.assertContains(response, "no other staff users")

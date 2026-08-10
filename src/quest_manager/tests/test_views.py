@@ -98,51 +98,51 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         q2_pk = self.quest2.pk
         archived_quest_pk = self.archived_quest.pk
 
-        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quests')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:available')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:available_all')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:inprogress')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:completed')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:past')).status_code, 200)
+        self.assert200('quests:quests')
+        self.assert200('quests:quests')
+        self.assert200('quests:available')
+        self.assert200('quests:available_all')
+        self.assert200('quests:inprogress')
+        self.assert200('quests:completed')
+        self.assert200('quests:past')
         # anyone can view drafts if they figure out the url, but it will be blank for them
-        self.assertEqual(self.client.get(reverse('quests:drafts')).status_code, 200)
+        self.assert200('quests:drafts')
 
-        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quest_detail', args=[q_pk])).status_code, 200)
+        self.assert200('quests:quest_detail', args=[q_pk])
+        self.assert200('quests:quest_detail', args=[q_pk])
 
         #  students shouldn't have access to these and should be redirected to login
-        self.assertEqual(self.client.get(reverse('quests:approvals')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:submitted')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:submitted_all')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:in_progress')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:approved')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_user_status', args=[q_pk])).status_code, 403)
+        self.assert403('quests:approvals')
+        self.assert403('quests:submitted')
+        self.assert403('quests:submitted_all')
+        self.assert403('quests:in_progress')
+        self.assert403('quests:approved')
+        self.assert403('quests:flagged')
+        self.assert403('quests:quest_user_status', args=[q_pk])
         # self.assertEqual(self.client.get(reverse('quests:skipped')).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:submitted_for_quest', args=[q_pk])).status_code, 302)
         # self.assertEqual(self.client.get(reverse('quests:returned_for_quest', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:approved_for_quest', args=[q_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:approved_for_quest_all', args=[q_pk])).status_code, 403)
+        self.assert403('quests:approved_for_quest', args=[q_pk])
+        self.assert403('quests:approved_for_quest_all', args=[q_pk])
         # self.assertEqual(self.client.get(reverse('quests:skipped_for_quest', args=[q_pk])).status_code, 302)
 
         # summary stats
-        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 403)
+        self.assert403('quests:summary', args=[q_pk])
 
-        self.assertEqual(self.client.get(reverse('quests:start', args=[q2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:hide', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:unhide', args=[q_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
+        self.assert302('quests:start', args=[q2_pk])
+        self.assert302('quests:hide', args=[q_pk])
+        self.assert302('quests:unhide', args=[q_pk])
+        self.assert404('quests:skip_for_quest', args=[q_pk])
+        self.assert403('quests:unarchive', args=[archived_quest_pk])
 
-        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 403)
+        self.assert403('quests:quest_prereqs_update', args=[q_pk])
 
         # 403 for CRUD views:
-        self.assertEqual(self.client.get(reverse('quests:quest_create')).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_update', args=[q_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 403)
+        self.assert403('quests:quest_create')
+        self.assert403('quests:quest_update', args=[q_pk])
+        self.assert403('quests:quest_copy', args=[q_pk])
+        self.assert403('quests:quest_delete', args=[q_pk])
+        self.assert403('quests:unarchive', args=[archived_quest_pk])
 
     def test_all_quest_pages__teacher_access_codes(self):
         """Teachers can reach the staff quest management and summary views."""
@@ -153,13 +153,13 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         q2_pk = self.quest2.pk
         archived_quest_pk = self.archived_quest.pk
 
-        self.assertEqual(self.client.get(reverse('quests:quest_delete', args=[q2_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quest_copy', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quest_user_status', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:quest_prereqs_update', args=[q_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])).status_code, 302)
+        self.assert200('quests:quest_delete', args=[q2_pk])
+        self.assert200('quests:quest_copy', args=[q_pk])
+        self.assert200('quests:quest_user_status', args=[q_pk])
+        self.assert200('quests:quest_prereqs_update', args=[q_pk])
+        self.assert302('quests:unarchive', args=[archived_quest_pk])
 
-        self.assertEqual(self.client.get(reverse('quests:summary', args=[q_pk])).status_code, 200)
+        self.assert200('quests:summary', args=[q_pk])
         self.assertEqual(self.client.get(reverse('quests:ajax_summary_histogram', args=[q_pk])).status_code, 403)  # Ajax only
         response = self.client.get(
             reverse('quests:ajax_summary_histogram', args=[q_pk]),
@@ -193,8 +193,7 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         # if the quest is unavailable to the student, then should get a 404 if there is no submission started yet
         # but we don't care about implementation of `is_available()` here, so just patch it to return False
         with patch('quest_manager.models.Quest.is_available', return_value=False):
-            response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
-            self.assertEqual(response.status_code, 404)
+            self.assert404('quests:start', args=[self.quest1.pk])
 
         # if the quest has not been started yet, and it's available to the student,
         # (quests created with default settings should be to students, as long as they are registered in a course)
@@ -388,37 +387,37 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         s2_pk = self.sub2.pk
 
         # Student's own submission
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assert200('quests:submission', args=[s1_pk])
+        self.assert200('quests:drop', args=[s1_pk])
+        self.assert200('quests:submission_past', args=[s1_pk])
 
         # Students shouldn't have access to these
-        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 403)
+        self.assert403('quests:flagged')
 
         # Student's own submission
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:unflag', args=[s1_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+        self.assert404('quests:skip', args=[s1_pk])
+        self.assert403('quests:approve', args=[s1_pk])
+        self.assert200('quests:submission_past', args=[s1_pk])
+        self.assert403('quests:flag', args=[s1_pk])
+        self.assert403('quests:unflag', args=[s1_pk])
+        self.assert404('quests:complete', args=[s1_pk])
 
         # Not this student's submission
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[s2_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s2_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:complete', args=[s2_pk])).status_code, 404)
+        self.assert302('quests:submission', args=[s2_pk])
+        self.assert302('quests:drop', args=[s2_pk])
+        self.assert404('quests:skip', args=[s2_pk])
+        self.assert302('quests:submission_past', args=[s2_pk])
+        self.assert404('quests:complete', args=[s2_pk])
 
         # Non existent submissions
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:complete', args=[0])).status_code, 404)
+        self.assert404('quests:submission', args=[0])
+        self.assert404('quests:drop', args=[0])
+        self.assert404('quests:skip', args=[0])
+        self.assert404('quests:submission_past', args=[0])
+        self.assert404('quests:complete', args=[0])
 
         # These Needs to be completed via POST
-        self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
+        self.assert404('quests:complete', args=[s1_pk])
 
     def test_submission__student_can_view_completed_submission_when_hidden(self):
         """
@@ -429,8 +428,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         s4_pk = self.sub4.pk
 
-        response = self.client.get(reverse('quests:submission', args=[s4_pk]))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('quests:submission', args=[s4_pk])
 
     def test_submission_view__staff_buttons_include_completion_statuses_link(self):
         """The staff quick-link button group on the submission detail page must include
@@ -486,8 +484,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.sub1.save()
         self.client.force_login(self.test_student1)
 
-        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:submission', args=[self.sub1.pk])
         # Assert each explanatory text sits inside its button's title attribute (tie the phrase to
         # the title="..." so the test can't pass on the text appearing elsewhere on the page).
         self.assertContains(
@@ -527,8 +524,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         s4_pk = self.sub4.pk
 
-        response = self.client.get(reverse('quests:drop', args=[s4_pk]))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('quests:drop', args=[s4_pk])
 
     def test_submission__hidden_quest_hides_submit_button(self):
         """
@@ -575,8 +571,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.quest3.archived = True
         self.quest3.save()
 
-        response = self.client.get(reverse('quests:submission', args=[self.sub4.pk]))
-        self.assertEqual(response.status_code, 404)
+        self.assert404('quests:submission', args=[self.sub4.pk])
 
     def test_submission__drop_button_hidden_when_approved(self):
         """
@@ -601,8 +596,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.sub4.save()
         s4_pk = self.sub4.pk
 
-        response = self.client.get(reverse('quests:drop', args=[s4_pk]))
-        self.assertEqual(response.status_code, 404)
+        self.assert404('quests:drop', args=[s4_pk])
 
     def test_drop__deletes_comment_and_submission(self):
         """Ensure that the draft_comment (foreignkey to Comment object) is deleted
@@ -642,10 +636,10 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         s1_pk = self.sub1.pk
         # s2_pk = self.sub2.pk
 
-        self.assertEqual(self.client.get(reverse('quests:flagged')).status_code, 200)
+        self.assert200('quests:flagged')
 
         # View it
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[s1_pk])).status_code, 200)
+        self.assert200('quests:submission', args=[s1_pk])
         # Flag it
         # self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
         self.assertRedirects(
@@ -663,18 +657,18 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertIsNone(self.sub1.flagged_by)
 
         # self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[s1_pk])).status_code, 200)
+        self.assert200('quests:submission_past', args=[s1_pk])
 
         # Non existent submissions
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:drop', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[0])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:submission_past', args=[0])).status_code, 404)
+        self.assert404('quests:submission', args=[0])
+        self.assert404('quests:drop', args=[0])
+        self.assert404('quests:skip', args=[0])
+        self.assert404('quests:submission_past', args=[0])
 
         # These Needs to be completed via POST
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
-        self.assertEqual(self.client.get(reverse('quests:skip', args=[s1_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('quests:approve', args=[s1_pk])).status_code, 404)
+        self.assert302('quests:skip', args=[s1_pk])
+        self.assert404('quests:approve', args=[s1_pk])
 
     def test_submission__quest_not_visible_returns_404(self):
         """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
@@ -687,7 +681,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertFalse(self.quest1.published)
 
         # TODO: should redirect, not 404?
-        self.assertEqual(self.client.get(reverse('quests:submission', args=[self.sub1.pk])).status_code, 404)
+        self.assert404('quests:submission', args=[self.sub1.pk])
 
     def test_submission__xp_entered_remains_when_submission_returned(self):
         """A student's requested XP is preserved on the form after a submission is returned."""
@@ -1734,8 +1728,7 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
             semester=SiteConfig.get().active_semester,
         )
 
-        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quest_user_status', args=[self.quest.id])
         statuses = {entry['user'].username: entry['status'] for entry in response.context['user_status_list']}
         self.assertEqual(statuses[self.student1.username], 'Awaiting Approval')
 
@@ -2358,8 +2351,7 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         """ initial values in form GET is the same as the self.quest (quest that is being copied)  """
         self.client.force_login(self.test_teacher)
 
-        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
-        self.assertEqual(get_response.status_code, 200)
+        get_response = self.assert200('quests:quest_copy', args=[self.quest.id])
 
         # Get the data from the form  (initial visit to the page)
         form_data = get_response.context['form'].initial
@@ -2396,8 +2388,7 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
     def test_quest_copy__ta_get_initial_values(self):
         """A TA copying a quest sees the same copied initial form values as a teacher."""
         self.client.force_login(self.test_ta)
-        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
-        self.assertEqual(get_response.status_code, 200)
+        get_response = self.assert200('quests:quest_copy', args=[self.quest.id])
 
         # Get the data from the form  (initial visit to the page)
         form_data = get_response.context['form'].initial
@@ -2445,8 +2436,7 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         """ When copying a quest should be able to set new prereqs """
         self.client.force_login(self.test_teacher)
 
-        get_response = self.client.get(reverse('quests:quest_copy', args=[self.quest.id]))
-        self.assertEqual(get_response.status_code, 200)
+        get_response = self.assert200('quests:quest_copy', args=[self.quest.id])
 
         # See above tests for explanation of this....(EXPLANATION REMOVED because above tests changed)
         form_data = get_response.context['form'].initial
@@ -2816,8 +2806,7 @@ class CategoryViewTests(ByteDeckTenantTestCase):
     def test_CategoryList_view__staff_can_view(self):
         """ Admin should be able to view course list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('quests:categories'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('quests:categories')
 
     def test_CategoryDetail_view__student_vs_admin_visibility(self):
         """ Admin and students should be able to view course details
@@ -2833,8 +2822,7 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         # Admin should be able to access view
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:category_detail', kwargs={"pk": view_test_campaign.pk})
 
         # Admin should be able to see every quest assigned to the viewed campaign
         displayed_quests = response.context["category_displayed_quests"]
@@ -2843,8 +2831,7 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         # Students should be able to access view
         self.client.force_login(self.test_student1)
-        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": view_test_campaign.pk}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:category_detail', kwargs={"pk": view_test_campaign.pk})
 
         # Students should only be able to see active quests assigned to the viewed campaign
         displayed_quests = response.context["category_displayed_quests"]
@@ -3781,8 +3768,7 @@ class DetailViewTest(ByteDeckTenantTestCase):
         site_config.save()
 
         # Staff user in a normal tenant schema
-        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quest_detail', args=[self.quest.id])
 
         # Should be in the context
         self.assertIn('can_export', response.context)
@@ -3792,8 +3778,7 @@ class DetailViewTest(ByteDeckTenantTestCase):
 
         # Now test as normal student
         self.client.force_login(self.test_student)
-        response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quest_detail', args=[self.quest.id])
         self.assertFalse(response.context['can_export'])
 
 
@@ -4210,8 +4195,7 @@ class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
             QuestSubmission, quest=self.quest, is_approved=True, is_completed=True,
             semester=SiteConfig.get().active_semester, time_approved=timezone.now(),
         )
-        response = self.client.get(reverse('quests:summary', args=[self.quest.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:summary', args=[self.quest.id])
         self.assertIsNotNone(response.context['latest_submission_time'])
         self.assertEqual(response.context['count_total'], 1)
         self.assertEqual(response.context['percent_returned'], 0)  # none returned -> 0%
