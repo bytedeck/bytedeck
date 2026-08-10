@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone as dt_timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
@@ -14,7 +14,8 @@ from django_tenants.utils import schema_context
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.billing import (
     _plan_summary_from_subscription, billing_configured, checkout_trial_end, clear_plan_summary_cache,
-    create_checkout_session, reconcile_checkout_session, subscription_period_end_date, subscription_plan_summary,
+    create_checkout_session, has_manageable_subscription, reconcile_checkout_session, subscription_period_end_date,
+    subscription_plan_summary,
 )
 from tenant.models import Tenant
 
@@ -343,6 +344,108 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         self.assertEqual(
             kwargs['idempotency_key'],
             f'deck-checkout-{self.tenant.schema_name}-{timezone.localdate()}')
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class HasManageableSubscriptionTest(ByteDeckTenantTestCase):
+    """has_manageable_subscription decides the subscription page's manage-button
+    destination: the Billing Portal only when Stripe still has a live
+    subscription to act on, otherwise a fresh Checkout (production find,
+    2026-08-09: an expired deck's portal offered nothing but old invoices)."""
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def test_has_manageable_subscription__false_without_a_subscription_id(self):
+        """A deck with no linked subscription needs no Stripe call: there is
+        nothing for the portal to manage."""
+        self.set_deck(stripe_subscription_id='')
+        with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve:
+            self.assertFalse(has_manageable_subscription(self.tenant))
+        mock_retrieve.assert_not_called()
+
+    def test_has_manageable_subscription__true_for_live_statuses(self):
+        """A subscription Stripe still considers live is manageable in the
+        portal, including past_due and unpaid (fixing the card there is exactly
+        their cure)."""
+        self.set_deck(stripe_subscription_id='sub_1')
+        for status in ('active', 'trialing', 'past_due', 'unpaid', 'paused'):
+            with self.subTest(status=status):
+                with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status=status)):
+                    self.assertTrue(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__false_for_terminal_statuses(self):
+        """A canceled (or expired-incomplete) subscription is a dead end in the
+        portal: it cannot be restarted there, so the deck needs a Checkout."""
+        self.set_deck(stripe_subscription_id='sub_1')
+        for status in ('canceled', 'incomplete_expired'):
+            with self.subTest(status=status):
+                with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status=status)):
+                    self.assertFalse(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__false_when_stripe_has_no_such_subscription(self):
+        """A subscription id this key can't see (deleted upstream, or a
+        test/live mode mismatch on a hand-linked legacy deck) is not
+        manageable, rather than a 500."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_gone')
+        with patch('tenant.billing.stripe.Subscription.retrieve',
+                   side_effect=stripe_lib.InvalidRequestError('No such subscription', param='id')):
+            self.assertFalse(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__other_stripe_errors_propagate(self):
+        """A transport/API failure is NOT silently read as "no subscription":
+        it propagates so the view shows its try-again message instead of
+        starting a checkout that could double-bill a live subscriber."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_1')
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.APIConnectionError('down')):
+            with self.assertRaises(stripe_lib.StripeError):
+                has_manageable_subscription(self.tenant)
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class CreateCheckoutSessionCustomerTest(ByteDeckTenantTestCase):
+    """create_checkout_session identifies the payer by existing customer when the
+    deck has one (a renewal after cancellation), else by the owner's email."""
+
+    def create_session(self, customer_id):
+        """Put the deck on this stripe_customer_id ('' = unlinked), run
+        create_checkout_session with Stripe mocked, and return the call kwargs.
+
+        The customer id is always set explicitly: ``self.tenant`` is a
+        class-level instance, so a value left over from another test in this
+        class would otherwise leak in through the in-memory model.
+        """
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_customer_id=customer_id)
+        self.tenant.refresh_from_db()
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            mock_create.return_value.url = 'https://stripe.example/session'
+            self.assertEqual(create_checkout_session(self.tenant), 'https://stripe.example/session')
+        return mock_create.call_args.kwargs
+
+    def test_create_checkout_session__linked_deck_checks_out_as_its_customer(self):
+        """A deck with a stripe_customer_id renews AS that customer (saved cards
+        and invoice history carry over, and the dashboard keeps one customer per
+        deck). Stripe rejects customer and customer_email together, so only
+        customer is sent, and the customer id joins the idempotency key so a
+        same-day unlinked attempt can't collide with the renewal."""
+        kwargs = self.create_session('cus_renew')
+        self.assertEqual(kwargs['customer'], 'cus_renew')
+        self.assertNotIn('customer_email', kwargs)
+        self.assertTrue(kwargs['idempotency_key'].endswith('-cus_renew'))
+
+    def test_create_checkout_session__unlinked_deck_checks_out_by_owner_email(self):
+        """A first-time deck sends no customer: Stripe mints one from the
+        owner's email, which is how the deck is identified back to its schema."""
+        kwargs = self.create_session('')
+        self.assertNotIn('customer', kwargs)
+        self.assertIn('customer_email', kwargs)
+        self.assertNotIn('-cus_', kwargs['idempotency_key'])
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
