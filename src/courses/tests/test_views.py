@@ -627,24 +627,6 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertContains(response, 'No semesters are currently open')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
-    def test_no_open_semester__staff_gets_dismissable_message_on_home(self):
-        """When the deck has no open semester, staff landing on home get a dismissable message
-        (linking to the semesters page) so they know students can't join a course (issue #2060)."""
-        self.client.force_login(self.test_teacher)
-        self._close_active_semester()
-
-        response = self.client.get(reverse('home'), follow=True)
-
-        self.assertContains(response, 'Create and activate a semester')
-
-    def test_no_open_semester__no_message_on_home_when_semester_open(self):
-        """No warning message on home when a semester is open (the default state)."""
-        self.client.force_login(self.test_teacher)
-
-        response = self.client.get(reverse('home'), follow=True)
-
-        self.assertNotContains(response, 'Create and activate a semester')
-
     def test_no_open_semester__student_join_button_replaced_by_message(self):
         """A student with no course sees a 'no semester open' note instead of the Join a Course
         button when the deck has no open semester (issue #2060)."""
@@ -923,6 +905,27 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
         html = render_to_string('semester_status_banner.html', {'config': None, 'request': request})
 
         self.assertNotIn(self.BANNER_ID, html)
+
+    def test_semester_status_banner__hidden_on_suspended_deck(self):
+        """A suspended deck shows only the suspension banner: the semester nudges are
+        suppressed, since students can't sign in there anyway. Uses the deck owner because
+        the suspension middleware signs everyone else out (#1734)."""
+        active_sem = SiteConfig.get().active_semester
+        active_sem.closed = True
+        active_sem.save()
+
+        # both clocks lapsed = suspended (tenant.is_suspended)
+        self.tenant.trial_end_date = datetime.date(2020, 1, 1)
+        self.tenant.paid_until = None
+        self.tenant.save()
+
+        self.client.force_login(SiteConfig.get().deck_owner)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, self.BANNER_ID)
+        # the suspension banner is the one warning that must remain
+        self.assertContains(response, 'This deck is suspended')
 
 
 class SemesterViewTests(ByteDeckTenantTestCase):
