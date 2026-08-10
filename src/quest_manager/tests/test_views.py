@@ -2543,6 +2543,70 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         self.assertEqual(Quest.objects.count(), quests_before)
 
 
+class HideQuestViewTests(ByteDeckTenantTestCase):
+    """Tests hiding and unhiding a quest, which a student does from the quest's own page.
+
+    Hidden quests are kept per student on their profile, so hiding one only affects the student
+    who hid it.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create two students and a quest for them to hide."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+        cls.other_student = User.objects.create_user('other_student')
+        cls.quest = baker.make(Quest)
+
+    def test_hide__adds_the_quest_to_the_students_hidden_list(self):
+        """Hiding a quest hides it for that student and sends them back to their quests page."""
+        self.client.force_login(self.test_student)
+        self.assertFalse(self.test_student.profile.is_quest_hidden(self.quest))
+
+        response = self.assertRedirectsQuests('quests:hide', args=[self.quest.pk])
+
+        self.test_student.profile.refresh_from_db()
+        self.assertTrue(self.test_student.profile.is_quest_hidden(self.quest))
+        self.assertWarningMessage(response)
+        self.assertIn(
+            f'{self.quest.name}</strong> has been added to your list of hidden quests.',
+            self.get_message_list(response)[0].message,
+        )
+
+    def test_hide__leaves_the_quest_visible_to_other_students(self):
+        """One student hiding a quest does not hide it for anyone else."""
+        self.client.force_login(self.test_student)
+        self.client.get(reverse('quests:hide', args=[self.quest.pk]))
+
+        self.other_student.profile.refresh_from_db()
+        self.assertFalse(self.other_student.profile.is_quest_hidden(self.quest))
+
+    def test_unhide__removes_the_quest_from_the_students_hidden_list(self):
+        """Unhiding a hidden quest restores it and sends the student to the all-available list."""
+        self.test_student.profile.hide_quest(self.quest.pk)
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:unhide', args=[self.quest.pk]))
+
+        self.assertRedirects(response, reverse('quests:available_all'))
+        self.test_student.profile.refresh_from_db()
+        self.assertFalse(self.test_student.profile.is_quest_hidden(self.quest))
+        self.assertSuccessMessage(response)
+        self.assertIn(
+            f'{self.quest.name}</strong> has been removed from your list of hidden quests.',
+            self.get_message_list(response)[0].message,
+        )
+
+    def test_hide__404_for_a_quest_that_does_not_exist(self):
+        """A hide url for a missing quest is a 404 rather than an entry for a nonexistent quest."""
+        self.client.force_login(self.test_student)
+
+        self.assert404('quests:hide', args=[0])
+
+        self.test_student.profile.refresh_from_db()
+        self.assertEqual(self.test_student.profile.get_hidden_quests_as_list(), [])
+
+
 class QuestListViewTest(ByteDeckTenantTestCase):
     """ Tests for:
 
