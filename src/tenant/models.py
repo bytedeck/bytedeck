@@ -722,6 +722,31 @@ class TenantDomain(DomainMixin):
     pass
 
 
+class ReleaseNotification(models.Model):
+    """Public-schema record of a ByteDeck release version that deck staff have been
+    notified about, so ``tenant.tasks.poll_release_announcement`` notifies each
+    version exactly once across every deck.
+
+    ``notified=False`` marks a baseline row written the first time the poll runs:
+    the version that shipped before this feature was enabled is recorded but no
+    notification is sent, so turning the feature on never mass-notifies staff about
+    a release they already have. Lives in the public schema (tenant app), like the
+    Tenant registry itself, because "which versions have been announced" is one
+    global fact, not a per-deck one.
+    """
+    version = models.CharField(max_length=20, unique=True)
+    discussion_url = models.CharField(max_length=500, blank=True, default="")
+    notified = models.BooleanField(
+        default=True,
+        help_text="False for the baseline row recorded on the first poll (no notification sent).",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Audit identifier: the version and whether staff were actually notified."""
+        return f"{self.version} ({'notified' if self.notified else 'baseline'})"
+
+
 class StripeEventLog(models.Model):
     """Idempotence and audit log for received Stripe webhook events (plan §5.2).
 
