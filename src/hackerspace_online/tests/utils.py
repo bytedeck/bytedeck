@@ -77,6 +77,21 @@ class ViewTestUtilsMixin():
             expected_url=f'{reverse(settings.LOGIN_URL)}?next={url_name}'
         )
 
+    def assertLoginRedirect(self, response, next_url):
+        """
+        Assert that a response the test already obtained redirected to the login page, with next_url
+        in its ?next= query string.
+
+        Takes the response rather than a url name, so it can check requests the other helpers cannot
+        make: an ajax request (``HTTP_X_REQUESTED_WITH``), a POST, or anything else with extra
+        arguments. When a plain GET is all that is needed, prefer assertRedirectsLogin, which makes
+        the request itself.
+        """
+        self.assertRedirects(
+            response=response,
+            expected_url=f'{reverse(settings.LOGIN_URL)}?next={next_url}'
+        )
+
     def assertRedirectsQuests(self, url_name, follow=False, *args, **kwargs):
         """
         Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the available quests page.
