@@ -1,14 +1,20 @@
 {% load utility_tags %}
-{# shared closing block for every subscription lifecycle email (maintainer requests, 2026-07-30): #}
-{# the non-profit Society note, a contact address for questions, and a fixed "Bytedeck" sign-off -- #}
-{# billing emails come from the platform, so they are signed Bytedeck rather than the deck's name. #}
-<p><em>Bytedeck is a non-profit Society. The board members are volunteers, and put many hours into
-  running and further developing Bytedeck. Our subscription pricing is competitive, and funds are
-  only utilized for maintaining systems and development.</em></p>
+{# shared closing block for every email the PLATFORM sends (subscription lifecycle notices, #}
+{# the deck-request verification, the new-deck welcome): a contact address for questions, a #}
+{# fixed "Bytedeck" sign-off, ByteDeck's wordmark, and the non-profit Society note beneath it #}
+{# (maintainer requests, 2026-07-30 and 2026-08-10). These come from Bytedeck rather than the #}
+{# deck, so they carry Bytedeck's branding throughout; a deck's own mail to its users #}
+{# (announcements, notifications) carries that deck's logo instead. #}
 <p>If you have any questions, contact us at <a href="mailto:contact@bytedeck.com">contact@bytedeck.com</a>.</p>
 <p>Bytedeck</p>
-{# platform emails (the deck-request sends) pass the wordmark's absolute URL as logo_url: #}
-{# there is no SiteConfig on the public schema, and mail clients can't resolve relative #}
-{# static paths anyway. width/height show the 510x128 wordmark at half size (maintainer #}
-{# request, 2026-08-08). Tenant lifecycle emails omit logo_url and get the deck's logo. #}
-{% if logo_url %}<p><img alt="[Logo]" src="{{ logo_url }}" width="255" height="64"></p>{% else %}<p><img alt="[Logo]" src="{% site_logo_url %}"></p>{% endif %}
+{# an absolute URL: mail clients can't resolve relative static paths, and there is no SiteConfig #}
+{# on the public schema. width/height show the 510x128 wordmark at half size (maintainer request, #}
+{# 2026-08-08). #}
+<p><img alt="[Logo]" src="{% public_email_logo_url %}" width="255" height="64"></p>
+{# the emphasis run CLOSES before the link and reopens around it: html2text (which derives the #}
+{# email's plain-text part) drops the space in front of a link that sits inside an <em>, which #}
+{# reads as "awesome app?[Contact us]" for text-only clients. Rendered HTML is unchanged. #}
+<p><em>Bytedeck is a non-profit Society registered in British Columbia. The board members are
+  volunteers, and put many hours into running and further developing Bytedeck. Interested in
+  joining our board and helping us steer the direction of this awesome app?</em>
+  <em><a href="mailto:contact@bytedeck.com">Contact us</a>!</em></p>
