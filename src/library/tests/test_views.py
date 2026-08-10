@@ -75,7 +75,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
-        """Set up a tenant client, site config, and active semester."""
+        """Set up the site config and active semester."""
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
@@ -499,7 +499,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
-        """Set up a tenant client, active semester, site config, and deck owner."""
+        """Set up the active semester, site config, and deck owner."""
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()

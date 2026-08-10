@@ -16,7 +16,6 @@ from profile_manager.models import email_confirmed_handler
 
 from siteconfig.models import SiteConfig
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -69,7 +68,6 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
     def test_sign_up_via_post__creates_user(self):
         """Posting valid sign up data creates the user and redirects to quests."""
-        self.client = TenantClient(self.tenant)
         form_data = {
             'username': "username",
             'first_name': "firsttest",
@@ -85,7 +83,6 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
     def test_sign_up_via_post__upcase_username_lowercased(self):
         """A mixed-case username is stored lowercased when signing up via POST."""
-        self.client = TenantClient(self.tenant)
         form_data = {
             'username': "TestUser",
             'first_name': "firsttest",
@@ -106,7 +103,6 @@ class CustomSignUpFormTest(ByteDeckTenantTestCase):
 
     def test_sign_up_via_post__with_email_sends_confirmation(self):
         """Signing up with an email creates the user and sends a confirmation email."""
-        self.client = TenantClient(self.tenant)
         form_data = {
             'email': 'email@example.com',
             'username': "username",
@@ -231,7 +227,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
 
     def test_sign_up_via_post__creates_user(self):
         """Completing the social sign up form via POST creates the user and redirects to quests."""
-        self.client = TenantClient(self.tenant)
         session = self.client.session
         form_data = {
             'username': "username",
@@ -286,7 +281,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         )
 
         self.setup_social_app()
-        self.client = TenantClient(self.tenant)
 
         social_login = self.get_social_login()
         social_login.user.email = test_student.email
@@ -349,7 +343,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         )
 
         self.setup_social_app()
-        self.client = TenantClient(self.tenant)
 
         social_login = self.get_social_login()
         social_login.user.email = test_student.email
@@ -429,7 +422,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         )
 
         self.setup_social_app()
-        self.client = TenantClient(self.tenant)
 
         social_login = self.get_social_login()
         social_login.user.email = test_student.email
@@ -513,7 +505,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         """
 
         self.setup_social_app()
-        self.client = TenantClient(self.tenant)
 
         social_email = "user@example.com"
         social_login = self.get_social_login()
@@ -571,7 +562,6 @@ class CustomSocialAccountSignUpFormTest(ByteDeckTenantTestCase):
         """
 
         self.setup_social_app()
-        self.client = TenantClient(self.tenant)
 
         social_email = "user@example.com"
         social_login = self.get_social_login()
@@ -682,8 +672,7 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         # but in this case, we are just performing a test to the form itself so we need to have access to
         # a WSGIRqeuest object, hence a small http call is performed
         # See issue: https://github.com/pennersr/django-allauth/issues/3002
-        client = TenantClient(self.tenant)
-        wsgi_request = client.get(reverse('account_login')).wsgi_request
+        wsgi_request = self.client.get(reverse('account_login')).wsgi_request
 
         form = CustomLoginForm(
             {
@@ -698,7 +687,6 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         """
         User should still be able to login regardless of the username case
         """
-        self.client = TenantClient(self.tenant)
         form_data = {
             'login': 'TestUser',
             'password': 'testuser'
@@ -712,7 +700,6 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         Test that whatever the value of SESSION_COOKIE_AGE expires correctly
         """
 
-        self.client = TenantClient(self.tenant)
         form_data = {
             'login': 'TestUser',
             'password': 'testuser'
@@ -733,7 +720,6 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         Test to see that disabling `Remember me` expires on browser close
         """
 
-        self.client = TenantClient(self.tenant)
         form_data = {
             'login': 'TestUser',
             'password': 'testuser'
@@ -749,7 +735,6 @@ class CustomLoginFormTest(ByteDeckTenantTestCase):
         Test to see that enabling `Remember me` does not expire immediately even when the browser is closed
         """
 
-        self.client = TenantClient(self.tenant)
         form_data = {
             'login': 'TestUser',
             'password': 'testuser',

@@ -30,6 +30,7 @@ class TaggitSelect2WidgetForm(forms.Form):
 
 
 class AutoResponseViewTests(ByteDeckTenantTestCase):
+    """Tests the tag autocomplete endpoint and who is allowed to query it."""
 
     @classmethod
     def setUpTestData(cls):
@@ -72,6 +73,7 @@ class AutoResponseViewTests(ByteDeckTenantTestCase):
 
 
 class TagCRUDViewTests(ByteDeckTenantTestCase):
+    """Tests the tag list/create/update/delete views, their access rules, and the staff-only admin buttons."""
 
     @classmethod
     def setUpTestData(cls):

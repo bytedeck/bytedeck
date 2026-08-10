@@ -36,7 +36,7 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         )
 
     def setUp(self):
-        """Set up a tenant test client, per-test form data, and a file_upload question
+        """Set up per-test form data and a file_upload question
         (per-test because its uploaded file is consumed when read)."""
         self.question_form_data = {
             "type": "short_answer",

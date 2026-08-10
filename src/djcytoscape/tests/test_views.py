@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from unittest.mock import patch
 
@@ -286,7 +285,6 @@ class PrimaryViewTests(ByteDeckTenantTestCase):
         self.assertFalse(CytoScape.objects.exists())
 
         # log in anoyone
-        self.client = TenantClient(self.tenant)
         anyone = User.objects.create_user('anyone')
         self.client.force_login(anyone)
 

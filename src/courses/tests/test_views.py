@@ -6,7 +6,6 @@ from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from freezegun import freeze_time
 
@@ -176,10 +175,6 @@ class CourseViewTestData:
             'block': cls.block.pk,
             'course': cls.course.pk,
         }
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
 
 class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
@@ -1782,7 +1777,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
 
     def setUp(self):
-        """Set up a tenant client for each test."""
+        """Turn on mark-calculation display so the page is reachable."""
         # to show mark calculation page without 404 you need to turn this on
         # (stays in setUp: SiteConfig writes populate cross-test caches)
         siteconfig = SiteConfig.get()

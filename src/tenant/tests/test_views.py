@@ -38,6 +38,8 @@ def view_accessible_by_non_public_only(request):
 
 
 class ViewsTest(ByteDeckTenantTestCase):
+    """Tests the public-only and non-public-only view guards on both the public and tenant schemas."""
+
     def setUp(self):
         """Build a request factory and an empty request for calling the views directly."""
         self.factory = RequestFactory()
