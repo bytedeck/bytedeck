@@ -85,7 +85,6 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert403('profiles:comment_ban', args=[s_pk])
         self.assert403('profiles:comment_ban_toggle', args=[s_pk])
         self.assert403('profiles:xp_toggle', args=[s_pk])
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
         self.assert404('profiles:profile_update', args=[s2_pk])
 
@@ -111,14 +110,16 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert302('profiles:comment_ban', args=[s_pk])
         self.assert302('profiles:comment_ban_toggle', args=[s_pk])
         self.assert302('profiles:xp_toggle', args=[s_pk])
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
 
-    def test_profile_recalculate_xp__status_codes(self):
-        """Need to test this view with students in an active course"""
-        # why testing this here?
-        self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
+    def test_recalculate_current_xp__requires_staff(self):
+        """Only staff can trigger the current-semester XP recalculation: an anonymous visitor is sent
+        to the login page and a logged-in student is refused. The staff path is covered by
+        test_recalculate_current_xp__dispatches_background_task.
+        """
+        self.assertRedirectsLogin('profiles:recalculate_xp_current')
 
-        self.assert302('profiles:recalculate_xp_current')
+        self.client.force_login(self.test_student1)
+        self.assert403('profiles:recalculate_xp_current')
 
     def test_recalculate_current_xp__dispatches_background_task(self):
         """recalculate_current_xp hands the all-student XP recompute to a background task
