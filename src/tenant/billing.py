@@ -86,7 +86,15 @@ def deck_label(deck):
 
 
 def _portal_configuration_cache_key(schema_name):
-    """Cache key holding a deck's Billing Portal configuration id."""
+    """The cache key holding one deck's Billing Portal configuration id.
+
+    Args:
+        schema_name (str): The deck's schema name, which namespaces the entry so
+            decks never read each other's configuration.
+
+    Returns:
+        str: The key, ``stripe-portal-config:{schema_name}``.
+    """
     return f'stripe-portal-config:{schema_name}'
 
 
@@ -116,6 +124,9 @@ def portal_configuration_id(deck):
         defaults = stripe.billing_portal.Configuration.list(
             api_key=settings.STRIPE_SECRET_KEY, is_default=True, limit=1)
         default = defaults.data[0]
+        # the login page is a flag, not copyable state: its url is read-only and
+        # Stripe mints a fresh one per configuration, so only `enabled` carries over
+        login_page = to_plain_dict(default.login_page) if getattr(default, 'login_page', None) else {}
         configuration = stripe.billing_portal.Configuration.create(
             api_key=settings.STRIPE_SECRET_KEY,
             business_profile={
@@ -123,6 +134,7 @@ def portal_configuration_id(deck):
                 'headline': f'Subscription for {deck_label(deck)}',
             },
             features=to_plain_dict(default.features),
+            **({'login_page': {'enabled': True}} if login_page.get('enabled') else {}),
             metadata={'schema_name': deck.schema_name},
         )
     except (stripe.StripeError, IndexError, AttributeError) as e:
@@ -260,9 +272,12 @@ def create_checkout_session(deck):
         # while an identical retry still reuses the session
         # a customer-bound (renewal) session has different parameters than an
         # email-identified one, so it gets its own key: a deck that abandoned an
-        # unlinked checkout earlier the same day can still renew after linking
+        # unlinked checkout earlier the same day can still renew after linking.
+        # The v2 generation marks the request shape that carries the deck label:
+        # Stripe rejects a key replayed with different parameters for 24 hours,
+        # so a same-day retry across a deploy must not reuse the older key.
         idempotency_key=(
-            f'deck-checkout-{deck.schema_name}-{localdate()}'
+            f'deck-checkout-v2-{deck.schema_name}-{localdate()}'
             + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
             + (f'-{deck.stripe_customer_id}' if deck.stripe_customer_id else '')
         ),

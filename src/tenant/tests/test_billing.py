@@ -344,7 +344,7 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         # must not fail the unmarked-key assertion
         self.assertEqual(
             kwargs['idempotency_key'],
-            f'deck-checkout-{self.tenant.schema_name}-{timezone.localdate()}')
+            f'deck-checkout-v2-{self.tenant.schema_name}-{timezone.localdate()}')
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
@@ -970,12 +970,21 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         """Start each test with an empty portal-configuration cache."""
         cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
 
-    def default_configuration(self):
-        """A stand-in for the account's default portal configuration."""
+    def default_configuration(self, login_page_enabled=False):
+        """A stand-in for the account's default portal configuration.
+
+        Args:
+            login_page_enabled (bool): Whether the account's default offers the
+                hosted login page, which the clone has to carry over as a flag.
+
+        Returns:
+            Mock: The configuration double.
+        """
         return Mock(
             id='bpc_default',
             business_profile={'headline': 'ByteDeck Learning Society', 'privacy_policy_url': 'https://x.test/p'},
             features={'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}},
+            login_page={'enabled': login_page_enabled, 'url': 'https://billing.stripe.test/p/login/x'},
         )
 
     def test_deck_label__is_the_decks_domain(self):
@@ -1013,6 +1022,36 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         self.assertEqual(kwargs['features'], {'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}})
         self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
         self.assertEqual(cache.get(_portal_configuration_cache_key(self.tenant.schema_name)), 'bpc_deck')
+
+    def test_portal_configuration_id__carries_the_default_login_page_setting(self):
+        """A default with the hosted login page enabled produces a clone with it
+        enabled too; a default without it produces a clone that omits the field.
+        Only the flag travels: the url is read-only and Stripe mints a fresh one
+        per configuration (review find on #2331)."""
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   return_value=Mock(data=[self.default_configuration(login_page_enabled=True)])), \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create',
+                      return_value=Mock(id='bpc_deck')) as mock_create:
+            portal_configuration_id(self.tenant)
+        self.assertEqual(mock_create.call_args.kwargs['login_page'], {'enabled': True})
+
+        cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   return_value=Mock(data=[self.default_configuration(login_page_enabled=False)])), \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create',
+                      return_value=Mock(id='bpc_deck')) as mock_create:
+            portal_configuration_id(self.tenant)
+        self.assertNotIn('login_page', mock_create.call_args.kwargs)
+
+    def test_create_checkout_session__idempotency_key_marks_the_labelled_request_shape(self):
+        """The key carries a v2 generation. Stripe rejects a key replayed within
+        24 hours with different parameters, and this release added the deck
+        label to the request, so a same-day retry across the deploy must not
+        reuse the pre-label key (review find on #2331)."""
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            mock_create.return_value.url = 'https://stripe.example/session'
+            create_checkout_session(self.tenant)
+        self.assertTrue(mock_create.call_args.kwargs['idempotency_key'].startswith('deck-checkout-v2-'))
 
     def test_portal_configuration_id__served_from_cache_without_calling_stripe(self):
         """A cached configuration id is reused: no Stripe call, no second configuration."""
