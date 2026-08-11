@@ -65,6 +65,13 @@ app.conf.beat_schedule = {
             "queue": "default",
         }
     },
+    "Poll for a new release announcement to notify deck staff": {
+        "task": "tenant.tasks.poll_release_announcement",
+        "schedule": crontab(minute=0),  # hourly, on the hour
+        "options": {
+            "queue": "default",
+        }
+    },
 }
 
 

@@ -1349,10 +1349,10 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         self.assert403('courses:mark_distribution_chart', args=[self.teacher.pk])
 
     def test_ajax_status_code__anonymous_redirected(self):
-        """An anonymous ajax request to the mark distribution chart is redirected (302)."""
-        # checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
-        response = self.client.get(reverse('courses:mark_distribution_chart', args=[self.teacher.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        """An anonymous ajax request to the mark distribution chart is sent to the login page."""
+        # an ajax request clears the 403 the non-ajax test covers, so this reaches LoginRequiredMixin
+        url = reverse('courses:mark_distribution_chart', args=[self.teacher.pk])
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_ajax_status_code__students(self):
         """A logged-in student's ajax request to the mark distribution chart succeeds (200)."""
@@ -1460,12 +1460,9 @@ class TestAjax_TagChart(ByteDeckTenantTestCase):
         self.assert403('courses:ajax_tag_progress_chart', args=[self.user.pk])
 
     def test_ajax_status_code__anonymous_redirected(self):
-        """An anonymous ajax request to the tag chart is redirected to login (302)."""
-        response = self.client.get(
-            reverse('courses:ajax_tag_progress_chart', args=[self.user.pk]),
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 302)
+        """An anonymous ajax request to the tag chart is sent to the login page."""
+        url = reverse('courses:ajax_tag_progress_chart', args=[self.user.pk])
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_ajax__no_tag_data_returns_empty_datasets(self):
         """With no tagged quests/badges, the chart returns 200 with empty quest/badge datasets."""
@@ -1592,15 +1589,11 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.assert403('courses:ajax_progress_chart', args=[self.student.pk])
 
     def test_ajax_status_code__anonymous_redirected(self):
-        """ checks redirect with ajax style request "HTTP_X_REQUESTED_WITH='XMLHttpRequest'"
-        redirects because of LoginRequiredMixin
-        """
-        # post
-        response = self.client.post(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
-        # get
-        response = self.client.get(reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        """An anonymous ajax request to the progress chart is sent to the login page, POST or GET."""
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        self.assertLoginRedirect(self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_ajax_status_code__student(self):
         """A student's ajax POST to the progress chart succeeds (200) while a GET returns 404."""
@@ -1870,13 +1863,13 @@ class AjaxRankPopupTests(ByteDeckTenantTestCase):
         # test anon
         # ajax_on_show_ranked_popup
         self.assert403('courses:ajax_on_show_ranked_popup')
-        response = self.client.get(reverse('courses:ajax_on_show_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('courses:ajax_on_show_ranked_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_ranked_popup
         self.assert403('courses:ajax_on_close_ranked_popup')
-        response = self.client.get(reverse('courses:ajax_on_close_ranked_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('courses:ajax_on_close_ranked_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)

@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from django.conf import settings
 from django.core import mail
 from django.core.cache import cache
 from django.test import override_settings
@@ -8,6 +9,7 @@ from freezegun import freeze_time
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
+from siteconfig.models import SiteConfig
 from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
 from tenant.notices import evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
@@ -106,6 +108,27 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             # push the trial deadline far out so its own d30 window doesn't co-fire here
             self.set_deck(active_user_count=4, trial_end_date=TODAY + timedelta(days=365))
             self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-09')])
+
+    def test_evaluate__suspended_deck_gets_no_limit_warnings(self):
+        """A suspended deck never warns about student seats: students cannot sign
+        in there at all, so the warning is wrong, and it would reach an owner who
+        may have walked away. The deck here is suspended while carrying a stale
+        student count above its cap, which is the case the guard exists for, so
+        only the suspension notice is due. The same deck warns again once it is no
+        longer suspended."""
+        # suspended: trial ended, and the 30-day grace window closed too
+        self.set_deck(
+            trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
+            max_active_users=5, active_user_count=6,  # a stale count above the cap
+        )
+        self.assertTrue(self.tenant.is_suspended)
+        # the suspension notice itself is still due; only the seat warning is gone
+        self.assertEqual(
+            self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(self.tenant.governing_deadline))])
+
+        # the same over-cap deck, subscribed again: the warning is due
+        self.set_deck(paid_until=TODAY + timedelta(days=90))
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
 
     def test_evaluate__unlimited_deck_gets_no_limit_warnings(self):
         """The -1 unlimited sentinel disables limit warnings entirely."""
@@ -453,9 +476,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     def test_process__grace_email_includes_dates_seats_and_logo(self):
         """The grace-period expiry email states every date the owner needs -- when
         the subscription expired and how long ago, when the grace period ends and
-        how many days remain -- plus current seat usage and the site logo
-        (maintainer request from staging live testing, 2026-07-25: the old email
-        gave no dates at all)."""
+        how many days remain -- plus current seat usage and the ByteDeck wordmark
+        (settings.PUBLIC_EMAIL_LOGO_URL) that signs every platform email
+        (maintainer request from staging live testing, 2026-07-25)."""
         Tenant.objects.filter(pk=self.tenant.pk).update(
             trial_end_date=None, paid_until=TODAY - timedelta(days=5),  # expired, in grace
             max_active_users=30, active_user_count=2,
@@ -470,9 +493,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('Sept. 9, 2026', html)   # grace ends paid_until + 30 days...
         self.assertIn('25 days left', html)    # ...with the countdown
         self.assertIn('using <strong>2</strong> of <strong>30</strong> current student', ' '.join(html.split()))
-        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('non-profit Society registered in British Columbia', html)  # every platform email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
-        self.assertIn('alt="[Logo]"', html)
+        self.assertIn(f'alt="[Logo]" src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__comped_deck_limit_email_renders_without_any_dates(self):
@@ -549,11 +572,25 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('only the deck owner can sign in', html)
         self.assertIn('your content and student data are intact', html)
         self.assertIn('<em>Maintenance</em> subscription', html)
-        self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
+        self.assertIn('non-profit Society registered in British Columbia', html)  # every platform email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         # billing emails are signed by the platform, never the deck (maintainer request, 2026-07-30)
         self.assertIn('<p>Bytedeck</p>', html)
-        self.assertIn('alt="[Logo]"', html)
+        # ...and branded by the platform too: the ByteDeck wordmark at half its
+        # natural size, by absolute URL, with the deck's own logo nowhere in the
+        # message (maintainer request, 2026-08-10: a deck's logo belongs on the
+        # mail that deck sends its own users, not on mail from Bytedeck)
+        self.assertIn(f'alt="[Logo]" src="{settings.PUBLIC_EMAIL_LOGO_URL}" width="255" height="64"', html)
+        self.assertNotIn(SiteConfig.get().get_site_logo_url(), html)
+        # the Society note closes the email BENEATH the wordmark, and invites the
+        # reader onto the board through a mailto (maintainer request, 2026-08-10)
+        self.assertLess(html.index('alt="[Logo]"'), html.index('non-profit Society'))
+        self.assertIn('awesome app?</em> <em><a href="mailto:contact@bytedeck.com">Contact us</a>!</em>', html)
+        # the same separator in the PLAIN-TEXT part, which is what the split
+        # emphasis run buys: html2text drops the space in front of a link that
+        # sits inside an <em>, leaving text-only clients "awesome app?[Contact us]"
+        plain_text = ' '.join(mail.outbox[0].body.split())
+        self.assertIn('awesome app?_ _[Contact us](mailto:contact@bytedeck.com)!_', plain_text)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process__suspended_email_follows_the_governing_trial_clock(self):

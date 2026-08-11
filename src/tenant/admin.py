@@ -149,10 +149,16 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name_text',
         'owner_email_text', 'owner_email_verified_boolean',
         'last_staff_login', 'google_signon_enabled',
-        'paid_until_text', 'trial_end_date_text',
+        'subscription_status_text', 'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'quest_count',
     )
+
+    class Media:
+        """Extra assets for the changelist: the Subscription column's badge
+        stylesheet (.deck-status-*), since the admin doesn't load the app's
+        bootstrap css."""
+        css = {'all': ('css/admin_deck_status.css',)}
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
     search_fields = ['schema_name', 'owner_full_name_cached', 'owner_email_cached']
 
@@ -373,6 +379,28 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 if primary_email_address.email == user_email(owner):
                     return True
         return False
+
+    @admin.display(description="subscription")
+    def subscription_status_text(self, obj):
+        """The deck's lifecycle status as a colored badge: the same status (and
+        the same word) the deck owner sees on their subscription details page,
+        both rendered from the shared ``Tenant.subscription_status`` precedence
+        chain so the two can never disagree.
+
+        Args:
+            obj (Tenant): The changelist row's tenant.
+
+        Returns:
+            SafeString | None: The rendered ``<span>`` badge for a deck row, or
+            None (an empty cell) for the public schema row, which isn't a deck.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return None
+        return format_html(
+            '<span class="deck-status deck-status-{}">{}</span>',
+            obj.subscription_status,
+            obj.subscription_status_label,
+        )
 
     @admin.display(description="paid until", ordering="paid_until")
     def paid_until_text(self, obj):

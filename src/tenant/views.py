@@ -432,8 +432,10 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
     """Staff-facing "Subscription details" page for the current deck (epic #1729 PR 6).
 
     GET shows the deck's billing status, expiry dates, student-seat usage (live
-    count), and the upgrade/renew action. POST starts the Stripe flow: Checkout
-    for an unlinked deck, the Billing Portal for a linked one. When Stripe isn't
+    count), and the upgrade/renew action. POST starts the Stripe flow: the
+    Billing Portal when the deck has a live subscription to manage, otherwise a
+    Checkout (bound to the deck's existing Stripe customer, if any), so an
+    expired deck's button leads straight to renewal. When Stripe isn't
     configured the page says so and the action falls back to the public
     subscribe page. Linked from the admin menu for all staff.
     """
@@ -514,7 +516,23 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        """Start the Stripe flow: Checkout (unlinked deck) or Billing Portal (linked).
+        """Start the Stripe flow: the Billing Portal or a Checkout, by live state.
+
+        The portal can only act on a LIVE subscription, so the routing asks
+        Stripe at click time: a deck whose linked subscription is alive gets the
+        portal; a deck with no live subscription (never linked, or its old one
+        fully canceled after expiry) gets a fresh Checkout instead, bound to its
+        existing Stripe customer when there is one. Routing on the customer id
+        alone sent expired decks to a portal with nothing actionable on it: a
+        dead end exactly when the deck is trying to come back (production find,
+        2026-08-09).
+
+        Args:
+            request (HttpRequest): The POST from the manage/subscribe button;
+                its ``tenant`` is the deck being billed and its ``user`` must be
+                that deck's owner.
+            *args: Positional URL arguments (this route takes none).
+            **kwargs: Keyword URL arguments (this route takes none).
 
         Returns:
             HttpResponse: A redirect to the Stripe-hosted page, or back to this
@@ -522,7 +540,7 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         import stripe as stripe_lib
 
-        from .billing import billing_configured, create_checkout_session, create_portal_session
+        from .billing import billing_configured, create_checkout_session, create_portal_session, has_manageable_subscription
 
         deck = request.tenant
         if not billing_configured():
@@ -557,7 +575,7 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             )
             return redirect('decks:subscription')
         try:
-            if deck.stripe_customer_id:
+            if deck.stripe_customer_id and has_manageable_subscription(deck):
                 url = create_portal_session(deck)
             else:
                 url = create_checkout_session(deck)

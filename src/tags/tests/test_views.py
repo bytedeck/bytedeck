@@ -85,8 +85,8 @@ class TagCRUDViewTests(ByteDeckTenantTestCase):
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""
-        self.assert302('tags:list')
-        self.assert302('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assertRedirectsLogin('tags:list')
+        self.assertRedirectsLogin('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
         self.assertRedirectsLogin('tags:detail_staff', args=[self.tag.pk])
         self.assertRedirectsLogin('tags:create')
         self.assertRedirectsLogin('tags:update', args=[self.tag.pk])

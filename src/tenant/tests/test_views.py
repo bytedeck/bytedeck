@@ -890,8 +890,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     def test_page__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
-        response = self.assert302('decks:subscription')
-        self.assertIn('login', response.url)
+        self.assertRedirectsLogin('decks:subscription')
 
         self.client.force_login(self.student)
         self.assert403('decks:subscription')
@@ -1234,6 +1233,32 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, '<form method="post"', count=2)
         self.assertNotContains(response, 'disabled')
 
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_page__lapsed_linked_deck_button_says_renew(self):
+        """A linked deck past its governing deadline (grace or suspended) labels
+        the manage action "Renew subscription" with renewal help text: the POST
+        routes such a deck to renewal, so the button says so up front
+        (production find, 2026-08-09: an expired deck's button read "Manage
+        subscription" and led to a portal with nothing actionable on it)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from siteconfig.models import SiteConfig
+
+        # grace (paid period just lapsed): staff still have access and see renew wording
+        self.set_deck(stripe_customer_id='cus_9', trial_end_date=None, paid_until=localdate() - timedelta(days=5))
+        response = self.get_page()
+        self.assertContains(response, 'Renew subscription', count=2)
+        self.assertNotContains(response, 'Manage subscription')
+
+        # suspended (grace fully lapsed): only the owner can still sign in; renew wording holds
+        self.client.force_login(SiteConfig.get().deck_owner)
+        self.set_deck(paid_until=localdate() - timedelta(days=45))
+        response = self.get_page()
+        self.assertContains(response, 'Renew subscription', count=2)
+        self.assertNotContains(response, 'Manage subscription')
+
     def test_page__contact_copy_links_the_support_address(self):
         """Copy that says to contact ByteDeck links the support address as a
         mailto (maintainer request, 2026-08-09): the managed-manually status, the
@@ -1320,15 +1345,61 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
         self.assertIn(self.tenant.schema_name, kwargs['idempotency_key'])
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_post__linked_deck_redirects_to_billing_portal(self):
-        """POST on a Stripe-linked deck opens the billing portal for that customer."""
-        self.set_deck(stripe_customer_id='cus_123')
-        with patch('tenant.billing.stripe.billing_portal.Session.create',
-                   return_value=Mock(url='https://portal.stripe.test/ps_123')) as mock_create:
+    def test_post__linked_deck_with_live_subscription_redirects_to_billing_portal(self):
+        """POST on a deck whose linked Stripe subscription is LIVE opens the
+        billing portal for that customer: the portal can act on a live
+        subscription (renew, fix the card, switch plans, cancel)."""
+        self.set_deck(stripe_customer_id='cus_123', stripe_subscription_id='sub_live')
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status='active')), \
+                patch('tenant.billing.stripe.billing_portal.Session.create',
+                      return_value=Mock(url='https://portal.stripe.test/ps_123')) as mock_create:
             response = self.client.post(reverse('decks:subscription'))
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, 'https://portal.stripe.test/ps_123')
         self.assertEqual(mock_create.call_args.kwargs['customer'], 'cus_123')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__expired_deck_with_canceled_subscription_renews_via_checkout(self):
+        """POST on an expired deck whose old subscription is fully CANCELED gets
+        a fresh Checkout bound to its existing customer, NOT a portal session:
+        a canceled subscription cannot be restarted from the portal, which
+        showed only payment methods and invoices, a dead end exactly when the
+        deck was trying to come back (production find, 2026-08-09; this deck
+        shape reproduced it: suspended, ids present, subscription canceled)."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(stripe_customer_id='cus_123', stripe_subscription_id='sub_dead',
+                      trial_end_date=None, paid_until=localdate() - timedelta(days=45))
+        with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status='canceled')), \
+                patch('tenant.billing.stripe.billing_portal.Session.create') as mock_portal, \
+                patch('tenant.billing.stripe.checkout.Session.create',
+                      return_value=Mock(url='https://checkout.stripe.test/cs_renew')) as mock_checkout:
+            response = self.client.post(reverse('decks:subscription'))
+        mock_portal.assert_not_called()
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_renew')
+        # the checkout is bound to the existing customer: saved cards and
+        # invoice history carry over instead of minting a duplicate customer
+        self.assertEqual(mock_checkout.call_args.kwargs['customer'], 'cus_123')
+
+    @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+    def test_post__customer_without_subscription_goes_to_checkout(self):
+        """POST on a deck with a customer id but NO subscription id (an
+        abandoned checkout, or a partial legacy link) starts a Checkout as that
+        customer without asking Stripe anything: there is no subscription the
+        portal could manage."""
+        self.set_deck(stripe_customer_id='cus_123')
+        with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve, \
+                patch('tenant.billing.stripe.billing_portal.Session.create') as mock_portal, \
+                patch('tenant.billing.stripe.checkout.Session.create',
+                      return_value=Mock(url='https://checkout.stripe.test/cs_c')) as mock_checkout:
+            response = self.client.post(reverse('decks:subscription'))
+        mock_retrieve.assert_not_called()
+        mock_portal.assert_not_called()
+        self.assertEqual(response.url, 'https://checkout.stripe.test/cs_c')
+        self.assertEqual(mock_checkout.call_args.kwargs['customer'], 'cus_123')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
     def test_post__manually_subscribed_deck_refused_to_prevent_double_billing(self):

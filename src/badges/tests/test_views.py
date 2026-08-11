@@ -702,13 +702,13 @@ class BadgeAjaxTests(ByteDeckTenantTestCase):
         # test anon
         # ajax_on_show_badge_popup
         self.assert403('badges:ajax_on_show_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_show_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_badge_popup
         self.assert403('badges:ajax_on_close_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_close_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)
