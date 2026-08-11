@@ -643,20 +643,20 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         # View it
         self.assert200('quests:submission', args=[s1_pk])
-        # Flag it
-        # self.assertEqual(self.client.get(reverse('quests:flag', args=[s1_pk])).status_code, 200)
+        # Flag it: the view updates the row, so this object has to be re-read to see it
         self.assertRedirects(
             response=self.client.get(reverse('quests:flag', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
-        # TODO Why does this fail? Why is self.sub1.flagged_by == None
-        # self.assertEqual(self.sub1.flagged_by, self.test_teacher)
+        self.sub1.refresh_from_db()
+        self.assertEqual(self.sub1.flagged_by, self.test_teacher)
 
         # Unflag it
         self.assertRedirects(
             response=self.client.get(reverse('quests:unflag', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
+        self.sub1.refresh_from_db()
         self.assertIsNone(self.sub1.flagged_by)
 
         # self.assertEqual(self.client.get(reverse('quests:drop', args=[s1_pk])).status_code, 200)
@@ -2623,6 +2623,59 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
 
         self.test_student.profile.refresh_from_db()
         self.assertEqual(self.test_student.profile.get_hidden_quests_as_list(), [])
+
+
+class FlagSubmissionViewTests(ByteDeckTenantTestCase):
+    """Tests flagging a submission for follow up, and unflagging it again.
+
+    Flagging records which teacher raised it, so the flag is attributable rather than anonymous
+    on a deck with several teachers.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create two teachers, a student, and a submission for them to flag."""
+        cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.other_teacher = User.objects.create_user('other_teacher', is_staff=True)
+        cls.test_student = User.objects.create_user('test_student')
+
+        cls.quest = baker.make(Quest)
+        cls.submission = baker.make(
+            QuestSubmission, user=cls.test_student, quest=cls.quest,
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def test_flag__records_which_teacher_raised_it(self):
+        """Flagging stores the teacher who flagged it, not merely that a flag exists."""
+        self.client.force_login(self.other_teacher)
+
+        response = self.client.get(reverse('quests:flag', args=[self.submission.pk]))
+
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.flagged_by, self.other_teacher)
+        self.assertSuccessMessage(response)
+
+    def test_unflag__clears_the_flag_and_says_which_submission(self):
+        """Unflagging clears the flag and reports the quest and student, so the right one is confirmed."""
+        self.submission.flagged_by = self.test_teacher
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:unflag', args=[self.submission.pk]))
+
+        self.submission.refresh_from_db()
+        self.assertIsNone(self.submission.flagged_by)
+        self.assertSuccessMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn(self.quest.name, message)
+        self.assertIn(str(self.test_student), message)
+
+    def test_flag__nonexistent_submission_is_a_404(self):
+        """A flag url for a missing submission 404s rather than reporting a flag it did not set."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert404('quests:flag', args=[0])
+        self.assert404('quests:unflag', args=[0])
 
 
 class SkipQuestViewTests(ByteDeckTenantTestCase):

@@ -2266,7 +2266,7 @@ def ajax_submission_count(request):
 def flag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    # approve quest automatically, and mark as transfer.
+    # record who raised the flag, so it is attributable on a deck with several teachers
     sub.flagged_by = request.user
     sub.save()
 
@@ -2294,7 +2294,6 @@ def ajax_flag(request):
 def unflag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    # approve quest automatically, and mark as transfer.
     sub.flagged_by = None
     sub.save()
 
