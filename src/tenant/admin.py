@@ -16,6 +16,7 @@ from django.utils.html import format_html
 from django.utils.formats import date_format
 from django.urls import reverse
 
+
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from allauth.account.utils import user_email
