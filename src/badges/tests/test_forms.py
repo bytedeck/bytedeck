@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
-from badges.forms import BadgeAssertionForm, BulkBadgeAssertionForm
+from badges.forms import BadgeAssertionForm, BulkBadgeAssertionForm, ProfileMultiSelectWidget
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
@@ -37,3 +37,19 @@ class BadgeAssertionFormTest(ByteDeckTenantTestCase):
         }
         form = BulkBadgeAssertionForm(data=form_data)
         self.assertTrue(form.is_valid(), form.errors)
+
+
+class ProfileMultiSelectWidgetTest(ByteDeckTenantTestCase):
+    """Tests for the Select2 widget used by BulkBadgeAssertionForm.students."""
+
+    def test_label_from_instance__shows_profile_and_username(self):
+        """The option label for a selected profile is '<profile> | <username>'.
+
+        Select2 only calls label_from_instance while rendering already-selected options, so it is
+        invoked directly here rather than through form validation.
+        """
+        user = baker.make(User, username='bob')
+        self.assertEqual(
+            ProfileMultiSelectWidget().label_from_instance(user.profile),
+            f"{user.profile} | bob",
+        )

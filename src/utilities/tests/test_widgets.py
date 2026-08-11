@@ -10,7 +10,6 @@ from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from queryset_sequence import QuerySetSequence
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -54,10 +53,6 @@ class TestGFKSelect2Widget(ByteDeckTenantTestCase):
         cls.groups = Group.objects.bulk_create(
             [Group(pk=pk, name=random_string(50)) for pk in range(100)]
         )
-
-    def setUp(self):
-        """Build a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def _ct_pk(self, obj):
         """Return the "<content_type_pk>-<object_pk>" string the GFK choice field uses to identify obj."""

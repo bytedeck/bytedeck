@@ -1,1 +1,1 @@
-Instructions to sign in to {{ tenant }}
+Instructions to sign in to {{ tenant.primary_domain_url }}

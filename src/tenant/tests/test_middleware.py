@@ -6,7 +6,6 @@ from django.core.cache import cache
 from django.shortcuts import reverse
 from django.utils.timezone import localdate
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -27,7 +26,6 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Build per-role users and clear the cached deck row (the cache backend
         outlives each test's transaction)."""
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         self.owner = SiteConfig.get().deck_owner
@@ -75,16 +73,18 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Anonymous requests pass through: the sign-in page renders normally on a
         suspended deck (with the suspended status banner, no redirect loop)."""
         self.suspend_deck()
-        response = self.client.get(reverse('account_login'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('account_login')
         self.assertContains(response, 'This deck is suspended')
 
     def test_bounce__nobody_bounced_while_not_suspended(self):
-        """On a live deck (trial running, or paid, or in grace) nobody is bounced."""
+        """On a live deck (trial running, or paid, or in grace) nobody is bounced.
+        A lapsed trial's grace window counts (#1734 B4): students keep access for
+        the full grace period before the owner-only bounce begins."""
         for fields in (
             {'trial_end_date': localdate() + timedelta(days=30), 'paid_until': None},  # on trial
             {'trial_end_date': None, 'paid_until': localdate() + timedelta(days=30)},  # subscribed
-            {'trial_end_date': None, 'paid_until': localdate() - timedelta(days=5)},   # in grace
+            {'trial_end_date': None, 'paid_until': localdate() - timedelta(days=5)},   # in paid grace
+            {'trial_end_date': localdate() - timedelta(days=5), 'paid_until': None},   # in trial grace (#1734 B4)
         ):
             self.set_deck(**fields)
             for user in (self.staff, self.student, self.owner):

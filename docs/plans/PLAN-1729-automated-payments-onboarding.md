@@ -218,10 +218,10 @@ Events handled — each handler is a thin translator that resolves the `Tenant` 
 | `checkout.session.completed` | Link `stripe_customer_id`/`stripe_subscription_id`; then sync |
 | `customer.subscription.created` / `updated` / `deleted` | `tenant.sync_from_stripe_subscription(sub)` |
 | `invoice.paid` | Same sync (extends `paid_until`) |
-| `invoice.payment_failed` | Owner email + in-app notice (no state change; grace covers it) |
+| `invoice.payment_failed` | Owner email + in-app notice via the notices machinery, once per failing invoice; respects the `DECK_NOTICES_ENABLED` report-only gate (no state change; grace covers it) |
 | anything else | Log + 200 |
 
-`Tenant.sync_from_stripe_subscription(sub)` is the **single write path**: sets `paid_until = current_period_end.date()`, `max_active_users = int(price.metadata['max_active_users'])` (fallback `STRIPE_PRICE_TIER_MAP` in settings), saves with `update_fields=[...]`, and invalidates the deck's cache entry. It never *lowers* `paid_until` from an event older than the last-processed one (monotonic guard using `StripeEventLog`).
+`Tenant.sync_from_stripe_subscription(sub)` is the **single write path**: sets `paid_until = current_period_end.date()`, `max_active_users = int(price.metadata['max_active_users'])` (fallback `STRIPE_PRICE_TIER_MAP` in settings), applies with targeted updates + cache invalidation, and links/unlinks `stripe_subscription_id` (a canceled subscription unlinks but keeps `paid_until` -- the deck is paid through its period end). *(As built in PR 7: the monotonic guard is simpler than event ordering -- `paid_until` only ever advances, never lowers, since payments are the only thing that moves it; `StripeEventLog` handles duplicate deliveries.)* Checkout also stamps `subscription_data.metadata.schema_name`, so every subscription event self-identifies without a lookup.
 
 Idempotence: `StripeEventLog.event_id` unique — duplicates return 200 before any handler runs.
 
@@ -341,7 +341,7 @@ Suspension (this epic) is where a deck's lifecycle *pauses*; #2044 defines where
 
 ## 11. Open questions for @tylerecouture
 
-1. **#1734 semantics:** ANSWERED 2026-07-30. Neither original option: suspended decks are owner-only, the semester auto-closes, and the admin-set cap is untouched (§0.2). Implemented by steps B1 (#2210) through B5.
+1. **#1734 semantics:** ANSWERED 2026-07-30. Neither original option: suspended decks are owner-only, the semester auto-closes, and the admin-set cap is untouched (§0.2). Implementation is planned as steps B1 (#2210) through B5; the rollout table in §0.2 tracks each step's live status.
 2. **Grace period:** ANSWERED 2026-07-30. 30 days, and it applies to trials too: a trial is treated as a kind of subscription, so every deck falls back on the same 30-day grace before suspension (step B4).
 3. **Reminder cadence confirmation (#1733 said "every day until it ends?"):** shipped as proposed in #2083 (30 d / 14 d / 7 d then daily through expiry + grace); no objection raised.
 4. **Tiers:** confirm 40/80/120 active students with monthly + annual prices, and that tier limits should live as Stripe Price metadata (no repo record of amounts needed).

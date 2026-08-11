@@ -107,6 +107,71 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         self.assertNotIn("<em>", link)
         self.assertTrue(link.endswith("</a>"))
 
+    def test_new_notification__explicit_url_becomes_the_destination(self):
+        """A notification created with url= stores it and links there (through the
+        read-tracking redirect) from both the dropdown and the list page."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder about this deck.",
+            url='/decks/subscription/',
+        )
+        note = self._latest_notification()
+        self.assertEqual(note.target_url, '/decks/subscription/')
+        self.assertTrue(note.get_url().endswith('?next=/decks/subscription/'))
+        self.assertIn("?next=/decks/subscription/", note.get_link())
+
+    def test_str__url_only_notification_links_the_verb_text(self):
+        """With an explicit url and no target object, the list page renders the verb
+        itself as the link text: the anchor would otherwise be empty, leaving the
+        destination unreachable from the notifications list."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder about this deck.",
+            url='/decks/subscription/',
+        )
+        text = str(self._latest_notification())
+        self.assertIn("?next=/decks/subscription/'>sent a reminder about this deck.</a>", text)
+
+    def test_str__link_text_keeps_the_verb_plain_with_one_small_link(self):
+        """With url= and link_text=, the list page renders the verb as plain text
+        followed by one small link (maintainer request, 2026-08-08), and the
+        dropdown's single-anchor row completes the sentence with the link text."""
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            verb="sent a reminder. See your",
+            url='/decks/subscription/',
+            link_text='subscription details page.',
+        )
+        note = self._latest_notification()
+        self.assertEqual(note.target_link_text, 'subscription details page.')
+        text = str(note)
+        # the verb sits OUTSIDE the anchor; only the link text is inside it
+        self.assertIn("sent a reminder. See your <a href=", text)
+        self.assertIn("?next=/decks/subscription/'>subscription details page.</a>", text)
+        self.assertIn(" See your subscription details page.</a>", note.get_link())
+
+    def test_get_url__explicit_url_overrides_the_targets_own_page(self):
+        """When both a target object and an explicit url are given, the explicit url
+        wins as the destination while the target still provides the link text."""
+        target = baker.make('announcements.Announcement')
+        new_notification(
+            self.teacher,
+            recipient=self.student,
+            affected_users=[self.student],
+            target=target,
+            verb="posted",
+            url='/decks/subscription/',
+        )
+        note = self._latest_notification()
+        self.assertTrue(note.get_url().endswith('?next=/decks/subscription/'))
+        self.assertIn(f"<em>{target}</em>", str(note))
+
     def test_new_notification__creates_unread_for_recipient(self):
         """new_notification() creates a single unread notification for the recipient."""
         # make sure the student doesn't have any notifications yet
@@ -233,6 +298,29 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         comment_hash = f'#comment-{comment.id}'
         self.assertIn(comment_hash, notification.get_url())
         self.assertIn(comment_hash, str(notification))
+
+    def test_get_sender_display__support_admin_renders_as_bytedeck(self):
+        """A notification sent by the deck's ByteDeck support account displays its
+        actor as "Bytedeck" (the raw `admin` username would read like any other
+        user), in both the notification-page rendering and the string form."""
+        from django.conf import settings
+
+        support_admin, _ = User.objects.get_or_create(username=settings.TENANT_DEFAULT_ADMIN_USERNAME)
+        new_notification(support_admin, recipient=self.student, verb='sent a deck suspended warning.')
+
+        notification = self.student.notifications.get()
+        self.assertEqual(notification.get_sender_display(), 'Bytedeck')
+        self.assertIn('Bytedeck sent a deck suspended warning.', notification.get_link())
+        self.assertIn('Bytedeck sent a deck suspended warning.', str(notification))
+
+    def test_get_sender_display__other_senders_keep_their_normal_form(self):
+        """Any other sender renders exactly as before: its own string form (for a
+        user, the username)."""
+        new_notification(self.teacher, recipient=self.student, verb='tested.')
+
+        notification = self.student.notifications.get()
+        self.assertEqual(str(notification.get_sender_display()), str(self.teacher))
+        self.assertIn(f'{self.teacher} tested.', notification.get_link())
 
 
 class NotificationModel_html_strip_Test(TestCase):
