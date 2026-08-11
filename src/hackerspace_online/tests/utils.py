@@ -15,7 +15,6 @@ from model_bakery import baker
 
 import json
 import re
-import warnings
 
 from urllib.parse import urlencode
 
@@ -43,20 +42,20 @@ class ViewTestUtilsMixin():
     than being silently redundant. Only a test case built on some other base needs it.
     """
 
-    def assertRedirectsAdmin(self, url_name, *args, **kwargs):
+    def assertRedirectsAdminLogin(self, url_name, *args, **kwargs):
         """
-        Redirection to django admin is now deprecated.
-        Use assertRedirectsLogin(self, url_name, *args, **kwargs) instead.
+        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the django
+        admin's own login page, with appropriate ?next= query string. Provide any url and path
+        parameters as args or kwargs.
 
-        Assert that a GET response to reverse(url_name, *args, **kwargs) redirected to the admin login page.
-        with appropriate ?next= query string. Provide any url and path parameters as args or kwargs.
-
+        This is for urls under /admin/ only. The admin sends an unauthenticated visitor to
+        ``admin:login``, not to ``settings.LOGIN_URL``, so assertRedirectsLogin is the wrong
+        assertion there; for the site's own views it is the right one.
         """
-        warnings.warn("Redirection to django admin is now deprecated.\nUse assertRedirectsLogin(self, url_name, *args, **kwargs) instead...",
-                      stacklevel=2)
+        target = reverse(url_name, *args, **kwargs)
         self.assertRedirects(
-            response=self.client.get(reverse(url_name, *args, **kwargs)),
-            expected_url='{}?next={}'.format('/admin/login/', reverse(url_name, *args, **kwargs)),
+            response=self.client.get(target),
+            expected_url=f'{reverse("admin:login")}?{urlencode({"next": target})}',
         )
 
     def assertRedirectsHome(self, url_name, *args, **kwargs):

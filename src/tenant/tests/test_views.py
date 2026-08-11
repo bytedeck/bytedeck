@@ -890,8 +890,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     def test_page__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
-        response = self.assert302('decks:subscription')
-        self.assertIn('login', response.url)
+        self.assertRedirectsLogin('decks:subscription')
 
         self.client.force_login(self.student)
         self.assert403('decks:subscription')

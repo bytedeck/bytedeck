@@ -1,6 +1,7 @@
 import re
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.shortcuts import reverse
@@ -45,7 +46,8 @@ class NonPublicOnlyAuthViewTests(ByteDeckTenantTestCase):
         """
         self.assert200('account_signup')  # ok
         self.assert200('account_login')  # ok
-        self.assert302('account_logout')  # redirect
+        # logging out lands on ACCOUNT_LOGOUT_REDIRECT_URL, which this project points at the login page
+        self.assertRedirects(self.client.get(reverse('account_logout')), reverse(settings.LOGIN_URL))
         self.assertRedirectsLogin('account_change_password')  # login required
         self.assertRedirectsLogin('account_set_password')  # login required
         self.assert200('account_inactive')  # ok

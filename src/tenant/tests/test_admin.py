@@ -274,8 +274,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom column "owner_full_name_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -300,8 +300,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom column "owner_email_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -317,8 +317,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of htmlized column "paid_until_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -333,8 +333,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of htmlized column "trial_end_date" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -377,8 +377,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom fields is searchable in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -1015,8 +1015,8 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         using both *verified* and *unverified* email addresses.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -1100,8 +1100,8 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         using *verified* only email addresses.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        self.assert302("admin:{}_{}_changelist".format("tenant", "tenant"))
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
