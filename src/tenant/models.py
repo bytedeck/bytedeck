@@ -4,6 +4,7 @@ from datetime import date
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.db.models.functions import Greatest
 from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
@@ -308,13 +309,17 @@ class Tenant(TenantMixin):
 
     # one human label per subscription_status slug; the subscription page's badge
     # and the tenant admin's Subscription column both render from this map, so
-    # the same state always shows the same word everywhere
+    # the same state always shows the same word everywhere. The KEY ORDER is
+    # meaningful: it is the branch order of the subscription_status chain below,
+    # and doubles as the sort rank annotate_subscription_status() applies, so
+    # sorting the admin's Subscription column ascending lists the decks that
+    # need attention (suspended, then grace) before the settled ones.
     SUBSCRIPTION_STATUS_LABELS = {
         'suspended': 'Suspended',
         'grace': 'Grace period',
+        'trial': 'Free trial',
         'maintenance': 'Maintenance',
         'subscribed': 'Subscribed',
-        'trial': 'Free trial',
         'manual': 'Managed manually',
     }
 
@@ -352,6 +357,64 @@ class Tenant(TenantMixin):
         if self.subscription_active:
             return 'subscribed'
         return 'manual'
+
+    @classmethod
+    def annotate_subscription_status(cls, queryset):
+        """Annotate `subscription_status_rank`: the subscription_status precedence
+        chain, expressed in SQL so a list view can SORT on the status.
+
+        `subscription_status` is derived in Python, and a column of derived values
+        has nothing for the database to order by, which is why the tenant admin's
+        Subscription column needs this to be sortable at all.
+
+        Each `When` mirrors the property of the same name, and the rank is the
+        slug's position in SUBSCRIPTION_STATUS_LABELS, so ascending lists suspended
+        decks first and managed-manually ones last. The two implementations must
+        agree: `test_annotate_subscription_status__matches_the_python_chain` builds
+        a deck in every status and asserts the annotation reproduces the property
+        exactly, so changing one without the other fails the suite.
+
+        Args:
+            queryset (QuerySet): Any Tenant queryset.
+
+        Returns:
+            QuerySet: The same queryset with `governing_deadline_date` and
+            `subscription_status_rank` annotated. The deadline alias deliberately
+            differs from the `governing_deadline` property so it doesn't shadow it
+            on the returned instances.
+        """
+        today = localdate()
+        # the day a deck's grace window closes: a governing deadline older than
+        # this is suspended, one on or after it is still inside grace
+        grace_cutoff = today - timedelta(days=GRACE_PERIOD_DAYS)
+        rank = {slug: position for position, slug in enumerate(cls.SUBSCRIPTION_STATUS_LABELS)}
+        # subscription_active: a paid clock whose grace tail has not run out
+        paid_access = models.Q(paid_until__isnull=False, paid_until__gte=grace_cutoff)
+        return queryset.annotate(
+            # Postgres GREATEST skips NULLs, so this is governing_deadline: the
+            # later of the two clocks, and NULL only when neither is set (a NULL
+            # then fails every date comparison below and falls through to 'manual')
+            governing_deadline_date=Greatest('trial_end_date', 'paid_until'),
+        ).annotate(
+            subscription_status_rank=models.Case(
+                models.When(governing_deadline_date__lt=grace_cutoff, then=models.Value(rank['suspended'])),
+                # past the deadline; anything that also outlived the grace
+                # window was already claimed by the branch above
+                models.When(governing_deadline_date__lt=today, then=models.Value(rank['grace'])),
+                models.When(
+                    models.Q(trial_end_date__isnull=False)
+                    & (models.Q(paid_until__isnull=True) | models.Q(trial_end_date__gt=models.F('paid_until'))),
+                    then=models.Value(rank['trial']),
+                ),
+                models.When(
+                    paid_access & ~models.Q(max_active_users=-1) & models.Q(max_active_users__lte=TRIAL_MAX_ACTIVE_USERS),
+                    then=models.Value(rank['maintenance']),
+                ),
+                models.When(paid_access, then=models.Value(rank['subscribed'])),
+                default=models.Value(rank['manual']),
+                output_field=models.IntegerField(),
+            ),
+        )
 
     @property
     def subscription_status_label(self):

@@ -16,6 +16,7 @@ from django.utils.html import format_html
 from django.utils.formats import date_format
 from django.urls import reverse
 
+
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from allauth.account.utils import user_email
@@ -380,12 +381,26 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     return True
         return False
 
-    @admin.display(description="subscription")
+    def get_queryset(self, request):
+        """The changelist queryset, with each deck's lifecycle status ranked in SQL
+        so the Subscription column can be sorted on.
+
+        Args:
+            request (HttpRequest): The admin request.
+
+        Returns:
+            QuerySet: Tenants annotated with `subscription_status_rank`.
+        """
+        return Tenant.annotate_subscription_status(super().get_queryset(request))
+
+    @admin.display(description="subscription", ordering="subscription_status_rank")
     def subscription_status_text(self, obj):
         """The deck's lifecycle status as a colored badge: the same status (and
         the same word) the deck owner sees on their subscription details page,
         both rendered from the shared ``Tenant.subscription_status`` precedence
-        chain so the two can never disagree.
+        chain so the two can never disagree. Sorting the column orders by the
+        matching SQL ranking annotation (see ``get_queryset``), which puts the
+        decks needing attention first.
 
         Args:
             obj (Tenant): The changelist row's tenant.
