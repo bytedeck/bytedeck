@@ -50,16 +50,36 @@
 {{ block_object.description }}
 {% endif %}
 
+{% comment %}
+The list is paginated server-side (see ProfileList.paginate_by) so a request
+only ever loads one page of students. Search and column sorting therefore run
+server-side too -- against every student, not just the current page -- via the
+?q=, ?sort= and ?order= querystring params below. bootstrap-table is kept only
+for its column show/hide toggle and styling of the current page's rows.
+{% endcomment %}
+<form method="get" class="form-inline">
+    <div class="form-group">
+        <div class="input-group">
+            <input type="text" name="q" class="form-control" value="{{ search_query }}"
+                   placeholder="Search {{ config.custom_name_for_student }}s">
+            <span class="input-group-btn">
+                <button class="btn btn-default" type="submit" title="Search"><i class="fa fa-search"></i></button>
+                {% if search_query %}
+                <a class="btn btn-default" href="?sort={{ current_sort }}&order={{ current_order }}" title="Clear search">
+                    <i class="fa fa-times"></i>
+                </a>
+                {% endif %}
+            </span>
+        </div>
+    </div>
+    <!-- keep the active sort when searching -->
+    <input type="hidden" name="sort" value="{{ current_sort }}">
+    <input type="hidden" name="order" value="{{ current_order }}">
+</form>
+
 {% include 'snippets/table_loading.html' %}
 <table data-toggle='table'
-data-sort-name='first'
-data-sort-order='asc'
-data-search='true'
 data-show-columns='true'
-{% if request.user.is_staff %}
-data-show-export="true"
-data-export-types="['csv', 'json']"
-{% endif %}
 
 data-icons='icons'
 data-icons-prefix='fa'
@@ -71,74 +91,67 @@ data-classes="table table-no-bordered table-hover"
         <th data-field='avatar' {% if request.user.is_staff %}data-visible="false"{% endif %}>
             Avatar
         </th>
-        <th data-sortable='true' data-field='first' data-visible="false">
-            First Name
+        <th data-field='first' data-visible="false">
+            {% include 'snippets/sortable_header.html' with field='first' label='First Name' %}
         </th>
-        <th data-sortable='true' data-field='preferred'>
-            Preferred Name
+        <th data-field='preferred'>
+            {% include 'snippets/sortable_header.html' with field='preferred' label='Preferred Name' %}
         </th>
-        <th data-sortable='true' data-field='last'>
-            Last Name
+        <th data-field='last'>
+            {% include 'snippets/sortable_header.html' with field='last' label='Last Name' %}
         </th>
-        <th data-sortable='true' data-field='alias'
+        <th data-field='alias'
             {% if request.user.is_staff %}data-visible="false"{% endif %}>
-            Alias
+            {% include 'snippets/sortable_header.html' with field='alias' label='Alias' %}
         </th>
 
         {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
 
             {% if config.custom_profile_field %}
-            <th data-sortable='true' data-field='custom_profile_field'
+            <th data-field='custom_profile_field'
                 {% if request.user.is_staff %}data-visible="false"{% endif %}>
-                {{ config.custom_profile_field }}
+                {% include 'snippets/sortable_header.html' with field='custom_profile_field' label=config.custom_profile_field %}
             </th>
             {% endif %}
 
-            <th data-sortable='true' data-field='blocks'
+            <th data-field='blocks'
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
                 {% group_name %}s
             </th>
-            <th data-sortable='true' data-field='courses' data-visible="false">
+            <th data-field='courses' data-visible="false">
                 Courses
             </th>
-            <th data-sortable='true' data-field='xp'
+            <th data-field='xp'
                 {% if request.user.is_staff and config.display_marks_calculation %}data-visible="false"{% endif %}>
-                XP
+                {% include 'snippets/sortable_header.html' with field='xp' label='XP' %}
             </th>
             {% if config.display_marks_calculation %}
-            <th data-sortable='true' data-field='mark' data-formatter="%s%"
+            <th data-field='mark' data-formatter="%s%"
                 {% if not request.user.is_staff %}data-visible="false"{% endif %}>
-                Mark
+                {% include 'snippets/sortable_header.html' with field='mark' label='Mark' %}
             </th>
             {% endif %}
 
         {% endif %}
-        <th data-sortable='true' data-field='portfolio'
+        <th data-field='portfolio'
             {% if request.user.is_staff %}data-visible="false"{% endif %}>
             Portfolio
         </th>
 
         {% if request.user.is_staff %}
 
-            {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE   %}
-                <!-- Uses `last_sub_datetime` for sorting -->
-                <!-- Needed to do this since we can't rely on the content of `last_sub` -->
-                <th data-sortable='true' data-field='last_sub' data-sort-name='last_sub_datetime'>
-                    Last Quest
+            {% if view_type != VIEW_TYPES.STAFF and view_type != VIEW_TYPES.INACTIVE %}
+                <th data-field='last_sub'>
+                    {% include 'snippets/sortable_header.html' with field='last_sub' label='Last Quest' %}
                 </th>
-                <th data-field='last_sub_datetime' data-switchable='false' data-visible='false'></th>
-                <!-- End sorting group -->
             {% endif %}
 
-            <!-- Uses `last_login_datetime` for sorting-->
-            <th data-sortable='true' data-field='last_login' data-sort-name='last_login_datetime' data-visible="false">
-                Last Login
+            <th data-field='last_login' data-visible="false">
+                {% include 'snippets/sortable_header.html' with field='last_login' label='Last Login' %}
             </th>
-            <th data-field='last_login_datetime' data-switchable='false' data-visible='false'></th>
-            <!-- End sorting group -->
 
-            <th data-sortable='true' data-field='username'>
-                Username
+            <th data-field='username'>
+                {% include 'snippets/sortable_header.html' with field='username' label='Username' %}
             </th>
 
             {% if view_type != VIEW_TYPES.STAFF %}
@@ -214,22 +227,16 @@ data-classes="table table-no-bordered table-hover"
                                     &nbsp;Never
                                 {% endif %}
                             </td>
-                            <!-- `last_sub_datetime` -->
-                            <td>
-                            {{ object.time_of_last_submission|date:"y/m/d" }} {{ object.time_of_last_submission|time:"H:i:s"}}
-                            </td>
-                            <!-- end `last_sub_datetime` -->
                     {% endif %}
 
                     <td>
-                        {{ object.user.last_login|date:'y/m/d' }}<br>
-                        <small>{{ object.user.last_login|timesince }} ago</small>
+                        {% if object.user.last_login %}
+                            {{ object.user.last_login|date:'y/m/d' }}<br>
+                            <small>{{ object.user.last_login|timesince }} ago</small>
+                        {% else %}
+                            &nbsp;Never
+                        {% endif %}
                     </td>
-                    <!-- `last_login_datetime` -->
-                    <td>
-                        {{ object.user.last_login|date:"y/m/d" }} {{ object.user.last_login|time:"H:i:s"}}
-                    </td>
-                    <!-- end `last_login_datetime` -->
                     <td><a href="{% url 'profiles:profile_detail' object.id %}">{{ object.user.username|truncatechars:14 }}</a></td>
 
                     {#      Admin buttons #}
@@ -262,6 +269,28 @@ data-classes="table table-no-bordered table-hover"
     </tbody>
 </table>
 
+{% if is_paginated %}
+<ul class="pagination pagination-centered">
+    {% if page_obj.has_previous %}
+        <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page=1">&laquo;</a></li>
+        <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.previous_page_number }}">&lsaquo;</a></li>
+    {% endif %}
+
+    {% for i in page_range %}
+        {% if i == paginator.ELLIPSIS %}
+            <li class="disabled"><span>{{ i }}</span></li>
+        {% else %}
+            <li {% if i == page_obj.number %}class="active"{% endif %}><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ i }}">{{ i }}</a></li>
+        {% endif %}
+    {% endfor %}
+
+    {% if page_obj.has_next %}
+        <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ page_obj.next_page_number }}">&rsaquo;</a></li>
+        <li><a href="?{% if querystring %}{{ querystring }}&{% endif %}page={{ paginator.num_pages }}">&raquo;</a></li>
+    {% endif %}
+</ul>
+{% endif %}
+
 
 {% endblock %}
 
@@ -269,11 +298,8 @@ data-classes="table table-no-bordered table-hover"
 
 <!-- https://bootstrap-table.com/ -->
 <script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>
-<script src="{% static 'js/tableExport-1.9.8.min.js' %}"></script>
-<script src="{% static 'js/bootstrap-table-export-1.20.2.min.js' %}"></script>
 <script>
   window.icons = {
-      export: 'fa-share',
       columns: 'fa-th-list',
   }
 </script>

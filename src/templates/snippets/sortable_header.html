@@ -1,0 +1,19 @@
+{% comment %}
+Renders a server-side-sort column header link for a paginated table.
+
+Include with the column's field/label; the surrounding view is expected to
+provide `current_sort`, `current_order` and `search_query` in the context:
+
+    {% include 'snippets/sortable_header.html' with field='xp' label='XP' %}
+
+Clicking the header sorts by that field, toggling asc/desc when it's already
+the active sort. The active search term is preserved so sorting doesn't clear a
+search. A caret shows the current direction on the active column.
+{% endcomment %}
+{% if current_sort == field and current_order == 'asc' %}
+    <a href="?sort={{ field }}&order=desc{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ label }} <i class="fa fa-caret-up"></i></a>
+{% elif current_sort == field %}
+    <a href="?sort={{ field }}&order=asc{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ label }} <i class="fa fa-caret-down"></i></a>
+{% else %}
+    <a href="?sort={{ field }}&order=asc{% if search_query %}&q={{ search_query|urlencode }}{% endif %}">{{ label }}</a>
+{% endif %}
