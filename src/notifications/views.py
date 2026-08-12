@@ -1,5 +1,6 @@
 import json
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
@@ -7,6 +8,7 @@ from django.http import HttpResponse, JsonResponse
 from django.shortcuts import Http404, HttpResponseRedirect, get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from tenant.views import non_public_only_view
 
 from hackerspace_online.decorators import xml_http_request_required
@@ -70,7 +72,12 @@ def read(request, id):
             notification.unread = False
             notification.time_read = timezone.now()
             notification.save()
-            if next is not None:
+            # Only follow ?next= when it stays on this deck or points at an
+            # explicitly trusted host (github.com, for the release-announcement
+            # notice); anything else falls back to the list so a crafted link
+            # can't turn this into an open redirect.
+            allowed_hosts = {request.get_host(), *settings.NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS}
+            if next and url_has_allowed_host_and_scheme(next, allowed_hosts=allowed_hosts, require_https=request.is_secure()):
                 return HttpResponseRedirect(next)
             else:
                 return HttpResponseRedirect(reverse('notifications:list'))

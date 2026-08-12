@@ -290,6 +290,33 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         self.assertRedirects(response, '/quests/available/', fetch_redirect_response=False)
 
+    def test_read__external_untrusted_next_falls_back_to_list(self):
+        """A ?next= pointing at an untrusted external host is refused: the user is sent to
+        the notifications list instead of being redirected off-site (open-redirect guard)."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': 'https://evil.example.com/phish'})
+
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
+
+    def test_read__trusted_github_next_is_followed(self):
+        """A ?next= pointing at the trusted release-announcement host (github.com) is followed,
+        so the release-announcement notice can still link out to its GitHub discussion."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        github_url = 'https://github.com/bytedeck/bytedeck/discussions/2318'
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': github_url})
+
+        self.assertRedirects(response, github_url, fetch_redirect_response=False)
+
     def test_read__other_users_notification_raises_404(self):
         """Reading a notification that belongs to another user is a 404 (not readable)."""
         self.client.force_login(self.test_student1)
