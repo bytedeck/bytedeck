@@ -1889,8 +1889,10 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:quest_update', args=[quest.pk]))
 
-        self.assertContains(response, 'Manage Questions')
-        self.assertContains(response, reverse('questions:list', args=[quest.pk]))
+        # assert the label and the href together, so the test can't pass on a button that
+        # merely sits near an unrelated occurrence of the URL
+        questions_url = reverse('questions:list', args=[quest.pk])
+        self.assertContains(response, f'href="{questions_url}">Manage Questions</a>')
 
     def test_quest_form__manage_questions_button_disabled_when_creating(self):
         """On the create form there is no quest to hang questions on yet, so the button is disabled (#2347)."""

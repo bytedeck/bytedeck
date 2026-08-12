@@ -112,6 +112,17 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        """Build the quest form's crispy layout.
+
+        Beyond the model fields, the layout carries the form's action buttons (cancel and submit,
+        repeated top and bottom) and links out to the two parts of a quest configured on their own
+        pages: prerequisites and submission questions. Both of those need a saved quest to attach
+        to, so on the create form they render as disabled placeholders explaining why.
+
+        Args:
+            *args: positional arguments passed through to ``forms.ModelForm``.
+            **kwargs: keyword arguments passed through to ``forms.ModelForm``.
+        """
         super().__init__(*args, **kwargs)
 
         self.fields['common_data'].label = 'Common Quest Info'
