@@ -3,10 +3,14 @@
 <p>Your deck <strong>{{ deck.name }}</strong> has <strong>{{ count }}</strong> current
   student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed{% if count >= cap %}: the limit has been reached, so no more students can register in a course.{% else %}: you're approaching the limit.{% endif %}</p>
 
-{% if deck.subscription_active %}
+{# the GOVERNING clock (the latest one) names the deadline, and grace decks are told their clock already ran out (#1734 B5) #}
+{% if deck.in_grace_period %}
+<p>Your deck's {% if deck.governing_clock_is_trial %}free trial ended{% else %}subscription expired{% endif %}
+  on <strong>{{ deck.governing_deadline }}</strong> and the deck is in its grace period.</p>
+{% elif deck.governing_clock_is_trial %}
+<p>Your deck's free trial ends on <strong>{{ deck.governing_deadline }}</strong>.</p>
+{% elif deck.subscription_active %}
 <p>Your deck's subscription is paid through <strong>{{ deck.paid_until }}</strong>.</p>
-{% elif deck.is_on_trial %}
-<p>Your deck's free trial ends on <strong>{{ deck.trial_end_date }}</strong>.</p>
 {% endif %}
 
 <p>Only <em>current</em> students (registered in a course in the active semester) count; staff and archived

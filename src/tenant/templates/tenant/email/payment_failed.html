@@ -1,0 +1,12 @@
+<p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
+
+<p>The latest subscription payment for your deck <strong>{{ deck.name }}</strong> <strong>failed</strong>.
+  Stripe will retry automatically, and your deck keeps full access through its grace period:
+  please update your payment details soon so the subscription doesn't lapse.</p>
+
+<p><a href="{{ subscribe_url }}">Open your subscription page</a> to update your card via Stripe's
+  billing portal. Questions about which students count toward your plan? Only <em>current</em> students
+  (those registered in a course this semester) count; see
+  <a href="{{ archive_help_url }}">freeing up student seats</a>.</p>
+
+{% include "tenant/email/_email_footer.html" %}

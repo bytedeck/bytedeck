@@ -1,11 +1,15 @@
 from io import StringIO
 from contextlib import redirect_stdout
+from unittest.mock import MagicMock, patch
 
 from django.apps import apps
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db.utils import OperationalError
 from django.test import TestCase, SimpleTestCase, override_settings
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
 
@@ -66,12 +70,88 @@ class InitDbTest(TestCase, CommandMixin):
         public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
         with tenant_context(public_tenant):
-            FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            homepage = FlatPage.objects.get(url='/home/')  # will throw exception if doesn't exist
+            # ALL THREE seeded TRY IT buttons must point at the deck-request form:
+            # the old "#contact" anchor target no longer exists anywhere on the page
+            self.assertEqual(homepage.content.count('href="/decks/request/"'), 3)
+            self.assertNotIn('href="#contact"', homepage.content)
             user = User.objects.get(username='admin')
             self.assertTrue(user.is_superuser)
             self.assertTrue(Site.objects.exists())
 
             Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
+
+    def test_initdb__bails_when_database_is_unreachable(self):
+        """If the initial DB connectivity check raises OperationalError, initdb reports it and
+        bails without creating a superuser."""
+        # Replace the module-level ``connections`` in initdb so its ``connections['default'].cursor()``
+        # check raises; the surrounding @transaction.atomic still uses the real connection.
+        mock_connections = MagicMock()
+        mock_connections.__getitem__.return_value.cursor.side_effect = OperationalError
+
+        with patch('hackerspace_online.management.commands.initdb.connections', mock_connections):
+            out = self.call_command()
+
+        self.assertIn("can't connect to the database", out)
+        self.assertFalse(User.objects.filter(username=settings.DEFAULT_SUPERUSER_USERNAME).exists())
+
+    def test_initdb__bails_when_superuser_already_exists(self):
+        """Run twice: the second run finds the superuser from the first and bails without error,
+        keeping initdb idempotent-safe."""
+        self.call_command()
+        out = self.call_command()
+
+        self.assertIn(
+            f'A superuser with username `{settings.DEFAULT_SUPERUSER_USERNAME}` already exists', out
+        )
+        # still exactly one superuser (the second run did not create another)
+        self.assertEqual(User.objects.filter(username=settings.DEFAULT_SUPERUSER_USERNAME).count(), 1)
+
+    def test_initdb__setup_shared_library_backfills_missing_domain(self):
+        """setup_shared_library backfills the library tenant's domain when the tenant already
+        exists but its domain is missing (e.g. a re-run after the domain was removed), rather
+        than leaving the shared library unreachable."""
+        from hackerspace_online.management.commands.initdb import Command
+
+        self.call_command()
+        library_schema = apps.get_app_config('library').TENANT_NAME
+        library = Tenant.objects.get(schema_name=library_schema)
+        library.domains.all().delete()
+        self.assertFalse(library.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists())
+
+        # The domain backfill runs before the (non-idempotent) library quest re-labelling, which
+        # would re-prefix names and overflow Quest.name on a second run; patch it out so the test
+        # targets only the domain-backfill branch.
+        with patch('quest_manager.models.Quest'):
+            Command().setup_shared_library()
+
+        self.assertTrue(library.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists())
+
+    def test_initdb__notes_when_public_tenant_already_existed(self):
+        """When the public tenant already exists, initdb reports that (a not-created notice)
+        instead of failing.
+
+        The superuser guard is mocked to appear unset so the run proceeds to the public-tenant
+        step (deleting the real superuser isn't possible here: its cascade touches per-tenant
+        tables that don't exist in the public schema). The public domain is dropped first so the
+        unconditional domain re-create doesn't hit the domain uniqueness constraint.
+        """
+        self.call_command()
+        Tenant.objects.get(schema_name='public').domains.all().delete()
+
+        # Mock the superuser guard to appear unset (so the run reaches the public-tenant step) and
+        # skip setup_shared_library, whose non-idempotent quest re-labelling would overflow
+        # Quest.name on a re-run and is unrelated to the public-tenant notice under test.
+        with patch('hackerspace_online.management.commands.initdb.User') as MockUser, \
+                patch('hackerspace_online.management.commands.initdb.Command.setup_shared_library'):
+            MockUser.objects.filter.return_value.exists.return_value = False
+            out = self.call_command()
+
+        self.assertIn('A schema with the name `public` already existed', out)
+        # the re-run reuses the existing homepage instead of adding a duplicate
+        self.assertEqual(
+            FlatPage.objects.filter(url='/home/', sites__domain=settings.ROOT_DOMAIN).count(), 1
+        )
 
 
 class GetHomepageContentTest(SimpleTestCase):
@@ -131,6 +211,11 @@ class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
         self.assertEqual(Quest.objects.count(), expected_quest_count)
         self.assertEqual(Category.objects.count(), expected_campaign_count)
         self.assertEqual(User.objects.count(), expected_user_count)
+
+    def test_generate_content__nonexistent_schema_raises_command_error(self):
+        """A schema name with no matching tenant raises CommandError instead of failing obscurely."""
+        with self.assertRaises(CommandError):
+            self.call_command('does_not_exist_schema')
 
 
 class FullCleanTest(TestCase, CommandMixin):

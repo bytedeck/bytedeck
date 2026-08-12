@@ -2,7 +2,7 @@
 
 {% block content %}
 <div class="container my-5" style="max-width: 720px;">
-    <h1 class="mb-3">Thanks &mdash; check your email to continue</h1>
+    <h1 class="mb-3">Thanks! Check your email to continue</h1>
     <p class="lead">
         We've sent a verification link to the email address you entered. Follow the
         steps below to finish setting up your new deck.
@@ -26,7 +26,22 @@
         </li>
     </ol>
 
-    <div class="alert alert-info" role="alert">
+    {# alert-warning, NOT a bare page-level .alert: the public stylesheet reserves #}
+    {# its fixed-toast styling for the BD-flash flash messages in public/base.html #}
+    <div class="alert alert-warning" role="alert">
+        <h2 class="h5 alert-heading">Your free trial</h2>
+        <ul class="mb-3">
+            <li>
+                Every new deck starts on a <strong>free {{ trial_days }}-day trial</strong>
+                with room for up to <strong>{{ trial_cap }} current student{{ trial_cap|pluralize }}</strong>.
+                No credit card is needed.
+            </li>
+            <li>
+                Subscribe any time to raise the student limit or keep the deck going;
+                when a trial or subscription ends, everything keeps working for a
+                <strong>{{ grace_days }}-day grace period</strong> while you decide.
+            </li>
+        </ul>
         <h2 class="h5 alert-heading">Good to know</h2>
         <ul class="mb-0">
             <li>

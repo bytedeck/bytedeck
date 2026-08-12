@@ -130,11 +130,15 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('\n** Creating homepage...'))
             from django.contrib.flatpages.models import FlatPage
 
-            homepage = FlatPage.objects.create(
+            # get_or_create so re-running against an existing public tenant doesn't add a
+            # duplicate '/home/' flatpage (FlatPage.url isn't unique on its own).
+            homepage, _ = FlatPage.objects.get_or_create(
                 url='/home/',
-                title='Home',
-                content=get_homepage_content(),
-                template_name='public/flatpage-wide.html',
+                defaults={
+                    'title': 'Home',
+                    'content': get_homepage_content(),
+                    'template_name': 'public/flatpage-wide.html',
+                },
             )
             homepage.sites.add(site)
             absolute_url = reverse('django.contrib.flatpages.views.flatpage', args=['home'])
@@ -179,7 +183,7 @@ def get_homepage_content():
             <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#teachers" role="button">TEACHERS</a>
           </div>
           <div class="col-md-4">
-            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#contact" role="button">TRY IT</a>
+            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="/decks/request/" role="button">TRY IT</a>
           </div>
         </div>
         <!-- /row -->
@@ -262,7 +266,7 @@ def get_homepage_content():
             open-ended, self-directed activities, where students can showcase their learning and creativity.</p>
             <div class="row">
               <div class="col-lg-4 BD-title-pixels">
-                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="#contact" role="button">TRY IT!</a>
+                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="/decks/request/" role="button">TRY IT!</a>
                 <!-- <div>
                   <img class="students-pixels BD-img-pixels" src="{img}pixels%203.png">
                 </div> -->
@@ -306,7 +310,7 @@ def get_homepage_content():
             where they're at.</p>
             <div class="row">
               <div class="col-lg-4">
-                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="#contact" role="button">TRY IT!!</a>
+                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="/decks/request/" role="button">TRY IT!!</a>
               </div>
             </div>
           </div>

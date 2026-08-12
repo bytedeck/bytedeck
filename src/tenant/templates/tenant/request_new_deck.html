@@ -3,8 +3,35 @@
 {% load crispy_forms_tags %}
 
 {% block content %}
-<div class="container my-5">
-    <h1 class="mb-4">Request a New Deck</h1>
+<div class="container my-5" style="max-width: 720px;">
+    <h1 class="mb-3">Request a New Deck</h1>
+
+    {# outline the whole flow up front (maintainer request, 2026-08-08): the page #}
+    {# asks only for a name and email, so say what happens after the form is sent #}
+    <p class="lead">Tell us who you are and we'll walk you through creating your own deck:</p>
+    <ol class="mb-4">
+        <li class="mb-2">
+            <strong>Verify your email.</strong> We'll send a verification link to the
+            address you enter below. Once your email is verified, the link opens a
+            short form asking for the info we need to create your own deck.
+        </li>
+        <li class="mb-2">
+            <strong>Sign in.</strong> After your deck is created, you'll be emailed
+            the login credentials for your deck.
+        </li>
+        <li class="mb-2">
+            <strong>Try it free.</strong> You'll start with a trial deck valid for
+            <strong>{{ trial_days }} days</strong> to test it out. If you want to
+            start using it with more than <strong>{{ trial_cap }} student{{ trial_cap|pluralize }}</strong>,
+            you'll need to <a href="/pages/subscribe/">add a subscription</a>.
+        </li>
+        <li class="mb-2">
+            <strong>Want a preview?</strong> If you want to see what ByteDeck has to
+            offer first, you can join as a student at
+            <a href="https://learn.bytedeck.com">learn.bytedeck.com</a>{% if demo_course_code %}
+            using the course code <strong>{{ demo_course_code }}</strong>{% endif %}.
+        </li>
+    </ol>
 
     <form method="post">
         {% csrf_token %}

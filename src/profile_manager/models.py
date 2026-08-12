@@ -14,6 +14,7 @@ from django.templatetags.static import static
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.functional import cached_property
+from django.utils.html import format_html
 
 from django_resized import ResizedImageField
 from django_tenants.utils import get_public_schema_name
@@ -141,7 +142,6 @@ class Profile(models.Model):
                                           help_text="A test account that won't show up in student lists",
                                           )
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
-    intro_tour_completed = models.BooleanField(default=False)
     not_earning_xp = models.BooleanField(default=False)
     banned_from_comments = models.BooleanField(default=False)
 
@@ -433,14 +433,20 @@ def create_profile(sender, **kwargs):
 
             new_profile.save()
 
-            staff_list = User.objects.filter(is_staff=True)
-            notify.send(
-                current_user,
-                target=new_profile,
-                recipient=staff_list[0],
-                affected_users=staff_list,
-                icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-                verb='.  New user registered: ')
+            # "New user registered" announces a newly created student or staff
+            # account to the deck's staff. The deck's system admin account is a
+            # superuser created automatically when the deck itself is created, so
+            # its creation is not a real registration and should not raise this
+            # notification (#2320). Students and teachers still do.
+            if not current_user.is_superuser:
+                staff_list = User.objects.filter(is_staff=True)
+                notify.send(
+                    current_user,
+                    target=new_profile,
+                    recipient=staff_list[0],
+                    affected_users=staff_list,
+                    icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+                    verb='.  New user registered: ')
 
 
 @receiver(post_delete, sender=Profile)
@@ -525,7 +531,20 @@ def user_logged_in_verify_email_reminder_handler(request, user, **kwargs):
     # Only send the email when they login again
     if not recently_signed_up_with_email:
         if email_address and email_address.verified is False:
-            messages.info(request, f"Please verify your email address: {user.email}.")
+            # Give the reminder an actionable link: clicking it re-sends the
+            # verification email (the same resend endpoint the profile form uses),
+            # since verifying requires the link inside that email. extra_tags='safe'
+            # lets the messages snippet render the anchor instead of escaping it.
+            resend_url = reverse('profiles:profile_resend_email_verification', args=[user.profile.pk])
+            messages.info(
+                request,
+                format_html(
+                    'Please verify your email address: {}. <a href="{}">Re-send verification link</a>.',
+                    user.email,
+                    resend_url,
+                ),
+                extra_tags='safe',
+            )
 
 
 def smart_list(value, delimiter=",", func=None):

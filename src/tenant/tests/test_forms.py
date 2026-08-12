@@ -3,6 +3,7 @@ import random
 import string
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -136,31 +137,34 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
 
-    def test_clean_name__deck_name_length_capped_at_url_limit(self):
-        """The deck name may be as long as the URL/schema allows — the model field's
-        max_length — not the old 20-char short-name cap (#1975). Only a name longer
-        than the field limit is rejected; the short name is truncated from it instead.
-        """
-        base = {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"}
-        max_len = Tenant._meta.get_field("name").max_length
+    def test_clean_name__deck_name_capped_for_readable_urls(self):
+        """New deck names are capped at DECK_NAME_MAX_LENGTH on the creation form:
+        the name becomes the deck's subdomain, and a name at the model field's
+        62-character Postgres schema limit makes an unreadable URL (maintainer
+        decision, 2026-08-08). One over the cap is rejected, a name at the cap is
+        accepted, and the model field itself still allows more so existing decks
+        with longer names are unaffected."""
+        from tenant.forms import DECK_NAME_MAX_LENGTH
 
-        # one over the field limit: rejected
-        too_long = "a" * (max_len + 1)
-        form = TenantForm({**base, "name": too_long})
+        base = {"first_name": "John", "last_name": "Doe", "email": "john.doe@example.com"}
+
+        form = TenantForm({**base, "name": "a" * (DECK_NAME_MAX_LENGTH + 1)})
         self.assertFalse(form.is_valid())
         self.assertIn("name", form.errors)
 
-        # longer than the old 20-char cap but within the field limit: accepted
-        self.assertGreater(max_len, 20)
-        long_but_valid = "a" * max_len
-        form = TenantForm({**base, "name": long_but_valid})
+        form = TenantForm({**base, "name": "a" * DECK_NAME_MAX_LENGTH})
         self.assertTrue(form.is_valid(), form.errors)
 
+        self.assertGreater(Tenant._meta.get_field("name").max_length, DECK_NAME_MAX_LENGTH)
+
     def test_name_help_text__includes_length_limit(self):
-        """The deck-name field's help text states the character limit (#1975)."""
-        max_len = Tenant._meta.get_field("name").max_length
+        """The deck-name field's help text states the cap (#1975), and the widget
+        carries it as a maxlength attribute so the browser stops overtyping."""
+        from tenant.forms import DECK_NAME_MAX_LENGTH
+
         form = TenantForm()
-        self.assertIn(str(max_len), form.fields["name"].help_text)
+        self.assertIn(str(DECK_NAME_MAX_LENGTH), form.fields["name"].help_text)
+        self.assertEqual(form.fields["name"].widget.attrs.get("maxlength"), DECK_NAME_MAX_LENGTH)
 
     def test_clean_name__duplicate_deck_name_is_rejected(self):
         """A deck name that already exists is rejected on the form (via the unique
@@ -180,3 +184,32 @@ class TenantFormTest(ByteDeckTenantTestCase):
         form = TenantForm(data)
         self.assertFalse(form.is_valid())
         self.assertIn("name", form.errors)
+
+    def test_clean_email__disabled_without_verified_email_raises(self):
+        """clean_email guards against a disabled email field with no verified address on record.
+
+        It is called directly here: through full form validation the disabled required email
+        field's own field-level clean raises 'This field is required.' first, so clean_email is
+        never reached with an empty value. The guard exists as defense in depth, so we exercise
+        the method itself.
+        """
+        # verified_data is truthy (so __init__ disables the field) but carries no email, and no
+        # form-level initial email is supplied either, so clean_email has nothing to fall back on.
+        form = TenantForm(
+            data={"name": "noemaildeck", "first_name": "John", "last_name": "Doe"},
+            verified_data={"first_name": "John", "last_name": "Doe"},
+        )
+        with self.assertRaises(ValidationError):
+            form.clean_email()
+
+    def test_save__commit_false_returns_unsaved_tenant(self):
+        """save(commit=False) returns the built-but-unsaved Tenant (no pk, no schema build)."""
+        form = TenantForm(data={
+            "name": "commitfalse",
+            "first_name": "John",
+            "last_name": "Doe",
+            "email": "john.doe@example.com",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+        tenant = form.save(commit=False)
+        self.assertIsNone(tenant.pk)
