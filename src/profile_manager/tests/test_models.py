@@ -142,6 +142,31 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertIsInstance(self.user.profile, Profile)
         self.assertEqual(str(self.user.profile), self.user.username)
 
+    def _new_user_notifications_for(self, user):
+        """The 'New user registered' notifications whose target is this user's profile."""
+        return Notification.objects.filter(
+            verb__icontains="New user registered",
+            target_content_type=ContentType.objects.get_for_model(Profile),
+            target_object_id=user.profile.id,
+        )
+
+    def test_create_profile__notifies_staff_when_a_student_registers(self):
+        """Creating a student (non-staff) user fires the 'New user registered' notification to staff."""
+        student = baker.make(User)  # non-staff, non-superuser by default
+        self.assertTrue(self._new_user_notifications_for(student).exists())
+
+    def test_create_profile__no_notification_for_staff_account(self):
+        """A staff account (e.g. a teacher, or the deck owner created at deck creation) does not
+        fire the 'New user registered' notification (#2320)."""
+        teacher = baker.make(User, is_staff=True)
+        self.assertFalse(self._new_user_notifications_for(teacher).exists())
+
+    def test_create_profile__no_notification_for_superuser_account(self):
+        """A superuser account (the deck's system admin, created at deck creation) does not fire
+        the 'New user registered' notification (#2320)."""
+        admin = baker.make(User, is_superuser=True)
+        self.assertFalse(self._new_user_notifications_for(admin).exists())
+
     def test_profile_deletion__cascades_to_user(self):
         """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too. """
         Profile.objects.filter(pk=self.profile.pk).delete()

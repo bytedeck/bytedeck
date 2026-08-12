@@ -433,14 +433,20 @@ def create_profile(sender, **kwargs):
 
             new_profile.save()
 
-            staff_list = User.objects.filter(is_staff=True)
-            notify.send(
-                current_user,
-                target=new_profile,
-                recipient=staff_list[0],
-                affected_users=staff_list,
-                icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-                verb='.  New user registered: ')
+            # "New user registered" announces a newly self-registered student to staff.
+            # Staff and superuser accounts (the deck's system admin and owner, created
+            # when the deck itself is created, plus any teacher accounts staff add) are
+            # created administratively, not self-registered, so they should not generate
+            # this notification (#2320).
+            if not current_user.is_staff and not current_user.is_superuser:
+                staff_list = User.objects.filter(is_staff=True)
+                notify.send(
+                    current_user,
+                    target=new_profile,
+                    recipient=staff_list[0],
+                    affected_users=staff_list,
+                    icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+                    verb='.  New user registered: ')
 
 
 @receiver(post_delete, sender=Profile)
