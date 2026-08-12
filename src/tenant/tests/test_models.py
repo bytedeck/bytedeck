@@ -481,6 +481,14 @@ class TenantSubscriptionStatusAnnotationTest(ByteDeckTenantTestCase):
             'trial_end_date': FROZEN_TODAY + timedelta(days=30),
             'paid_until': FROZEN_TODAY - timedelta(days=1),
         },
+        # both clocks landing on the SAME day: subscription language wins the tie,
+        # so this must rank 'subscribed'. Both chains compare the trial strictly
+        # later, and this fixture is what holds them to it
+        'equal-deadlines': {
+            'trial_end_date': FROZEN_TODAY + timedelta(days=30),
+            'paid_until': FROZEN_TODAY + timedelta(days=30),
+            'max_active_users': 40,
+        },
     }
 
     @classmethod
@@ -525,13 +533,18 @@ class TenantSubscriptionStatusAnnotationTest(ByteDeckTenantTestCase):
 
     def test_annotate_subscription_status__covers_every_status(self):
         """The fixtures reach all six statuses (so the test above is not silently
-        checking a subset), each is the status its fixture name claims, and a
-        running trial outranks an older paid clock still inside its grace tail."""
+        checking a subset), and each is the status its fixture name claims.
+
+        The two clock-precedence cases are pinned by name: a running trial outranks
+        an older paid clock still inside its grace tail, and two clocks ending on
+        the SAME day are 'subscribed', which is what stops either chain from
+        relaxing its strict comparison to a >=."""
         statuses = {fixture: deck.subscription_status for fixture, deck in self.ranked().items()}
         self.assertEqual(set(statuses.values()), set(Tenant.SUBSCRIPTION_STATUS_LABELS))
         for status in Tenant.SUBSCRIPTION_STATUS_LABELS:
             self.assertEqual(statuses[status], status)
         self.assertEqual(statuses['trial-over-stale-paid'], 'trial')
+        self.assertEqual(statuses['equal-deadlines'], 'subscribed')
 
     def test_annotate_subscription_status__orders_suspended_first_and_manual_last(self):
         """Sorting ascending on the rank lists the decks needing attention first:
