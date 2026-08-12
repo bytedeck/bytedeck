@@ -162,15 +162,15 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         student = baker.make(User)  # non-staff, non-superuser by default
         self.assertTrue(self._new_user_notifications_for(student).exists())
 
-    def test_create_profile__no_notification_for_staff_account(self):
-        """A staff account (e.g. a teacher, or the deck owner created at deck creation) does not
-        fire the 'New user registered' notification (#2320)."""
+    def test_create_profile__notifies_staff_when_a_teacher_is_added(self):
+        """A staff (teacher) account is created administratively, but it still fires the
+        'New user registered' notification: only the superuser system account is suppressed (#2320)."""
         teacher = baker.make(User, is_staff=True)
-        self.assertFalse(self._new_user_notifications_for(teacher).exists())
+        self.assertTrue(self._new_user_notifications_for(teacher).exists())
 
     def test_create_profile__no_notification_for_superuser_account(self):
-        """A superuser account (the deck's system admin, created at deck creation) does not fire
-        the 'New user registered' notification (#2320)."""
+        """A superuser account (the deck's system admin, created automatically at deck creation) does
+        not fire the 'New user registered' notification, since it is not a real registration (#2320)."""
         admin = baker.make(User, is_superuser=True)
         self.assertFalse(self._new_user_notifications_for(admin).exists())
 
