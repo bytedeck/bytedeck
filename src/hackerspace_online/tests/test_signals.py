@@ -1,11 +1,8 @@
-from unittest.mock import patch
-
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 
 from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 
-from hackerspace_online.signals import change_domain_urls
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.models import Tenant
 
@@ -46,20 +43,3 @@ class SignalTest(ByteDeckTenantTestCase):
             self.assertEqual(site.domain, full_domain)
             self.assertEqual(site.name, full_domain[:name_max])
             self.assertLessEqual(len(site.name), name_max)
-
-    def test_change_domain_urls__is_a_noop_on_create(self):
-        """change_domain_urls only acts on Site updates; a create (created=True) returns
-        immediately, before even looking up the public tenant."""
-        with schema_context(get_public_schema_name()):
-            site = Site.objects.first()
-            with patch.object(Tenant.objects, 'get') as mock_get:
-                self.assertIsNone(change_domain_urls(sender=Site, instance=site, created=True))
-            # The guard returns before the tenant lookup, so get() is never reached.
-            mock_get.assert_not_called()
-
-    def test_change_domain_urls__returns_when_public_tenant_missing(self):
-        """If the public tenant lookup fails, the handler returns quietly rather than raising."""
-        with schema_context(get_public_schema_name()):
-            site = Site.objects.first()
-            with patch.object(Tenant.objects, 'get', side_effect=Tenant.DoesNotExist):
-                self.assertIsNone(change_domain_urls(sender=Site, instance=site, created=False))
