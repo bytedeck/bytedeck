@@ -22,7 +22,14 @@ jobs:
       with:
         python-version: '3.12'
     - name: Install ruff
-      run: pip install ruff
+      # Install the constraint requirements.txt pins, so CI, the pre-commit hook
+      # and a local venv all lint with the same ruff. requirements.txt stays the
+      # single place the version is set, and its upper cap applies here too, so a
+      # new ruff minor cannot reach CI unpinned and fail the build on new rules.
+      run: |
+        ruff_spec=$(grep -m1 -E '^ruff([<>=!~,]|$)' requirements.txt | cut -d'#' -f1 | tr -d '[:space:]')
+        echo "Installing $ruff_spec"
+        pip install "$ruff_spec"
     - name: Lint
       # Config lives in pyproject.toml ([tool.ruff]). --output-format=github
       # emits inline PR annotations (replaces the old flake8-annotations action).
