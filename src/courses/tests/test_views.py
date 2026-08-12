@@ -296,13 +296,13 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         """POSTing the archive view closes the active semester and redirects to the semester list."""
         self.client.force_login(self.test_teacher)
         active_sem = SiteConfig.get().active_semester
-        self.assertFalse(active_sem.closed)
+        self.assertFalse(active_sem.is_archived)
         self.assertRedirects(
             response=self.client.post(reverse('courses:semester_archive')),
             expected_url=reverse('courses:semester_list'),
         )
         active_sem.refresh_from_db()
-        self.assertTrue(active_sem.closed)
+        self.assertTrue(active_sem.is_archived)
 
     def test_SemesterArchive__get_is_a_preview_and_does_not_archive(self):
         """GET on the archive view renders the confirmation/preview page (with the counts of
@@ -320,7 +320,7 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(response.context['num_seats_freed'], 1)
         self.assertFalse(response.context['blocked'])
         active_sem.refresh_from_db()
-        self.assertFalse(active_sem.closed)
+        self.assertFalse(active_sem.is_archived)
 
     def test_SemesterArchive__get_shows_blockers(self):
         """The archive preview lists blockers: submissions awaiting approval and students
@@ -353,13 +353,13 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertWarningMessage(response)
         self.assertIn('awaiting approval', str(self.get_message_list(response)[0]))
         active_sem.refresh_from_db()
-        self.assertFalse(active_sem.closed)
+        self.assertFalse(active_sem.is_archived)
 
     def test_SemesterArchive__already_archived(self):
         """POSTing the archive view for an already-archived semester warns and takes no action."""
         self.client.force_login(self.test_teacher)
         active_sem = SiteConfig.get().active_semester
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
         response = self.client.post(reverse('courses:semester_archive'))
@@ -591,7 +591,7 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         'no semester is open' state from issue #2060. Saving fires the SiteConfig cache invalidation.
         """
         active = SiteConfig.get().active_semester
-        active.closed = True
+        active.status = Semester.Status.ARCHIVED
         active.save()
 
     def test_CourseStudentCreate_view__blocked_when_no_open_semester__get(self):
@@ -862,7 +862,7 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
         """When the active semester is archived (the no-open-semester state, #1177),
         staff see the students-can't-join warning linking to the semester list."""
         active_sem = SiteConfig.get().active_semester
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
         self.client.force_login(self.test_teacher)
@@ -875,7 +875,7 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
         """Students never see the semester status banner, even in the states that show
         it to staff."""
         active_sem = SiteConfig.get().active_semester
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
         self.client.force_login(self.test_student)
@@ -902,7 +902,7 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
         suppressed, since students can't sign in there anyway. Uses the deck owner because
         the suspension middleware signs everyone else out (#1734)."""
         active_sem = SiteConfig.get().active_semester
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
         # both clocks lapsed = suspended (tenant.is_suspended)

@@ -217,10 +217,25 @@ class Grade(IsAPrereqMixin, models.Model):
             return False
 
 
+class SemesterQuerySet(models.query.QuerySet):
+
+    def upcoming(self):
+        """Semesters being set up, which students can't join yet."""
+        return self.filter(status=Semester.Status.UPCOMING)
+
+    def open(self):
+        """Semesters students can currently be registered in."""
+        return self.filter(status=Semester.Status.OPEN)
+
+    def archived(self):
+        """Semesters that have been archived: final marks recorded, read-only."""
+        return self.filter(status=Semester.Status.ARCHIVED)
+
+
 class SemesterManager(models.Manager):
 
     def get_queryset(self):
-        return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
+        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day')
 
     def get_current(self, as_queryset=False):
         if as_queryset:
@@ -237,9 +252,9 @@ class SemesterManager(models.Manager):
         """
         active_sem = self.get_current()
 
-        # This semester has already been closed
-        if active_sem.closed:
-            return Semester.CLOSED
+        # This semester has already been archived
+        if active_sem.is_archived:
+            return Semester.ALREADY_ARCHIVED
 
         # There are still quests awaiting approval, can't close!
         if QuestSubmission.objects.all_awaiting_approval():
@@ -255,7 +270,7 @@ class SemesterManager(models.Manager):
 
                 QuestSubmission.objects.remove_in_progress()
 
-                active_sem.closed = True
+                active_sem.status = Semester.Status.ARCHIVED
                 active_sem.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
@@ -268,9 +283,21 @@ def default_end_date():
 
 
 class Semester(models.Model):
-    CLOSED = -1
+    """A period of time that student course registrations, quest submissions, and XP belong to.
+
+    A semester moves through a one-way lifecycle (see Status): it is set up while UPCOMING,
+    students earn XP in it while OPEN, and archiving records their final marks and makes it
+    ARCHIVED, which is terminal.
+    """
+    ALREADY_ARCHIVED = -1
     QUEST_AWAITING_APPROVAL = -2
     STUDENTS_WITH_NEGATIVE_XP = -3
+
+    class Status(models.TextChoices):
+        """The stages of a semester's lifecycle, in order. Archiving is one-way."""
+        UPCOMING = 'upcoming', 'Upcoming'
+        OPEN = 'open', 'Open'
+        ARCHIVED = 'archived', 'Archived'
 
     name = models.CharField(
         blank=True, unique=False, max_length=50,
@@ -279,9 +306,10 @@ class Semester(models.Model):
 
     first_day = models.DateField(null=True, default=date.today)
     last_day = models.DateField(null=True, default=default_end_date)
-    closed = models.BooleanField(
-        default=False,
-        help_text="All student courses in this semester have been closed and final marks recorded."
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.UPCOMING,
+        help_text="Upcoming: still being set up. Open: students can be registered in it and earn XP. "
+                  "Archived: final marks have been recorded and it can no longer be changed."
     )
 
     objects = SemesterManager()
@@ -297,11 +325,26 @@ class Semester(models.Model):
             return self.first_day.strftime("%b-%Y")
         return f"Semester {self.pk}"
 
-    def active_by_date(self):
-        # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
-        return (self.last_day + timedelta(days=5)) > date.today() > (self.first_day - timedelta(days=20))
+    @property
+    def is_upcoming(self):
+        """Whether this semester is still being set up (students can't join it yet)."""
+        return self.status == self.Status.UPCOMING
 
+    @property
     def is_open(self):
+        """Whether students can be registered in this semester and earn XP in it.
+
+        This is the lifecycle status, not a date comparison: a semester stays open until
+        it is archived, even once its last day has passed (see is_within_dates()).
+        """
+        return self.status == self.Status.OPEN
+
+    @property
+    def is_archived(self):
+        """Whether this semester's final marks have been recorded, making it read-only."""
+        return self.status == self.Status.ARCHIVED
+
+    def is_within_dates(self):
         """
         :return: True if the current date falls within the semeseter's first and last day (inclusive)
         """
@@ -311,7 +354,7 @@ class Semester(models.Model):
 
     def has_ended(self):
         """Whether the semester's last day is in the past (local date, consistent with
-        is_open()). Used by the semester list to flag an active semester that has run
+        is_within_dates()). Used by the semester list to flag an open semester that has run
         past its end date and is probably due to be archived.
 
         Returns:

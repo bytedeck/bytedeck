@@ -60,7 +60,8 @@ def get_active_semester():
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
         # is this only needed for tests? If not then need a unique username probably, not this!
-        semester, created = Semester.objects.get_or_create()
+        # a deck's first semester starts open, so students can join a course right away
+        semester, created = Semester.objects.get_or_create(defaults={'status': Semester.Status.OPEN})
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
     return semester.id
@@ -393,11 +394,11 @@ class SiteConfig(models.Model):
     def has_no_open_semester(self):
         """Whether there is no semester open for students to join a course into (issue #2060).
 
-        Closing a semester (``Semester.complete_active_semester``) sets ``closed=True`` but leaves
-        it as the active semester, so "no open semester" means the active semester is missing or
-        flagged closed. Used to block student registration and to warn staff.
+        Archiving a semester (``Semester.complete_active_semester``) leaves it as the active
+        semester, so "no open semester" means the active semester is missing or no longer
+        open. Used to block student registration and to warn staff.
         """
-        return self.active_semester is None or self.active_semester.closed
+        return self.active_semester is None or not self.active_semester.is_open
 
     @classmethod
     def cache_key(cls):

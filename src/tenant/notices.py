@@ -84,9 +84,9 @@ def close_semester_on_new_suspension(deck):
             returned += 1
 
         result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
-        if result == Semester.CLOSED:
+        if result == Semester.ALREADY_ARCHIVED:
             # nothing was open; the episode is recorded so this isn't re-checked
-            return 'semester was already closed'
+            return 'semester was already archived'
         if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
             # can't happen (submissions were just returned; negative XP is clamped),
             # but if it ever does, roll everything back and retry next run instead
