@@ -1,10 +1,12 @@
 from datetime import timedelta
+from email.utils import formataddr
 from model_bakery import baker
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.mail import EmailMultiAlternatives
+from django.test import override_settings
 from django.utils import timezone
 from django_tenants.utils import get_tenant_model
 
@@ -139,8 +141,8 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
         self.assertEqual(type(email), EmailMultiAlternatives)
         self.assertEqual(email.to, [self.test_student1.email])
-        # Default deck short name is "Deck"
-        self.assertEqual(email.subject, "Deck Notifications")
+        # Subject names the deck's domain (the host of root_url) so recipients can tell decks apart (#2338)
+        self.assertEqual(email.subject, "Notifications from test.com")
 
         # https://stackoverflow.com/questions/62958111/how-to-display-html-content-of-an-emailmultialternatives-mail-object
         html_content = email.alternatives[0][0]
@@ -150,6 +152,28 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notifications[0]), html_content)  # Links to notifications
         self.assertIn(str(notifications[1]), html_content)  # Links to notifications
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@bytedeck.com")
+    def test_generate_notification_email__from_names_the_deck(self):
+        """The From header shows the deck's domain as the sender name while keeping the
+        configured sending address, so recipients can tell which deck it's from (#2338)."""
+        baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        email = generate_notification_email(self.test_student1, "https://test.com")
+        self.assertEqual(email.from_email, formataddr(("test.com", "noreply@bytedeck.com")))
+
+    @override_settings(DEFAULT_FROM_EMAIL="")
+    def test_generate_notification_email__from_falls_back_when_unconfigured(self):
+        """With no DEFAULT_FROM_EMAIL configured, the From is left to Django's default (#2338)."""
+        baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        email = generate_notification_email(self.test_student1, "https://test.com")
+        # from_email=None -> EmailMessage substitutes settings.DEFAULT_FROM_EMAIL (here "")
+        self.assertEqual(email.from_email, "")
 
     def test_generate_notification_email__staff(self):
         """ Test that staff notification emails include quests awaiting approval """
