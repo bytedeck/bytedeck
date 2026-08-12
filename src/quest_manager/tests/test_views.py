@@ -678,7 +678,14 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assert404('quests:approve', args=[s1_pk])
 
     def test_submission__quest_not_visible_returns_404(self):
-        """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
+        """Unpublishing a quest hides an in-progress submission of it: the student gets a 404,
+        because the default QuestSubmission queryset excludes unpublished quests and the view's
+        fallback lookup only covers completed submissions.
+
+        A completed submission survives the quest being unpublished and still renders (see
+        test_submission__unavailable_quest_shows_notice_and_hides_form_for_student), so only
+        work the student hadn't finished disappears on them.
+        """
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -687,7 +694,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.quest1.save()
         self.assertFalse(self.quest1.published)
 
-        # TODO: should redirect, not 404?
+        self.assertFalse(self.sub1.is_completed)
         self.assert404('quests:submission', args=[self.sub1.pk])
 
     def test_submission__xp_entered_remains_when_submission_returned(self):
@@ -2166,7 +2173,10 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     def test_post_save_button__defaults(self):
-        """ Save button should redirect to the quest detail view, no changes to form data"""
+        """Posting the prereq back unchanged saves nothing: the view redirects to the quest
+        detail page, the prereq keeps its original values, and no "Prerequisites have been
+        updated" message is shown (the has_changed() early return, issue #1980).
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2191,8 +2201,25 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
+        # nothing was saved: the same single prereq, with the values it started with
+        prereqs = self.parent_quest.prereqs()
+        self.assertEqual(prereqs.count(), 1)
+        unchanged_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(unchanged_prereq.prereq_object, self.prereq_quest)
+        self.assertEqual(unchanged_prereq.prereq_count, 1)
+        # the alternate (OR) half is still empty, as add_simple_prereqs left it: the form posts
+        # or_prereq_count but no or_prereq_object, so a save would be free to write to these
+        self.assertIsNone(unchanged_prereq.or_prereq_object)
+        self.assertEqual(unchanged_prereq.or_prereq_count, 1)
+
+        # and the teacher isn't told anything was updated
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
+
     def test_post_save_button__delete(self):
-        """ Flag the prereq for deletion by setting the DELETE field to true"""
+        """Flagging the prereq for deletion (DELETE field true) removes it: the quest is left
+        with no prerequisites and the Prereq row is gone from the database.
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2218,11 +2245,15 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
-        # TODO should no longer have the prereq.. but this doesn't work for some reason....
-        # self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        # the prereq was deleted, so the quest has none left
+        self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        self.assertFalse(Prereq.objects.filter(pk=self.existing_prereq.pk).exists())
 
     def test_post_save_button__new_values(self):
-        """ New prereq data in form should change the prereqs for the parent quest."""
+        """New prereq data in the form changes the parent quest's prereqs: the existing row is
+        updated in place to point at a different quest (with a new count), and the extra form
+        adds a second prereq.
+        """
         self.client.force_login(self.test_teacher)
         new_quest = baker.make(Quest, name="New Quest")
         new_quest_2 = baker.make(Quest, name="New Quest 2")
@@ -2261,10 +2292,17 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         prereqs = self.parent_quest.prereqs()
         self.assertEqual(prereqs.count(), 2)
 
-        # TODO For some reason the original prereq is not getting replaced by the first form in the formset.
-        # print(prereqs)
-        # self.assertEqual(prereqs[0].prereq_object, new_quest)
-        # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
+        # the first form edited the existing prereq row rather than adding another one, so it
+        # now requires new_quest (3 times) instead of the prereq_quest it was created with.
+        # Looked up by pk because prereqs() is unordered.
+        updated_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(updated_prereq.prereq_object, new_quest)
+        self.assertEqual(updated_prereq.prereq_count, 3)
+
+        # the second (extra) form added the other quest as a new prereq
+        added_prereq = prereqs.exclude(pk=self.existing_prereq.pk).get()
+        self.assertEqual(added_prereq.prereq_object, new_quest_2)
+        self.assertEqual(added_prereq.prereq_count, 1)
 
     def _changed_formset_data(self):
         """Build POST data that changes the existing prereq (prereq_count 1 -> 3) so
@@ -2322,8 +2360,8 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(any('being updated' in m and scape.name in m for m in messages))
 
-        # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
-        # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
+        # the edit itself was saved: the same prereq row, with its new count
+        self.assertEqual(self.parent_quest.prereqs().get(pk=self.existing_prereq.pk).prereq_count, 3)
 
 
 class QuestCopyViewTest(ByteDeckTenantTestCase):

@@ -104,7 +104,14 @@ git pull                      # master (prod) or staging (staging host)
 
 `production/server-update.sh` does the following:
 
-1. `docker compose ... build` the images.
+1. `docker compose ... build --pull` the images. `--pull` re-fetches each base
+   image (`python:3.12-slim`, `nginx:stable`) so a deploy builds on the current
+   base and picks up its OS-level security updates, rather than on an older copy
+   of the tag left on the host. The pull is best effort: if it fails (say the
+   registry is unreachable) the build is retried without `--pull`, using the base
+   images already on the host, so an outage can still not block a deploy or a
+   rollback. A build that fails for any other reason fails the retry too and
+   stops the deploy.
 2. Copy `production/systemd/bytedeck.com.service` into `/etc/systemd/system/`.
 3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
    `redis-host-setup.service` host tuning (disables THP, sets
