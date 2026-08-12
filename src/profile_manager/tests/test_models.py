@@ -143,7 +143,14 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertEqual(str(self.user.profile), self.user.username)
 
     def _new_user_notifications_for(self, user):
-        """The 'New user registered' notifications whose target is this user's profile."""
+        """Return the 'New user registered' notifications whose target is this user's profile.
+
+        Args:
+            user: the User whose profile is the notification target to filter on.
+
+        Returns:
+            A lazy Notification QuerySet of the matching 'New user registered' notifications.
+        """
         return Notification.objects.filter(
             verb__icontains="New user registered",
             target_content_type=ContentType.objects.get_for_model(Profile),
