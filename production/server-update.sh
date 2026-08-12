@@ -23,7 +23,18 @@ docker builder prune -f || echo "WARN: docker builder prune failed; continuing."
 # deploy, so the OS-level security updates published under those tags reach the
 # containers: Docker builds on whatever copy of a tag is already on the host,
 # however old it is, and these tags are updated in place upstream.
-$COMPOSE build --pull
+#
+# The pull is best effort, like the prunes above. --pull makes the build require
+# the registry, and it aborts rather than falling back when the registry cannot
+# be reached, which would leave us unable to deploy (or to roll back, exactly
+# when speed matters) during a registry outage. Retrying without it builds on the
+# base already on the host, trading a possibly stale base for a deploy that still
+# works offline. A build that fails for any other reason fails again on the
+# retry, so real errors still stop the deploy.
+$COMPOSE build --pull || {
+  echo "WARN: build with --pull failed (registry unreachable?); retrying with the base images already on this host."
+  $COMPOSE build
+}
 
 # Update the web app's systemd unit file
 sudo cp production/systemd/bytedeck.com.service /etc/systemd/system/bytedeck.com.service
