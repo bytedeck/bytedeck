@@ -152,6 +152,12 @@ Suggested alarms:
   `mem_used_percent` > 85% and `disk_used_percent` > 85% so the next OOM pages
   you *before* it happens. (Sentry, issue #2005, would also surface the app
   errors.)
+- **Redis has no CloudWatch metrics either**, now that it is a container on this
+  host rather than ElastiCache. So there is no alarm to create for it yet, and
+  the `used_memory` / `maxmemory` and `errorstat_OOM` checks in §6 are a manual
+  stopgap: with `noeviction`, hitting the cap makes celery publishes fail, not
+  just cache writes. The durable fix is a redis exporter feeding the same
+  CloudWatch agent as the host metrics above, alarming at ~80% of the cap.
 
 **Give every one of them a notification action.** An alarm with no action just
 changes colour in a console nobody is watching, which defeats the whole reason
@@ -216,6 +222,12 @@ Year ____  peak: RAM used ____  swap ____  RDS conns ____/185  RDS CPU ____%  re
 1. In `.env`, revert `UWSGI_EXTRA_ARGS` (back to the in-file default) and
    restore `REDIS_MAXMEMORY=512mb` **before** downsizing: a 1 GB redis cap on
    the 3.8 GiB `c5a.large` starves uWSGI/celery and recreates the OOM.
+   Lowering the cap needs no check of what redis is holding first: persistence
+   is disabled (`--save ""`, `--appendonly no`) and the restart in step 2 is a
+   full `down`/`up`, so redis comes back empty and the smaller cap applies to a
+   nearly empty dataset. Queued tasks are wiped along with it, which this setup
+   already accepts (broker and cache are both disposable), so do the restart
+   off-peak when nothing important is mid-flight.
 2. `sudo systemctl restart bytedeck.com`, confirm the site is healthy, and check
    that redis picked up the lower cap. Redis publishes no host port, so the
    check goes through the container:
