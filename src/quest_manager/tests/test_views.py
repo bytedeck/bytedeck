@@ -678,7 +678,14 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assert404('quests:approve', args=[s1_pk])
 
     def test_submission__quest_not_visible_returns_404(self):
-        """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
+        """Unpublishing a quest hides an in-progress submission of it: the student gets a 404,
+        because the default QuestSubmission queryset excludes unpublished quests and the view's
+        fallback lookup only covers completed submissions.
+
+        A completed submission survives the quest being unpublished and still renders (see
+        test_submission__unavailable_quest_shows_notice_and_hides_form_for_student), so only
+        work the student hadn't finished disappears on them.
+        """
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -687,7 +694,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.quest1.save()
         self.assertFalse(self.quest1.published)
 
-        # TODO: should redirect, not 404?
+        self.assertFalse(self.sub1.is_completed)
         self.assert404('quests:submission', args=[self.sub1.pk])
 
     def test_submission__xp_entered_remains_when_submission_returned(self):
@@ -1864,6 +1871,17 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             'time_available': "14:30:59",
         }
 
+    def _make_TA(self, username='test_ta'):
+        """Create and return a TA (a student with permission to work on quest drafts).
+
+        Profiles are created automatically by a User post_save signal, so the flag goes on
+        the profile that already exists.
+        """
+        test_ta = User.objects.create_user(username)
+        test_ta.profile.is_TA = True
+        test_ta.profile.save()
+        return test_ta
+
     def test_quest_form__quick_reply_field_below_tags(self):
         """The Quick Reply Text field renders below the Tags field on the quest form (#2114)."""
         self.client.force_login(self.test_teacher)
@@ -1881,6 +1899,45 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             response = self.client.get(url)
             self.assertContains(response, 'data-warn-unsaved')
             self.assertContains(response, 'warn-unsaved-changes.js')
+
+    def test_quest_form__manage_questions_button_links_to_the_quests_questions(self):
+        """Editing a quest offers a Manage Questions button linking to that quest's question list (#2347)."""
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+
+        response = self.client.get(reverse('quests:quest_update', args=[quest.pk]))
+
+        # assert the label and the href together, so the test can't pass on a button that
+        # merely sits near an unrelated occurrence of the URL
+        questions_url = reverse('questions:list', args=[quest.pk])
+        self.assertContains(response, f'href="{questions_url}">Manage Questions</a>')
+
+    def test_quest_form__manage_questions_button_disabled_when_creating(self):
+        """On the create form there is no quest to hang questions on yet, so the button is disabled (#2347)."""
+        self.client.force_login(self.test_teacher)
+
+        content = self.client.get(reverse('quests:quest_create')).content.decode()
+
+        self.assertIn('Manage Questions', content)
+        # the disabled placeholder is a <button>, not a link to the (non-existent) quest's questions
+        self.assertIn('disabled title="You need to create this new quest first, '
+                      'before you can add submission questions."', content)
+        self.assertNotIn('/questions/quest/', content)
+
+    def test_quest_form__manage_questions_button_hidden_from_tas(self):
+        """TAs can edit their draft quests but can't manage questions (staff-only), so they don't see the button (#2347)."""
+        test_ta = User.objects.create_user('test_ta_questions')
+        test_ta.profile.is_TA = True  # profiles are created automatically via User post_save signal
+        test_ta.profile.save()
+        self.client.force_login(test_ta)
+
+        # a TA may only edit an unpublished quest they are the editor of
+        quest = Quest.objects.create(**self.minimal_valid_form_data, editor=test_ta, published=False)
+
+        content = self.client.get(reverse('quests:quest_update', args=[quest.pk])).content.decode()
+
+        self.assertNotIn('Manage Questions', content)
+        self.assertNotIn(reverse('questions:list', args=[quest.pk]), content)
 
     def test_quest_create__teacher_can_create_and_delete(self):
         """Teachers can create quests and delete both live and archived quests."""
@@ -1922,9 +1979,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_create__TA_creates_drafts_and_deletes_own(self):
         """TAs can create draft quests (as editor) and delete their own but not others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # Can access the Create view
@@ -1998,9 +2053,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_update__ta_can_update_own_draft(self):
         """TAs can update only their own unpublished quests, not published ones or others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # make a quest for us to update, use the form data so easier to track what we're updating
@@ -2065,9 +2118,85 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn(scape.name, str(messages[0]))
 
-    # TODO
-    # TAs should not be able to make a quest published
-    # When a quest is published by a teacher, the editor should be removed
+    def test_quest_create__TA_publishing_is_overridden(self):
+        """A TA who posts published (the field is on their form, only hidden) still gets a draft
+        with themselves as editor: QuestFormViewMixin.form_valid overrides both, so a hand-made
+        POST can't put a TA's quest in front of students.
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,  # and they can't hand the draft to someone else
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+
+    def test_quest_update__TA_publishing_their_draft_is_overridden(self):
+        """The same override applies when a TA updates the draft they own: it stays unpublished
+        and stays theirs, so publishing remains a teacher's decision.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(test_ta)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
+
+    def test_quest_update__teacher_publishing_removes_the_editor(self):
+        """When a teacher publishes a TA's draft, the TA's editor access is removed with it, so
+        they can no longer edit a quest students are now working on.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertTrue(quest.published)
+        self.assertIsNone(quest.editor)
+        # and the TA has indeed lost access to it
+        self.assertFalse(quest.is_editable(test_ta))
+
+    def test_quest_update__teacher_leaving_a_quest_unpublished_keeps_the_editor(self):
+        """A teacher editing a draft without publishing it leaves the TA as editor, so the TA can
+        keep working on it.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        # 'published' is a checkbox: leaving it out of the POST is how the form says "draft"
+        form_data = {**self.minimal_valid_form_data, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
 
     def test_quest_create__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
@@ -2166,7 +2295,10 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     def test_post_save_button__defaults(self):
-        """ Save button should redirect to the quest detail view, no changes to form data"""
+        """Posting the prereq back unchanged saves nothing: the view redirects to the quest
+        detail page, the prereq keeps its original values, and no "Prerequisites have been
+        updated" message is shown (the has_changed() early return, issue #1980).
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2191,8 +2323,25 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
+        # nothing was saved: the same single prereq, with the values it started with
+        prereqs = self.parent_quest.prereqs()
+        self.assertEqual(prereqs.count(), 1)
+        unchanged_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(unchanged_prereq.prereq_object, self.prereq_quest)
+        self.assertEqual(unchanged_prereq.prereq_count, 1)
+        # the alternate (OR) half is still empty, as add_simple_prereqs left it: the form posts
+        # or_prereq_count but no or_prereq_object, so a save would be free to write to these
+        self.assertIsNone(unchanged_prereq.or_prereq_object)
+        self.assertEqual(unchanged_prereq.or_prereq_count, 1)
+
+        # and the teacher isn't told anything was updated
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
+
     def test_post_save_button__delete(self):
-        """ Flag the prereq for deletion by setting the DELETE field to true"""
+        """Flagging the prereq for deletion (DELETE field true) removes it: the quest is left
+        with no prerequisites and the Prereq row is gone from the database.
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2218,11 +2367,15 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
-        # TODO should no longer have the prereq.. but this doesn't work for some reason....
-        # self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        # the prereq was deleted, so the quest has none left
+        self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        self.assertFalse(Prereq.objects.filter(pk=self.existing_prereq.pk).exists())
 
     def test_post_save_button__new_values(self):
-        """ New prereq data in form should change the prereqs for the parent quest."""
+        """New prereq data in the form changes the parent quest's prereqs: the existing row is
+        updated in place to point at a different quest (with a new count), and the extra form
+        adds a second prereq.
+        """
         self.client.force_login(self.test_teacher)
         new_quest = baker.make(Quest, name="New Quest")
         new_quest_2 = baker.make(Quest, name="New Quest 2")
@@ -2261,10 +2414,17 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         prereqs = self.parent_quest.prereqs()
         self.assertEqual(prereqs.count(), 2)
 
-        # TODO For some reason the original prereq is not getting replaced by the first form in the formset.
-        # print(prereqs)
-        # self.assertEqual(prereqs[0].prereq_object, new_quest)
-        # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
+        # the first form edited the existing prereq row rather than adding another one, so it
+        # now requires new_quest (3 times) instead of the prereq_quest it was created with.
+        # Looked up by pk because prereqs() is unordered.
+        updated_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(updated_prereq.prereq_object, new_quest)
+        self.assertEqual(updated_prereq.prereq_count, 3)
+
+        # the second (extra) form added the other quest as a new prereq
+        added_prereq = prereqs.exclude(pk=self.existing_prereq.pk).get()
+        self.assertEqual(added_prereq.prereq_object, new_quest_2)
+        self.assertEqual(added_prereq.prereq_count, 1)
 
     def _changed_formset_data(self):
         """Build POST data that changes the existing prereq (prereq_count 1 -> 3) so
@@ -2322,8 +2482,8 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(any('being updated' in m and scape.name in m for m in messages))
 
-        # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
-        # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
+        # the edit itself was saved: the same prereq row, with its new count
+        self.assertEqual(self.parent_quest.prereqs().get(pk=self.existing_prereq.pk).prereq_count, 3)
 
 
 class QuestCopyViewTest(ByteDeckTenantTestCase):
