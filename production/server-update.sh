@@ -18,7 +18,12 @@ COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 docker image prune -f || echo "WARN: docker image prune failed; continuing."
 docker builder prune -f || echo "WARN: docker builder prune failed; continuing."
 
-$COMPOSE build
+# Build on freshly pulled base images. --pull re-fetches each FROM image
+# (python:3.12-slim for web/celery/celery-beat, nginx:stable for nginx) on every
+# deploy, so the OS-level security updates published under those tags reach the
+# containers: Docker builds on whatever copy of a tag is already on the host,
+# however old it is, and these tags are updated in place upstream.
+$COMPOSE build --pull
 
 # Update the web app's systemd unit file
 sudo cp production/systemd/bytedeck.com.service /etc/systemd/system/bytedeck.com.service
