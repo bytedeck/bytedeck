@@ -124,6 +124,18 @@ class QuestForm(forms.ModelForm):
             'Edit Prerequisites</a>' \
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %} '
+
+        # Questions are managed on their own page, so link to it from the form where the rest of
+        # the quest is configured (#2347); the detail page's "Submission Questions" panel is the
+        # other way in. Staff-only, because every view in the questions app requires staff and
+        # TAQuestForm inherits this layout, so an unguarded button would 403 for a TA.
+        questions_btn = '{% if request.user.is_staff %}' \
+            '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'questions:list\' object.id %}">' \
+            'Manage Questions</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add submission questions.">Manage Questions</button>' \
+            '{% endif %}' \
             '{% endif %}'
 
         self.helper = FormHelper()
@@ -131,6 +143,7 @@ class QuestForm(forms.ModelForm):
             HTML(cancel_btn),
             HTML(submit_btn),
             HTML(prereqs_btn),
+            HTML(questions_btn),
             Div(
                 'name',
                 'xp',
