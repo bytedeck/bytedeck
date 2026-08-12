@@ -7,12 +7,45 @@ that no other check covers: CI only ever renders the development overlay, so a
 production-only regression (an app port published straight to the host, say)
 would otherwise reach a deploy unnoticed.
 """
+import re
 import subprocess
 import sys
 
 import yaml
 
 APP_SERVICES = ("web", "celery", "celery-beat")
+REQUIRED_SERVICES = APP_SERVICES + ("redis", "nginx")
+
+# A json-file `max-size`: a number with an optional unit, e.g. "10m". Docker
+# documents k/m/g and also accepts the "mb" spelling, so both are allowed here.
+LOG_SIZE = re.compile(r"^(\d+(?:\.\d+)?)(b|[kmg]b?)?$", re.IGNORECASE)
+
+
+def runs_as_root(user):
+    """Return whether a Compose `user:` value would run the container as root.
+
+    `user` is the rendered value, which Compose accepts as `UID[:GID]` or
+    `name[:group]`, so only the part before the first colon identifies the user
+    and `0:1000` is as much root as `0`. None means no override, which is not
+    root: the image's own USER applies, and that is asserted against the built
+    image by the "Application image" job in the workflow.
+    """
+    if user is None:
+        return False
+    return str(user).split(":", 1)[0].strip().lower() in ("0", "root")
+
+
+def log_size_is_bounded(size):
+    """Return whether a json-file `max-size` option actually bounds the log.
+
+    `size` is the rendered option value. Truthiness is not enough here, since
+    `"0"` and a typo'd size are both non-empty strings while neither bounds
+    anything, so the value has to parse as a positive Docker size.
+    """
+    if size is None:
+        return False
+    match = LOG_SIZE.match(str(size).strip())
+    return bool(match) and float(match.group(1)) > 0
 
 
 def render():
@@ -53,10 +86,20 @@ def main():
         if not ok:
             failures.append(msg)
 
+    # Everything below describes a specific service, so a service that is not
+    # there at all would otherwise read as compliant: `.get(name, {})` finds no
+    # published port on a `celery` that does not exist. Establish they are all
+    # present first, and say so plainly rather than asserting about nothing.
+    for name in REQUIRED_SERVICES:
+        check(name in services, f"{name} is defined")
+    if failures:
+        print(f"\n{len(failures)} failure(s): production is missing a service, so the rest was not checked")
+        return 1
+
     # Nothing but nginx may reach the host: the app must not be reachable around
     # nginx, which terminates TLS and enforces the Host check.
     for name in APP_SERVICES + ("redis",):
-        check(not services.get(name, {}).get("ports"), f"{name} publishes no host port")
+        check(not services[name].get("ports"), f"{name} publishes no host port")
     check(
         sorted(f"{p.get('published')}->{p.get('target')}" for p in services["nginx"]["ports"])
         == ["443->8088", "80->8080"],
@@ -65,7 +108,7 @@ def main():
 
     # Production runs the built image, not the host checkout.
     for name in APP_SERVICES:
-        check(not services.get(name, {}).get("volumes"), f"{name} mounts no source volume")
+        check(not services[name].get("volumes"), f"{name} mounts no source volume")
 
     # Nothing may be pinned to root here. The rendered config cannot see the
     # image's own USER, so this only catches an explicit root override; that the
@@ -73,8 +116,7 @@ def main():
     # image by the "Application image" job in
     # .github/workflows/production_config.yml.
     for name in APP_SERVICES:
-        check(services.get(name, {}).get("user") not in ("0:0", "root", "0"),
-              f"{name} is not pinned to root")
+        check(not runs_as_root(services[name].get("user")), f"{name} is not pinned to root")
 
     # Tier separation: nginx must have no route to redis.
     nginx_nets = set(services["nginx"].get("networks") or {})
@@ -87,7 +129,8 @@ def main():
     # Restart policy and bounded logs apply everywhere in production.
     for name, svc in services.items():
         check(svc.get("restart") == "unless-stopped", f"{name} restarts unless stopped")
-        check(bool(svc.get("logging", {}).get("options", {}).get("max-size")), f"{name} bounds its log size")
+        check(log_size_is_bounded(svc.get("logging", {}).get("options", {}).get("max-size")),
+              f"{name} bounds its log size")
 
     print(f"\n{len(failures)} failure(s)")
     return 1 if failures else 0

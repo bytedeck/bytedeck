@@ -34,6 +34,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# These jobs run code from the pull request, and the only thing here that needs
+# the token is `actions/checkout`. Read-only keeps that code from receiving a
+# writable GITHUB_TOKEN if the repository or org default ever grants one.
+permissions:
+  contents: read
+
 jobs:
   config-contract:
     name: Production config contract
