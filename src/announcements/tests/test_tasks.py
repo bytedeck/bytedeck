@@ -1,7 +1,10 @@
 from datetime import timedelta
+from email.utils import formataddr
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.db import connection
+from django.test import override_settings
 from django.utils import timezone
 from django.conf import settings
 
@@ -107,6 +110,22 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
             }
         )
         self.assertTrue(task_result.successful())
+
+    @override_settings(DEFAULT_FROM_EMAIL="noreply@bytedeck.com")
+    def test_send_announcement_emails__names_the_deck(self):
+        """The announcement email's subject and From name the deck's domain (host of root_url)
+        so recipients can tell which deck it's from (#2338)."""
+        mail.outbox = []
+        tasks.send_announcement_emails.apply(
+            kwargs={
+                "content": "Hello",
+                "root_url": "https://example.com",
+                "absolute_url": "/link/to/announcement/",
+            }
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].subject, "Announcement from example.com")
+        self.assertEqual(mail.outbox[0].from_email, formataddr(("example.com", "noreply@bytedeck.com")))
 
     def test_publish_announcement__clears_draft_and_removes_task(self):
         """Publishing marks the announcement non-draft, disables auto_publish, and removes its periodic task."""

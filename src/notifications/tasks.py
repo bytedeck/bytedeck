@@ -1,4 +1,8 @@
 from datetime import timedelta
+from email.utils import formataddr
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -12,8 +16,6 @@ from quest_manager.models import QuestSubmission
 from notifications.models import Notification
 
 from profile_manager.models import Profile
-
-from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -72,7 +74,11 @@ def get_notification_emails(root_url):
 def generate_notification_email(user, root_url):
     """Generate an email notification from user"""
     html_template = get_template('notifications/email_notifications.html')
-    subject = f'{SiteConfig.get().site_name_short} Notifications'
+    # Name the deck the email is from so recipients can tell decks apart even when a deck
+    # hasn't customised its logo (#2338). root_url is the deck's root URL, so its host is
+    # the deck's domain (e.g. "deckname.bytedeck.com"); .hostname drops any scheme/port.
+    deck_domain = urlsplit(root_url).hostname or root_url
+    subject = f'Notifications from {deck_domain}'
     to_email_address = user.email
     unread_notifications = Notification.objects.all_unread(user)
     submissions_awaiting_approval = None
@@ -94,7 +100,12 @@ def generate_notification_email(user, root_url):
             'root_url': root_url,
             'profile_edit_url': reverse('profiles:profile_edit_own')
         })
-        email_msg = EmailMultiAlternatives(subject, text_content, to=[to_email_address])
+        # Show the deck's domain as the sender name so a recipient can tell which deck an
+        # email is from at a glance, while keeping the actual sending address (the one the
+        # mail server is authorised for) unchanged (#2338). Fall back to the default sender
+        # when DEFAULT_FROM_EMAIL isn't configured.
+        from_email = formataddr((deck_domain, settings.DEFAULT_FROM_EMAIL)) if settings.DEFAULT_FROM_EMAIL else None
+        email_msg = EmailMultiAlternatives(subject, text_content, from_email=from_email, to=[to_email_address])
         email_msg.attach_alternative(html_content, "text/html")
 
         return email_msg
