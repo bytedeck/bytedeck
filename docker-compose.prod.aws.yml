@@ -92,13 +92,17 @@ services:
     ports:
       - "443:8088"
       - "80:8080"
-    # Waiting for web to pass its healthcheck (rather than merely to exist)
-    # means the `web` hostname resolves and answers before nginx resolves its
-    # upstream at startup, which is the condition nginx needs to proxy without
-    # a manual reload.
+    # Start ordering only. nginx must come up straight away, without waiting
+    # for web to pass its healthcheck: web spends minutes running
+    # migrate_schemas over every tenant schema and then collectstatic before
+    # uwsgi binds :8000, and nginx serves the maintenance page for that whole
+    # window. Gating on service_healthy would leave 443 unbound until the
+    # migrations finished, so visitors would get a connection error instead of
+    # the "ByteDeck is updating" page. nginx re-resolves `web` at request time
+    # (see the resolver directive in nginx/bytedeck.conf.template), so it does
+    # not need the upstream to exist when it starts.
     depends_on:
-      web:
-        condition: service_healthy
+      - web
     # Runs as the host uid:gid because the Let's Encrypt certificates are
     # bind-mounted from the host and have to stay readable.
     user: $WUID:$WGID
