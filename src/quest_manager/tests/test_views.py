@@ -2207,6 +2207,10 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         unchanged_prereq = prereqs.get(pk=self.existing_prereq.pk)
         self.assertEqual(unchanged_prereq.prereq_object, self.prereq_quest)
         self.assertEqual(unchanged_prereq.prereq_count, 1)
+        # the alternate (OR) half is still empty, as add_simple_prereqs left it: the form posts
+        # or_prereq_count but no or_prereq_object, so a save would be free to write to these
+        self.assertIsNone(unchanged_prereq.or_prereq_object)
+        self.assertEqual(unchanged_prereq.or_prereq_count, 1)
 
         # and the teacher isn't told anything was updated
         messages = [str(m) for m in response.wsgi_request._messages]
