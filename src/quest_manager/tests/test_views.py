@@ -1900,6 +1900,45 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             self.assertContains(response, 'data-warn-unsaved')
             self.assertContains(response, 'warn-unsaved-changes.js')
 
+    def test_quest_form__manage_questions_button_links_to_the_quests_questions(self):
+        """Editing a quest offers a Manage Questions button linking to that quest's question list (#2347)."""
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+
+        response = self.client.get(reverse('quests:quest_update', args=[quest.pk]))
+
+        # assert the label and the href together, so the test can't pass on a button that
+        # merely sits near an unrelated occurrence of the URL
+        questions_url = reverse('questions:list', args=[quest.pk])
+        self.assertContains(response, f'href="{questions_url}">Manage Questions</a>')
+
+    def test_quest_form__manage_questions_button_disabled_when_creating(self):
+        """On the create form there is no quest to hang questions on yet, so the button is disabled (#2347)."""
+        self.client.force_login(self.test_teacher)
+
+        content = self.client.get(reverse('quests:quest_create')).content.decode()
+
+        self.assertIn('Manage Questions', content)
+        # the disabled placeholder is a <button>, not a link to the (non-existent) quest's questions
+        self.assertIn('disabled title="You need to create this new quest first, '
+                      'before you can add submission questions."', content)
+        self.assertNotIn('/questions/quest/', content)
+
+    def test_quest_form__manage_questions_button_hidden_from_tas(self):
+        """TAs can edit their draft quests but can't manage questions (staff-only), so they don't see the button (#2347)."""
+        test_ta = User.objects.create_user('test_ta_questions')
+        test_ta.profile.is_TA = True  # profiles are created automatically via User post_save signal
+        test_ta.profile.save()
+        self.client.force_login(test_ta)
+
+        # a TA may only edit an unpublished quest they are the editor of
+        quest = Quest.objects.create(**self.minimal_valid_form_data, editor=test_ta, published=False)
+
+        content = self.client.get(reverse('quests:quest_update', args=[quest.pk])).content.decode()
+
+        self.assertNotIn('Manage Questions', content)
+        self.assertNotIn(reverse('questions:list', args=[quest.pk]), content)
+
     def test_quest_create__teacher_can_create_and_delete(self):
         """Teachers can create quests and delete both live and archived quests."""
         # simulate a logged in teacher
