@@ -51,6 +51,44 @@ jobs:
       - name: Assert the production compose contract
         run: python production/tests/check_prod_compose.py
 
+  image:
+    name: Application image
+    runs-on: ubuntu-22.04
+    # Nothing here is worth running while the cheaper static check is failing.
+    needs: config-contract
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build the application image
+        run: docker build -t bytedeck-app:check .
+      - name: Assert the image runs unprivileged
+        # The rendered compose config cannot see the image's own USER, so the
+        # config contract can only catch an explicit root override. Production
+        # relies on this default, since it sets no `user:` on the app services.
+        run: |
+          user=$(docker image inspect -f '{{.Config.User}}' bytedeck-app:check)
+          if [ "$user" != "app" ]; then
+            echo "FAIL  image runs as '${user:-root}', expected 'app'"
+            exit 1
+          fi
+          echo "PASS  image runs as $user"
+      - name: Assert the build toolchain stayed out of the runtime image
+        # The whole point of the two-stage build: the compilers that build uwsgi
+        # belong to the builder stage, not to what production ships and runs.
+        run: |
+          if docker run --rm bytedeck-app:check bash -c 'command -v gcc' >/dev/null 2>&1; then
+            echo "FAIL  gcc is present in the runtime image; the build stage leaked into it"
+            exit 1
+          fi
+          echo "PASS  no compiler in the runtime image"
+      - name: Assert the healthcheck dependencies are installed
+        # celery-beat's healthcheck in docker-compose.yml runs pgrep, which
+        # comes from procps. Without it the container reports unhealthy forever.
+        run: |
+          docker run --rm bytedeck-app:check bash -c 'command -v pgrep' >/dev/null
+          echo "PASS  pgrep is available for the celery-beat healthcheck"
+
   topology:
     name: Production topology
     runs-on: ubuntu-22.04

@@ -70,7 +70,8 @@ def main():
     # Nothing may be pinned to root here. The rendered config cannot see the
     # image's own USER, so this only catches an explicit root override; that the
     # image itself defaults to a non-root user is asserted against the built
-    # image instead (see the image check in the workflow).
+    # image by the "Application image" job in
+    # .github/workflows/production_config.yml.
     for name in APP_SERVICES:
         check(services.get(name, {}).get("user") not in ("0:0", "root", "0"),
               f"{name} is not pinned to root")

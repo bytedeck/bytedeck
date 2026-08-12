@@ -98,8 +98,9 @@ visible, not quietly loop-restart. **Healthchecks** are shared (defined in
 
 The normal test suite runs the development overlay, so it never sees any of the
 above. Two checks under `production/tests/` cover it instead, wired up in
-`.github/workflows/production_config.yml` and runnable by hand from the repo
-root:
+`.github/workflows/production_config.yml` alongside a third job that builds the
+application image and asserts it runs as the unprivileged `app` user with no
+compiler left in it. Both scripts are runnable by hand from the repo root:
 
 ```bash
 python production/tests/check_prod_compose.py   # renders the prod config, asserts its invariants
