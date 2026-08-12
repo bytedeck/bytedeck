@@ -1,4 +1,4 @@
-Django>=5.2.16,<5.3
+Django>=5.2.17,<5.3  # 5.2.17 is a security release: admin URLField XSS (CVE-2026-15920) plus three other fixes
 
 # Version policy: floors are the versions currently in use; ceilings block the
 # next MAJOR (allowing backwards-compatible minor/patch updates), except where a
