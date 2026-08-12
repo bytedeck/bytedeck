@@ -2,7 +2,6 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
@@ -87,10 +86,6 @@ class BadgeTestModel(ByteDeckTenantTestCase):
     def setUpTestData(cls):
         """Create a Badge for the class tests."""
         cls.badge = baker.make(Badge)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_badge__creation(self):
         """A Badge is created and its str is its name."""
@@ -209,10 +204,6 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
 
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_user_badge_assertion_count__annotates_count_per_user(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
         the correct number of assertions for each user as an "assertion_count" annotation on the queryset"""
@@ -297,10 +288,6 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         cls.badge = Recipe(Badge, xp=20).make()
 
         cls.badge_assertion_recipe = Recipe(BadgeAssertion, user=cls.student, badge=cls.badge, semester=cls.sem)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_badge_assertion__creation(self):
         """A BadgeAssertion is created and its str is its badge's name."""

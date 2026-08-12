@@ -1,5 +1,34 @@
-from django.test import TestCase
+from django.conf import settings
+from django.test import SimpleTestCase, TestCase
 from django.template import Template, Context
+
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from siteconfig.models import SiteConfig
+from utilities.templatetags.utility_tags import checkcross, favicon_url, public_email_logo_url
+
+
+class CheckcrossFilterTest(SimpleTestCase):
+    """Tests for the checkcross filter's non-boolean fall-through."""
+
+    def test_checkcross__non_boolean_returns_none(self):
+        """A value that is neither True nor False maps to no icon (None)."""
+        self.assertIsNone(checkcross(None))
+
+
+class FaviconUrlTagTest(ByteDeckTenantTestCase):
+    """Tests for the favicon_url tag on a (non-public) tenant."""
+
+    def test_favicon_url__returns_siteconfig_favicon(self):
+        """On a tenant, favicon_url returns the deck's configured favicon URL.
+
+        A known favicon is configured first, then the tag is asserted against that exact URL
+        (computed independently of get_favicon_url) so the test can't pass on an empty fixture
+        where both sides would collapse to the same default.
+        """
+        config = SiteConfig.get()
+        config.favicon = 'favicon/known_test_favicon.png'
+        config.save()  # invalidates the SiteConfig cache via invalidate_siteconfig_cache_signal
+        self.assertEqual(favicon_url(), f"{settings.MEDIA_URL}favicon/known_test_favicon.png")
 
 
 class PossessiveFilterTest(TestCase):
@@ -26,3 +55,15 @@ class PossessiveFilterTest(TestCase):
         context = Context({"name": "Mary"})
         output = template.render(context)
         self.assertEqual(output, "Mary&#x27;s")
+
+
+class PublicEmailLogoUrlTagTest(SimpleTestCase):
+    """Tests for the platform wordmark tag used in ByteDeck's own emails."""
+
+    def test_public_email_logo_url__returns_the_configured_wordmark(self):
+        """The tag serves settings.PUBLIC_EMAIL_LOGO_URL verbatim: an absolute
+        URL (mail clients cannot resolve relative static paths) read from
+        settings rather than SiteConfig, so it also works on the public schema,
+        which has no SiteConfig."""
+        with self.settings(PUBLIC_EMAIL_LOGO_URL='https://cdn.example.com/wordmark.png'):
+            self.assertEqual(public_email_logo_url(), 'https://cdn.example.com/wordmark.png')

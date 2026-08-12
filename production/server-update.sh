@@ -10,7 +10,31 @@ cd "$(dirname "$0")/.."
 
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 
-$COMPOSE build
+# Reclaim disk before building so image layers and BuildKit cache left by earlier
+# deploys can't fill the host and fail the build mid-`pip install` ([Errno 28] No
+# space left on device). Only unused data is removed: dangling images (a previous
+# deploy's now-superseded image) and build cache. Named volumes (the Postgres
+# data) are never touched. Best-effort: a prune hiccup shouldn't fail the deploy.
+docker image prune -f || echo "WARN: docker image prune failed; continuing."
+docker builder prune -f || echo "WARN: docker builder prune failed; continuing."
+
+# Build on freshly pulled base images. --pull re-fetches each FROM image
+# (python:3.12-slim for web/celery/celery-beat, nginx:stable for nginx) on every
+# deploy, so the OS-level security updates published under those tags reach the
+# containers: Docker builds on whatever copy of a tag is already on the host,
+# however old it is, and these tags are updated in place upstream.
+#
+# The pull is best effort, like the prunes above. --pull makes the build require
+# the registry, and it aborts rather than falling back when the registry cannot
+# be reached, which would leave us unable to deploy (or to roll back, exactly
+# when speed matters) during a registry outage. Retrying without it builds on the
+# base already on the host, trading a possibly stale base for a deploy that still
+# works offline. A build that fails for any other reason fails again on the
+# retry, so real errors still stop the deploy.
+$COMPOSE build --pull || {
+  echo "WARN: build with --pull failed (registry unreachable?); retrying with the base images already on this host."
+  $COMPOSE build
+}
 
 # Update the web app's systemd unit file
 sudo cp production/systemd/bytedeck.com.service /etc/systemd/system/bytedeck.com.service
@@ -36,11 +60,6 @@ sudo systemctl enable redis-host-setup.service
 sudo systemctl restart redis-host-setup.service
 sudo systemctl enable bytedeck.com.service
 sudo systemctl restart bytedeck.com
-
-# Restart the nginx server: sometimes nginx doesn't reconnect to uwsgi after a
-# restart, and this helps when run manually. Best-effort: -T avoids needing a
-# TTY (so it works on the runner), and a failed reload shouldn't fail the deploy.
-$COMPOSE exec -T nginx nginx -s reload || echo "WARN: nginx reload failed; continuing."
 
 # Show logs. Follow them when run interactively; in an automated deploy (no TTY,
 # e.g. the CI runner) print a recent snapshot and exit so the job can finish.

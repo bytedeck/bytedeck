@@ -57,7 +57,10 @@ def save_task_to_public_schema(sender, instance, **kwargs):
     # We would want to change the `id` used by the `PeriodicTask` object.
     # e.g. A ClockedSchedule object's id saved with this task is 4 but it can be different when it was saved
     # to the public schema.
-    for schedule_type, schedule_model in schedules_map.items():
+    # django_celery_beat validates (via validate_unique on save) that a PeriodicTask has exactly
+    # one of clocked/interval/crontab/solar set before this pre_save signal fires, so exactly one
+    # schedule_type is non-None and the loop always breaks; it never falls through.
+    for schedule_type, schedule_model in schedules_map.items():  # pragma: no branch
         if task_dict[schedule_type] is not None:
             # Fetch the schedule from the current schema and get the details
             schedule_id = task_dict[schedule_type]

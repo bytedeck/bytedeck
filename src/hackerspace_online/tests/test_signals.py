@@ -1,10 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context, tenant_context
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.models import Tenant
 
 # from django.shortcuts import reverse
@@ -14,10 +13,8 @@ from tenant.models import Tenant
 User = get_user_model()
 
 
-class SignalTest(ViewTestUtilsMixin, ByteDeckTenantTestCase):
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        self.client = TenantClient(self.tenant)
+class SignalTest(ByteDeckTenantTestCase):
+    """Tests the signal handlers that keep the Site record in sync with tenant domain changes."""
 
     def test_handle_tenant_site_domain_update__long_domain_truncates_site_name(self):
         """A tenant whose full domain exceeds Site.name's 50-char limit is still

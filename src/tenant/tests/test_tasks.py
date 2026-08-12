@@ -132,15 +132,44 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
 
         from django.utils.timezone import localdate
 
-        from tenant.models import Tenant
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
 
         Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
-            trial_end_date=localdate() - timedelta(days=1), paid_until=None, max_active_users=80,
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None, max_active_users=80,
         )
 
         self.assertTrue(tasks.deck_status_check.apply().successful())
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.max_active_users, 80)
+
+    def test_deck_status_check__closes_semester_on_fresh_suspension(self):
+        """The nightly task closes a freshly suspended deck's open semester
+        (enforcement: runs even with notices report-only) and refreshes the
+        cached counts afterwards, so the deck comes out of the run with its
+        post-suspension state: semester closed, zero current students."""
+        from datetime import timedelta
+
+        from django.contrib.auth import get_user_model
+        from django.utils.timezone import localdate
+        from model_bakery import baker
+        from siteconfig.models import SiteConfig
+        from tenant.models import GRACE_PERIOD_DAYS, Tenant
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        student = baker.make(User)
+        baker.make('courses.CourseStudent', user=student, semester=SiteConfig.get().active_semester)
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(
+            trial_end_date=localdate() - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None,
+        )
+
+        result = tasks.deck_status_check.apply()
+        self.assertTrue(result.successful())
+        self.assertIn('closed semester', result.result)
+
+        self.assertTrue(SiteConfig.get().active_semester.closed)
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.active_user_count, 0)  # refreshed AFTER the close
 
     def test_daily_deck_status_check_for_all_tenants__dispatches_only_billable_decks(self):
         """The dispatcher schedules one per-schema check per deck, skipping the
@@ -170,3 +199,52 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.assertTrue(task_result.successful())
         self.assertEqual(mock_apply_async.call_count, billable_count)
         self.assertIn(f"for {billable_count} deck(s)", task_result.result)
+
+
+class DeckStatusCheckStripeReconcileTests(ByteDeckTenantTestCase):
+    """Tests for the nightly Stripe reconcile inside deck_status_check
+    (epic #1729 PR 7, plan §5.3: webhooks are an optimization, not truth)."""
+
+    def test_deck_status_check__reconciles_linked_deck(self):
+        """A Stripe-linked deck re-syncs from a fresh subscription retrieval."""
+        from datetime import datetime, timedelta, timezone as dt_timezone
+        from unittest.mock import patch
+
+        from django.test import override_settings
+        from django.utils.timezone import localdate
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task', paid_until=None)
+        period_end = int((datetime.now(tz=dt_timezone.utc) + timedelta(days=90)).timestamp())
+        subscription = {'id': 'sub_task', 'status': 'active',
+                        'items': {'data': [{'current_period_end': period_end, 'price': {'id': 'p', 'metadata': {}}}]}}
+
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', return_value=subscription):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('paid_until', result.result)
+        self.assertGreater(Tenant.objects.get(pk=self.tenant.pk).paid_until, localdate() + timedelta(days=60))
+
+    def test_deck_status_check__stripe_error_does_not_break_notices(self):
+        """A Stripe outage during reconcile is reported in the summary while the
+        cached-field refresh and the notices engine still run."""
+        from unittest.mock import patch
+
+        import stripe as stripe_lib
+
+        from django.test import override_settings
+
+        from tenant.models import Tenant
+
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_subscription_id='sub_task')
+        with override_settings(STRIPE_SECRET_KEY='sk_test_123'):
+            with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.StripeError('down')):
+                result = tasks.deck_status_check.apply()
+        self.assertIn('stripe error', result.result)
+        self.assertIn('notices:', result.result)
+
+    def test_deck_status_check__skips_unlinked_or_unconfigured(self):
+        """Decks with no subscription id (or servers without Stripe) skip the reconcile."""
+        result = tasks.deck_status_check.apply()
+        self.assertIn('stripe: not linked', result.result)

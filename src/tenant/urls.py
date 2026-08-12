@@ -18,4 +18,7 @@ urlpatterns = [
     path("subscription/", views.SubscriptionDetail.as_view(), name="subscription"),
     path("subscription/activating/", views.SubscriptionActivating.as_view(), name="subscription_activating"),
     path("subscription/status/", views.subscription_status, name="subscription_status"),
+
+    # Stripe webhook (public schema only; signature-verified, csrf_exempt -- PR 7).
+    path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),
 ]

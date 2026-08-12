@@ -2,19 +2,18 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from unittest.mock import patch
 
 from djcytoscape.models import CytoScape
 
 from profile_manager.models import Profile
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
 
 
-class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -42,10 +41,6 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             initial_content_type=cls.quest_ct,
             initial_object_id=cls.map_initial_quest.id,
         )
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
@@ -185,7 +180,103 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         mock_regenerate.assert_called_once()
 
 
-class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestMapAccessAndInterlinkTests(ByteDeckTenantTestCase):
+    """Access-control and interlink/generate branches of the map views."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, two students, and a map pinned to a dedicated initial quest."""
+        # a teacher must exist before students so profile-creation notifications work
+        cls.teacher = User.objects.create_user('cov_teacher', is_staff=True)
+        cls.student1 = User.objects.create_user('cov_student1')
+        cls.student2 = User.objects.create_user('cov_student2')
+        for user in (cls.teacher, cls.student1, cls.student2):
+            Profile.objects.get_or_create(user=user)
+
+        cls.quest_ct = ContentType.objects.get(app_label='quest_manager', model='quest')
+        # Pin the map's initial object to a dedicated quest (see ViewTests.setUpTestData
+        # for why a random baker-filled GFK target is avoided).
+        cls.map_quest = baker.make('quest_manager.Quest')
+        cls.map = baker.make(
+            'djcytoscape.CytoScape',
+            initial_content_type=cls.quest_ct,
+            initial_object_id=cls.map_quest.id,
+        )
+
+    def test_quest_map_personalized__student_cannot_view_another_students_map(self):
+        """A non-staff user requesting another user's personalized map gets a 404."""
+        self.client.force_login(self.student1)
+        response = self.client.get(
+            reverse('djcytoscape:quest_map_personalized', args=[self.map.id, self.student2.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_quest_map_interlink__staff_missing_map_offers_generate_form(self):
+        """Interlinking to an object that has no map yet, as staff, renders the
+        generate-map form (dispatching through ScapeGenerateMap with the initial
+        object and parent scape passed through)."""
+        unmapped_quest = baker.make('quest_manager.Quest')
+        self.client.force_login(self.teacher)
+        response = self.client.get(reverse(
+            'djcytoscape:quest_map_interlink',
+            args=[self.quest_ct.id, unmapped_quest.id, self.map.id],
+        ))
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
+
+    def test_quest_map_interlink__student_missing_map_404(self):
+        """Interlinking to an object that has no map yet, as a non-staff user, raises 404."""
+        unmapped_quest = baker.make('quest_manager.Quest')
+        self.client.force_login(self.student1)
+        response = self.client.get(reverse(
+            'djcytoscape:quest_map_interlink',
+            args=[self.quest_ct.id, unmapped_quest.id, self.map.id],
+        ))
+        self.assertEqual(response.status_code, 404)
+
+    def test_primary__no_primary_scape_offers_generate_form(self):
+        """When maps exist but none is flagged as the primary scape, the primary view
+        renders the generate-map form (for staff) rather than a map."""
+        # A map exists (so the welcome-quest auto-generation is skipped), but none is primary.
+        CytoScape.objects.update(is_the_primary_scape=False)
+        self.client.force_login(self.teacher)
+        response = self.assert200('djcytoscape:primary')
+        self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
+
+
+class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
+    """UpdateMapMessageMixin adds a 'maps are being updated' message after editing/deleting a
+    model that maps depend on (ranks/quests/badges). Its map-auto-update-off path is exercised
+    here through a rank delete (RankDelete mixes it in); the message-emitting path is covered by
+    the rank/quest/badge suites."""
+
+    def setUp(self):
+        """Log in a staff user (the mixin's consumer views require staff)."""
+        self.staff = User.objects.create_user('mixin_staff', is_staff=True)
+        self.client.force_login(self.staff)
+
+    def test_form_valid__no_map_message_when_auto_update_disabled(self):
+        """With SiteConfig.map_auto_update off, deleting a rank skips the related-maps lookup and
+        emits no 'maps are being updated' message."""
+        from courses.models import Rank
+        from siteconfig.models import SiteConfig
+
+        config = SiteConfig.get()
+        config.map_auto_update = False
+        config.save()
+
+        rank = baker.make(Rank, name="Bronze")
+        response = self.client.post(reverse('courses:rank_delete', args=[rank.id]), follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Rank.objects.filter(id=rank.id).exists())
+        self.assertFalse(
+            any("being updated" in str(m) for m in response.context['messages']),
+            "no map-update message should be shown when map_auto_update is off",
+        )
+
+
+class PrimaryViewTests(ByteDeckTenantTestCase):
 
     def test_primary__generates_initial_map_on_first_view(self):
         """Viewing the primary map for the first time generates the 'Main' map."""
@@ -193,7 +284,6 @@ class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(CytoScape.objects.exists())
 
         # log in anoyone
-        self.client = TenantClient(self.tenant)
         anyone = User.objects.create_user('anyone')
         self.client.force_login(anyone)
 
@@ -205,7 +295,7 @@ class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(CytoScape.objects.filter(name="Main").exists())
 
 
-class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class RegenerateViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -218,7 +308,6 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant client logged in as the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
     def test_regenerate__redirects_to_quest_map(self):
