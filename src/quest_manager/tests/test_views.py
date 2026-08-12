@@ -1871,6 +1871,17 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             'time_available': "14:30:59",
         }
 
+    def _make_TA(self, username='test_ta'):
+        """Create and return a TA (a student with permission to work on quest drafts).
+
+        Profiles are created automatically by a User post_save signal, so the flag goes on
+        the profile that already exists.
+        """
+        test_ta = User.objects.create_user(username)
+        test_ta.profile.is_TA = True
+        test_ta.profile.save()
+        return test_ta
+
     def test_quest_form__quick_reply_field_below_tags(self):
         """The Quick Reply Text field renders below the Tags field on the quest form (#2114)."""
         self.client.force_login(self.test_teacher)
@@ -1929,9 +1940,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_create__TA_creates_drafts_and_deletes_own(self):
         """TAs can create draft quests (as editor) and delete their own but not others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # Can access the Create view
@@ -2005,9 +2014,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_update__ta_can_update_own_draft(self):
         """TAs can update only their own unpublished quests, not published ones or others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # make a quest for us to update, use the form data so easier to track what we're updating
@@ -2072,9 +2079,85 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn(scape.name, str(messages[0]))
 
-    # TODO
-    # TAs should not be able to make a quest published
-    # When a quest is published by a teacher, the editor should be removed
+    def test_quest_create__TA_publishing_is_overridden(self):
+        """A TA who posts published (the field is on their form, only hidden) still gets a draft
+        with themselves as editor: QuestFormViewMixin.form_valid overrides both, so a hand-made
+        POST can't put a TA's quest in front of students.
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,  # and they can't hand the draft to someone else
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+
+    def test_quest_update__TA_publishing_their_draft_is_overridden(self):
+        """The same override applies when a TA updates the draft they own: it stays unpublished
+        and stays theirs, so publishing remains a teacher's decision.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(test_ta)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
+
+    def test_quest_update__teacher_publishing_removes_the_editor(self):
+        """When a teacher publishes a TA's draft, the TA's editor access is removed with it, so
+        they can no longer edit a quest students are now working on.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertTrue(quest.published)
+        self.assertIsNone(quest.editor)
+        # and the TA has indeed lost access to it
+        self.assertFalse(quest.is_editable(test_ta))
+
+    def test_quest_update__teacher_leaving_a_quest_unpublished_keeps_the_editor(self):
+        """A teacher editing a draft without publishing it leaves the TA as editor, so the TA can
+        keep working on it.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        # 'published' is a checkbox: leaving it out of the POST is how the form says "draft"
+        form_data = {**self.minimal_valid_form_data, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
 
     def test_quest_create__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
