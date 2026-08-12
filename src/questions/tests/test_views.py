@@ -36,7 +36,7 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         )
 
     def setUp(self):
-        """Set up a tenant test client, per-test form data, and a file_upload question
+        """Set up per-test form data and a file_upload question
         (per-test because its uploaded file is consumed when read)."""
         self.question_form_data = {
             "type": "short_answer",
@@ -88,8 +88,7 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         """Teachers can view a quest's question list, which displays each question's
         (truncated) instructions."""
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse("questions:list", kwargs={"quest_id": self.quest.id}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
         self.assertTemplateUsed(response, "questions/question_list.html")
         # NOTE: instructions are truncated at 20 characters in the table, so these
         # fixture instructions must be shorter than that to assert on them

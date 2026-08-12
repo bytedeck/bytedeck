@@ -30,6 +30,7 @@ class TaggitSelect2WidgetForm(forms.Form):
 
 
 class AutoResponseViewTests(ByteDeckTenantTestCase):
+    """Tests the tag autocomplete endpoint and who is allowed to query it."""
 
     @classmethod
     def setUpTestData(cls):
@@ -72,6 +73,7 @@ class AutoResponseViewTests(ByteDeckTenantTestCase):
 
 
 class TagCRUDViewTests(ByteDeckTenantTestCase):
+    """Tests the tag list/create/update/delete views, their access rules, and the staff-only admin buttons."""
 
     @classmethod
     def setUpTestData(cls):
@@ -83,8 +85,8 @@ class TagCRUDViewTests(ByteDeckTenantTestCase):
 
     def test_page_status_code__anonymous(self):
         """Make sure the all views are not accessible to anonymous users"""
-        self.assert302('tags:list')
-        self.assert302('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
+        self.assertRedirectsLogin('tags:list')
+        self.assertRedirectsLogin('tags:detail_student', args=[self.tag.pk, self.test_student.pk])
         self.assertRedirectsLogin('tags:detail_staff', args=[self.tag.pk])
         self.assertRedirectsLogin('tags:create')
         self.assertRedirectsLogin('tags:update', args=[self.tag.pk])

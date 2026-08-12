@@ -75,7 +75,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
-        """Set up a tenant client, site config, and active semester."""
+        """Set up the site config and active semester."""
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
@@ -499,7 +499,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         cls.test_student = User.objects.create_user('test_student', is_staff=False)
 
     def setUp(self):
-        """Set up a tenant client, active semester, site config, and deck owner."""
+        """Set up the active semester, site config, and deck owner."""
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()
@@ -1121,13 +1121,7 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
         """
         Anonymous users should be redirected to the login page when accessing the library overview.
         """
-        response = self.client.get(reverse('library:quest_list'))
-
-        # Expect a 302 redirect
-        self.assert302('library:quest_list')
-
-        # Should redirect to login page with next param
-        self.assertTrue(response.url.startswith('/accounts/login/'))
+        self.assertRedirectsLogin('library:quest_list')
 
     def test_library_overview__for_students(self):
         """

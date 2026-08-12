@@ -165,3 +165,22 @@ class ByteDeckTenantTestCaseTest(ByteDeckTenantTestCase):
         Category = apps.get_model('quest_manager', 'Category')
         self.assertFalse(Category.objects.filter(title='mutated').exists())
         self.assertTrue(Category.objects.filter(title='setuptestdata-probe').exists())
+
+
+class ViewTestUtilsMixinTest(ByteDeckTenantTestCase):
+    """Tests the login-redirect helpers against a real login-required view (tags:list)."""
+
+    def test_assertLoginRedirect__next_url_carrying_a_query_string(self):
+        """The helper matches Django's redirect when the requested url has its own query string.
+
+        Django puts the whole path and query in ?next=, percent-encoded, so the expected url has to
+        be built by encoding the query rather than pasting next_url in: pasted, the requested url's
+        own & would start a second parameter of the login url instead of staying inside ?next=.
+        """
+        url = f"{reverse('tags:list')}?page=2&sort=name"
+
+        self.assertLoginRedirect(self.client.get(url), url)
+
+    def test_assertRedirectsLoginURL__next_url_carrying_a_query_string(self):
+        """assertRedirectsLoginURL takes a url rather than a url name, so it sees query strings too."""
+        self.assertRedirectsLoginURL(f"{reverse('tags:list')}?page=2&sort=name")

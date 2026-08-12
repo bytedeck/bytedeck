@@ -54,6 +54,7 @@ class CustomGFKSelect2Widget(GFKSelect2Widget):
 
 
 class TestAutoResponseView(ByteDeckTenantTestCase):
+    """Tests the generic autocomplete endpoint: field-id validation, 404s, and pagination."""
 
     @classmethod
     def setUpTestData(cls):
@@ -181,6 +182,7 @@ class TestAutoResponseView(ByteDeckTenantTestCase):
 
 
 class MenuItemViewTests(ByteDeckTenantTestCase):
+    """Tests the menu-item CRUD views, their access rules, and the leading-slash validation error."""
 
     @classmethod
     def setUpTestData(cls):
@@ -211,8 +213,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
     def test_MenuItemListView__admin_can_view(self):
         ''' Admin should be able to view menu item list '''
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('utilities:menu_items'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('utilities:menu_items')
 
     def test_MenuItemCreateView__admin_can_create(self):
         ''' Admin should be able to create a menu item '''
@@ -281,6 +282,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
 
 
 class FlatPageViewTests(ByteDeckTenantTestCase):
+    """Tests access to the flat-page views for anonymous users and students."""
 
     @staticmethod
     def create_flatpage(**kwargs) -> FlatPage:
@@ -542,8 +544,7 @@ class VideosViewTests(ByteDeckTenantTestCase):
     def test_videos__student_get_is_forbidden(self):
         """A logged-in student can't even read the page: it is the staff upload form."""
         self.client.force_login(self.test_student)
-        response = self.client.get(reverse('utilities:videos'))
-        self.assertEqual(response.status_code, 403)
+        self.assert403('utilities:videos')
 
     def test_videos__student_post_does_not_upload(self):
         """A logged-in student gets a 403 and their upload is not saved."""
@@ -563,8 +564,7 @@ class VideosViewTests(ByteDeckTenantTestCase):
             title="Intro Video",
             video_file=SimpleUploadedFile("intro.mp4", b"fake video bytes", content_type="video/mp4"),
         )
-        response = self.client.get(reverse('utilities:videos'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('utilities:videos')
         self.assertTemplateUsed(response, 'utilities/videos.html')
         self.assertIn(video, list(response.context['videos']))
 

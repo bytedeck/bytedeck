@@ -2,7 +2,6 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from unittest.mock import patch
 
@@ -241,8 +240,7 @@ class QuestMapAccessAndInterlinkTests(ByteDeckTenantTestCase):
         # A map exists (so the welcome-quest auto-generation is skipped), but none is primary.
         CytoScape.objects.update(is_the_primary_scape=False)
         self.client.force_login(self.teacher)
-        response = self.client.get(reverse('djcytoscape:primary'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('djcytoscape:primary')
         self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
 
 
@@ -286,7 +284,6 @@ class PrimaryViewTests(ByteDeckTenantTestCase):
         self.assertFalse(CytoScape.objects.exists())
 
         # log in anoyone
-        self.client = TenantClient(self.tenant)
         anyone = User.objects.create_user('anyone')
         self.client.force_login(anyone)
 

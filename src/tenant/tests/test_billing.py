@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone as dt_timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.core.cache import cache
 from django.test import SimpleTestCase, override_settings
@@ -13,8 +13,10 @@ from django_tenants.utils import schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from tenant.billing import (
-    _plan_summary_from_subscription, billing_configured, checkout_trial_end, clear_plan_summary_cache,
-    create_checkout_session, reconcile_checkout_session, subscription_period_end_date, subscription_plan_summary,
+    _plan_summary_from_subscription, _portal_configuration_cache_key, billing_configured, checkout_trial_end,
+    clear_plan_summary_cache, create_checkout_session, create_portal_session, deck_label,
+    has_manageable_subscription, portal_configuration_id, reconcile_checkout_session, stamp_subscription_description,
+    subscription_period_end_date, subscription_plan_summary,
 )
 from tenant.models import Tenant
 
@@ -325,9 +327,8 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         kwargs = self.create_session()
         expected = int(timezone.make_aware(datetime(2026, 9, 15, 0, 0)).timestamp())
-        self.assertEqual(
-            kwargs['subscription_data'],
-            {'metadata': {'schema_name': self.tenant.schema_name}, 'trial_end': expected})
+        self.assertEqual(kwargs['subscription_data']['metadata'], {'schema_name': self.tenant.schema_name})
+        self.assertEqual(kwargs['subscription_data']['trial_end'], expected)
         self.assertTrue(kwargs['idempotency_key'].endswith(f'-trial-{expected}'))
 
     def test_create_checkout_session__no_trial_end_when_not_applicable(self):
@@ -337,12 +338,136 @@ class CreateCheckoutSessionTrialEndTest(ByteDeckTenantTestCase):
         Tenant.objects.filter(pk=self.tenant.pk).update(trial_end_date=date(2026, 8, 10), paid_until=None)
         self.tenant.refresh_from_db()
         kwargs = self.create_session()
-        self.assertEqual(kwargs['subscription_data'], {'metadata': {'schema_name': self.tenant.schema_name}})
+        self.assertEqual(kwargs['subscription_data']['metadata'], {'schema_name': self.tenant.schema_name})
+        self.assertNotIn('trial_end', kwargs['subscription_data'])
         # the full base key, not a substring check: a schema name containing "trial"
         # must not fail the unmarked-key assertion
         self.assertEqual(
             kwargs['idempotency_key'],
-            f'deck-checkout-{self.tenant.schema_name}-{timezone.localdate()}')
+            f'deck-checkout-v2-{self.tenant.schema_name}-{timezone.localdate()}')
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class HasManageableSubscriptionTest(ByteDeckTenantTestCase):
+    """has_manageable_subscription decides the subscription page's manage-button
+    destination: the Billing Portal only when Stripe still has a live
+    subscription to act on, otherwise a fresh Checkout (production find,
+    2026-08-09: an expired deck's portal offered nothing but old invoices)."""
+
+    def set_deck(self, **fields):
+        """Persist billing fields on this deck's Tenant row and refresh the instance.
+
+        Args:
+            **fields: Tenant field values to write on this deck's row (e.g.
+                ``stripe_subscription_id``), then reloaded into ``self.tenant``.
+        """
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def test_has_manageable_subscription__false_without_a_subscription_id(self):
+        """A deck with no linked subscription needs no Stripe call: there is
+        nothing for the portal to manage."""
+        self.set_deck(stripe_subscription_id='')
+        with patch('tenant.billing.stripe.Subscription.retrieve') as mock_retrieve:
+            self.assertFalse(has_manageable_subscription(self.tenant))
+        mock_retrieve.assert_not_called()
+
+    def test_has_manageable_subscription__true_for_live_statuses(self):
+        """A subscription Stripe still considers live is manageable in the
+        portal, including past_due and unpaid (fixing the card there is exactly
+        their cure)."""
+        self.set_deck(stripe_subscription_id='sub_1')
+        for status in ('active', 'trialing', 'past_due', 'unpaid', 'paused'):
+            with self.subTest(status=status):
+                with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status=status)):
+                    self.assertTrue(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__false_for_terminal_statuses(self):
+        """A canceled (or expired-incomplete) subscription is a dead end in the
+        portal: it cannot be restarted there, so the deck needs a Checkout."""
+        self.set_deck(stripe_subscription_id='sub_1')
+        for status in ('canceled', 'incomplete_expired'):
+            with self.subTest(status=status):
+                with patch('tenant.billing.stripe.Subscription.retrieve', return_value=Mock(status=status)):
+                    self.assertFalse(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__false_when_stripe_has_no_such_subscription(self):
+        """A subscription id this key can't see (deleted upstream, or a
+        test/live mode mismatch on a hand-linked legacy deck) is not
+        manageable, rather than a 500. Stripe signals exactly that case with
+        the resource_missing error code."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_gone')
+        with patch('tenant.billing.stripe.Subscription.retrieve',
+                   side_effect=stripe_lib.InvalidRequestError(
+                       'No such subscription', param='id', code='resource_missing')):
+            self.assertFalse(has_manageable_subscription(self.tenant))
+
+    def test_has_manageable_subscription__other_invalid_requests_propagate(self):
+        """An InvalidRequestError that is NOT resource_missing (a malformed id,
+        a rejected parameter) leaves the subscription's real state unknown, so
+        it propagates rather than being read as "gone": reading unknown as gone
+        would offer a checkout that could duplicate a live subscription."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_1')
+        with patch('tenant.billing.stripe.Subscription.retrieve',
+                   side_effect=stripe_lib.InvalidRequestError(
+                       'Invalid expand parameter', param='expand', code='parameter_unknown')):
+            with self.assertRaises(stripe_lib.InvalidRequestError):
+                has_manageable_subscription(self.tenant)
+
+    def test_has_manageable_subscription__other_stripe_errors_propagate(self):
+        """A transport/API failure is NOT silently read as "no subscription":
+        it propagates so the view shows its try-again message instead of
+        starting a checkout that could double-bill a live subscriber."""
+        import stripe as stripe_lib
+
+        self.set_deck(stripe_subscription_id='sub_1')
+        with patch('tenant.billing.stripe.Subscription.retrieve', side_effect=stripe_lib.APIConnectionError('down')):
+            with self.assertRaises(stripe_lib.StripeError):
+                has_manageable_subscription(self.tenant)
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class CreateCheckoutSessionCustomerTest(ByteDeckTenantTestCase):
+    """create_checkout_session identifies the payer by existing customer when the
+    deck has one (a renewal after cancellation), else by the owner's email."""
+
+    def create_session(self, customer_id):
+        """Put the deck on this stripe_customer_id ('' = unlinked), run
+        create_checkout_session with Stripe mocked, and return the call kwargs.
+
+        The customer id is always set explicitly: ``self.tenant`` is a
+        class-level instance, so a value left over from another test in this
+        class would otherwise leak in through the in-memory model.
+        """
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_customer_id=customer_id)
+        self.tenant.refresh_from_db()
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            mock_create.return_value.url = 'https://stripe.example/session'
+            self.assertEqual(create_checkout_session(self.tenant), 'https://stripe.example/session')
+        return mock_create.call_args.kwargs
+
+    def test_create_checkout_session__linked_deck_checks_out_as_its_customer(self):
+        """A deck with a stripe_customer_id renews AS that customer (saved cards
+        and invoice history carry over, and the dashboard keeps one customer per
+        deck). Stripe rejects customer and customer_email together, so only
+        customer is sent, and the customer id joins the idempotency key so a
+        same-day unlinked attempt can't collide with the renewal."""
+        kwargs = self.create_session('cus_renew')
+        self.assertEqual(kwargs['customer'], 'cus_renew')
+        self.assertNotIn('customer_email', kwargs)
+        self.assertTrue(kwargs['idempotency_key'].endswith('-cus_renew'))
+
+    def test_create_checkout_session__unlinked_deck_checks_out_by_owner_email(self):
+        """A first-time deck sends no customer: Stripe mints one from the
+        owner's email, which is how the deck is identified back to its schema."""
+        kwargs = self.create_session('')
+        self.assertNotIn('customer', kwargs)
+        self.assertIn('customer_email', kwargs)
+        self.assertNotIn('-cus_', kwargs['idempotency_key'])
 
 
 @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
@@ -830,3 +955,157 @@ class ResolveDeckTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_customer_id, 'cus_only')
         self.assertEqual(self.tenant.stripe_subscription_id, '')
+
+
+@override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
+class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
+    """Every Stripe-hosted page an owner sees names the deck being billed.
+
+    The product ("Bytedeck Subscription - 120 Students") is identical for every
+    deck on a tier, so an owner with several decks could not tell which one a
+    checkout or portal belonged to (production find, 2026-08-10).
+    """
+
+    def setUp(self):
+        """Start each test with an empty portal-configuration cache."""
+        cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
+
+    def default_configuration(self, login_page_enabled=False):
+        """A stand-in for the account's default portal configuration.
+
+        Args:
+            login_page_enabled (bool): Whether the account's default offers the
+                hosted login page, which the clone has to carry over as a flag.
+
+        Returns:
+            Mock: The configuration double.
+        """
+        return Mock(
+            id='bpc_default',
+            business_profile={'headline': 'ByteDeck Learning Society', 'privacy_policy_url': 'https://x.test/p'},
+            features={'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}},
+            login_page={'enabled': login_page_enabled, 'url': 'https://billing.stripe.test/p/login/x'},
+        )
+
+    def test_deck_label__is_the_decks_domain(self):
+        """The label is the deck's primary domain, the name its owner knows it by."""
+        self.assertEqual(deck_label(self.tenant), self.tenant.primary_domain_url)
+
+    def test_create_checkout_session__names_the_deck_on_the_payment_page_and_subscription(self):
+        """Checkout carries the deck two ways Stripe displays: the subscription
+        description (which follows the subscription onto the portal and invoices)
+        and the custom text above the pay button."""
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            mock_create.return_value.url = 'https://stripe.example/session'
+            create_checkout_session(self.tenant)
+        kwargs = mock_create.call_args.kwargs
+        self.assertEqual(kwargs['subscription_data']['description'], f'Deck: {self.tenant.primary_domain_url}')
+        self.assertEqual(
+            kwargs['custom_text'],
+            {'submit': {'message': f'You are subscribing the deck {self.tenant.primary_domain_url}.'}})
+        # the schema stamping the webhooks rely on is untouched
+        self.assertEqual(kwargs['subscription_data']['metadata'], {'schema_name': self.tenant.schema_name})
+
+    def test_portal_configuration_id__clones_the_default_with_a_deck_headline(self):
+        """The deck's configuration copies the account default's features (so no
+        portal capability is lost) and replaces only the headline; the id is
+        cached so later portal visits reuse the same configuration."""
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   return_value=Mock(data=[self.default_configuration()])), \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create',
+                      return_value=Mock(id='bpc_deck')) as mock_create:
+            self.assertEqual(portal_configuration_id(self.tenant), 'bpc_deck')
+        kwargs = mock_create.call_args.kwargs
+        self.assertEqual(kwargs['business_profile']['headline'], f'Subscription for {self.tenant.primary_domain_url}')
+        # the default's other business-profile fields and ALL its features survive
+        self.assertEqual(kwargs['business_profile']['privacy_policy_url'], 'https://x.test/p')
+        self.assertEqual(kwargs['features'], {'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}})
+        self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+        self.assertEqual(cache.get(_portal_configuration_cache_key(self.tenant.schema_name)), 'bpc_deck')
+
+    def test_portal_configuration_id__carries_the_default_login_page_setting(self):
+        """A default with the hosted login page enabled produces a clone with it
+        enabled too; a default without it produces a clone that omits the field.
+        Only the flag travels: the url is read-only and Stripe mints a fresh one
+        per configuration (review find on #2331)."""
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   return_value=Mock(data=[self.default_configuration(login_page_enabled=True)])), \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create',
+                      return_value=Mock(id='bpc_deck')) as mock_create:
+            portal_configuration_id(self.tenant)
+        self.assertEqual(mock_create.call_args.kwargs['login_page'], {'enabled': True})
+
+        cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   return_value=Mock(data=[self.default_configuration(login_page_enabled=False)])), \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create',
+                      return_value=Mock(id='bpc_deck')) as mock_create:
+            portal_configuration_id(self.tenant)
+        self.assertNotIn('login_page', mock_create.call_args.kwargs)
+
+    def test_create_checkout_session__idempotency_key_marks_the_labelled_request_shape(self):
+        """The key carries a v2 generation. Stripe rejects a key replayed within
+        24 hours with different parameters, and this release added the deck
+        label to the request, so a same-day retry across the deploy must not
+        reuse the pre-label key (review find on #2331)."""
+        with patch('tenant.billing.stripe.checkout.Session.create') as mock_create:
+            mock_create.return_value.url = 'https://stripe.example/session'
+            create_checkout_session(self.tenant)
+        self.assertTrue(mock_create.call_args.kwargs['idempotency_key'].startswith('deck-checkout-v2-'))
+
+    def test_portal_configuration_id__served_from_cache_without_calling_stripe(self):
+        """A cached configuration id is reused: no Stripe call, no second configuration."""
+        cache.set(_portal_configuration_cache_key(self.tenant.schema_name), 'bpc_cached', 60)
+        with patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
+            self.assertEqual(portal_configuration_id(self.tenant), 'bpc_cached')
+        mock_create.assert_not_called()
+
+    def test_portal_configuration_id__none_when_stripe_cannot_provide_one(self):
+        """A Stripe failure (or an account with no default configuration) yields
+        None rather than raising: an unnamed portal beats no portal at all."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list',
+                   side_effect=stripe_lib.StripeError('nope')):
+            self.assertIsNone(portal_configuration_id(self.tenant))
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list', return_value=Mock(data=[])):
+            self.assertIsNone(portal_configuration_id(self.tenant))
+
+    def test_create_portal_session__passes_the_deck_configuration_and_survives_without_one(self):
+        """The portal session carries the deck's configuration; when none could
+        be prepared the session is created without one (the account default)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_customer_id='cus_1')
+        self.tenant.refresh_from_db()
+        with patch('tenant.billing.portal_configuration_id', return_value='bpc_deck'), \
+                patch('tenant.billing.stripe.billing_portal.Session.create',
+                      return_value=Mock(url='https://portal.test/s')) as mock_create:
+            create_portal_session(self.tenant)
+        self.assertEqual(mock_create.call_args.kwargs['configuration'], 'bpc_deck')
+
+        with patch('tenant.billing.portal_configuration_id', return_value=None), \
+                patch('tenant.billing.stripe.billing_portal.Session.create',
+                      return_value=Mock(url='https://portal.test/s')) as mock_create:
+            create_portal_session(self.tenant)
+        self.assertNotIn('configuration', mock_create.call_args.kwargs)
+
+    def test_stamp_subscription_description__labels_legacy_subscriptions_once(self):
+        """Syncing a subscription labels it with the deck (the path that reaches
+        legacy links and anything created before the label existed), and skips
+        the write when the label is already right."""
+        with patch('tenant.billing.stripe.Subscription.modify') as mock_modify:
+            stamp_subscription_description(self.tenant, {'id': 'sub_1', 'description': None})
+        self.assertEqual(mock_modify.call_args.args, ('sub_1',))
+        self.assertEqual(mock_modify.call_args.kwargs['description'], f'Deck: {self.tenant.primary_domain_url}')
+
+        with patch('tenant.billing.stripe.Subscription.modify') as mock_modify:
+            stamp_subscription_description(
+                self.tenant, {'id': 'sub_1', 'description': f'Deck: {self.tenant.primary_domain_url}'})
+        mock_modify.assert_not_called()
+
+    def test_stamp_subscription_description__stripe_error_never_fails_the_sync(self):
+        """The label is cosmetic: a Stripe failure is logged and swallowed so the
+        billing sync it rides along with still completes."""
+        import stripe as stripe_lib
+
+        with patch('tenant.billing.stripe.Subscription.modify', side_effect=stripe_lib.StripeError('boom')):
+            stamp_subscription_description(self.tenant, {'id': 'sub_1', 'description': ''})

@@ -14,6 +14,7 @@ User = get_user_model()
 
 
 class NotificationViewTests(ByteDeckTenantTestCase):
+    """Tests access to the notification pages for anonymous users, students, and teachers."""
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -36,8 +37,10 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         self.assert403('notifications:ajax')
         self.assert403('notifications:ajax_mark_read')
-        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
-        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
+        # an ajax request clears the 403 above, so these reach LoginRequiredMixin and go to the login page
+        for url_name in ('notifications:ajax_mark_read', 'notifications:ajax'):
+            url = reverse(url_name)
+            self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_notification_page_status_codes__students(self):
         """A logged-in student can view list pages but not the ajax-only endpoints."""
@@ -45,8 +48,8 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
@@ -66,8 +69,8 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         # Bad id notification read request should redirect to list view
         self.assertRedirects(
