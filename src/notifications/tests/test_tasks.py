@@ -173,7 +173,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         )
         email = generate_notification_email(self.test_student1, "https://test.com")
         # from_email=None -> EmailMessage substitutes settings.DEFAULT_FROM_EMAIL (here "")
-        self.assertNotIn("test.com <", email.from_email or "")
+        self.assertEqual(email.from_email, "")
 
     def test_generate_notification_email__staff(self):
         """ Test that staff notification emails include quests awaiting approval """

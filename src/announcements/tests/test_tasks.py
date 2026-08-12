@@ -127,6 +127,22 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
         self.assertEqual(mail.outbox[0].subject, "Announcement from example.com")
         self.assertEqual(mail.outbox[0].from_email, formataddr(("example.com", "noreply@bytedeck.com")))
 
+    @override_settings(DEFAULT_FROM_EMAIL="")
+    def test_send_announcement_emails__from_falls_back_when_unconfigured(self):
+        """With no DEFAULT_FROM_EMAIL configured, the announcement From is left to Django's
+        default (the deck domain is not spliced into an empty address) (#2338)."""
+        mail.outbox = []
+        tasks.send_announcement_emails.apply(
+            kwargs={
+                "content": "Hello",
+                "root_url": "https://example.com",
+                "absolute_url": "/link/to/announcement/",
+            }
+        )
+        self.assertEqual(len(mail.outbox), 1)
+        # from_email=None -> EmailMessage substitutes settings.DEFAULT_FROM_EMAIL (here "")
+        self.assertEqual(mail.outbox[0].from_email, "")
+
     def test_publish_announcement__clears_draft_and_removes_task(self):
         """Publishing marks the announcement non-draft, disables auto_publish, and removes its periodic task."""
         self.assertTrue(self.announcement.draft)

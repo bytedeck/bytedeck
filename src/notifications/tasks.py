@@ -72,7 +72,18 @@ def get_notification_emails(root_url):
 
 
 def generate_notification_email(user, root_url):
-    """Generate an email notification from user"""
+    """Build the daily unread-notifications digest email for a single user.
+
+    Args:
+        user: The recipient User; their unread notifications (and, for staff, submissions
+            awaiting approval) make up the email, and their email is the To address.
+        root_url: The deck's root URL; its host names the deck in the subject and sender.
+
+    Returns:
+        EmailMultiAlternatives ready to send, or None when there is nothing to send:
+        a non-staff user not currently enrolled, or a user with no unread notifications
+        and (for staff) no submissions awaiting approval.
+    """
     html_template = get_template('notifications/email_notifications.html')
     # Name the deck the email is from so recipients can tell decks apart even when a deck
     # hasn't customised its logo (#2338). root_url is the deck's root URL, so its host is

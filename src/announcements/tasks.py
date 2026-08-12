@@ -37,6 +37,16 @@ def send_notifications(user_id, announcement_id):
 
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
+    """Send a published announcement by email to everyone on the announcement mailing list.
+
+    Args:
+        content: The announcement's HTML content (used as the email body).
+        root_url: The deck's root URL; its host names the deck in the subject and sender.
+        absolute_url: The announcement's absolute URL, linked from the email.
+
+    Returns:
+        list[str]: the recipient email addresses the announcement was bcc'd to.
+    """
     siteconfig = SiteConfig.get()
     # Name the deck the email is from so recipients can tell decks apart even when a deck
     # hasn't customised its logo (#2338). root_url is the deck's root URL, so its host is
