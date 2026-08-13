@@ -382,12 +382,28 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
     def test_SemesterActivate__changes_active_semester(self):
         """POSTing the activate view changes the siteconfig's active semester and
-        redirects to the semester_list."""
+        redirects to the semester_list. Starting an upcoming semester also opens it,
+        so students can join a course in it."""
         self.client.force_login(self.test_teacher)
-        new_semester = baker.make('courses.semester')
+        new_semester = baker.make('courses.semester', status=Semester.Status.UPCOMING)
         response = self.client.post(reverse('courses:semester_activate', args=[new_semester.pk]))
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(SiteConfig.get().active_semester, Semester.objects.get(pk=new_semester.pk))
+        new_semester.refresh_from_db()
+        self.assertTrue(new_semester.is_open)
+
+    def test_SemesterActivate__already_open_semester_stays_open(self):
+        """Activating a semester that is already open just points the deck at it: the
+        status is untouched, so re-activating never rewinds an archived-or-open stage."""
+        self.client.force_login(self.test_teacher)
+        open_semester = baker.make('courses.semester', status=Semester.Status.OPEN)
+
+        response = self.client.post(reverse('courses:semester_activate', args=[open_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(SiteConfig.get().active_semester, open_semester)
+        open_semester.refresh_from_db()
+        self.assertTrue(open_semester.is_open)
 
     def test_SemesterActivate__get_not_allowed(self):
         """GET must not change the active semester (deck-wide state changes are POST-only,
