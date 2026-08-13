@@ -8,6 +8,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.http import Http404
 from django.shortcuts import render, redirect, get_object_or_404, reverse
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_POST
 from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView, FormView
 from django.urls import reverse_lazy
@@ -215,6 +216,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def regenerate(request, scape_id):
     scape = get_object_or_404(CytoScape, id=scape_id)
     try:
@@ -228,6 +230,7 @@ def regenerate(request, scape_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def regenerate_all(request):
     # Offload to celery: regenerating maps builds each map's full graph JSON in memory, so
     # doing it in the request would scale a single web request's memory with the number and

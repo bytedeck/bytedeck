@@ -1,5 +1,6 @@
 import uuid
 from copy import deepcopy
+from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -13,10 +14,16 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.views import shared_library_enabled_view
 from library.importer import import_quest_to, import_campaign_to
-from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
+from library.exporter import (
+    build_library_clone_name,
+    clone_quests_into_library,
+    export_campaign_and_copy_quests,
+    export_campaign_to_library,
+    export_quest_to_library,
+)
 from model_bakery import baker
 from notifications.models import Notification
-from quest_manager.models import Category, Quest
+from quest_manager.models import Category, CommonData, Quest
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.models import TenantDomain
@@ -1201,6 +1208,14 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
 
     @patch("library.exporter.QuestResource.import_data")
+    def test_clone_quests_into_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A database error while copying conflicting quests is re-raised with context."""
+        mock_import_data.side_effect = IntegrityError("duplicate key")
+        quest = baker.make(Quest, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to copy conflicting quests to library schema"):
+            clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
+
+    @patch("library.exporter.QuestResource.import_data")
     def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
         """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
         mock_import_data.side_effect = IntegrityError("duplicate key")
@@ -1460,3 +1475,143 @@ class LibraryViewsOnPublicSchemaTests(LibraryTenantTestCaseMixin):
 
         with self.assertRaises(Http404):
             wrapped(RequestFactory().get('/'))
+
+
+class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
+    """Copying a quest whose original is already in the Library must not carry local row ids.
+
+    The copy used to be built with `deepcopy`, which kept `editor_id`,
+    `specific_teacher_to_notify_id` and `common_data_id`: primary keys that mean
+    something different in the Library's schema. Absent there, the export died on a
+    ValidationError; present, the copy silently adopted a stranger's row.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A local campaign whose quest also exists in the Library, plus local FK targets."""
+        cls.test_teacher = User.objects.create_user('clone_teacher', is_staff=True)
+        cls.local_editor = User.objects.create_user('clone_local_editor', is_staff=False)
+
+    def _make_conflicting_campaign(self, **quest_kwargs):
+        """Build a local campaign with one quest that already exists in the Library.
+
+        Args:
+            **quest_kwargs: extra field values for the local quest.
+
+        Returns:
+            tuple[Category, Quest]: the local campaign and its conflicting quest.
+        """
+        campaign = baker.make(Category, title=f"Conflict Campaign {uuid.uuid4().hex[:6]}")
+        quest = baker.make(
+            Quest, campaign=campaign, published=True, archived=False,
+            name=f"Conflicted Quest {uuid.uuid4().hex[:6]}", **quest_kwargs
+        )
+        with library_schema_context():
+            baker.make(Quest, import_id=quest.import_id, published=False,
+                       name=f"Library copy {uuid.uuid4().hex[:6]}")
+        return campaign, quest
+
+    def _library_clone_of(self, quest):
+        """Return the Library copy of `quest`: same campaign, different import_id.
+
+        Args:
+            quest (Quest): the local quest that was copied.
+
+        Returns:
+            Quest: the copy created in the Library schema.
+        """
+        return Quest.objects.all_including_archived().exclude(import_id=quest.import_id).get(
+            campaign__import_id=quest.campaign.import_id
+        )
+
+    def test_export_campaign_and_copy_quests__succeeds_when_the_quest_has_an_editor(self):
+        """A conflicting quest with local user FKs exports instead of raising ValidationError."""
+        campaign, quest = self._make_conflicting_campaign(
+            editor=self.local_editor, specific_teacher_to_notify=self.test_teacher
+        )
+
+        export_campaign_and_copy_quests(
+            source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id
+        )
+
+        with library_schema_context():
+            clone = self._library_clone_of(quest)
+            self.assertIsNone(clone.editor)
+            self.assertIsNone(clone.specific_teacher_to_notify)
+
+    def test_export_campaign_and_copy_quests__does_not_adopt_a_library_row_at_the_same_pk(self):
+        """The copy drops common_data rather than pointing at whatever shares that pk."""
+        with library_schema_context():
+            library_common = baker.make(CommonData, title="LIBRARY BLURB")
+
+        local_common = baker.make(CommonData, title="LOCAL BLURB")
+        campaign, quest = self._make_conflicting_campaign(common_data=local_common)
+
+        export_campaign_and_copy_quests(
+            source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id
+        )
+
+        with library_schema_context():
+            clone = self._library_clone_of(quest)
+            self.assertIsNone(clone.common_data)
+            # the Library's own row is untouched by the export
+            library_common.refresh_from_db()
+            self.assertEqual(library_common.title, "LIBRARY BLURB")
+
+    def test_export_campaign_and_copy_quests__copy_keeps_the_quest_content(self):
+        """Dropping the cross-schema FKs must not gut the copy: its content still travels."""
+        campaign, quest = self._make_conflicting_campaign(
+            xp=42, instructions="<p>Do the thing</p>", short_description="A conflicted quest",
+        )
+
+        export_campaign_and_copy_quests(
+            source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id
+        )
+
+        with library_schema_context():
+            clone = self._library_clone_of(quest)
+            self.assertEqual(clone.xp, 42)
+            # the quest_manager signal re-indents saved HTML, so match on the content
+            self.assertIn("Do the thing", clone.instructions)
+            self.assertEqual(clone.short_description, "A conflicted quest")
+            self.assertFalse(clone.published)
+            self.assertNotEqual(clone.import_id, quest.import_id)
+            self.assertIn("(Exported on", clone.name)
+
+    def test_clone_quests_into_library__returns_none_when_there_is_nothing_to_copy(self):
+        """A campaign with no conflicts skips the copy step entirely."""
+        self.assertIsNone(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]))
+
+    def test_build_library_clone_name__falls_back_to_a_numbered_suffix(self):
+        """A taken dated name pushes the next copy on to a numbered suffix."""
+        dated = f"Quest A (Exported on {date.today()})"
+
+        self.assertEqual(build_library_clone_name("Quest A", set()), dated)
+        self.assertEqual(
+            build_library_clone_name("Quest A", {dated}),
+            f"Quest A (Exported on {date.today()}) #1",
+        )
+
+    def test_build_library_clone_name__stays_within_the_field_max_length(self):
+        """A long source name is truncated so the suffixed name still fits."""
+        max_len = Quest._meta.get_field('name').max_length
+
+        name = build_library_clone_name("x" * max_len, set())
+
+        self.assertLessEqual(len(name), max_len)
+        self.assertIn("(Exported on", name)
+
+    def test_export_campaign_and_copy_quests__copy_does_not_collide_with_an_archived_name(self):
+        """The naming loop consults archived Library quests, which the default manager hides."""
+        campaign, quest = self._make_conflicting_campaign()
+        with library_schema_context():
+            # Claim the name the copy would otherwise take, on an archived quest
+            baker.make(Quest, name=build_library_clone_name(quest.name, set()), archived=True)
+
+        export_campaign_and_copy_quests(
+            source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id
+        )
+
+        with library_schema_context():
+            clone = self._library_clone_of(quest)
+            self.assertTrue(clone.name.endswith("#1"), f"expected a numbered suffix, got {clone.name!r}")

@@ -20,6 +20,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -32,7 +33,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from library.utils import from_library_schema_first
+from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -923,11 +924,40 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
+    """Return the rendered preview panel for one quest, for the accordion tables.
+
+    POST only, and XHR only (see the decorators). The accordion in
+    bootstrap-table-accordion.js calls this when a row is expanded and drops the
+    returned HTML into the row's detail area.
+
+    On a Library page the accordion sets ``use_library_schema=1``, which serves
+    the preview out of the shared Library schema instead of the caller's own
+    deck. That flag is a boolean by design: the schema name is resolved server
+    side from the library app's config, never taken from the request, so a
+    caller cannot name the schema its request runs against (schema names are the
+    decks' public subdomains, so accepting one would let any logged-in user read
+    another deck's content).
+
+    Args:
+        request (HttpRequest): the current request. Reads ``use_library_schema``
+            from POST; everything else comes from the URL and the session.
+        quest_id (int | None): primary key of the quest to preview, in whichever
+            schema the flag above selected. Staff may preview archived quests.
+
+    Returns:
+        JsonResponse: ``{"quest_info_html": "<rendered preview>"}``.
+
+    Raises:
+        Http404: if the request is not a POST, if no ``quest_id`` is given (the
+            "every quest at once" response was an unbounded per-request memory
+            hog with no staff gate, issue #2081), or if no matching quest is
+            visible to this user.
+    """
     if request.method == "POST":
         template = 'quest_manager/preview_content_quests_avail.html'
 
-        with from_library_schema_first(request):
-            is_library_view = (request.POST.get('use_schema') == 'library')
+        with library_schema_if_requested(request):
+            is_library_view = is_library_schema_requested(request)
             can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
@@ -1623,6 +1653,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting `archived=False` and ensure it is unpublished
@@ -2002,7 +2033,24 @@ def unhide(request, quest_id):
 
 
 @login_required
+@require_POST
 def skip(request, submission_id):
+    """Approve a submission as a transfer: complete and approved, but worth no XP.
+
+    Limited to staff and to a student marked as not earning XP acting on their own
+    submission, so a student cannot skip a quest by guessing the url. POST-only, because it
+    approves the quest outright (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        submission_id: the id of the QuestSubmission to transfer.
+
+    Returns:
+        An HttpResponseRedirect to the approvals queue for staff, or to the student's quests.
+
+    Raises:
+        Http404: when the requester may not skip this submission.
+    """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
@@ -2036,9 +2084,20 @@ def skip(request, submission_id):
 
 @non_public_only_view
 @login_required
+@require_POST
 def skipped(request, quest_id):
-    """A combination of the start and complete views, but automatically approved
-    regardless, and do_not_grant_xp = True
+    """Skip a quest the student never started: start it, then transfer it.
+
+    A combination of the start and complete views, but automatically approved regardless,
+    and do_not_grant_xp = True. POST-only, since it both creates a submission and approves
+    it (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        quest_id: the id of the Quest to start and transfer.
+
+    Returns:
+        The HttpResponseRedirect from :func:`skip`, which handles the approval.
     """
     quest = get_object_or_404(Quest, pk=quest_id)
     # create_submission always returns a submission: a new in-progress one, or the

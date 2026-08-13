@@ -1,6 +1,7 @@
 from datetime import date
-from copy import deepcopy
 from uuid import uuid4
+
+import tablib
 
 from django_tenants.utils import schema_context
 from quest_manager.admin import QuestResource
@@ -9,6 +10,97 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
 from .utils import library_schema_context, get_library_conflicting_quests
+
+
+def build_library_clone_name(local_name, taken_names):
+    """Return a name for a clone of `local_name` that is free in the Library.
+
+    Quest names are unique per schema and capped at the model's max_length, so a
+    clone of a quest whose original is already in the Library needs a name of its
+    own. Falls back to numbered suffixes when the dated one is also taken.
+
+    Args:
+        local_name (str): the source quest's name.
+        taken_names (set[str]): every name already spoken for in the Library.
+            Must include archived quests: they still hold their name against the
+            unique constraint even though the default manager hides them.
+
+    Returns:
+        str: a name not in `taken_names`, within the field's max_length.
+    """
+    max_len = Quest._meta.get_field('name').max_length or 50
+    base_suffix = f" (Exported on {date.today()})"
+
+    candidate = local_name[:max_len - len(base_suffix)] + base_suffix
+    counter = 1
+    while candidate in taken_names:
+        full_suffix = f"{base_suffix} #{counter}"
+        candidate = local_name[:max_len - len(full_suffix)] + full_suffix
+        counter += 1
+
+    return candidate
+
+
+def clone_quests_into_library(*, source_schema, quests):
+    """Copy quests into the Library as fresh entries, leaving the originals alone.
+
+    Used when a campaign is shared but some of its quests are already in the
+    Library under the same `import_id`: those get a new copy rather than
+    overwriting what is there.
+
+    The copies travel through `QuestResource`, the same serialization the rest of
+    the export uses, with the `import_id` and `name` columns rewritten per row.
+    Going through the resource is what keeps this safe: `Meta.exclude` drops
+    `editor`, `specific_teacher_to_notify` and `common_data`, which are primary
+    keys that mean something different in the Library's schema and must not
+    travel. It also means the copies pick up campaign and prerequisite handling
+    for free instead of re-implementing a subset of it.
+
+    Args:
+        source_schema (str): the tenant schema holding the quests being copied.
+        quests (list[Quest]): quests loaded from `source_schema`.
+
+    Returns:
+        ImportResult | None: the result of importing the copies, or None when
+        there was nothing to copy.
+    """
+    if not quests:
+        return None
+
+    with schema_context(source_schema):
+        export_data = QuestResource().export(quests)
+
+    with library_schema_context():
+        # Archived quests count: the unique constraint does not care that the
+        # default manager hides them.
+        taken_names = set(Quest.objects.all_including_archived().values_list('name', flat=True))
+
+        rows = export_data.dict
+        visibility_map = {}
+        for row in rows:
+            clone_import_id = str(uuid4())
+            row['import_id'] = clone_import_id
+            row['name'] = build_library_clone_name(row['name'], taken_names)
+            taken_names.add(row['name'])
+            # Copies land unpublished like everything else pushed to the Library
+            visibility_map[clone_import_id] = False
+
+        clone_data = tablib.Dataset()
+        clone_data.headers = export_data.headers
+        for row in rows:
+            clone_data.append([row[header] for header in clone_data.headers])
+
+        try:
+            return QuestResource().import_data(
+                clone_data,
+                dry_run=False,
+                raise_errors=True,
+                use_transactions=True,
+                import_campaign=True,
+                local_visibility_map=visibility_map,
+            )
+        except (ValidationError, IntegrityError) as e:
+            raise ValidationError(f"Failed to copy conflicting quests to library schema: {e}") from e
 
 
 def export_quest_to_library(*, source_schema, quest_import_id):
@@ -131,9 +223,9 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
       - Detect quests in the target library that share an import_id with local quests.
       - Export only the non-conflicting quests (unpublished) and the campaign.
       - Ensure the campaign exists in the library.
-      - For each conflicting local quest, create a new unpublished copy in the
-        library campaign with a fresh import_id and a suffixed name to avoid
-        uniqueness issues.
+      - Copy each conflicting local quest into the library campaign as a new
+        unpublished entry with a fresh import_id and a name of its own, leaving
+        the library's existing version untouched.
 
     Args:
         source_schema (str): Tenant schema that contains the source campaign.
@@ -176,32 +268,10 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
             library_campaign.full_clean()
             library_campaign.save()
 
-        # Step 4: clone only the conflicting quests
-        for local_quest in local_quests:
-            if local_quest.import_id in library_conflicting_ids:
-                clone = deepcopy(local_quest)
-                clone.pk = None
-                clone.import_id = uuid4()
-                clone.campaign = library_campaign
-                clone.published = False
+    # Step 4: copy the conflicting quests in alongside the campaign. They carry
+    # the campaign's import_id in their export data, so they attach to the
+    # campaign ensured above.
+    conflicting_quests = [q for q in local_quests if q.import_id in library_conflicting_ids]
+    clone_quests_into_library(source_schema=source_schema, quests=conflicting_quests)
 
-                # make sure name fits max length
-                max_len = Quest._meta.get_field("name").max_length or 50
-                base_suffix = f" (Exported on {date.today()})"
-                counter = 1
-                base_name = local_quest.name
-
-                # Try the base suffix first
-                potential_name = base_name[:max_len - len(base_suffix)] + base_suffix
-                while Quest.objects.filter(name=potential_name).exists():
-                    counter_suffix = f" #{counter}"
-                    full_suffix = base_suffix + counter_suffix
-                    potential_name = base_name[:max_len - len(full_suffix)] + full_suffix
-                    counter += 1
-
-                clone.name = potential_name
-
-                clone.full_clean()
-                clone.save()
-
-        return library_campaign
+    return library_campaign

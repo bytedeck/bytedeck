@@ -131,7 +131,8 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assert302('quests:start', args=[q2_pk])
         self.assert302('quests:hide', args=[q_pk])
         self.assert302('quests:unhide', args=[q_pk])
-        self.assert404('quests:skip_for_quest', args=[q_pk])
+        # skip_for_quest is POST-only (#2383); posting still 404s for a student who may not skip
+        self.assertEqual(self.client.post(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
         self.assert403('quests:unarchive', args=[archived_quest_pk])
 
         self.assert403('quests:quest_prereqs_update', args=[q_pk])
@@ -158,7 +159,7 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assert200('quests:quest_prereqs_update', args=[q_pk])
         # unarchiving unpublishes the quest, so it lands on the Drafts tab where the quest now is
         self.assertRedirects(
-            response=self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])),
+            response=self.client.post(reverse('quests:unarchive', args=[archived_quest_pk])),
             expected_url=reverse('quests:drafts'),
         )
 
@@ -397,8 +398,9 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Students shouldn't have access to these
         self.assert403('quests:flagged')
 
-        # Student's own submission
-        self.assert404('quests:skip', args=[s1_pk])
+        # Student's own submission. skip is POST-only (#2383), so post to reach the view's own
+        # 404 for a student who isn't allowed to skip.
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[s1_pk])).status_code, 404)
         self.assert403('quests:approve', args=[s1_pk])
         self.assert200('quests:submission_past', args=[s1_pk])
         self.assert403('quests:flag', args=[s1_pk])
@@ -408,14 +410,14 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Not this student's submission: sent back to their own quests page, not shown someone else's work
         self.assertRedirectsQuests('quests:submission', args=[s2_pk])
         self.assertRedirectsQuests('quests:drop', args=[s2_pk])
-        self.assert404('quests:skip', args=[s2_pk])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[s2_pk])).status_code, 404)
         self.assertRedirectsQuests('quests:submission_past', args=[s2_pk])
         self.assert404('quests:complete', args=[s2_pk])
 
         # Non existent submissions
         self.assert404('quests:submission', args=[0])
         self.assert404('quests:drop', args=[0])
-        self.assert404('quests:skip', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[0])).status_code, 404)
         self.assert404('quests:submission_past', args=[0])
         self.assert404('quests:complete', args=[0])
 
@@ -665,14 +667,14 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Non existent submissions
         self.assert404('quests:submission', args=[0])
         self.assert404('quests:drop', args=[0])
-        self.assert404('quests:skip', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[0])).status_code, 404)
         self.assert404('quests:submission_past', args=[0])
 
         # These Needs to be completed via POST
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         # skipping is a staff transfer, so it returns the teacher to the approvals queue
         self.assertRedirects(
-            response=self.client.get(reverse('quests:skip', args=[s1_pk])),
+            response=self.client.post(reverse('quests:skip', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
         self.assert404('quests:approve', args=[s1_pk])
@@ -961,7 +963,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         profile.not_earning_xp = True
         profile.save()
 
-        response = self.client.get(reverse('quests:skip', args=[self.sub.id]))
+        response = self.client.post(reverse('quests:skip', args=[self.sub.id]))
 
         self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
         self.sub.refresh_from_db()
@@ -2157,6 +2159,54 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertFalse(quest.published)
         self.assertEqual(quest.editor, test_ta)
 
+    def test_quest_create__TA_cannot_set_the_restricted_fields_by_post(self):
+        """A TA who hand-posts the fields their form leaves off gets none of them: the new quest
+        is an ordinary draft of their own, not archived and not available outside a course (#2384).
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,
+            'archived': True,
+            'available_outside_course': True,
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        # an archived quest drops out of the default manager, so look it up either way and let
+        # the assertions below name what actually went wrong
+        new_quest = Quest.objects.all_including_archived().latest('datetime_created')
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+        self.assertFalse(new_quest.archived)
+        self.assertFalse(new_quest.available_outside_course)
+        self.assertRedirects(response, new_quest.get_absolute_url())
+
+    def test_quest_update__TA_post_leaves_the_teachers_settings_alone(self):
+        """A TA editing a draft can't clear the settings a teacher made, whether by posting a new
+        value or by omitting the field: neither is bound to their form, so both are left alone (#2384).
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.available_outside_course = True  # a teacher's setting, absent from the TA's form
+        quest.save()
+        self.client.force_login(test_ta)
+
+        # 'available_outside_course' is omitted entirely, which for a bound BooleanField would
+        # read as False; 'archived' is posted as True to show a claimed value is ignored too.
+        form_data = {**self.minimal_valid_form_data, 'name': "Edited by the TA", 'archived': True}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertEqual(quest.name, "Edited by the TA")
+        self.assertTrue(quest.available_outside_course)
+        self.assertFalse(quest.archived)
+
     def test_quest_update__teacher_publishing_removes_the_editor(self):
         """When a teacher publishes a TA's draft, the TA's editor access is removed with it, so
         they can no longer edit a quest students are now working on.
@@ -2859,11 +2909,30 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
             QuestSubmission, user=cls.transfer_student, quest=cls.quest, semester=cls.semester,
         )
 
+    def test_skip__get_is_rejected_and_leaves_the_submission_unapproved(self):
+        """Skipping approves a submission outright, so it must not happen on a GET: a teacher
+        following a link, or a page with an <img> pointing here, would otherwise approve a
+        student's quest for them (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('quests:skip', args=[self.submission.pk])
+
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_approved)
+
+    def test_skip_for_quest__get_is_rejected_and_starts_nothing(self):
+        """The same for the url that starts the quest before approving it: nothing is created."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('quests:skip_for_quest', args=[self.quest.pk])
+
+        self.assertFalse(QuestSubmission.objects.filter(user=self.test_teacher, quest=self.quest).exists())
+
     def test_skip__teacher_approves_the_submission_as_a_transfer(self):
         """A teacher skipping a submission marks it completed and approved, and back to the approvals queue."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('quests:skip', args=[self.submission.pk]))
+        response = self.client.post(reverse('quests:skip', args=[self.submission.pk]))
 
         self.assertRedirects(response, reverse('quests:approvals'), fetch_redirect_response=False)
         self.submission.refresh_from_db()
@@ -2876,7 +2945,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         xp_before = self.transfer_student.profile.xp_cached
 
-        self.client.get(reverse('quests:skip', args=[self.submission.pk]))
+        self.client.post(reverse('quests:skip', args=[self.submission.pk]))
 
         self.submission.refresh_from_db()
         self.assertTrue(self.submission.do_not_grant_xp)
@@ -2891,7 +2960,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         """
         self.client.force_login(self.transfer_student)
 
-        self.assert404('quests:skip', args=[self.submission.pk])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[self.submission.pk])).status_code, 404)
 
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_approved)
@@ -2904,7 +2973,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student)
         self.assertFalse(QuestSubmission.objects.filter(user=self.test_student, quest=self.quest).exists())
 
-        response = self.client.get(reverse('quests:skip_for_quest', args=[self.quest.pk]))
+        response = self.client.post(reverse('quests:skip_for_quest', args=[self.quest.pk]))
 
         self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
         submission = QuestSubmission.objects.get(user=self.test_student, quest=self.quest)
@@ -2915,7 +2984,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         """A skip url for a missing quest 404s rather than creating a submission for nothing."""
         self.client.force_login(self.test_teacher)
 
-        self.assert404('quests:skip_for_quest', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip_for_quest', args=[0])).status_code, 404)
 
         self.assertFalse(QuestSubmission.objects.filter(user=self.test_teacher).exists())
 
@@ -5105,6 +5174,16 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
         url = reverse('quests:quest_archive', args=[nonexistent_id])
         self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_unarchive__get_is_rejected_and_leaves_the_quest_archived(self):
+        """Unarchiving changes the quest, so it must not happen on a GET (#2383). The button in
+        the template already posts; this closes the url itself."""
+        archived_quest = baker.make(Quest, archived=True)
+
+        self.assert405('quests:unarchive', args=[archived_quest.id])
+
+        archived_quest.refresh_from_db()
+        self.assertTrue(archived_quest.archived)
 
     def test_unarchive__nonexistent_quest_returns_404(self):
         """Unarchiving a quest id that does not exist 404s cleanly (#1856).
