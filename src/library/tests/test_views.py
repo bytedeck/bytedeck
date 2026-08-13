@@ -5,10 +5,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection
+from django.http import Http404
+from django.test import RequestFactory
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
+from library.views import shared_library_enabled_view
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
 from model_bakery import baker
@@ -1442,3 +1445,18 @@ class LibraryViewsOnPublicSchemaTests(LibraryTenantTestCaseMixin):
             with self.subTest(url_name=url_name):
                 response = self.client.get(reverse(url_name))
                 self.assertEqual(response.status_code, 404)
+
+    @patch('library.views.SiteConfig.get', return_value=None)
+    def test_shared_library_enabled_view__404s_when_there_is_no_site_config(self, mock_get):
+        """With no deck config there is no Shared Library either, so the check 404s.
+
+        `SiteConfig.get()` returns None on the public schema. This check runs ahead
+        of the non-public guard, so it has to handle that itself rather than raising
+        AttributeError on a None config. Exercised against the decorator directly:
+        going through the test client would render the 404 page, which calls
+        `SiteConfig.get()` again and would fail on the patch rather than the guard.
+        """
+        wrapped = shared_library_enabled_view(lambda request: 'reached the view')
+
+        with self.assertRaises(Http404):
+            wrapped(RequestFactory().get('/'))

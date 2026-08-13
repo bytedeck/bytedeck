@@ -40,23 +40,18 @@ def shared_library_enabled_view(f):
     reachable (and importable) on a deck that had deliberately opted out. A deck
     with the feature off should behave as though it does not exist, hence 404
     rather than a 403 or an explanatory page.
+
+    `SiteConfig.get()` returns None on the public schema, which has no deck
+    config and so has no Shared Library either: that is treated the same way, so
+    this holds on its own rather than relying on running after a non-public check.
     """
     @functools.wraps(f)
     def wrapper(request, *args, **kwargs):
         config = SiteConfig.get()
-        if not config.enable_shared_library:
+        if config is None or not config.enable_shared_library:
             raise Http404("The Shared Library is not enabled on this deck.")
         return f(request, *args, **kwargs)
     return wrapper
-
-
-class SharedLibraryEnabledMixin:
-    """Class-based-view form of `shared_library_enabled_view`."""
-
-    @method_decorator(shared_library_enabled_view)
-    def dispatch(self, *args, **kwargs):
-        """Apply the Shared Library feature check before handling the request."""
-        return super().dispatch(*args, **kwargs)
 
 
 def get_published_library_object(model, import_id):
@@ -151,8 +146,8 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class LibraryQuestListView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     """
     View for displaying a list of active quests from the shared library.
 
@@ -195,8 +190,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, Te
         return context
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class LibraryCampaignListView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
     """
     View for displaying a list of active campaigns (categories) from the shared library.
 
@@ -243,8 +238,8 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin,
         return context
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ImportQuestView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ImportQuestView(NonPublicOnlyViewMixin, View):
     """
     View for importing a single quest from the shared library into the current deck.
 
@@ -321,8 +316,8 @@ class ImportQuestView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, View):
         return redirect('quests:drafts')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ImportCampaignView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ImportCampaignView(NonPublicOnlyViewMixin, View):
     """
     View for importing a full campaign (category) from the shared library into the current deck.
 
@@ -445,8 +440,8 @@ class ExportPermissionMixin:
             raise PermissionDenied("Only the deck owner can export unless allow_staff_export is enabled.")
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ExportQuestView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, ExportPermissionMixin, View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
     """
     View for exporting a single quest from the current deck into the shared library.
 
@@ -560,8 +555,8 @@ class ExportQuestView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, ExportP
         return redirect('quests:quests')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ExportCampaignView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, ExportPermissionMixin, View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
     """
     View for exporting a full campaign (category) and its quests
     from the current deck into the shared library.
@@ -697,8 +692,8 @@ class ExportCampaignView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, Expo
         return redirect('quests:categories')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class CategoryDetailView(NonPublicOnlyViewMixin, SharedLibraryEnabledMixin, TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
     """
     View the content of a campaign (category) from the shared library.
     """
