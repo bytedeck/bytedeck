@@ -19,7 +19,11 @@ STAND_IN_IMAGE=python:3.12-slim
 WORKDIR=$(mktemp -d)
 CERT_DIR=$WORKDIR/letsencrypt/live/$DOMAIN_UNDER_TEST
 
-export ROOT_DOMAIN=$DOMAIN_UNDER_TEST WUID=0 WGID=0
+# CDN_static is a required nginx build arg (the legacy /media/ redirect is
+# rendered from it and the build fails on an empty value), so it gets a
+# stand-in host here. Nothing in this file requests /media/, so the value only
+# has to be non-empty and syntactically a host.
+export ROOT_DOMAIN=$DOMAIN_UNDER_TEST WUID=0 WGID=0 CDN_static=cdn.$DOMAIN_UNDER_TEST
 COMPOSE=(docker compose -p bytedeck-topotest
          -f docker-compose.yml
          -f docker-compose.prod.aws.yml
@@ -118,6 +122,15 @@ check yes "web can reach redis:6379" \
 # A request for a domain this deck does not serve is dropped, not proxied.
 check no "nginx drops a foreign Host header" \
     curl -sk --max-time 10 -o /dev/null https://127.0.0.1/ -H "Host: not-this-deck.example.com"
+
+# The legacy /media/ shim redirects to the CDN host the image was built with, so
+# a build that substituted the wrong value (or none) is caught here rather than
+# by a visitor following an old link. The build guard only proves the value was
+# non-empty; this proves it reached the rendered config.
+check yes "nginx redirects /media/ to the CDN_static host" \
+    bash -c "curl -sk --max-time 10 -o /dev/null -w '%{http_code} %{redirect_url}' \
+                  https://127.0.0.1/media/logo.png -H 'Host: $DOMAIN_UNDER_TEST' \
+             | grep -qx '301 https://cdn.$DOMAIN_UNDER_TEST/public_media/logo.png'"
 
 echo
 if [ "$failures" -gt 0 ]; then
