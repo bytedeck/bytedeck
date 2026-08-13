@@ -2,6 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.shortcuts import reverse
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
 from model_bakery import baker
@@ -316,6 +317,39 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': github_url})
 
         self.assertRedirects(response, github_url, fetch_redirect_response=False)
+
+    @override_settings(NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS=['example.org'])
+    def test_read__configured_extra_host_next_is_followed(self):
+        """A ?next= host that isn't the current deck but is listed in
+        NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS is followed, so the allowlist setting (not just
+        the hardcoded default) actually widens the trusted destinations."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        configured_url = 'https://example.org/whats-new'
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': configured_url})
+
+        self.assertRedirects(response, configured_url, fetch_redirect_response=False)
+
+    def test_read__insecure_next_rejected_on_secure_request(self):
+        """On an HTTPS request, an http:// ?next= (even to an allowed host) is refused and falls
+        back to the list: require_https follows the request scheme, so a secure page won't bounce
+        the user down to an insecure URL."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        # secure=True makes request.is_secure() True, so require_https rejects the http:// target.
+        response = self.client.get(
+            reverse('notifications:read', args=[note.id]), {'next': 'http://github.com/bytedeck/bytedeck'}, secure=True,
+        )
+
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
 
     def test_read__other_users_notification_raises_404(self):
         """Reading a notification that belongs to another user is a 404 (not readable)."""

@@ -65,6 +65,18 @@ def read_all(request):
 @non_public_only_view
 @login_required
 def read(request, id):
+    """Mark the requester's own notification `id` as read, then redirect onward.
+
+    `id` is the notification's primary key (from the URL). The notification is
+    marked read only when it belongs to `request.user`; another user's id raises
+    a 404. On success the view redirects to the `?next=` URL when that URL is
+    safe, meaning a same-deck link (relative, or the current host) or one whose
+    host is in `settings.NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS` (github.com by
+    default, for the release-announcement notice). Any other `next` (or none)
+    falls back to the notifications list, so a crafted `next` can't turn this
+    into an open redirect. A missing or deleted notification id also redirects
+    to the list, with an error message. Returns an HttpResponseRedirect.
+    """
     try:
         next = request.GET.get('next', None)
         notification = Notification.objects.get(id=id)
