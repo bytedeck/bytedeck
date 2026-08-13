@@ -206,6 +206,9 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
         """
         Populate context with active campaigns from the shared library.
 
+        Args:
+            **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
+
         Returns:
             dict: Template context including:
                 - heading (str): Page title.

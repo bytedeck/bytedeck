@@ -104,6 +104,22 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return queryset
 
     def get_context_data(self, *args, **kwargs):
+        """Add the tab state and the campaign table's flags to the deck's campaign list.
+
+        Args:
+            *args: positional arguments passed through to `ListView.get_context_data`.
+            **kwargs: keyword arguments passed through to `ListView.get_context_data`.
+
+        Returns:
+            dict: the template context, with
+                - available_tab_active (bool): the Available tab is the one being shown.
+                - inactive_tab_active (bool): the Inactive tab is the one being shown.
+                - can_export (bool): this user may push a campaign to the Shared Library,
+                    so the export action is offered.
+                - is_library_view (bool): False. The campaign table is shared with the
+                    Library's campaign list, and this is the deck's own copy, so it shows
+                    the local actions rather than the Library's import action.
+        """
         context_data = super().get_context_data(*args, **kwargs)
 
         can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
