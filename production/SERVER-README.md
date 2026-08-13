@@ -204,12 +204,13 @@ variables are left untouched.
 **S3** and they are served through **CloudFront**. nginx does not serve app
 media in normal operation.
 
-> Legacy detail: `nginx/bytedeck.conf.template` still contains a hardcoded
-> `location ~ /media/(.*)$` that 301-redirects to a specific CloudFront
-> distribution (`d10ge8y4vx8iud.cloudfront.net/public_media/$1`). It's a
-> workaround for old hardcoded `/media/...` URLs and causes a redundant redirect
-> hop. Prefer generating correct absolute S3/CloudFront URLs in the app and
-> removing this block when practical.
+> Legacy detail: `nginx/bytedeck.conf.template` still contains a
+> `location ~ /media/(.*)$` that 301-redirects to the S3/CloudFront
+> distribution. The CDN host is injected from the `CDN_static` `.env` value at
+> image-build time (`envsubst` in `nginx/Dockerfile`) rather than hardcoded. It's
+> a workaround for old hardcoded `/media/...` URLs and causes a redundant
+> redirect hop. Prefer generating correct absolute S3/CloudFront URLs in the app
+> and removing this block when practical.
 
 ## Database
 
@@ -334,7 +335,7 @@ request, so it redirects every request forever).
       -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}'  # web's IP per network
   ```
   The upstream address must match web's IP on the network it shares with nginx
-  (`backend-network`; web also sits on `frontend-network`, and that IP is not
+  (`frontend-network`; web also sits on `backend-network`, and that IP is not
   the one nginx dials). If they do not match, nginx is holding a stale address: confirm
   the site config still carries the `resolver` line and the `$web_upstream`
   variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping

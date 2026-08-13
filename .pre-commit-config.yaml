@@ -23,7 +23,7 @@ repos:
   # Keep this rev in step with the ruff pin in requirements.txt, so the hook and
   # CI lint with the same version and cannot disagree about what passes.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.2
+    rev: v0.16.3
     hooks:
       - id: ruff
         args: [ "--fix" ]
