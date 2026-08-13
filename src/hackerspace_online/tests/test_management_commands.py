@@ -81,6 +81,26 @@ class InitDbTest(TestCase, CommandMixin):
 
             Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
 
+    def test_initdb__gives_the_shared_library_a_reachable_domain(self):
+        """A single initdb run leaves the Library deck reachable at library.<ROOT_DOMAIN> (#2382).
+
+        The tenant post_save signal derives a domain from the tenant's name, and the Library
+        tenant is named 'Shared Library', so the derived domain contains a space and can never
+        be reached. initdb has to set the intended domain itself, on the first run rather than
+        only on a re-run against a database where the tenant already exists.
+        """
+        self.call_command()
+
+        library_tenant = Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)
+        primary_domain = library_tenant.get_primary_domain().domain
+
+        self.assertEqual(primary_domain, f'library.{settings.ROOT_DOMAIN}')
+        # no leftover unreachable domain beside it, or the deck answers on a host nobody can type
+        self.assertEqual(
+            list(library_tenant.domains.values_list('domain', flat=True)),
+            [f'library.{settings.ROOT_DOMAIN}'],
+        )
+
     def test_initdb__bails_when_database_is_unreachable(self):
         """If the initial DB connectivity check raises OperationalError, initdb reports it and
         bails without creating a superuser."""

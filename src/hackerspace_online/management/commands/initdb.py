@@ -35,9 +35,16 @@ class Command(BaseCommand):
             defaults={'name': 'Shared Library'},
         )
 
-        if not created and not library_tenant.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists():
+        # Set the domain whether or not the tenant was just created. A new tenant already has
+        # one, because the post_save signal derives a domain from the tenant's *name*, and
+        # 'Shared Library' contains a space, so that domain can never be reached: on a fresh
+        # database the Library deck was unreachable at library.<ROOT_DOMAIN> until initdb was
+        # run a second time (#2382).
+        library_domain = 'library.' + settings.ROOT_DOMAIN
+        if not library_tenant.domains.filter(domain=library_domain).exists():
+            library_tenant.domains.all().delete()
             library_tenant.domains.create(
-                domain='library.' + settings.ROOT_DOMAIN,
+                domain=library_domain,
                 is_primary=True
             )
         from django.db import models
