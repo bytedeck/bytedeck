@@ -36,24 +36,30 @@
     </div>
 
     {# Archive / restore / delete get their own button group, separate from the profile actions above (#2182). #}
+    {% comment %}
+      Archiving and restoring change the student's account, so they post rather than link (#2383).
+      One form wraps the whole group and each button names its own action, which keeps the buttons
+      direct children of the .btn-group so Bootstrap still joins them into one control.
+    {% endcomment %}
     {% if request.user.is_staff and not object.user.is_staff %}
-      <div class="btn-group" role="group">
-        {% if object.user.is_active %}
-          {# Archiving deactivates the student (reversible) instead of deleting outright. #}
-          <a class="btn btn-default" title="Archive this student (deactivates their account; can be restored or deleted later)"
-            href="{% url 'profiles:profile_archive' object.id %}"
-            role="button"><i class="fa fa-archive"></i></a>
-        {% else %}
-          {# Archived student: restore (dark up-arrow inside the archive box, kept 1em via fa-stack-inline) reactivates; delete is available here too. #}
-          <a class="btn btn-success" title="Restore this student (reactivates their account)"
-            href="{% url 'profiles:profile_restore' object.id %}"
-            role="button"><span class="fa-stack fa-stack-inline"><i class="fa fa-archive fa-stack-1x"></i><i class="fa fa-arrow-up fa-stack-1x"></i></span></a>
+      <form method="post" class="preview-action-form">
+        {% csrf_token %}
+        <div class="btn-group" role="group">
+          {% if object.user.is_active %}
+            {# Archiving deactivates the student (reversible) instead of deleting outright. #}
+            <button type="submit" class="btn btn-default" title="Archive this student (deactivates their account; can be restored or deleted later)"
+              formaction="{% url 'profiles:profile_archive' object.id %}"><i class="fa fa-archive"></i></button>
+          {% else %}
+            {# Archived student: restore (dark up-arrow inside the archive box, kept 1em via fa-stack-inline) reactivates; delete is available here too. #}
+            <button type="submit" class="btn btn-success" title="Restore this student (reactivates their account)"
+              formaction="{% url 'profiles:profile_restore' object.id %}"><span class="fa-stack fa-stack-inline"><i class="fa fa-archive fa-stack-1x"></i><i class="fa fa-arrow-up fa-stack-1x"></i></span></button>
 
-          <a class="btn btn-danger" title="Delete this User permanently"
-            href="{% url 'profiles:profile_delete' object.id %}"
-            role="button"><i class="fa fa-trash-o"></i></a>
-        {% endif %}
-      </div>
+            <a class="btn btn-danger" title="Delete this User permanently"
+              href="{% url 'profiles:profile_delete' object.id %}"
+              role="button"><i class="fa fa-trash-o"></i></a>
+          {% endif %}
+        </div>
+      </form>
     {% endif %}
 {% endblock %}
 

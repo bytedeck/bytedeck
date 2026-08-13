@@ -20,14 +20,22 @@
       <a id="btn-fullscreen" role="button" class="btn btn-default">Fullscreen <i class="fa fa-arrows-alt"></i></a>
       <a class="btn btn-default" href="{% url 'djcytoscape:list' %}" role="button"
         title = "List all maps"><i class="fa fa-list-ul"></i></a>
-      <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
-        title = "Recalculate ALL Maps.  This may take a few moments." >
-        <i class="fa fa-refresh"></i>
-      </a>
-      <a class="btn btn-success" href="{% url 'djcytoscape:regenerate' scape.id %}" role="button"
-        title = "Recalculate this Map." >
-        <i class="fa fa-undo"></i>
-      </a>
+      {% comment %}
+        Regenerating rebuilds a map (and removes one whose initial object is gone), so these post
+        rather than link (#2383).
+      {% endcomment %}
+      <form method="post" action="{% url 'djcytoscape:regenerate_all' %}" class="preview-action-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary" title="Recalculate ALL Maps.  This may take a few moments.">
+          <i class="fa fa-refresh"></i>
+        </button>
+      </form>
+      <form method="post" action="{% url 'djcytoscape:regenerate' scape.id %}" class="preview-action-form">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-success" title="Recalculate this Map.">
+          <i class="fa fa-undo"></i>
+        </button>
+      </form>
       <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button"
         title = "Edit the Map" >
         <i class="fa fa-edit"></i>

@@ -20,6 +20,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -1623,6 +1624,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting `archived=False` and ensure it is unpublished
@@ -2002,6 +2004,7 @@ def unhide(request, quest_id):
 
 
 @login_required
+@require_POST
 def skip(request, submission_id):
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     # student can only do this if the button is turned on by a teacher
@@ -2036,6 +2039,7 @@ def skip(request, submission_id):
 
 @non_public_only_view
 @login_required
+@require_POST
 def skipped(request, quest_id):
     """A combination of the start and complete views, but automatically approved
     regardless, and do_not_grant_xp = True

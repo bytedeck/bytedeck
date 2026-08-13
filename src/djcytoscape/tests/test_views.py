@@ -313,7 +313,7 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
     def test_regenerate__redirects_to_quest_map(self):
         """Regenerating a good map redirects back to that map's quest_map page."""
         self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate', args=[self.map.id])),
+            response=self.client.post(reverse('djcytoscape:regenerate', args=[self.map.id])),
             expected_url=reverse('djcytoscape:quest_map', args=[self.map.id]),
         )
 
@@ -325,22 +325,43 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
             initial_object_id=99999,  # a non-existant object
         )
         self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate', args=[bad_map.id])),
+            response=self.client.post(reverse('djcytoscape:regenerate', args=[bad_map.id])),
             expected_url=reverse('djcytoscape:primary'),
         )
 
     def test_regenerate_all__redirects_to_primary(self):
         """Regenerating all maps redirects to the primary map."""
         self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate_all')),
+            response=self.client.post(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),
         )
+
+    def test_regenerate__get_is_rejected_and_leaves_the_map_alone(self):
+        """Regenerating rebuilds a map, and removes one whose initial object is gone, so it must
+        not happen on a GET: a staff member following a link (or loading a page with an <img>
+        pointing here) would otherwise delete a map (#2383)."""
+        bad_map = CytoScape.objects.create(
+            name="bad map",
+            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
+            initial_object_id=99999,  # a non-existant object, so regenerating would delete this map
+        )
+
+        self.assert405('djcytoscape:regenerate', args=[bad_map.id])
+
+        self.assertTrue(CytoScape.objects.filter(id=bad_map.id).exists())
+
+    @patch('djcytoscape.views.regenerate_all_maps.apply_async')
+    def test_regenerate_all__get_is_rejected_and_dispatches_nothing(self, mock_apply_async):
+        """The same for regenerating every map, which is queued as a background task (#2383)."""
+        self.assert405('djcytoscape:regenerate_all')
+
+        self.assertFalse(mock_apply_async.called)
 
     @patch('djcytoscape.views.regenerate_all_maps.apply_async')
     def test_regenerate_all__always_offloads_to_background_task(self, mock_apply_async):
         """Regeneration is always offloaded to the celery task (no inline loop / count
         threshold), and the user is told it's being processed in the background (#2081)."""
-        response = self.client.get(reverse('djcytoscape:regenerate_all'), follow=True)
+        response = self.client.post(reverse('djcytoscape:regenerate_all'), follow=True)
 
         mock_apply_async.assert_called_once_with(args=[self.staff_user.id], queue='default')
         self.assertTrue(

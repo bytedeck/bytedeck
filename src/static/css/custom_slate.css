@@ -295,3 +295,16 @@ input, textarea {
 .announcement-dropdown a{
     color: rgb(200, 200, 200);
 }
+
+/* A dropdown item that posts instead of linking (e.g. Publish an announcement) takes the colours
+   this theme gives `.dropdown-menu > li > a`; its layout comes from .dropdown-post-form in
+   custom_common.css. */
+.dropdown-menu > li > .dropdown-post-form > .btn-link{
+    color: #c8c8c8;
+}
+
+.dropdown-menu > li > .dropdown-post-form > .btn-link:hover,
+.dropdown-menu > li > .dropdown-post-form > .btn-link:focus{
+    color: #ffffff;
+    background-color: #272b30;
+}

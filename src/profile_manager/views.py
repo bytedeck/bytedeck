@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.html import format_html
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView, DeleteView
 
@@ -491,6 +492,7 @@ def oauth_merge_account(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def recalculate_current_xp(request):
     # Recalculating XP for every current student invalidates and recomputes a cache per
     # profile; on a busy deck that is hundreds of profiles in one request, which has grown a
@@ -509,6 +511,7 @@ def recalculate_current_xp(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
@@ -518,6 +521,7 @@ def xp_toggle(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_archive(request, profile_id):
     """Archive a student by deactivating their account (``User.is_active = False``).
 
@@ -549,6 +553,7 @@ def profile_archive(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_restore(request, profile_id):
     """Restore an archived student by reactivating their account (``User.is_active = True``).
 
@@ -570,12 +575,14 @@ def profile_restore(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban_toggle(request, profile_id):
     return comment_ban(request, profile_id, toggle=True)
 
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
     if toggle:
