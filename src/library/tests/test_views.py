@@ -1208,6 +1208,14 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
 
     @patch("library.exporter.QuestResource.import_data")
+    def test_clone_quests_into_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
+        """A database error while copying conflicting quests is re-raised with context."""
+        mock_import_data.side_effect = IntegrityError("duplicate key")
+        quest = baker.make(Quest, published=True)
+        with self.assertRaisesMessage(ValidationError, "Failed to copy conflicting quests to library schema"):
+            clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
+
+    @patch("library.exporter.QuestResource.import_data")
     def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
         """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
         mock_import_data.side_effect = IntegrityError("duplicate key")
