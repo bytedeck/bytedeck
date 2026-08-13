@@ -708,6 +708,13 @@ GITHUB_API_TOKEN = env('GITHUB_API_TOKEN', default='')
 # owner/name of the repo whose Announcements discussions carry the changelog.
 RELEASE_ANNOUNCEMENT_REPO = env('RELEASE_ANNOUNCEMENT_REPO', default='bytedeck/bytedeck')
 
+# External hosts a notification click-through may redirect to. The notifications
+# read view forwards its ?next= target, which for most notices is an internal
+# relative path but for the release-announcement notice is the GitHub Discussion
+# link, so github.com is trusted here; any other absolute URL is refused and the
+# user is sent to their notifications list instead (closes an open redirect).
+NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS = env.list('NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS', default=['github.com'])
+
 # STRIPE ##########################################################
 
 # Automated deck subscriptions (epic #1729). All default to None: when the keys
