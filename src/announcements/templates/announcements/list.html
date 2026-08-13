@@ -59,7 +59,17 @@
             <li class="announcement--edit"><a href="{% url 'announcements:update' object.id %}">Edit</a></li>
             <li class="announcement--copy"><a href="{% url 'announcements:copy' object.id %}">Copy</a></li>
             {% if object.draft %}
-              <li><a href="{% url 'announcements:publish' object.id %}" title="Publish and broadcast this announcement to students.">Publish</a></li>
+              {% comment %}
+                Publishing broadcasts and emails the announcement to every student, so it posts
+                rather than links (#2383). .dropdown-post-form keeps the button looking like the
+                other items in the menu.
+              {% endcomment %}
+              <li>
+                <form method="post" action="{% url 'announcements:publish' object.id %}" class="dropdown-post-form">
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-link" title="Publish and broadcast this announcement to students.">Publish</button>
+                </form>
+              </li>
             {% endif %}
             <li role="separator" class="divider"></li>
             {% endif %}
