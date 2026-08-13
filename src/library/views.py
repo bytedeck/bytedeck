@@ -1,6 +1,9 @@
+import functools
+
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db import connection
+from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.utils.decorators import method_decorator
@@ -10,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 
 from hackerspace_online.decorators import staff_member_required
+from tenant.views import NonPublicOnlyViewMixin
 
 from quest_manager.models import Quest, Category
 
@@ -21,10 +25,79 @@ from notifications.signals import notify
 
 
 from .exporter import export_quest_to_library, export_campaign_and_copy_quests
+from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
+
+
+def shared_library_enabled_view(f):
+    """Raise Http404 unless this deck has the Shared Library turned on.
+
+    `SiteConfig.enable_shared_library` is off by default and marked experimental.
+    Without this the flag only hid the sidebar link, so every Library URL stayed
+    reachable (and importable) on a deck that had deliberately opted out. A deck
+    with the feature off should behave as though it does not exist, hence 404
+    rather than a 403 or an explanatory page.
+
+    `SiteConfig.get()` returns None on the public schema, which has no deck
+    config and so has no Shared Library either: that is treated the same way, so
+    this holds on its own rather than relying on running after a non-public check.
+    """
+    @functools.wraps(f)
+    def wrapper(request, *args, **kwargs):
+        config = SiteConfig.get()
+        if config is None or not config.enable_shared_library:
+            raise Http404("The Shared Library is not enabled on this deck.")
+        return f(request, *args, **kwargs)
+    return wrapper
+
+
+def get_published_library_object(model, import_id):
+    """Fetch a published object from the Shared Library by its import ID.
+
+    Content lands in the Library unpublished and stays invisible to other decks
+    until a Library admin reviews and publishes it (#1949). That gate used to
+    filter only the listing pages, so a POST straight to an import URL pulled
+    unreviewed content down. Both import paths go through here instead.
+
+    Must be called from within the library schema context.
+
+    Args:
+        model (type[Quest] | type[Category]): the model to fetch.
+        import_id (UUID): the import ID to look up.
+
+    Returns:
+        Quest | Category | None: the published object, or None when it exists in
+        the Library but has not been published yet.
+
+    Raises:
+        Http404: if nothing in the Library has this import ID at all.
+    """
+    obj = model.objects.filter(import_id=import_id).first()
+    if obj is None:
+        raise Http404(f"No {model._meta.verbose_name} in the Library with import ID {import_id}.")
+
+    return obj if obj.published else None
+
+
+def redirect_awaiting_review(request, content_type, redirect_to):
+    """Send the user back to the Library, explaining the content is not published yet.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        content_type (str): "quest" or "campaign", used in the message.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the warning message.
+    """
+    messages.warning(
+        request,
+        f"That {content_type} is not available in the Library yet: a Library admin still has to review and publish it."
+    )
+    return redirect(redirect_to)
 
 
 def email_library_staff_of_push(content_type, content_name, exported_obj, sharer, source_deck_url):
@@ -73,8 +146,8 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class LibraryQuestListView(TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     """
     View for displaying a list of active quests from the shared library.
 
@@ -117,8 +190,8 @@ class LibraryQuestListView(TemplateView):
         return context
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class LibraryCampaignListView(TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
     """
     View for displaying a list of active campaigns (categories) from the shared library.
 
@@ -165,8 +238,8 @@ class LibraryCampaignListView(TemplateView):
         return context
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ImportQuestView(View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ImportQuestView(NonPublicOnlyViewMixin, View):
     """
     View for importing a single quest from the shared library into the current deck.
 
@@ -196,7 +269,10 @@ class ImportQuestView(View):
 
         # Fetch the quest from the shared library
         with library_schema_context():
-            quest = get_object_or_404(Quest, import_id=quest_import_id)
+            quest = get_published_library_object(Quest, quest_import_id)
+
+        if quest is None:
+            return redirect_awaiting_review(request, 'quest', 'library:quest_list')
 
         return render(request, self.template_name, {
             'quest': quest,
@@ -226,7 +302,9 @@ class ImportQuestView(View):
             raise PermissionDenied(f'Quest with import_id {quest_import_id} already exists in the current deck.')
 
         with library_schema_context():
-            quest = get_object_or_404(Quest, import_id=quest_import_id)
+            quest = get_published_library_object(Quest, quest_import_id)
+            if quest is None:
+                return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
             import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
 
@@ -238,8 +316,8 @@ class ImportQuestView(View):
         return redirect('quests:drafts')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ImportCampaignView(View):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ImportCampaignView(NonPublicOnlyViewMixin, View):
     """
     View for importing a full campaign (category) from the shared library into the current deck.
 
@@ -271,7 +349,9 @@ class ImportCampaignView(View):
         local_category = Category.objects.filter(import_id=campaign_import_id).first()
 
         with library_schema_context():
-            library_category = get_object_or_404(Category, import_id=campaign_import_id)
+            library_category = get_published_library_object(Category, campaign_import_id)
+            if library_category is None:
+                return redirect_awaiting_review(request, 'campaign', 'library:category_list')
             category_id = library_category.pk
             category_name = library_category.name
             category_icon = library_category.get_icon_url()
@@ -325,7 +405,9 @@ class ImportCampaignView(View):
             raise PermissionDenied(f'Campaign with import ID {campaign_import_id} already exists in the current deck.')
 
         with library_schema_context():
-            category = get_object_or_404(Category, import_id=campaign_import_id)
+            category = get_published_library_object(Category, campaign_import_id)
+            if category is None:
+                return redirect_awaiting_review(request, 'campaign', 'library:category_list')
             # Collect import IDs for all quests in the campaign
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
@@ -358,8 +440,8 @@ class ExportPermissionMixin:
             raise PermissionDenied("Only the deck owner can export unless allow_staff_export is enabled.")
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ExportQuestView(View, ExportPermissionMixin):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
     """
     View for exporting a single quest from the current deck into the shared library.
 
@@ -388,6 +470,7 @@ class ExportQuestView(View, ExportPermissionMixin):
         return render(request, self.template_name, {
             'quest': quest,
             'library_quest': library_quest,
+            'licence_form': ShareLicenceForm(),
         })
 
     def post(self, request, quest_import_id):
@@ -414,6 +497,18 @@ class ExportQuestView(View, ExportPermissionMixin):
         self._require_export_permission(request)
 
         quest = get_object_or_404(Quest.objects.all(), import_id=quest_import_id)
+
+        # The licence checkbox is `required` in the template, but that is a browser
+        # hint only: this is what actually holds the push (#1546, #2366).
+        licence_form = ShareLicenceForm(request.POST)
+        if not licence_form.is_valid():
+            with library_schema_context():
+                library_quest = Quest.objects.all_including_archived().filter(import_id=quest.import_id).first()
+            return render(request, self.template_name, {
+                'quest': quest,
+                'library_quest': library_quest,
+                'licence_form': licence_form,
+            })
 
         source_schema = connection.schema_name
         # Resolve the source deck's URL now, while its schema is active (the email
@@ -460,8 +555,8 @@ class ExportQuestView(View, ExportPermissionMixin):
         return redirect('quests:quests')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class ExportCampaignView(View, ExportPermissionMixin):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
     """
     View for exporting a full campaign (category) and its quests
     from the current deck into the shared library.
@@ -470,20 +565,21 @@ class ExportCampaignView(View, ExportPermissionMixin):
     """
     template_name = 'library/confirm_export_campaign.html'
 
-    def get(self, request, campaign_import_id):
-        """
-        Display the confirmation page for exporting a campaign and its quests to the shared library.
+    def _render_confirmation(self, request, campaign, licence_form):
+        """Render the campaign export confirmation page.
+
+        Shared by GET and by the POST path that rejects an unagreed licence, so
+        the page a user lands on after a failed submit is the one they started from.
 
         Args:
             request (HttpRequest): The current HTTP request object.
-            campaign_import_id (UUID): The unique import ID of the campaign to be exported.
+            campaign (Category): The local campaign being shared.
+            licence_form (ShareLicenceForm): Blank on GET, bound (and invalid) on
+                a rejected POST so its error renders.
 
         Returns:
-            HttpResponse: The rendered confirmation template with campaign and quest details.
+            HttpResponse: The rendered confirmation template.
         """
-        self._require_export_permission(request)
-
-        campaign = get_object_or_404(Category, import_id=campaign_import_id)
         # evaluate the queryset to render the quests properly and give proper context to get_library_conflicting_quests
         quests = list(campaign.current_quests())
 
@@ -504,8 +600,26 @@ class ExportCampaignView(View, ExportPermissionMixin):
             'category_published': campaign.published,
             'category_displayed_quests': quests,
             'library_quest_import_ids': library_quest_import_ids,
+            'licence_form': licence_form,
         }
         return render(request, self.template_name, context)
+
+    def get(self, request, campaign_import_id):
+        """
+        Display the confirmation page for exporting a campaign and its quests to the shared library.
+
+        Args:
+            request (HttpRequest): The current HTTP request object.
+            campaign_import_id (UUID): The unique import ID of the campaign to be exported.
+
+        Returns:
+            HttpResponse: The rendered confirmation template with campaign and quest details.
+        """
+        self._require_export_permission(request)
+
+        campaign = get_object_or_404(Category, import_id=campaign_import_id)
+
+        return self._render_confirmation(request, campaign, ShareLicenceForm())
 
     def post(self, request, campaign_import_id):
         """
@@ -527,6 +641,13 @@ class ExportCampaignView(View, ExportPermissionMixin):
         self._require_export_permission(request)
 
         campaign = get_object_or_404(Category, import_id=campaign_import_id)
+
+        # The licence checkbox is `required` in the template, but that is a browser
+        # hint only: this is what actually holds the push (#1546, #2366).
+        licence_form = ShareLicenceForm(request.POST)
+        if not licence_form.is_valid():
+            return self._render_confirmation(request, campaign, licence_form)
+
         source_schema = connection.schema_name
         # Resolve the source deck's URL now, while its schema is active (the email
         # is built later inside the library schema context) -- see #1949.
@@ -571,12 +692,32 @@ class ExportCampaignView(View, ExportPermissionMixin):
         return redirect('quests:categories')
 
 
-@method_decorator([login_required, staff_member_required], name='dispatch')
-class CategoryDetailView(TemplateView):
+@method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
+class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
     """
     View the content of a campaign (category) from the shared library.
     """
     template_name = 'library/category_detail_view.html'
+
+    def get(self, request, *args, **kwargs):
+        """Render the campaign, or send the user back if it is still awaiting review.
+
+        Args:
+            request (HttpRequest): The current HTTP request.
+            *args: Positional arguments passed through to TemplateView.
+            **kwargs: URL kwargs, including 'campaign_import_id' (UUID).
+
+        Returns:
+            HttpResponse: the campaign detail page, or a redirect to the Library
+            campaign list when the campaign has not been published there yet.
+        """
+        with library_schema_context():
+            category = get_published_library_object(Category, kwargs.get('campaign_import_id'))
+
+        if category is None:
+            return redirect_awaiting_review(request, 'campaign', 'library:category_list')
+
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         """

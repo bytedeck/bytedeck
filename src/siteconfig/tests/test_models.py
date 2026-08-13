@@ -201,6 +201,11 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         current_schema = "test"
         library_schema = get_library_schema_name()
 
+        # Exporting is part of the Shared Library feature, so the deck has to have it on
+        self.config.enable_shared_library = True
+        self.config.full_clean()
+        self.config.save()
+
         # Owner should always be able to export
         owner = self.config.deck_owner
         self.assertTrue(self.config.can_user_export_to_library(owner, current_schema))
@@ -234,3 +239,18 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         # Anonymous users cannot export
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), current_schema))
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), library_schema))
+
+    def test_can_user_export_to_library__false_when_shared_library_disabled(self):
+        """Nobody can export from a deck that has the Shared Library turned off.
+
+        The views 404 in that case, so the buttons this method controls must not render.
+        """
+        self.config.enable_shared_library = False
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        staff_user = baker.make('auth.User', is_staff=True)
+
+        self.assertFalse(self.config.can_user_export_to_library(self.config.deck_owner, "test"))
+        self.assertFalse(self.config.can_user_export_to_library(staff_user, "test"))

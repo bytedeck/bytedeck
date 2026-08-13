@@ -5,10 +5,13 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, connection
+from django.http import Http404
+from django.test import RequestFactory
 from django.urls import reverse
-from django_tenants.utils import schema_exists
+from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
+from library.views import shared_library_enabled_view
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import export_campaign_and_copy_quests, export_campaign_to_library, export_quest_to_library
 from model_bakery import baker
@@ -20,6 +23,10 @@ from tenant.models import TenantDomain
 
 
 User = get_user_model()
+
+# What the browser sends when the sharer ticks the licence checkbox on an export
+# confirmation page. The push is refused without it (#2366).
+AGREED_LICENCE = {'agree_license': 'on'}
 
 
 class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
@@ -40,6 +47,18 @@ class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
             cls._setup_library_tenant()
 
         super().setUpClass()
+
+    def setUp(self):
+        """Turn the Shared Library on for the deck under test.
+
+        Every test in this module exercises a deck that has opted into the feature.
+        The opted-out case has its own class (`SharedLibraryDisabledTests`), so the
+        default here is "enabled" rather than SiteConfig's off-by-default.
+        """
+        super().setUp()
+        config = SiteConfig.get()
+        config.enable_shared_library = True
+        config.save()
 
     @classmethod
     def get_library_tenant_domain(cls):
@@ -76,6 +95,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up the site config and active semester."""
+        super().setUp()
         self.config = SiteConfig.get()
         self.sem = SiteConfig.get().active_semester
 
@@ -299,7 +319,9 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         # Login as staff
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('library:quest_list'))
+        # The Library pages themselves 404 while the feature is off, so check the
+        # sidebar on a page staff can still reach.
+        response = self.client.get(reverse('quests:quests'))
         # Checks if the html in the sidebar for library is there (shouldn't be)
         self.assertNotContains(response, 'id="lg-menu-library"')
 
@@ -325,7 +347,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse("library:export_quest", kwargs={"quest_import_id": str(self.local_quest.import_id)})
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
 
         self.assertEqual(response.status_code, 403)
 
@@ -398,7 +420,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)  # user performing export
 
         url = reverse('library:export_quest', args=[self.local_quest.import_id])
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
 
         self.assertRedirects(response, reverse('quests:quests'))
 
@@ -439,7 +461,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_quest', args=[self.local_quest.import_id])
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
         self.assertRedirects(response, reverse('quests:quests'))
 
         # An email was dispatched asynchronously to the library staff member.
@@ -473,7 +495,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse("library:export_quest", kwargs={"quest_import_id": str(self.shared_quest.import_id)})
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
 
         self.assertEqual(response.status_code, 403)
 
@@ -500,6 +522,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
     def setUp(self):
         """Set up the active semester, site config, and deck owner."""
+        super().setUp()
         self.sem = SiteConfig.get().active_semester
 
         self.config = SiteConfig.get()
@@ -870,7 +893,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 403)
 
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
         self.assertEqual(response.status_code, 403)
 
     def test_export__permission_allowed_for_owner_staff_export_disabled(self):
@@ -931,7 +954,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.shared_category.import_id)})
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
         self.assertEqual(response.status_code, 403)
 
     def test_export_get__disables_button_if_no_quests(self):
@@ -966,7 +989,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
         self.assertRedirects(response, reverse('quests:categories'))
 
         with library_schema_context():
@@ -1005,7 +1028,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
-        response = self.client.post(url)
+        response = self.client.post(url, data=AGREED_LICENCE)
         self.assertRedirects(response, reverse('quests:categories'))
 
         # An email was dispatched asynchronously to the library staff member.
@@ -1200,3 +1223,240 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
         baker.make(Quest, campaign=campaign, published=True)
         with self.assertRaisesMessage(ValidationError, "Failed to import campaign to library schema"):
             export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
+
+
+class SharedLibraryDisabledTests(LibraryTenantTestCaseMixin):
+    """Every Library view is unreachable on a deck that has the feature turned off.
+
+    `SiteConfig.enable_shared_library` used to hide the sidebar link and nothing
+    else, leaving every Library URL live (and importable) on a deck that had
+    opted out.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create published Library content and a staff user on the local deck."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, published=True)
+            cls.library_quest = baker.make(Quest, campaign=cls.library_campaign, published=True, archived=False)
+
+        cls.local_quest = baker.make(Quest, published=True)
+        cls.local_campaign = baker.make(Category)
+        baker.make(Quest, campaign=cls.local_campaign, published=True)
+        cls.test_teacher = User.objects.create_user('disabled_teacher', is_staff=True)
+
+    def setUp(self):
+        """Turn the Shared Library back off, overriding the base class default."""
+        super().setUp()
+        self.config = SiteConfig.get()
+        self.config.enable_shared_library = False
+        self.config.allow_staff_export = True
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+    def test_library_views__return_404_when_shared_library_disabled(self):
+        """Staff hitting any Library URL on an opted-out deck get a 404."""
+        urls = [
+            reverse('library:quest_list'),
+            reverse('library:category_list'),
+            reverse('library:import_quest', args=[self.library_quest.import_id]),
+            reverse('library:import_category', args=[self.library_campaign.import_id]),
+            reverse('library:category_detail_view', args=[self.library_campaign.import_id]),
+            reverse('library:export_quest', args=[self.local_quest.import_id]),
+            reverse('library:export_category', args=[self.local_campaign.import_id]),
+        ]
+        for url in urls:
+            with self.subTest(url=url):
+                self.assert404URL(url)
+
+    def test_import_quest_post__does_nothing_when_shared_library_disabled(self):
+        """A POST to the quest import URL cannot pull content onto an opted-out deck."""
+        response = self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists())
+
+    def test_import_campaign_post__does_nothing_when_shared_library_disabled(self):
+        """A POST to the campaign import URL cannot pull content onto an opted-out deck."""
+        response = self.client.post(reverse('library:import_category', args=[self.library_campaign.import_id]))
+
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
+
+    def test_export_quest_post__does_nothing_when_shared_library_disabled(self):
+        """A POST to the quest export URL cannot push content from an opted-out deck."""
+        response = self.client.post(
+            reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE
+        )
+
+        self.assertEqual(response.status_code, 404)
+        with library_schema_context():
+            self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.local_quest.import_id).exists())
+
+
+class UnreviewedLibraryContentTests(LibraryTenantTestCaseMixin):
+    """Content awaiting a Library admin's review must not be importable.
+
+    Pushed content lands unpublished and is invisible until reviewed (#1949).
+    That gate only filtered the listing pages, so a POST straight to an import
+    URL pulled unreviewed content down.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create unpublished (pending review) Library content and a local staff user."""
+        with library_schema_context():
+            cls.pending_quest = baker.make(Quest, published=False, archived=False)
+            cls.pending_campaign = baker.make(Category, published=False)
+            cls.pending_campaign_quest = baker.make(
+                Quest, campaign=cls.pending_campaign, published=True, archived=False
+            )
+        cls.test_teacher = User.objects.create_user('pending_teacher', is_staff=True)
+
+    def setUp(self):
+        """Log in as staff on a deck with the Shared Library enabled."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+    def test_import_quest_get__redirects_when_quest_awaits_review(self):
+        """The confirmation page for an unpublished Library quest sends the user back with a warning."""
+        response = self.client.get(reverse('library:import_quest', args=[self.pending_quest.import_id]))
+
+        self.assertRedirects(response, reverse('library:quest_list'))
+        self.assertWarningMessage(response)
+
+    def test_import_quest_post__refuses_a_quest_awaiting_review(self):
+        """Posting the import URL for an unpublished Library quest imports nothing."""
+        response = self.client.post(reverse('library:import_quest', args=[self.pending_quest.import_id]))
+
+        self.assertRedirects(response, reverse('library:quest_list'))
+        self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.pending_quest.import_id).exists())
+
+    def test_import_campaign_get__redirects_when_campaign_awaits_review(self):
+        """The confirmation page for an unpublished Library campaign sends the user back with a warning."""
+        response = self.client.get(reverse('library:import_category', args=[self.pending_campaign.import_id]))
+
+        self.assertRedirects(response, reverse('library:category_list'))
+        self.assertWarningMessage(response)
+
+    def test_import_campaign_post__refuses_a_campaign_awaiting_review(self):
+        """Posting the import URL for an unpublished Library campaign imports nothing, quests included."""
+        response = self.client.post(reverse('library:import_category', args=[self.pending_campaign.import_id]))
+
+        self.assertRedirects(response, reverse('library:category_list'))
+        self.assertFalse(Category.objects.filter(import_id=self.pending_campaign.import_id).exists())
+        self.assertFalse(
+            Quest.objects.all_including_archived().filter(import_id=self.pending_campaign_quest.import_id).exists()
+        )
+
+    def test_category_detail_view__redirects_when_campaign_awaits_review(self):
+        """The Library campaign detail page is not a peephole into unreviewed content."""
+        response = self.client.get(reverse('library:category_detail_view', args=[self.pending_campaign.import_id]))
+
+        self.assertRedirects(response, reverse('library:category_list'))
+        self.assertWarningMessage(response)
+
+    def test_import_quest_to__refuses_a_quest_awaiting_review(self):
+        """The importer itself filters on published, not just the view above it."""
+        with self.assertRaises(Quest.DoesNotExist):
+            import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.pending_quest.import_id)
+
+    def test_import_quest__unknown_import_id_still_404s(self):
+        """An import ID that is in no schema at all is a 404, not a redirect."""
+        self.assert404URL(reverse('library:import_quest', args=[str(uuid.uuid4())]))
+
+
+class ShareLicenceAgreementTests(LibraryTenantTestCaseMixin):
+    """The CC BY-SA agreement holds the push server-side, not just in the browser."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a local quest and campaign to share, and a staff user to share them."""
+        cls.local_quest = baker.make(Quest, published=True, archived=False)
+        cls.local_campaign = baker.make(Category)
+        baker.make(Quest, campaign=cls.local_campaign, published=True, archived=False)
+        cls.test_teacher = User.objects.create_user('licence_teacher', is_staff=True)
+
+    def setUp(self):
+        """Allow staff to export, and log in as one."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+    def test_export_quest_post__refused_without_the_licence_agreement(self):
+        """A quest push with no licence checkbox is re-rendered with an error and shares nothing."""
+        response = self.client.post(reverse('library:export_quest', args=[self.local_quest.import_id]), data={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'agree to the Creative Commons license')
+        with library_schema_context():
+            self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.local_quest.import_id).exists())
+
+    def test_export_campaign_post__refused_without_the_licence_agreement(self):
+        """A campaign push with no licence checkbox is re-rendered with an error and shares nothing."""
+        response = self.client.post(reverse('library:export_category', args=[self.local_campaign.import_id]), data={})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'agree to the Creative Commons license')
+        with library_schema_context():
+            self.assertFalse(Category.objects.filter(import_id=self.local_campaign.import_id).exists())
+
+    def test_export_quest_post__succeeds_with_the_licence_agreement(self):
+        """Ticking the box lets the push through, so the guard is not blocking everything."""
+        response = self.client.post(
+            reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE
+        )
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        with library_schema_context():
+            self.assertTrue(Quest.objects.all_including_archived().filter(import_id=self.local_quest.import_id).exists())
+
+    def test_export_get__renders_the_licence_checkbox(self):
+        """Both confirmation pages render the field name the form validates."""
+        for url in (
+            reverse('library:export_quest', args=[self.local_quest.import_id]),
+            reverse('library:export_category', args=[self.local_campaign.import_id]),
+        ):
+            with self.subTest(url=url):
+                self.assertContains(self.client.get(url), 'name="agree_license"')
+
+
+class LibraryViewsOnPublicSchemaTests(LibraryTenantTestCaseMixin):
+    """The Library is a per-deck feature and has no meaning on the public schema.
+
+    There is a single urlconf, so `/library/...` resolves on the public tenant too,
+    where `SiteConfig.get()` returns None. These views need the project's standard
+    non-public guard ahead of anything that reads site config.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to make the request."""
+        cls.test_teacher = User.objects.create_user('public_schema_teacher', is_staff=True)
+
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_library_views__404_on_the_public_schema(self, mock_connection):
+        """Library URLs are not served from the public schema."""
+        self.client.force_login(self.test_teacher)
+
+        for url_name in ('library:quest_list', 'library:category_list'):
+            with self.subTest(url_name=url_name):
+                response = self.client.get(reverse(url_name))
+                self.assertEqual(response.status_code, 404)
+
+    @patch('library.views.SiteConfig.get', return_value=None)
+    def test_shared_library_enabled_view__404s_when_there_is_no_site_config(self, mock_get):
+        """With no deck config there is no Shared Library either, so the check 404s.
+
+        `SiteConfig.get()` returns None on the public schema. This check runs ahead
+        of the non-public guard, so it has to handle that itself rather than raising
+        AttributeError on a None config. Exercised against the decorator directly:
+        going through the test client would render the 404 page, which calls
+        `SiteConfig.get()` again and would fail on the patch rather than the guard.
+        """
+        wrapped = shared_library_enabled_view(lambda request: 'reached the view')
+
+        with self.assertRaises(Http404):
+            wrapped(RequestFactory().get('/'))

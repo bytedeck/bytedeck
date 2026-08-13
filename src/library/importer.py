@@ -54,11 +54,13 @@ def import_quest_to(*, destination_schema, quest_import_id):
         ImportResult: The result of the import operation, including row-level status info.
 
     Raises:
-        ValueError: If the quest with the given import_id does not exist in the source schema
-                    or cannot be found in the destination schema after import.
+        Quest.DoesNotExist: If no *published* quest with the given import_id exists in
+            the library. Content awaiting a Library admin's review is unpublished and
+            must not travel to other decks (#1949), so it is filtered out here as well
+            as in the view.
     """
     with library_schema_context():
-        quest = Quest.objects.get(import_id=quest_import_id)
+        quest = Quest.objects.get(import_id=quest_import_id, published=True)
 
         export_data = QuestResource().export([quest])
 
