@@ -19,7 +19,11 @@ STAND_IN_IMAGE=python:3.12-slim
 WORKDIR=$(mktemp -d)
 CERT_DIR=$WORKDIR/letsencrypt/live/$DOMAIN_UNDER_TEST
 
-export ROOT_DOMAIN=$DOMAIN_UNDER_TEST WUID=0 WGID=0
+# CDN_static is a required nginx build arg (the legacy /media/ redirect is
+# rendered from it and the build fails on an empty value), so it gets a
+# stand-in host here. Nothing in this file requests /media/, so the value only
+# has to be non-empty and syntactically a host.
+export ROOT_DOMAIN=$DOMAIN_UNDER_TEST WUID=0 WGID=0 CDN_static=cdn.$DOMAIN_UNDER_TEST
 COMPOSE=(docker compose -p bytedeck-topotest
          -f docker-compose.yml
          -f docker-compose.prod.aws.yml

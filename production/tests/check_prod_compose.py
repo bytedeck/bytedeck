@@ -59,7 +59,8 @@ def render():
     out = subprocess.run(
         ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.prod.aws.yml", "config"],
         capture_output=True, text=True,
-        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "ROOT_DOMAIN": "example.com", "WUID": "1000", "WGID": "999"},
+        env={"PATH": "/usr/bin:/bin:/usr/local/bin", "ROOT_DOMAIN": "example.com",
+             "WUID": "1000", "WGID": "999", "CDN_static": "cdn.example.com"},
     )
     if out.returncode:
         sys.exit(f"FAIL: production config does not render:\n{out.stderr}")
