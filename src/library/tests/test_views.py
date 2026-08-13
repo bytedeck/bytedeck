@@ -1582,8 +1582,8 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
         """A campaign with no conflicts skips the copy step entirely."""
         self.assertIsNone(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]))
 
-    def test_build_library_clone_name__avoids_names_held_by_archived_quests(self):
-        """Archived Library quests still hold their name against the unique constraint."""
+    def test_build_library_clone_name__falls_back_to_a_numbered_suffix(self):
+        """A taken dated name pushes the next copy on to a numbered suffix."""
         dated = f"Quest A (Exported on {date.today()})"
 
         self.assertEqual(build_library_clone_name("Quest A", set()), dated)
