@@ -2157,6 +2157,54 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertFalse(quest.published)
         self.assertEqual(quest.editor, test_ta)
 
+    def test_quest_create__TA_cannot_set_the_restricted_fields_by_post(self):
+        """A TA who hand-posts the fields their form leaves off gets none of them: the new quest
+        is an ordinary draft of their own, not archived and not available outside a course (#2384).
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,
+            'archived': True,
+            'available_outside_course': True,
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        # an archived quest drops out of the default manager, so look it up either way and let
+        # the assertions below name what actually went wrong
+        new_quest = Quest.objects.all_including_archived().latest('datetime_created')
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+        self.assertFalse(new_quest.archived)
+        self.assertFalse(new_quest.available_outside_course)
+        self.assertRedirects(response, new_quest.get_absolute_url())
+
+    def test_quest_update__TA_post_leaves_the_teachers_settings_alone(self):
+        """A TA editing a draft can't clear the settings a teacher made, whether by posting a new
+        value or by omitting the field: neither is bound to their form, so both are left alone (#2384).
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.available_outside_course = True  # a teacher's setting, absent from the TA's form
+        quest.save()
+        self.client.force_login(test_ta)
+
+        # 'available_outside_course' is omitted entirely, which for a bound BooleanField would
+        # read as False; 'archived' is posted as True to show a claimed value is ignored too.
+        form_data = {**self.minimal_valid_form_data, 'name': "Edited by the TA", 'archived': True}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertEqual(quest.name, "Edited by the TA")
+        self.assertTrue(quest.available_outside_course)
+        self.assertFalse(quest.archived)
+
     def test_quest_update__teacher_publishing_removes_the_editor(self):
         """When a teacher publishes a TA's draft, the TA's editor access is removed with it, so
         they can no longer edit a quest students are now working on.
