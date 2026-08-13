@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
@@ -5,7 +7,7 @@ from django.urls import reverse
 from model_bakery import baker
 from unittest.mock import patch
 
-from djcytoscape.models import CytoScape
+from djcytoscape.models import CytoElement, CytoScape
 
 from profile_manager.models import Profile
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
@@ -317,16 +319,51 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
             expected_url=reverse('djcytoscape:quest_map', args=[self.map.id]),
         )
 
+    def test_regenerate__rebuilds_the_map(self):
+        """Regenerating rebuilds the map: its elements are recreated from the current quests and
+        badges, the cached json the page renders from is refreshed, and last_regeneration is stamped.
+
+        This is the point of the view, so the elements are wiped first to prove the request put
+        them back, rather than asserting on a map that was never disturbed.
+        """
+        original_elements = self.map.elements_dict()
+        original_labels = sorted(node['data'].get('label') for node in original_elements['nodes'])
+        self.assertGreater(len(original_labels), 0, "the fixture map should have nodes to rebuild")
+        stale_regeneration = self.map.last_regeneration
+
+        # A map goes stale when the objects it was built from change, so simulate the extreme of
+        # that: no elements at all, and a cache that says the map is empty.
+        CytoElement.objects.all_for_scape(self.map).delete()
+        CytoScape.objects.filter(id=self.map.id).update(elements_json=json.dumps({'nodes': [], 'edges': []}))
+
+        self.client.post(reverse('djcytoscape:regenerate', args=[self.map.id]))
+
+        rebuilt_map = CytoScape.objects.get(id=self.map.id)
+        rebuilt_elements = rebuilt_map.elements_dict()
+        # The quests and badges behind the map are unchanged, so the same nodes and edges come back.
+        # The element rows are new ones, so compare labels rather than whole dicts (which carry ids).
+        self.assertEqual(sorted(node['data'].get('label') for node in rebuilt_elements['nodes']), original_labels)
+        self.assertEqual(len(rebuilt_elements['edges']), len(original_elements['edges']))
+        # The page renders from the cache, so it has to hold the whole rebuilt payload: nodes, edges
+        # and their order, not just a node count that a partial write could also satisfy.
+        self.assertEqual(json.loads(rebuilt_map.elements_json), json.loads(rebuilt_map.generate_elements_json()))
+        self.assertGreater(rebuilt_map.last_regeneration, stale_regeneration)
+
     def test_regenerate__with_deleted_object(self):
-        """Regenerating a map whose initial object is gone redirects to the primary map."""
+        """Regenerating a map whose initial object is gone deletes the map, says so, and redirects
+        to the primary map (there is no map page left to send the teacher back to)."""
         bad_map = CytoScape.objects.create(
             name="bad map",
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
         )
-        self.assertRedirects(
-            response=self.client.post(reverse('djcytoscape:regenerate', args=[bad_map.id])),
-            expected_url=reverse('djcytoscape:primary'),
+        response = self.client.post(reverse('djcytoscape:regenerate', args=[bad_map.id]), follow=True)
+
+        self.assertRedirects(response, reverse('djcytoscape:primary'))
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+        self.assertTrue(
+            any("bad map" in str(m) and "no longer exists" in str(m) for m in response.context['messages']),
+            "expected a warning naming the map that was removed",
         )
 
     def test_regenerate_all__redirects_to_primary(self):
