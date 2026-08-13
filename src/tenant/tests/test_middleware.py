@@ -6,7 +6,6 @@ from django.core.cache import cache
 from django.shortcuts import reverse
 from django.utils.timezone import localdate
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -27,7 +26,6 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Build per-role users and clear the cached deck row (the cache backend
         outlives each test's transaction)."""
         cache.delete(deck_cache_key(self.tenant.schema_name))
-        self.client = TenantClient(self.tenant)
         self.staff = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         self.owner = SiteConfig.get().deck_owner
@@ -75,8 +73,7 @@ class OwnerOnlyWhenSuspendedMiddlewareTest(ByteDeckTenantTestCase):
         """Anonymous requests pass through: the sign-in page renders normally on a
         suspended deck (with the suspended status banner, no redirect loop)."""
         self.suspend_deck()
-        response = self.client.get(reverse('account_login'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('account_login')
         self.assertContains(response, 'This deck is suspended')
 
     def test_bounce__nobody_bounced_while_not_suspended(self):

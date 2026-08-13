@@ -1,11 +1,11 @@
-Django>=5.2.16,<5.3
+Django>=5.2.17,<5.3  # 5.2.17 is a security release: admin URLField XSS (CVE-2026-15920) plus three other fixes
 
 # Version policy: floors are the versions currently in use; ceilings block the
 # next MAJOR (allowing backwards-compatible minor/patch updates), except where a
 # tighter cap is required for compatibility (noted inline). 0.x packages are
 # capped at the next 0.minor, since for 0.x that is the breaking-change unit.
 # The django-* packages below are all compatible with Django 5.2 LTS.
-django-allauth[socialaccount]>=65.18.0,<66  # the extra pulls pyjwt[crypto]/oauthlib/requests, needed by the Google provider
+django-allauth[socialaccount]>=65.19.0,<66  # the extra pulls pyjwt[crypto]/oauthlib/requests, needed by the Google provider
 django-bootstrap-datepicker-plus>=6.0.0,<7.0
 django-celery-beat>=2.9.0,<3.0
 django-colorful>=1.4.0,<2.0
@@ -24,7 +24,7 @@ django-select2>=8.4.8,<9.0
 django-storages[boto3]>=1.14.6,<2
 django-summernote>=0.8.20.0,<0.9
 django-taggit>=6.1.0,<7.0
-django-tenants>=3.12.0,<3.13  # compat cap: multitenancy core, tracks Django closely -- hold at the tested minor
+django-tenants>=3.14.0,<3.15  # compat cap: multitenancy core, tracks Django closely -- hold at the tested minor
 django-url-or-relative-url-field>=0.2.0,<0.3.0
 tenant-schemas-celery>=5.0.0,<6.0
 

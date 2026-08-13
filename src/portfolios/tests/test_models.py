@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.templatetags.static import static
+from django.urls import reverse
 
 from model_bakery import baker
 
@@ -25,6 +26,20 @@ class PortfolioModelTest(ByteDeckTenantTestCase):
         self.assertEqual(str(portfolio), str(student))
         self.assertIn(str(portfolio.pk), portfolio.get_absolute_url())
         self.assertIn(str(portfolio.uuid), portfolio.get_public_url())
+
+
+class ArtworkStrAndUrlTest(ByteDeckTenantTestCase):
+    """Tests for the Artwork model's __str__ and get_absolute_url."""
+
+    def test_str__is_the_title(self):
+        """An artwork stringifies to its title."""
+        art = baker.make(Artwork, title='My Art')
+        self.assertEqual(str(art), 'My Art')
+
+    def test_get_absolute_url__points_at_parent_portfolio(self):
+        """An artwork's absolute url is its parent portfolio's detail page."""
+        art = baker.make(Artwork)
+        self.assertEqual(art.get_absolute_url(), reverse('portfolios:detail', kwargs={'pk': art.portfolio.pk}))
 
 
 class ArtworkGetLinkTest(ByteDeckTenantTestCase):
@@ -118,6 +133,12 @@ class ArtworkGetEmbedUrlSourceTest(ByteDeckTenantTestCase):
     def test_get_embed_url_source__none_without_video_url(self):
         """No video_url yields no source."""
         self.assertIsNone(Artwork(video_url='').get_embed_url_source())
+
+    def test_get_embed_url_source__other_backend_returns_none(self):
+        """A video_url whose backend is neither YouTube nor Vimeo yields no source."""
+        art = Artwork(video_url='https://soundcloud.com/x/y')
+        with patch('portfolios.models.detect_backend', return_value=MagicMock()):
+            self.assertIsNone(art.get_embed_url_source())
 
 
 class ArtworkIsVideoTest(ByteDeckTenantTestCase):

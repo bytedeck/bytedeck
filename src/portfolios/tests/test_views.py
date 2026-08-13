@@ -1,13 +1,12 @@
 from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
-from django_tenants.test.client import TenantClient
 from django.core.files.uploadedfile import InMemoryUploadedFile, SimpleUploadedFile
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from portfolios.models import Artwork, Portfolio
 from portfolios.views import is_acceptable_vid_type
 
@@ -35,7 +34,7 @@ def generate_test_png_file():
     return uploaded_file
 
 
-class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class PortfolioViewTests(ByteDeckTenantTestCase):
     """ url(r'^$', views.PortfolioList.as_view(), name='list'),
         url(r'^public/$', views.public_list, name='public_list'),
         url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
@@ -82,10 +81,6 @@ class PortfolioViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.portfolio = baker.make('portfolios.Portfolio', user=cls.test_student)
         cls.art = baker.make('portfolios.Artwork', image_file=generate_test_png_file(), portfolio=cls.portfolio)
         cls.doc = baker.make('comments.Document', docfile=generate_test_png_file(), comment=baker.make('comments.Comment', user=cls.test_student))
-
-    def setUp(self):
-        """Create a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_portfolio_view_status_codes__for_anonymous(self):
         ''' If not logged in then all views should redirect to login, EXCEPT the public list and public urls '''

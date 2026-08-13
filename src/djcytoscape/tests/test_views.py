@@ -1,20 +1,21 @@
+import json
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 from unittest.mock import patch
 
-from djcytoscape.models import CytoScape
+from djcytoscape.models import CytoElement, CytoScape
 
 from profile_manager.models import Profile
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin, generate_form_data
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
 
 
-class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -42,10 +43,6 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             initial_content_type=cls.quest_ct,
             initial_object_id=cls.map_initial_quest.id,
         )
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page  '''
@@ -185,7 +182,7 @@ class ViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         mock_regenerate.assert_called_once()
 
 
-class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class QuestMapAccessAndInterlinkTests(ByteDeckTenantTestCase):
     """Access-control and interlink/generate branches of the map views."""
 
     @classmethod
@@ -207,10 +204,6 @@ class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase
             initial_content_type=cls.quest_ct,
             initial_object_id=cls.map_quest.id,
         )
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest_map_personalized__student_cannot_view_another_students_map(self):
         """A non-staff user requesting another user's personalized map gets a 404."""
@@ -249,12 +242,11 @@ class QuestMapAccessAndInterlinkTests(ViewTestUtilsMixin, ByteDeckTenantTestCase
         # A map exists (so the welcome-quest auto-generation is skipped), but none is primary.
         CytoScape.objects.update(is_the_primary_scape=False)
         self.client.force_login(self.teacher)
-        response = self.client.get(reverse('djcytoscape:primary'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('djcytoscape:primary')
         self.assertTemplateUsed(response, 'djcytoscape/generate_new_form.html')
 
 
-class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
     """UpdateMapMessageMixin adds a 'maps are being updated' message after editing/deleting a
     model that maps depend on (ranks/quests/badges). Its map-auto-update-off path is exercised
     here through a rank delete (RankDelete mixes it in); the message-emitting path is covered by
@@ -262,7 +254,6 @@ class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Log in a staff user (the mixin's consumer views require staff)."""
-        self.client = TenantClient(self.tenant)
         self.staff = User.objects.create_user('mixin_staff', is_staff=True)
         self.client.force_login(self.staff)
 
@@ -287,7 +278,7 @@ class UpdateMapMessageMixinTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         )
 
 
-class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class PrimaryViewTests(ByteDeckTenantTestCase):
 
     def test_primary__generates_initial_map_on_first_view(self):
         """Viewing the primary map for the first time generates the 'Main' map."""
@@ -295,7 +286,6 @@ class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertFalse(CytoScape.objects.exists())
 
         # log in anoyone
-        self.client = TenantClient(self.tenant)
         anyone = User.objects.create_user('anyone')
         self.client.force_login(anyone)
 
@@ -307,7 +297,7 @@ class PrimaryViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertTrue(CytoScape.objects.filter(name="Main").exists())
 
 
-class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class RegenerateViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -320,40 +310,95 @@ class RegenerateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
     def setUp(self):
         """Set up a tenant client logged in as the staff user."""
-        self.client = TenantClient(self.tenant)
         self.client.force_login(self.staff_user)
 
     def test_regenerate__redirects_to_quest_map(self):
         """Regenerating a good map redirects back to that map's quest_map page."""
         self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate', args=[self.map.id])),
+            response=self.client.post(reverse('djcytoscape:regenerate', args=[self.map.id])),
             expected_url=reverse('djcytoscape:quest_map', args=[self.map.id]),
         )
 
+    def test_regenerate__rebuilds_the_map(self):
+        """Regenerating rebuilds the map: its elements are recreated from the current quests and
+        badges, the cached json the page renders from is refreshed, and last_regeneration is stamped.
+
+        This is the point of the view, so the elements are wiped first to prove the request put
+        them back, rather than asserting on a map that was never disturbed.
+        """
+        original_elements = self.map.elements_dict()
+        original_labels = sorted(node['data'].get('label') for node in original_elements['nodes'])
+        self.assertGreater(len(original_labels), 0, "the fixture map should have nodes to rebuild")
+        stale_regeneration = self.map.last_regeneration
+
+        # A map goes stale when the objects it was built from change, so simulate the extreme of
+        # that: no elements at all, and a cache that says the map is empty.
+        CytoElement.objects.all_for_scape(self.map).delete()
+        CytoScape.objects.filter(id=self.map.id).update(elements_json=json.dumps({'nodes': [], 'edges': []}))
+
+        self.client.post(reverse('djcytoscape:regenerate', args=[self.map.id]))
+
+        rebuilt_map = CytoScape.objects.get(id=self.map.id)
+        rebuilt_elements = rebuilt_map.elements_dict()
+        # The quests and badges behind the map are unchanged, so the same nodes and edges come back.
+        # The element rows are new ones, so compare labels rather than whole dicts (which carry ids).
+        self.assertEqual(sorted(node['data'].get('label') for node in rebuilt_elements['nodes']), original_labels)
+        self.assertEqual(len(rebuilt_elements['edges']), len(original_elements['edges']))
+        # The page renders from the cache, so it has to hold the whole rebuilt payload: nodes, edges
+        # and their order, not just a node count that a partial write could also satisfy.
+        self.assertEqual(json.loads(rebuilt_map.elements_json), json.loads(rebuilt_map.generate_elements_json()))
+        self.assertGreater(rebuilt_map.last_regeneration, stale_regeneration)
+
     def test_regenerate__with_deleted_object(self):
-        """Regenerating a map whose initial object is gone redirects to the primary map."""
+        """Regenerating a map whose initial object is gone deletes the map, says so, and redirects
+        to the primary map (there is no map page left to send the teacher back to)."""
         bad_map = CytoScape.objects.create(
             name="bad map",
             initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
             initial_object_id=99999,  # a non-existant object
         )
-        self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate', args=[bad_map.id])),
-            expected_url=reverse('djcytoscape:primary'),
+        response = self.client.post(reverse('djcytoscape:regenerate', args=[bad_map.id]), follow=True)
+
+        self.assertRedirects(response, reverse('djcytoscape:primary'))
+        self.assertFalse(CytoScape.objects.filter(id=bad_map.id).exists())
+        self.assertTrue(
+            any("bad map" in str(m) and "no longer exists" in str(m) for m in response.context['messages']),
+            "expected a warning naming the map that was removed",
         )
 
     def test_regenerate_all__redirects_to_primary(self):
         """Regenerating all maps redirects to the primary map."""
         self.assertRedirects(
-            response=self.client.get(reverse('djcytoscape:regenerate_all')),
+            response=self.client.post(reverse('djcytoscape:regenerate_all')),
             expected_url=reverse('djcytoscape:primary'),
         )
+
+    def test_regenerate__get_is_rejected_and_leaves_the_map_alone(self):
+        """Regenerating rebuilds a map, and removes one whose initial object is gone, so it must
+        not happen on a GET: a staff member following a link (or loading a page with an <img>
+        pointing here) would otherwise delete a map (#2383)."""
+        bad_map = CytoScape.objects.create(
+            name="bad map",
+            initial_content_type=ContentType.objects.get(app_label='quest_manager', model='quest'),
+            initial_object_id=99999,  # a non-existant object, so regenerating would delete this map
+        )
+
+        self.assert405('djcytoscape:regenerate', args=[bad_map.id])
+
+        self.assertTrue(CytoScape.objects.filter(id=bad_map.id).exists())
+
+    @patch('djcytoscape.views.regenerate_all_maps.apply_async')
+    def test_regenerate_all__get_is_rejected_and_dispatches_nothing(self, mock_apply_async):
+        """The same for regenerating every map, which is queued as a background task (#2383)."""
+        self.assert405('djcytoscape:regenerate_all')
+
+        self.assertFalse(mock_apply_async.called)
 
     @patch('djcytoscape.views.regenerate_all_maps.apply_async')
     def test_regenerate_all__always_offloads_to_background_task(self, mock_apply_async):
         """Regeneration is always offloaded to the celery task (no inline loop / count
         threshold), and the user is told it's being processed in the background (#2081)."""
-        response = self.client.get(reverse('djcytoscape:regenerate_all'), follow=True)
+        response = self.client.post(reverse('djcytoscape:regenerate_all'), follow=True)
 
         mock_apply_async.assert_called_once_with(args=[self.staff_user.id], queue='default')
         self.assertTrue(

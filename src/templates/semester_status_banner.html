@@ -5,9 +5,11 @@ staff only. Nudges the two states the semester workflow can silently sit in:
 - the active semester's last day has passed, so it's probably time to archive it
   (archiving records final marks and frees the students' deck seats).
 `config` comes from the config context processor; it is None on the public schema,
-which hides the banner entirely.
+which hides the banner entirely. Suppressed on a suspended deck (current_deck from the
+deck_status context processor): students can't sign in there anyway, so semester nudges
+are noise next to the suspension banner.
 {% endcomment %}
-{% if config and request.user.is_staff %}
+{% if config and request.user.is_staff and not current_deck.is_suspended %}
     {% if config.has_no_open_semester %}
         <div class="alert alert-warning" id="semester-status-banner">
             <i class="fa fa-fw fa-calendar-times-o"></i>

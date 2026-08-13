@@ -74,7 +74,7 @@ class TenantAdminForm(TenantBaseForm):
 
     class Meta(TenantBaseForm.Meta):
         fields = TenantBaseForm.Meta.fields + [
-            'owner_full_name', 'owner_email', 'max_active_users', 'max_quests', 'paid_until', 'trial_end_date',
+            'max_active_users', 'paid_until', 'trial_end_date',
             'stripe_customer_id', 'stripe_subscription_id', 'can_delete']
 
     def clean_name(self):
@@ -92,6 +92,29 @@ class SendEmailAdminForm(forms.Form):
     subject = forms.CharField(
         widget=widgets.AdminTextInputWidget(attrs={"placeholder": "Subject"}))
     message = forms.CharField(widget=ByteDeckSummernoteSafeWidget)
+
+
+class ChangeDeckOwnerAdminForm(forms.Form):
+    """Intermediate form for the "Change deck owner" action: pick the new owner
+    from the selected deck's staff users (built per-deck by the action)."""
+    # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+    _selected_action = forms.CharField(widget=forms.MultipleHiddenInput)
+
+    new_owner = forms.ChoiceField(
+        label="New deck owner",
+        help_text="Staff users on this deck. The chosen user is promoted to superuser; "
+                  "the current owner's permissions are untouched.",
+    )
+
+    def __init__(self, *args, choices=(), **kwargs):
+        """Attach the per-deck staff-user choices the action resolved.
+
+        Args:
+            choices (iterable): ``(username, label)`` pairs for the deck's
+                staff users, excluding the current owner.
+        """
+        super().__init__(*args, **kwargs)
+        self.fields['new_owner'].choices = choices
 
 
 class DeleteConfirmationForm(forms.Form):
@@ -123,16 +146,21 @@ class DeleteConfirmationForm(forms.Form):
 
 class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     list_display = (
-        'schema_name', 'owner_full_name_text', 'owner_full_name_deprecated',
-        'owner_email_text', 'owner_email_verified_boolean', 'owner_email_deprecated',
+        'schema_name', 'owner_full_name_text',
+        'owner_email_text', 'owner_email_verified_boolean',
         'last_staff_login', 'google_signon_enabled',
-        'paid_until_text', 'trial_end_date_text',
+        'subscription_status_text', 'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
-        'max_quests', 'quest_count',
+        'quest_count',
     )
+
+    class Media:
+        """Extra assets for the changelist: the Subscription column's badge
+        stylesheet (.deck-status-*), since the admin doesn't load the app's
+        bootstrap css."""
+        css = {'all': ('css/admin_deck_status.css',)}
     list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
-    # DEPRECATED: these fields ("owner_full_name" and "owner_email") will be removed in a future update
-    search_fields = ['schema_name', 'owner_full_name', 'owner_full_name_cached', 'owner_email', 'owner_email_cached']
+    search_fields = ['schema_name', 'owner_full_name_cached', 'owner_email_cached']
 
     form = TenantAdminForm
     inlines = (TenantDomainInline, )
@@ -140,7 +168,10 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     delete_selected_confirmation_template = 'admin/tenant/tenant/delete_selected_confirmation.html'
     delete_confirmation_template = 'admin/tenant/tenant/delete_confirmation.html'
 
-    actions = ['refresh_cached_fields', 'sync_from_stripe', 'message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin']
+    actions = [
+        'refresh_cached_fields', 'sync_from_stripe', 'verify_owner_email', 'change_deck_owner',
+        'message_unverified', 'message_verified', 'enable_google_signin', 'disable_google_signin',
+    ]
 
     @admin.action(description="Refresh deck stats for selected deck(s)")
     def refresh_cached_fields(self, request, queryset):
@@ -204,16 +235,128 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                 messages.WARNING,
             )
 
+    @admin.action(description="Verify owner email for selected deck(s)")
+    def verify_owner_email(self, request, queryset):
+        """Normalize each selected deck owner's allauth EmailAddress to
+        verified+primary: the state deck creation produces (legacy decks predate
+        that flow, so their owners often have no EmailAddress row at all). Uses
+        the same write path as the ``backfill_owner_emails`` management command
+        (tenant.utils.normalize_owner_email) and reports each deck's outcome as
+        its own message; decks that need a human (no owner email, or the address
+        is verified by a different account) are flagged rather than guessed at.
+        """
+        from library.utils import get_library_schema_name
+
+        from .utils import normalize_owner_email
+
+        for tenant in queryset.exclude(schema_name__in=[get_public_schema_name(), get_library_schema_name()]):
+            try:
+                # atomic() so a broken schema can't poison the connection for the rest
+                with transaction.atomic(), tenant_context(tenant):
+                    status, owner_name, email, notes = normalize_owner_email(tenant, apply_changes=True)
+            except Exception as e:
+                self.message_user(request, f"{tenant.schema_name}: ERROR {type(e).__name__}: {e}", messages.ERROR)
+                continue
+            summary = {
+                'fixed': f"verified the owner's email ({owner_name} <{email}>)",
+                'ok': f"owner email already verified ({owner_name} <{email}>)",
+                'no-email': f"owner '{owner_name}' has NO email set: add one in the deck's Site Config first",
+                'skipped': f"'{email}' is already verified by another account on the deck: needs a human",
+            }[status]
+            level = {'fixed': messages.SUCCESS, 'ok': messages.INFO}.get(status, messages.WARNING)
+            note_suffix = f" ({notes})" if notes else ''
+            self.message_user(request, f"{tenant.schema_name}: {summary}{note_suffix}", level)
+
+    @admin.action(description="Change deck owner for the selected deck")
+    def change_deck_owner(self, request, queryset):
+        """Hand a deck to a new owner from the admin (legacy decks whose owner is
+        the wrong account). Works on exactly ONE selected deck: an intermediate
+        page lists that deck's staff users (minus the current owner) to pick
+        from, then the switch runs through the same write path as the
+        ``change_deck_owner`` management command (tenant.utils.switch_deck_owner):
+        the new owner is promoted to superuser, the previous owner's permissions
+        are untouched, and the deck's cached owner fields refresh immediately.
+        """
+        from library.utils import get_library_schema_name
+
+        from .utils import switch_deck_owner
+
+        queryset = queryset.exclude(schema_name__in=[get_public_schema_name(), get_library_schema_name()])
+        if queryset.count() != 1:
+            self.message_user(request, "Select exactly ONE deck to change its owner.", messages.ERROR)
+            return None
+        tenant = queryset.first()
+        with tenant_context(tenant):
+            current_owner = SiteConfig.get().deck_owner
+            # the field is NOT NULL, but older admin code guards ownerless decks
+            # (message_selected), so match that caution instead of 500ing on .pk
+            if current_owner is None:
+                self.message_user(
+                    request,
+                    f"{tenant.schema_name}: this deck has no owner set in its SiteConfig; fix it there first.",
+                    messages.ERROR,
+                )
+                return None
+            staff = User.objects.filter(is_staff=True).exclude(pk=current_owner.pk).order_by('username')
+            choices = [
+                (user.username, f"{user.get_full_name() or user.username} ({user.username})")
+                for user in staff
+            ]
+        if not choices:
+            self.message_user(
+                request,
+                f"{tenant.schema_name}: no other staff users on the deck to hand it to.",
+                messages.WARNING,
+            )
+            return None
+
+        if request.POST.get("post"):  # if admin pressed 'Change owner' on the intermediate page
+            form = ChangeDeckOwnerAdminForm(data=request.POST, choices=choices)
+            if form.is_valid():
+                try:
+                    old_username, new_username = switch_deck_owner(tenant, form.cleaned_data['new_owner'])
+                except ValueError as e:  # pragma: no cover -- the form's choice validation already
+                    # rejects unknown/non-staff users; this only guards the race where the user's
+                    # account changes between the picker render and the confirm POST
+                    self.message_user(request, f"{tenant.schema_name}: {e}", messages.ERROR)
+                    return None
+                self.message_user(
+                    request,
+                    f"{tenant.schema_name}: owner changed from '{old_username}' to '{new_username}' "
+                    "(promoted to superuser). Now run \"Verify owner email\" on the deck to normalize "
+                    "the new owner's email verification.",
+                    messages.SUCCESS,
+                )
+                return None
+        else:
+            # '_selected_action' (ACTION_CHECKBOX_NAME) is required for the admin intermediate form to submit
+            form = ChangeDeckOwnerAdminForm(initial={helpers.ACTION_CHECKBOX_NAME: [tenant.pk]}, choices=choices)
+
+        adminform = helpers.AdminForm(form, [(None, {"fields": form.base_fields})], {})
+        media = self.media + adminform.media
+        request.current_app = self.admin_site.name
+        return TemplateResponse(
+            request,
+            "admin/tenant/tenant/change_deck_owner.html",
+            context={
+                **self.admin_site.each_context(request),
+                "title": f"Change the owner of deck '{tenant.schema_name}'",
+                "adminform": adminform,
+                "subtitle": None,
+                "tenant": tenant,
+                "current_owner": current_owner,
+                "queryset": queryset,
+                # building proper breadcrumb in admin
+                "opts": self.model._meta,
+                "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+                "media": media,
+            },
+        )
+
     @admin.display(description="owner full name")
     def owner_full_name_text(self, obj):
         return obj.owner_full_name_cached
     owner_full_name_text.admin_order_field = "owner_full_name_cached"
-
-    @admin.display(description="owner full name (DEPRECATED)")
-    def owner_full_name_deprecated(self, obj):
-        """This field will be removed in a future update"""
-        return obj.owner_full_name
-    owner_full_name_deprecated.admin_order_field = "owner_full_name"
 
     @admin.display(description="owner email")
     def owner_email_text(self, obj):
@@ -237,11 +380,27 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     return True
         return False
 
-    @admin.display(description="owner email (DEPRECATED)")
-    def owner_email_deprecated(self, obj):
-        """This field will be removed in a future update"""
-        return obj.owner_email
-    owner_email_deprecated.admin_order_field = "owner_email"
+    @admin.display(description="subscription")
+    def subscription_status_text(self, obj):
+        """The deck's lifecycle status as a colored badge: the same status (and
+        the same word) the deck owner sees on their subscription details page,
+        both rendered from the shared ``Tenant.subscription_status`` precedence
+        chain so the two can never disagree.
+
+        Args:
+            obj (Tenant): The changelist row's tenant.
+
+        Returns:
+            SafeString | None: The rendered ``<span>`` badge for a deck row, or
+            None (an empty cell) for the public schema row, which isn't a deck.
+        """
+        if obj.schema_name == get_public_schema_name():
+            return None
+        return format_html(
+            '<span class="deck-status deck-status-{}">{}</span>',
+            obj.subscription_status,
+            obj.subscription_status_label,
+        )
 
     @admin.display(description="paid until", ordering="paid_until")
     def paid_until_text(self, obj):

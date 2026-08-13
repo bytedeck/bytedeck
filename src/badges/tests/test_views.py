@@ -6,11 +6,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion, BadgeType
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -23,7 +22,7 @@ import json
 User = get_user_model()
 
 
-class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -40,10 +39,6 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_badge.tags.add('tag')
         cls.test_badge_type = baker.make(BadgeType)
         cls.test_assertion = baker.make(BadgeAssertion)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_badge_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to home  '''
@@ -88,7 +83,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert403('badges:revoke', args=[s_pk])
         self.assert403('badges:grant_qualifying', args=[b_pk])
 
-        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
+        self.assert403('badges:badge_prereqs_update', args=[b_pk])
 
     def test_all_badge_page_status_codes__teachers(self):
         """Teachers get 200 on every badge view, including create/update/grant/revoke."""
@@ -242,8 +237,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
-        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('badges:grant', kwargs={'user_id': 0, 'badge_id': 0})
         # neither field is pre-filled because both id lookups were skipped
         self.assertNotIn('user', response.context['form'].initial)
         self.assertNotIn('badge', response.context['form'].initial)
@@ -544,7 +538,7 @@ class BadgeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(request, "CustomBadge Type")
 
 
-class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeTypeViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -554,10 +548,6 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student')
 
         cls.badge_type = baker.make(BadgeType)
-
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_all_page_status_codes__anonymous_redirected(self):
         ''' If not logged in then all views should redirect to login page '''
@@ -579,8 +569,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
     def test_BadgeTypeList_view__staff_can_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('badges:badge_types'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('badges:badge_types')
 
     def test_BadgeTypeCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
@@ -667,7 +656,7 @@ class BadgeTypeViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(request, 'Delete CustomBadge Type')
 
 
-class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class BadgeAjaxTests(ByteDeckTenantTestCase):
     """ test case for
     + ajax/on_show_badge_popup/
     + ajax/on_close_badge_popup/
@@ -703,10 +692,6 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.badge_single = baker.make(Badge, badge_type=cls.badge_type2)
         cls.create_assertion_notification(cls.badge_single)
 
-    def setUp(self):
-        """Set up a tenant client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_status_codes__badge_popup_endpoints(self):
         ''' tests correct status codes for `on_show_badge_popup` and `on_close_badge_popup`
         403 - because not ajax
@@ -717,13 +702,13 @@ class BadgeAjaxTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # test anon
         # ajax_on_show_badge_popup
         self.assert403('badges:ajax_on_show_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_show_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_badge_popup
         self.assert403('badges:ajax_on_close_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_close_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)

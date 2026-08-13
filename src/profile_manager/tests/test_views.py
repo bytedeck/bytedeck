@@ -8,12 +8,12 @@ from django.core import mail
 from django.core.cache import cache
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
 from courses.models import Block, CourseStudent
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from notifications.models import Notification
 from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
@@ -22,7 +22,7 @@ from profile_manager.models import Profile
 from hackerspace_online.tests.utils import generate_form_data
 
 
-class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ProfileViewTests(ByteDeckTenantTestCase):
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -44,10 +44,6 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
         cls.active_sem = SiteConfig.get().active_semester
-
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def tearDown(self):
         """Clear the cache after each test."""
@@ -87,10 +83,9 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # viewing the profile of another student
         self.assertRedirectsQuests('profiles:profile_detail', args=[s2_pk])
 
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 403)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 403)
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.assert403('profiles:comment_ban', args=[s_pk])
+        self.assert403('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert403('profiles:xp_toggle', args=[s_pk])
 
         self.assert404('profiles:profile_update', args=[s2_pk])
 
@@ -113,17 +108,102 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('profiles:profile_list_inactive')
         self.assert200('profiles:tag_chart', args=[s_pk])
         self.assert200('profiles:profile_delete', args=[s_pk])
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:comment_ban_toggle', args=[s_pk])).status_code, 302)
-        self.assertEqual(self.client.get(reverse('profiles:xp_toggle', args=[s_pk])).status_code, 302)
-        # self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        # POST-only, so a GET is rejected rather than performed (#2383); each view's staff
+        # behaviour is covered by its own test below
+        self.assert405('profiles:comment_ban', args=[s_pk])
+        self.assert405('profiles:comment_ban_toggle', args=[s_pk])
+        self.assert405('profiles:xp_toggle', args=[s_pk])
 
-    def test_profile_recalculate_xp__status_codes(self):
-        """Need to test this view with students in an active course"""
-        # why testing this here?
-        self.assertEqual(self.active_sem.pk, SiteConfig.get().active_semester.pk)
+    def test_recalculate_current_xp__requires_staff(self):
+        """Only staff can trigger the current-semester XP recalculation: an anonymous visitor is sent
+        to the login page and a logged-in student is refused. The staff path is covered by
+        test_recalculate_current_xp__dispatches_background_task.
+        """
+        self.assertRedirectsLogin('profiles:recalculate_xp_current')
 
-        self.assertEqual(self.client.get(reverse('profiles:recalculate_xp_current')).status_code, 302)
+        self.client.force_login(self.test_student1)
+        self.assert403('profiles:recalculate_xp_current')
+
+    def test_xp_toggle__flips_whether_the_student_earns_xp(self):
+        """Toggling XP off stops the student earning it, and toggling again puts them back."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+        self.assertFalse(profile.not_earning_xp)
+
+        self.client.post(reverse('profiles:xp_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.not_earning_xp)
+
+        self.client.post(reverse('profiles:xp_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertFalse(profile.not_earning_xp)
+
+    def test_xp_toggle__returns_to_the_page_the_toggle_was_clicked_from(self):
+        """The toggle is a link on a student list or profile, so it sends staff back where they were."""
+        self.client.force_login(self.test_teacher)
+        previous_page = reverse('profiles:profile_list')
+
+        response = self.client.post(
+            reverse('profiles:xp_toggle', args=[self.test_student1.profile.pk]),
+            HTTP_REFERER=previous_page,
+        )
+
+        self.assertRedirects(response, previous_page)
+
+    def test_comment_ban__bans_the_student_and_stays_banned_when_repeated(self):
+        """comment_ban bans rather than toggles, so clicking it on a banned student leaves them banned."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+        self.assertFalse(profile.banned_from_comments)
+
+        response = self.client.post(reverse('profiles:comment_ban', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+        self.assertWarningMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn(self.test_student1.username, message)
+        self.assertIn('banned from commenting publicly', message)
+
+        self.client.post(reverse('profiles:comment_ban', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+
+    def test_comment_ban_toggle__bans_and_unbans_the_student(self):
+        """comment_ban_toggle is the same view in toggle mode: it lifts a ban it already applied."""
+        self.client.force_login(self.test_teacher)
+        profile = self.test_student1.profile
+
+        self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertTrue(profile.banned_from_comments)
+
+        self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+        profile.refresh_from_db()
+        self.assertFalse(profile.banned_from_comments)
+
+    def test_comment_ban_toggle__lifting_a_ban_reports_success(self):
+        """Lifting a ban reports success, where applying one reports a warning."""
+        profile = self.test_student1.profile
+        profile.banned_from_comments = True
+        profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('profiles:comment_ban_toggle', args=[profile.pk]))
+
+        self.assertSuccessMessage(response)
+        message = self.get_message_list(response)[0].message
+        self.assertIn('Commenting ban removed for', message)
+        self.assertIn(self.test_student1.username, message)
+
+    def test_comment_ban__notifies_the_banned_student(self):
+        """A banned student is told they were banned, so the ban is not silent to them."""
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('profiles:comment_ban', args=[self.test_student1.profile.pk]))
+
+        notification = Notification.objects.all_for_user(self.test_student1).first()
+        self.assertIsNotNone(notification)
+        self.assertIn('banned you from making public comments', notification.verb)
 
     def test_recalculate_current_xp__dispatches_background_task(self):
         """recalculate_current_xp hands the all-student XP recompute to a background task
@@ -141,7 +221,7 @@ class ProfileViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         # The view must NOT recompute in-request; it must dispatch the celery task instead.
         with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch, \
                 patch.object(Profile, 'xp_invalidate_cache') as mock_invalidate:
-            response = self.client.get(reverse('profiles:recalculate_xp_current'))
+            response = self.client.post(reverse('profiles:recalculate_xp_current'))
 
         self.assertEqual(response.status_code, 302)
         mock_dispatch.assert_called_once()
@@ -739,10 +819,6 @@ class ProfileDeleteTests(ByteDeckTenantTestCase):
         # URL for deleting the student's profile
         cls.delete_url = reverse("profiles:profile_delete", kwargs={"pk": cls.student.profile.pk})
 
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_profile_delete__teacher_can_delete(self):
         """Ensure that teacher (staff) users can delete a profile and its associated user."""
         self.client.force_login(self.teacher)
@@ -798,14 +874,10 @@ class ProfileArchiveTests(ByteDeckTenantTestCase):
         cls.detail_url = reverse("profiles:profile_detail", args=[cls.student.profile.pk])
         cls.delete_url = reverse("profiles:profile_delete", args=[cls.student.profile.pk])
 
-    def setUp(self):
-        """Create a tenant-aware test client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_profile_archive__staff_deactivates_student(self):
         """A staff request to profile_archive deactivates the student (is_active=False) and redirects."""
         self.client.force_login(self.teacher)
-        response = self.client.get(self.archive_url)
+        response = self.client.post(self.archive_url)
         self.student.refresh_from_db()
         self.assertFalse(self.student.is_active)
         self.assertEqual(response.status_code, 302)
@@ -815,7 +887,7 @@ class ProfileArchiveTests(ByteDeckTenantTestCase):
         self.student.is_active = False
         self.student.save()
         self.client.force_login(self.teacher)
-        response = self.client.get(self.restore_url)
+        response = self.client.post(self.restore_url)
         self.student.refresh_from_db()
         self.assertTrue(self.student.is_active)
         self.assertEqual(response.status_code, 302)
@@ -824,14 +896,14 @@ class ProfileArchiveTests(ByteDeckTenantTestCase):
         """Archiving a staff account is refused, leaving that account active."""
         staff_target = self.User.objects.create_user('other_teacher', is_staff=True)
         self.client.force_login(self.teacher)
-        self.client.get(reverse("profiles:profile_archive", args=[staff_target.profile.pk]))
+        self.client.post(reverse("profiles:profile_archive", args=[staff_target.profile.pk]))
         staff_target.refresh_from_db()
         self.assertTrue(staff_target.is_active)
 
     def test_profile_archive__non_staff_forbidden(self):
         """A non-staff user cannot archive: access is forbidden and the target stays active."""
         self.client.force_login(self.other_student)
-        response = self.client.get(self.archive_url)
+        response = self.client.post(self.archive_url)
         self.student.refresh_from_db()
         self.assertEqual(response.status_code, 403)
         self.assertTrue(self.student.is_active)
@@ -841,7 +913,7 @@ class ProfileArchiveTests(ByteDeckTenantTestCase):
         self.student.is_active = False
         self.student.save()
         self.client.force_login(self.other_student)
-        response = self.client.get(self.restore_url)
+        response = self.client.post(self.restore_url)
         self.student.refresh_from_db()
         self.assertEqual(response.status_code, 403)
         self.assertFalse(self.student.is_active)
@@ -879,8 +951,7 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Create a teacher (required before other users, as profile creation notifies staff),
-        a local user with an unverified email, the Google SocialApp, and a tenant client."""
-        self.client = TenantClient(self.tenant)
+        a local user with an unverified email, and the Google SocialApp."""
         self.User = get_user_model()
         self.teacher = self.User.objects.create_user('test_teacher', is_staff=True)
         self.user = self.User.objects.create_user('existing_student', email='student@example.com')
@@ -924,8 +995,7 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
     def test_oauth_merge_account__get_renders_merge_page(self):
         """GET shows the merge confirmation page with the matched account's username and email."""
         self._seed_merge_session()
-        response = self.client.get(reverse('profiles:oauth_merge_account'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('profiles:oauth_merge_account')
         self.assertEqual(response.context['other_account_username'], self.user.username)
         self.assertEqual(response.context['email_address'], self.user.email)
 
@@ -965,5 +1035,65 @@ class OAuthMergeAccountViewTests(ByteDeckTenantTestCase):
         """With no ``merge_with_user_id`` in the session, ``get_object_or_404`` short-circuits to a
         404 before any POST handling — which is why the view's own ``if not merge_with_user_id``
         guard can never be reached."""
-        response = self.client.get(reverse('profiles:oauth_merge_account'))
-        self.assertEqual(response.status_code, 404)
+        self.assert404('profiles:oauth_merge_account')
+
+
+class StateChangingProfileViewsRequirePostTests(ByteDeckTenantTestCase):
+    """The profile views that change a student's account must not act on a GET (#2383).
+
+    Django's CSRF protection deliberately does not cover GET, so a view that mutates on GET can
+    be triggered by a teacher following a link or merely loading a page with an <img> pointing at
+    it. Each of these now answers 405 and leaves the student alone.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and the student these views would act on."""
+        User = get_user_model()
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def setUp(self):
+        """Log the teacher in, so only the request method decides the outcome."""
+        self.client.force_login(self.teacher)
+
+    def test_profile_archive__get_is_rejected_and_leaves_the_student_active(self):
+        """Loading the archive url can't deactivate a student."""
+        self.assert405('profiles:profile_archive', args=[self.student.profile.pk])
+        self.student.refresh_from_db()
+        self.assertTrue(self.student.is_active)
+
+    def test_profile_restore__get_is_rejected_and_leaves_the_student_archived(self):
+        """Loading the restore url can't reactivate an archived student."""
+        self.student.is_active = False
+        self.student.save()
+
+        self.assert405('profiles:profile_restore', args=[self.student.profile.pk])
+
+        self.student.refresh_from_db()
+        self.assertFalse(self.student.is_active)
+
+    def test_xp_toggle__get_is_rejected_and_leaves_xp_earning_alone(self):
+        """Loading the xp toggle url can't stop a student earning XP."""
+        self.assert405('profiles:xp_toggle', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.not_earning_xp)
+
+    def test_comment_ban__get_is_rejected_and_leaves_the_student_unbanned(self):
+        """Loading the ban url can't ban a student from commenting."""
+        self.assert405('profiles:comment_ban', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.banned_from_comments)
+
+    def test_comment_ban_toggle__get_is_rejected_and_leaves_the_student_unbanned(self):
+        """The toggle form of the ban is closed the same way."""
+        self.assert405('profiles:comment_ban_toggle', args=[self.student.profile.pk])
+        self.student.profile.refresh_from_db()
+        self.assertFalse(self.student.profile.banned_from_comments)
+
+    def test_recalculate_current_xp__get_is_rejected_and_dispatches_nothing(self):
+        """Loading the recalculate url can't queue the all-student XP recompute."""
+        with patch('profile_manager.views.invalidate_profile_xp_cache_on_schema.apply_async') as mock_dispatch:
+            self.assert405('profiles:recalculate_xp_current')
+
+        self.assertFalse(mock_dispatch.called)

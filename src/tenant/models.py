@@ -91,24 +91,10 @@ class Tenant(TenantMixin):
     )
     desc = models.TextField(blank=True)
     created_on = models.DateField(auto_now_add=True)
-    owner_full_name = models.CharField(
-        max_length=255, blank=True, null=True,
-        help_text="DEPRECATED: the full name of the Deck Owner (set in each deck's Site Config) will be used. \
-        This field will be removed in a future update",
-    )
-    owner_email = models.EmailField(
-        null=True, blank=True,
-        help_text="DEPRECATED: the verified email address of the Deck Owner (set in each deck's Site Config) will be used. \
-        This field will be removed in a future update",
-    )
     max_active_users = models.SmallIntegerField(
         default=5,
         help_text="The maximum number of CURRENT students (registered in a course in the active semester) \
             on this deck; -1 = unlimited. Staff and merely-active (unregistered) students don't count."
-    )
-    max_quests = models.SmallIntegerField(
-        default=100,
-        help_text="The maximum number of quests that can be active on this deck (archived quests are considered inactive); -1 = unlimited."
     )
     trial_end_date = models.DateField(
         null=True,
@@ -168,7 +154,9 @@ class Tenant(TenantMixin):
 
     quest_count = models.PositiveSmallIntegerField(
         default=0,
-        help_text="This is a cached field: the number of non-archived quests in the deck"
+        help_text="This is a cached field: the number of quests currently available on the deck "
+                  "(published, past their start date, not expired, not archived, and in an active "
+                  "campaign or no campaign)"
     )
 
     last_staff_login = models.DateTimeField(
@@ -317,6 +305,62 @@ class Tenant(TenantMixin):
             and self.max_active_users != -1
             and self.max_active_users <= TRIAL_MAX_ACTIVE_USERS
         )
+
+    # one human label per subscription_status slug; the subscription page's badge
+    # and the tenant admin's Subscription column both render from this map, so
+    # the same state always shows the same word everywhere
+    SUBSCRIPTION_STATUS_LABELS = {
+        'suspended': 'Suspended',
+        'grace': 'Grace period',
+        'maintenance': 'Maintenance',
+        'subscribed': 'Subscribed',
+        'trial': 'Free trial',
+        'manual': 'Managed manually',
+    }
+
+    @property
+    def subscription_status(self):
+        """The deck's lifecycle status as a slug: the single precedence chain
+        behind every status display (the subscription page's badge and the
+        tenant admin's Subscription column), so the two can never disagree.
+
+        Precedence matters: a deck past its grace window is 'suspended' even
+        though its trial dates still exist, and a deck in the paid clock's
+        grace window is 'grace' even though ``subscription_active`` is still
+        True there (access is retained through grace). The LATEST clock governs
+        the lifecycle (#1734 B4), so when the trial clock governs (and hasn't
+        lapsed into the branches above) the deck is 'trial' even if an older
+        ``paid_until`` still keeps ``subscription_active`` True through its
+        grace tail. 'manual' is the both-dates-blank escape hatch for
+        comped/legacy decks managed outside the subscription lifecycle.
+
+        Returns:
+            str: One of the ``SUBSCRIPTION_STATUS_LABELS`` keys: 'suspended',
+            'grace', 'maintenance', 'subscribed', 'trial' or 'manual'.
+        """
+        if self.is_suspended:
+            return 'suspended'
+        if self.in_grace_period:
+            return 'grace'
+        if self.governing_clock_is_trial:
+            # not suspended and not in grace, so the governing trial clock is
+            # still running: the deck is on trial regardless of any older,
+            # still-in-grace paid_until (which would misreport as subscribed)
+            return 'trial'
+        if self.is_on_maintenance:
+            return 'maintenance'
+        if self.subscription_active:
+            return 'subscribed'
+        return 'manual'
+
+    @property
+    def subscription_status_label(self):
+        """The human-readable label for ``subscription_status``, e.g. 'Free trial'.
+
+        Returns:
+            str: The ``SUBSCRIPTION_STATUS_LABELS`` entry for the current status.
+        """
+        return self.SUBSCRIPTION_STATUS_LABELS[self.subscription_status]
 
     @property
     def days_until_expiry(self):
@@ -469,7 +513,7 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -517,6 +561,12 @@ class Tenant(TenantMixin):
 
             if updates:
                 Tenant.objects.filter(pk=self.pk).update(**updates)
+
+        # The subscription page's cached plan summary can go stale even when no
+        # Tenant field changes (a portal plan switch can keep the period end and
+        # cap while changing the product/price on display), so it is cleared on
+        # every sync, for the event's subscription and the previously linked one.
+        clear_plan_summary_cache(self.schema_name, sub_id, current.stripe_subscription_id)
 
         if updates:
             for field, value in updates.items():
@@ -628,11 +678,15 @@ class Tenant(TenantMixin):
         )
 
     def get_quest_count(self):
-        """
-        Returns the number of un-archived quests.
+        """The number of quests currently AVAILABLE on the deck: published, past
+        their start date, not expired, not archived, and in an active campaign
+        (or no campaign). This is the pool the students' Available quests tab
+        draws from, before per-student filtering (prerequisites, submissions),
+        so the deck stat matches what the deck actually offers rather than
+        counting drafts and expired quests.
         """
         Quest = apps.get_model('quest_manager', 'Quest')
-        return Quest.objects.filter(archived=False).count()
+        return Quest.objects.get_active().count()
 
     def get_last_staff_login(self):
         """
@@ -722,6 +776,31 @@ class DeckNotice(models.Model):
 
 class TenantDomain(DomainMixin):
     pass
+
+
+class ReleaseNotification(models.Model):
+    """Public-schema record of a ByteDeck release version that deck staff have been
+    notified about, so ``tenant.tasks.poll_release_announcement`` notifies each
+    version exactly once across every deck.
+
+    ``notified=False`` marks a baseline row written the first time the poll runs:
+    the version that shipped before this feature was enabled is recorded but no
+    notification is sent, so turning the feature on never mass-notifies staff about
+    a release they already have. Lives in the public schema (tenant app), like the
+    Tenant registry itself, because "which versions have been announced" is one
+    global fact, not a per-deck one.
+    """
+    version = models.CharField(max_length=20, unique=True)
+    discussion_url = models.CharField(max_length=500, blank=True, default="")
+    notified = models.BooleanField(
+        default=True,
+        help_text="False for the baseline row recorded on the first poll (no notification sent).",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Audit identifier: the version and whether staff were actually notified."""
+        return f"{self.version} ({'notified' if self.notified else 'baseline'})"
 
 
 class StripeEventLog(models.Model):

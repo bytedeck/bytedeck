@@ -15,14 +15,19 @@ Two flows feed deck billing state, both defined here:
   handler is a thin translator that resolves the deck and funnels through
   ``Tenant.sync_from_stripe_subscription`` -- the single billing write path.
 """
+import json
+import logging
 from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 
 import stripe
 
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.timezone import localdate
+
+logger = logging.getLogger(__name__)
 
 # Cap outbound Stripe HTTP time: webhook handlers retrieve subscriptions inside
 # the request's DB transaction (needed for the StripeEventLog dedupe + rollback
@@ -41,6 +46,125 @@ except (ImportError, AttributeError):  # pragma: no cover -- requires a differen
 # hour absorbs clock skew and request latency so a boundary-day checkout can't
 # fail at Stripe after passing our check
 CHECKOUT_TRIAL_END_MINIMUM = timedelta(hours=49)
+
+# How long the subscription page's plan summary (product name, price, cadence)
+# may serve from cache before re-asking Stripe. The billing write paths clear
+# the cache on sync, so this only bounds staleness for dashboard-side edits
+# (e.g. a renamed product) that fire no event we act on.
+PLAN_SUMMARY_CACHE_SECONDS = 60 * 15
+
+# Currencies whose Stripe amounts are already whole units rather than cents
+# (https://docs.stripe.com/currencies#zero-decimal): dividing by 100 would
+# display a hundredth of the real price.
+ZERO_DECIMAL_CURRENCIES = frozenset((
+    'bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga',
+    'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
+))
+
+# How long a deck's Billing Portal configuration id (the one whose headline names
+# the deck) is remembered. Configurations are permanent Stripe objects, so this
+# only decides how often we re-create one: on a cache miss the deck gets a fresh
+# configuration, leaving the previous one unused on the account.
+PORTAL_CONFIGURATION_CACHE_SECONDS = 60 * 60 * 24 * 30
+
+
+def deck_label(deck):
+    """The deck's domain, the name its owner recognizes it by.
+
+    Stripe's hosted pages show the product ("Bytedeck Subscription - 120
+    Students"), which is identical for every deck on that tier, so an owner with
+    several decks cannot tell which one they are paying for (production find,
+    2026-08-10). This label goes into the places Stripe will display.
+
+    Args:
+        deck (Tenant): The deck being billed.
+
+    Returns:
+        str: The deck's primary domain, e.g. ``hackerspace.bytedeck.com``.
+    """
+    return deck.primary_domain_url
+
+
+def _portal_configuration_cache_key(schema_name):
+    """The cache key holding one deck's Billing Portal configuration id.
+
+    Args:
+        schema_name (str): The deck's schema name, which namespaces the entry so
+            decks never read each other's configuration.
+
+    Returns:
+        str: The key, ``stripe-portal-config:{schema_name}``.
+    """
+    return f'stripe-portal-config:{schema_name}'
+
+
+def portal_configuration_id(deck):
+    """A Billing Portal configuration whose headline names this deck; None when
+    one cannot be prepared.
+
+    The portal is Stripe-hosted and takes no per-session copy, so naming the deck
+    there means giving the session its own configuration. The configuration is
+    cloned from the account's default so every feature the dashboard enables
+    (cancel, update, invoice history, payment methods) is preserved, with only
+    the headline replaced. Returning None makes the caller fall back to the
+    account default: an unnamed portal is a far better outcome than no portal.
+
+    Args:
+        deck (Tenant): The deck being billed.
+
+    Returns:
+        str | None: The configuration id (``bpc_...``), or None if Stripe could
+        not provide one.
+    """
+    cache_key = _portal_configuration_cache_key(deck.schema_name)
+    configuration_id = cache.get(cache_key)
+    if configuration_id:
+        return configuration_id
+    try:
+        defaults = stripe.billing_portal.Configuration.list(
+            api_key=settings.STRIPE_SECRET_KEY, is_default=True, limit=1)
+        default = defaults.data[0]
+        # the login page is a flag, not copyable state: its url is read-only and
+        # Stripe mints a fresh one per configuration, so only `enabled` carries over
+        login_page = to_plain_dict(default.login_page) if getattr(default, 'login_page', None) else {}
+        configuration = stripe.billing_portal.Configuration.create(
+            api_key=settings.STRIPE_SECRET_KEY,
+            business_profile={
+                **to_plain_dict(default.business_profile),
+                'headline': f'Subscription for {deck_label(deck)}',
+            },
+            features=to_plain_dict(default.features),
+            **({'login_page': {'enabled': True}} if login_page.get('enabled') else {}),
+            metadata={'schema_name': deck.schema_name},
+        )
+    except (stripe.StripeError, IndexError, AttributeError) as e:
+        # no default configuration to clone, or Stripe refused the copy: the
+        # portal still works without a configuration, so never block on this
+        logger.warning("could not prepare a portal configuration for %s: %s", deck.schema_name, e)
+        return None
+    cache.set(cache_key, configuration.id, PORTAL_CONFIGURATION_CACHE_SECONDS)
+    return configuration.id
+
+
+def to_plain_dict(stripe_obj):
+    """A stripe-python object (or a dict) as plain nested dicts/lists.
+
+    stripe-python 15.x objects support indexing but are NOT dicts: ``.get()``
+    raises AttributeError. The handlers and sync code are written dict-style,
+    which every test exercised with plain-dict doubles, so the mismatch only
+    surfaced on staging's first real webhook delivery (500 on every event,
+    2026-08-09). Converting at each SDK boundary keeps the dict-style code and
+    the test doubles honest; ``str()`` of a Stripe object is its full JSON.
+
+    Args:
+        stripe_obj: A stripe-python object, or an already-plain dict.
+
+    Returns:
+        dict: The same data as plain nested dicts/lists.
+    """
+    if isinstance(stripe_obj, dict):
+        return stripe_obj
+    return json.loads(str(stripe_obj))
 
 
 def billing_configured():
@@ -90,18 +214,21 @@ def checkout_trial_end(deck):
 
 
 def create_checkout_session(deck):
-    """Create a subscription Checkout Session for an unlinked deck; return its URL.
+    """Create a subscription Checkout Session for the deck; return its URL.
 
     The deck is identified to Stripe three ways (client_reference_id, metadata,
-    and the customer email), so the webhook (PR 7) and manual reconciliation can
-    always find their way back to the schema. A mid-trial deck's remaining free
-    time rides along as ``subscription_data.trial_end`` (see
-    :func:`checkout_trial_end`). The idempotency key means a double-click or
-    same-day retry with identical parameters reuses the same session instead of
-    minting duplicates.
+    and the customer identity), so the webhook (PR 7) and manual reconciliation
+    can always find their way back to the schema. A first-time deck checks out
+    under the owner's email (Stripe mints the customer); a deck that already
+    has a ``stripe_customer_id`` (renewing after its old subscription fully
+    ended) checks out AS that customer, keeping its saved cards and invoice
+    history. A mid-trial deck's remaining free time rides along as
+    ``subscription_data.trial_end`` (see :func:`checkout_trial_end`). The
+    idempotency key means a double-click or same-day retry with identical
+    parameters reuses the same session instead of minting duplicates.
 
     Args:
-        deck (Tenant): The current deck; must not already have a stripe_customer_id.
+        deck (Tenant): The current deck.
 
     Returns:
         str: The Stripe-hosted checkout URL to redirect the owner to.
@@ -112,7 +239,15 @@ def create_checkout_session(deck):
         mode='subscription',
         line_items=[{'price': settings.STRIPE_PRICE_ID, 'quantity': 1}],
         client_reference_id=deck.schema_name,
-        customer_email=deck.get_owner_email_cached() or None,
+        # a returning deck checks out as its EXISTING Stripe customer, so the
+        # saved cards and invoice history carry over and the dashboard shows one
+        # customer per deck; Stripe forbids passing customer and customer_email
+        # together, so a first-time deck is identified by the owner's email
+        **(
+            {'customer': deck.stripe_customer_id}
+            if deck.stripe_customer_id
+            else {'customer_email': deck.get_owner_email_cached() or None}
+        ),
         metadata={'schema_name': deck.schema_name},
         # stamp the subscription too, so webhook subscription events (PR 7)
         # self-identify without a lookup; a mid-trial deck's remaining free time
@@ -120,8 +255,14 @@ def create_checkout_session(deck):
         # the deck's existing trial ends
         subscription_data={
             'metadata': {'schema_name': deck.schema_name},
+            # the deck this pays for, in Stripe's own displayable field: the
+            # product name is the same for every deck on a tier, so this is what
+            # tells an owner with several decks which one they are paying for
+            'description': f'Deck: {deck_label(deck)}',
             **({'trial_end': int(trial_end.timestamp())} if trial_end else {}),
         },
+        # the same fact on the payment page itself, above the pay button
+        custom_text={'submit': {'message': f'You are subscribing the deck {deck_label(deck)}.'}},
         # Checkout substitutes the real session id into the literal placeholder
         success_url=deck.get_root_url() + reverse('decks:subscription_activating') + '?session_id={CHECKOUT_SESSION_ID}',
         cancel_url=_subscription_page_url(deck),
@@ -129,19 +270,74 @@ def create_checkout_session(deck):
         # trial variant carries the trial-end timestamp: a same-day retry after the
         # cutoff passed, or after an admin moved trial_end_date, gets a fresh key
         # while an identical retry still reuses the session
+        # a customer-bound (renewal) session has different parameters than an
+        # email-identified one, so it gets its own key: a deck that abandoned an
+        # unlinked checkout earlier the same day can still renew after linking.
+        # The v2 generation marks the request shape that carries the deck label:
+        # Stripe rejects a key replayed with different parameters for 24 hours,
+        # so a same-day retry across a deploy must not reuse the older key.
         idempotency_key=(
-            f'deck-checkout-{deck.schema_name}-{localdate()}'
+            f'deck-checkout-v2-{deck.schema_name}-{localdate()}'
             + (f'-trial-{int(trial_end.timestamp())}' if trial_end else '')
+            + (f'-{deck.stripe_customer_id}' if deck.stripe_customer_id else '')
         ),
     )
     return session.url
+
+
+def has_manageable_subscription(deck):
+    """Whether the deck's linked Stripe subscription is one the Billing Portal
+    can still act on (renew, fix the card, switch plans, cancel).
+
+    The portal manages LIVE subscriptions only. A fully canceled (or absent)
+    subscription cannot be restarted there: the portal home shows just payment
+    methods and invoice history, a dead end for an expired deck trying to come
+    back (production find, 2026-08-09). Those decks need a fresh Checkout
+    instead. Stripe is asked at call time so the answer matches what the portal
+    will actually offer: ``past_due``/``unpaid`` subscriptions count as
+    manageable (fixing the card in the portal is their cure), while
+    ``canceled`` and ``incomplete_expired`` are dead ends.
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        bool: True when the portal is the right destination for the manage
+        button; False when a new Checkout is (no linked subscription, it no
+        longer exists on this Stripe account/mode, or its status is terminal).
+
+    Raises:
+        stripe.StripeError: On any Stripe failure that leaves the
+        subscription's state unknown (transport errors, and invalid requests
+        other than the subscription not existing), so the caller shows its
+        try-again message rather than starting a checkout.
+    """
+    if not deck.stripe_subscription_id:
+        return False
+    try:
+        subscription = stripe.Subscription.retrieve(
+            deck.stripe_subscription_id, api_key=settings.STRIPE_SECRET_KEY)
+    except stripe.InvalidRequestError as error:
+        # resource_missing means no such subscription for this key (deleted
+        # upstream, or a test/live mode mismatch): nothing for the portal to
+        # manage. Every OTHER invalid request (a malformed id, a bad parameter)
+        # leaves the subscription's real state unknown, and treating unknown as
+        # "gone" would offer a checkout that could duplicate a live
+        # subscription, so those propagate to the caller's error handling.
+        if error.code == 'resource_missing':
+            return False
+        raise
+    return subscription.status not in ('canceled', 'incomplete_expired')
 
 
 def create_portal_session(deck):
     """Create a Billing Portal session for a Stripe-linked deck; return its URL.
 
     The portal is where a linked deck renews, upgrades, changes card, or cancels
-    -- Stripe hosts all of it; we only need the customer id.
+    -- Stripe hosts all of it; we only need the customer id. The session carries
+    a configuration whose headline names the deck (see
+    :func:`portal_configuration_id`), so an owner with several decks can see
+    which one the portal is billing.
 
     Args:
         deck (Tenant): The current deck; must have a stripe_customer_id.
@@ -149,12 +345,164 @@ def create_portal_session(deck):
     Returns:
         str: The Stripe-hosted portal URL to redirect the owner to.
     """
+    configuration_id = portal_configuration_id(deck)
     session = stripe.billing_portal.Session.create(
         api_key=settings.STRIPE_SECRET_KEY,
         customer=deck.stripe_customer_id,
         return_url=_subscription_page_url(deck),
+        # a configuration headlined with the deck's domain; omitted when one
+        # could not be prepared, which falls back to the account default
+        **({'configuration': configuration_id} if configuration_id else {}),
     )
     return session.url
+
+
+def stamp_customer_description(deck, customer_id):
+    """Best-effort: label the Stripe Customer with the deck it pays for.
+
+    Checkout creates the Customer with only the payer's email, so the dashboard's
+    Customers list gives no hint which deck a customer belongs to (maintainer
+    request, 2026-08-09). Stamping the schema name into the description (and
+    searchable metadata) fixes that at the moment a customer is
+    first linked to a deck. Purely cosmetic, so a Stripe error is logged and
+    swallowed: it must never fail the webhook or the post-checkout reconcile
+    that calls it.
+
+    Args:
+        deck (Tenant): The deck the customer was just linked to.
+        customer_id (str): The Stripe customer id (cus_...).
+    """
+    try:
+        stripe.Customer.modify(
+            customer_id,
+            api_key=settings.STRIPE_SECRET_KEY,
+            description=deck.schema_name,
+            metadata={'schema_name': deck.schema_name},
+        )
+    except stripe.StripeError as e:
+        logger.warning('could not stamp deck description on Stripe customer %s: %s', customer_id, e)
+
+
+def _plan_summary_cache_key(schema_name, subscription_id):
+    """Cache key for one deck's plan summary, keyed on the linked subscription."""
+    return f'stripe-plan-summary:{schema_name}:{subscription_id}'
+
+
+def clear_plan_summary_cache(schema_name, *subscription_ids):
+    """Drop cached plan summaries so the subscription page re-fetches from Stripe.
+
+    Called from the billing write paths (checkout reconciliation and
+    ``Tenant.sync_from_stripe_subscription``) so a plan switched in the billing
+    portal shows on the page as soon as its webhook syncs, rather than after the
+    cache TTL runs out.
+
+    Args:
+        schema_name (str): The deck's schema.
+        *subscription_ids: Subscription ids whose cached summaries may exist
+            (typically the event's and the previously linked one); falsy and
+            duplicate entries are skipped.
+    """
+    for subscription_id in set(subscription_ids):
+        if subscription_id:
+            cache.delete(_plan_summary_cache_key(schema_name, subscription_id))
+
+
+def _plan_summary_from_subscription(subscription):
+    """Condense a retrieved subscription (price + product expanded) to display parts.
+
+    Args:
+        subscription (dict): A Stripe Subscription with ``items.data.price.product``
+            expanded (or an equivalent test double).
+
+    Returns:
+        dict | None: ``{'name': ..., 'renewal_phrase': ...}`` -- the Product's name
+        and a cadence-plus-price phrase like "renewed annually at $75.00 per year"
+        or "renewed every 6 months at $50.00" (empty string when the price has no
+        recurrence). None when there's no expanded product name to show.
+    """
+    data = (subscription.get('items') or {}).get('data') or []
+    price = (data[0].get('price') or {}) if data else {}
+    product = price.get('product')
+    name = product.get('name') if isinstance(product, dict) else None
+    if not name:
+        return None
+
+    recurring = price.get('recurring') or {}
+    interval = recurring.get('interval')
+    count = recurring.get('interval_count') or 1
+    if interval == 'year' and count == 1:
+        cadence, per_suffix = 'renewed annually', ' per year'
+    elif interval == 'month' and count == 1:
+        cadence, per_suffix = 'renewed monthly', ' per month'
+    elif interval and count == 1:
+        # a singular day/week cadence reads without the count ("renewed every week")
+        cadence, per_suffix = f'renewed every {interval}', ''
+    elif interval:
+        cadence, per_suffix = f'renewed every {count} {interval}s', ''
+    else:  # a one-time price shouldn't arise on a subscription, but Stripe allows odd data
+        cadence, per_suffix = '', ''
+
+    amount = price.get('unit_amount')
+    money = ''
+    if amount is not None:
+        currency = (price.get('currency') or '').lower()
+        # Stripe amounts are in the currency's SMALLEST unit: cents for most
+        # currencies, but zero-decimal currencies (Stripe's documented list)
+        # carry the whole amount already, so 7500 JPY is 7,500, not 75.00.
+        if currency in ZERO_DECIMAL_CURRENCIES:
+            rendered = f'{amount:,.0f}'
+        else:
+            rendered = f'{amount / 100:,.2f}'
+        money = f'${rendered}' if currency in ('', 'usd') else f'{rendered} {currency.upper()}'
+
+    if cadence and money:
+        phrase = f'{cadence} at {money}{per_suffix}'
+    else:
+        # a cadence alone still reads fine; a price with no cadence would dangle, so drop it
+        phrase = cadence
+    return {'name': name, 'renewal_phrase': phrase}
+
+
+def subscription_plan_summary(deck):
+    """What the deck's linked Stripe subscription buys, for the status line, or None.
+
+    Retrieves the subscription with its price and product expanded and condenses
+    it via :func:`_plan_summary_from_subscription` to the Product name plus a
+    renewal phrase (e.g. "Bytedeck Subscription - 40 Students" / "renewed
+    annually at $75.00 per year"). The result is cached for
+    PLAN_SUMMARY_CACHE_SECONDS per (deck, subscription) and cleared by the
+    billing write paths, so the page doesn't call Stripe on every load yet shows
+    a portal plan switch as soon as its webhook syncs.
+
+    Returns None -- the page then renders its usual copy with no plan info --
+    when the deck has no linked subscription, no secret key is configured, the
+    retrieve fails (logged, swallowed: a Stripe hiccup must not break the page),
+    or the data carries no product name.
+
+    Args:
+        deck (Tenant): The current deck.
+
+    Returns:
+        dict | None: ``{'name': str, 'renewal_phrase': str}`` or None.
+    """
+    if not deck.stripe_subscription_id or not settings.STRIPE_SECRET_KEY:
+        return None
+    cache_key = _plan_summary_cache_key(deck.schema_name, deck.stripe_subscription_id)
+    summary = cache.get(cache_key)
+    if summary is not None:
+        return summary
+    try:
+        subscription = to_plain_dict(stripe.Subscription.retrieve(
+            deck.stripe_subscription_id, api_key=settings.STRIPE_SECRET_KEY,
+            expand=['items.data.price.product'],
+        ))
+    except stripe.StripeError as e:
+        logger.warning('could not fetch the plan summary for %s: %s', deck.schema_name, e)
+        return None
+    summary = _plan_summary_from_subscription(subscription)
+    if summary is not None:
+        cache.set(cache_key, summary, PLAN_SUMMARY_CACHE_SECONDS)
+    return summary
 
 
 def subscription_period_end_date(subscription):
@@ -193,9 +541,9 @@ def reconcile_checkout_session(deck, session_id):
     from tenant.models import Tenant
     from tenant.utils import invalidate_current_deck_cache
 
-    session = stripe.checkout.Session.retrieve(
+    session = to_plain_dict(stripe.checkout.Session.retrieve(
         session_id, api_key=settings.STRIPE_SECRET_KEY, expand=['subscription'],
-    )
+    ))
     # The session id arrives via the success-URL query string, so never trust it
     # blindly: the session must be one THIS deck's checkout created (bound via
     # client_reference_id/metadata), or a session id from some other deck's
@@ -218,8 +566,14 @@ def reconcile_checkout_session(deck, session_id):
     paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
+    # stamp only on a fresh link, so repeat polls of the status endpoint don't
+    # re-write the customer on every poll
+    newly_linked = bool(updates['stripe_customer_id']) and deck.stripe_customer_id != updates['stripe_customer_id']
     Tenant.objects.filter(schema_name=deck.schema_name).update(**updates)
     invalidate_current_deck_cache(deck.schema_name)  # the banner should update immediately
+    clear_plan_summary_cache(deck.schema_name, deck.stripe_subscription_id, updates['stripe_subscription_id'])
+    if newly_linked:
+        stamp_customer_description(deck, updates['stripe_customer_id'])
     return True
 
 
@@ -292,11 +646,43 @@ def _sync_deck_from_subscription_id(deck, subscription_id):
     configured with only the webhook secret can still absorb events that sync
     straight from their payloads, but it cannot retrieve, and an exception here
     would turn into a 500 that Stripe retries for days (review find on #2110).
+
+    Args:
+        deck (Tenant): The deck whose billing state the subscription drives.
+        subscription_id (str): The Stripe subscription id (sub_...) to retrieve.
+
+    Returns:
+        str: A short human-readable summary for the caller's log/audit trail.
     """
     if not settings.STRIPE_SECRET_KEY:
         return 'STRIPE_SECRET_KEY unset; retrieve skipped'
-    subscription = stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY)
+    subscription = to_plain_dict(stripe.Subscription.retrieve(subscription_id, api_key=settings.STRIPE_SECRET_KEY))
+    stamp_subscription_description(deck, subscription)
     return deck.sync_from_stripe_subscription(subscription)
+
+
+def stamp_subscription_description(deck, subscription):
+    """Best-effort: label the Stripe subscription with the deck it pays for.
+
+    Checkout sets this at creation, so this is the path that reaches everything
+    older: legacy subscriptions linked by hand, and anything created before the
+    label existed. Stripe shows the description alongside the plan, which is
+    what tells an owner with several decks which one a subscription belongs to.
+    Purely cosmetic, so a Stripe error is logged and swallowed: it must never
+    fail the sync it rides along with.
+
+    Args:
+        deck (Tenant): The deck the subscription pays for.
+        subscription (dict): The retrieved subscription, as a plain dict.
+    """
+    wanted = f'Deck: {deck_label(deck)}'
+    if subscription.get('description') == wanted:
+        return
+    try:
+        stripe.Subscription.modify(
+            subscription['id'], api_key=settings.STRIPE_SECRET_KEY, description=wanted)
+    except stripe.StripeError as e:
+        logger.warning("could not label subscription %s for %s: %s", subscription.get('id'), deck.schema_name, e)
 
 
 def handle_webhook_event(event):
@@ -308,6 +694,10 @@ def handle_webhook_event(event):
     event types are logged and acknowledged. Idempotence (duplicate delivery)
     is enforced by the caller via StripeEventLog before this runs.
 
+    Args:
+        event: The verified Stripe Event, as the SDK's Event object or an
+            equivalent plain dict (converted internally via to_plain_dict).
+
     Returns:
         tuple[str, str]: ``(schema_name, summary)`` -- the resolved deck's schema
         (empty string when no deck resolved) as structured data for the event
@@ -315,6 +705,9 @@ def handle_webhook_event(event):
     """
     from django_tenants.utils import tenant_context
 
+    # accept the SDK's Event object as well as a plain dict: everything below
+    # (and every handler) speaks dict
+    event = to_plain_dict(event)
     event_type = event.get('type', '')
     obj = (event.get('data') or {}).get('object') or {}
     metadata = obj.get('metadata') or {}
@@ -347,6 +740,10 @@ def handle_webhook_event(event):
             if session_sub:
                 guard |= Q(stripe_subscription_id=session_sub)
             linked = Tenant.objects.filter(guard, pk=deck.pk).update(stripe_customer_id=obj['customer'])
+            if linked and deck.stripe_customer_id != obj['customer']:
+                # a fresh link (not a re-delivery rewriting the same id): label the
+                # customer with its deck so the dashboard's Customers list is legible
+                stamp_customer_description(deck, obj['customer'])
             parts.append('linked customer' if linked else 'customer link kept (session not for the linked subscription)')
         else:
             # a session without a customer must not CLEAR a stored link

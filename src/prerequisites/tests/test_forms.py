@@ -1,7 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -19,7 +18,6 @@ class PrereqFormInlineMediaTest(ByteDeckTenantTestCase):
 
     def setUp(self):
         """Create a tenant client and a teacher user for the tests."""
-        self.client = TenantClient(self.tenant)
         self.teacher = baker.make(User, is_staff=True)
 
     def test_media__includes_prereq_css(self):

@@ -56,7 +56,7 @@ Services started in production:
 
 | Service       | What it does                                                                 |
 | ------------- | --------------------------------------------------------------------------- |
-| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared`, `migrate_schemas --executor=multiprocessing`, and `collectstatic`. |
+| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared`, `migrate_schemas --executor=multiprocessing`, and `collectstatic`. The port is **not** published to the host: nginx reaches it over the internal `frontend-network`, so TLS and the host check can't be bypassed. |
 | `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
 | `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
 | `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
@@ -65,6 +65,18 @@ Services started in production:
 Postgres runs on **AWS RDS** (not a compose service), reached via the
 `POSTGRES_*` settings in `.env`. Redis runs as the `redis` compose service
 above, reached via `REDIS_HOST` / `REDIS_PORT`.
+
+Two networks separate the tiers: `frontend-network` carries traffic between
+nginx and `web`, and `backend-network` carries everything internal (the app
+services and redis). Only `web` sits on both, so nginx has no route to redis.
+
+**Production runs the code baked into the image.** `server-update.sh` rebuilds
+the image from the deployed commit on every deploy, and the app services mount
+no source volume, so what runs is what was built and tested rather than
+whatever happens to be in the host checkout. Editing files under
+`/home/ubuntu/bytedeck` therefore changes nothing until the next deploy. The
+app services also run as the image's unprivileged `app` user; only nginx sets
+an explicit `user:`, because it reads the host's Let's Encrypt certificates.
 
 The shared service config lives in `docker-compose.yml`; the AWS file layers
 production concerns on top. In production every service additionally has
@@ -81,6 +93,26 @@ visible, not quietly loop-restart. **Healthchecks** are shared (defined in
 - `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
   beat silently stops all periodic tasks.
 - `redis`: `redis-cli ping`.
+
+### Checking this configuration
+
+The normal test suite runs the development overlay, so it never sees any of the
+above. Two checks under `production/tests/` cover it instead, wired up in
+`.github/workflows/production_config.yml` alongside a third job that builds the
+application image and asserts it runs as the unprivileged `app` user with no
+compiler left in it. Both scripts are runnable by hand from the repo root:
+
+```bash
+python production/tests/check_prod_compose.py   # renders the prod config, asserts its invariants
+bash production/tests/check_prod_topology.sh    # boots the stack, asserts who can reach whom
+```
+
+The first needs no Docker daemon and takes seconds. The second boots the real
+production overlay against throwaway certificates, substituting a trivial server
+for the application image, so it tests the topology rather than the app. Between
+them they assert that nothing but nginx is published to the host, that the app
+services mount no source volume, that nginx can reach `web` but not `redis`, and
+that a foreign `Host` header is still dropped.
 
 Check health at a glance with `docker compose ps` (the STATUS column shows
 `(healthy)` / `(unhealthy)`). Note compose does **not** auto-restart a running
@@ -104,16 +136,21 @@ git pull                      # master (prod) or staging (staging host)
 
 `production/server-update.sh` does the following:
 
-1. `docker compose ... build` the images.
+1. `docker compose ... build --pull` the images. `--pull` re-fetches each base
+   image (`python:3.12-slim`, `nginx:stable`) so a deploy builds on the current
+   base and picks up its OS-level security updates, rather than on an older copy
+   of the tag left on the host. The pull is best effort: if it fails (say the
+   registry is unreachable) the build is retried without `--pull`, using the base
+   images already on the host, so an outage can still not block a deploy or a
+   rollback. A build that fails for any other reason fails the retry too and
+   stops the deploy.
 2. Copy `production/systemd/bytedeck.com.service` into `/etc/systemd/system/`.
 3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
    `redis-host-setup.service` host tuning (disables THP, sets
    `vm.overcommit_memory=1` — the settings the dockerized Redis warns about).
 4. `systemctl daemon-reload`, enable + run `redis-host-setup`, then enable and
    **restart** `bytedeck.com.service` (which runs `docker compose ... up -d`).
-5. `nginx -s reload` inside the nginx container (works around nginx sometimes
-   not reconnecting to uwsgi after a restart).
-6. Tail the compose logs when run interactively; print a recent snapshot and
+5. Tail the compose logs when run interactively; print a recent snapshot and
    exit when run non-interactively (e.g. from the deploy runner).
 
 The app is managed by the **`bytedeck.com.service`** systemd unit
@@ -167,12 +204,13 @@ variables are left untouched.
 **S3** and they are served through **CloudFront**. nginx does not serve app
 media in normal operation.
 
-> Legacy detail: `nginx/bytedeck.conf.template` still contains a hardcoded
-> `location ~ /media/(.*)$` that 301-redirects to a specific CloudFront
-> distribution (`d10ge8y4vx8iud.cloudfront.net/public_media/$1`). It's a
-> workaround for old hardcoded `/media/...` URLs and causes a redundant redirect
-> hop. Prefer generating correct absolute S3/CloudFront URLs in the app and
-> removing this block when practical.
+> Legacy detail: `nginx/bytedeck.conf.template` still contains a
+> `location ~ /media/(.*)$` that 301-redirects to the S3/CloudFront
+> distribution. The CDN host is injected from the `CDN_static` `.env` value at
+> image-build time (`envsubst` in `nginx/Dockerfile`) rather than hardcoded. It's
+> a workaround for old hardcoded `/media/...` URLs and causes a redundant
+> redirect hop. Prefer generating correct absolute S3/CloudFront URLs in the app
+> and removing this block when practical.
 
 ## Database
 
@@ -275,10 +313,36 @@ request, so it redirects every request forever).
 
 ## Troubleshooting
 
-- **502 / nginx not reaching the app after a deploy:** nginx sometimes doesn't
-  reconnect to uwsgi after `web` restarts. Re-run the reload:
-  `docker compose ... exec nginx nginx -s reload` (server-update.sh already does
-  this).
+- **502 right after a restart:** expected while `web` is still starting, and it
+  lasts as long as startup does rather than any fixed time: the `web` container
+  runs `migrate_schemas` over every tenant schema and then `collectstatic`
+  before uwsgi binds :8000 (the more tenants, the longer it takes; the
+  container healthcheck allows up to 10 minutes), and nginx has nothing to talk
+  to until it does. The 502s clear once `spawned uWSGI master process` appears
+  in the web logs:
+  ```bash
+  cd ~/bytedeck
+  C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+  $C logs -f web
+  ```
+- **502 that does not clear:** check that nginx is dialling the address `web`
+  actually has:
+  ```bash
+  cd ~/bytedeck
+  C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+  $C logs nginx | grep -o 'upstream: "uwsgi://[^"]*"' | tail -1   # who nginx calls
+  $C ps -q web | xargs docker inspect \
+      -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}'  # web's IP per network
+  ```
+  The upstream address must match web's IP on the network it shares with nginx
+  (`frontend-network`; web also sits on `backend-network`, and that IP is not
+  the one nginx dials). If they do not match, nginx is holding a stale address: confirm
+  the site config still carries the `resolver` line and the `$web_upstream`
+  variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping
+  either one restores the old resolve-once-at-startup behaviour.
+  `$C exec nginx nginx -s reload` clears it until the next recreation.
+- **Check nginx and web share a network:** `$C exec nginx getent hosts web`
+  should print the current web IP.
 - **Which user is each container running as:**
   `docker inspect $(docker ps -aq) --format '{{.Config.User}} {{.Name}}'`
 - **Logs:** `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs -f`

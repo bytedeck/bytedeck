@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.html import format_html
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView, DeleteView
 
@@ -247,7 +248,19 @@ class ProfileDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
         context["approved_submission_count"] = approved_submission_qs.count()
         return context
 
-    def delete(self, request, *args, **kwargs):
+    # Deliberately untested: users should be archived, not hard-deleted (see #2182), so this
+    # delete flow is slated for removal/replacement rather than covered with a test.
+    def delete(self, request, *args, **kwargs):  # pragma: no cover -- see comment above (#2182)
+        """Delete the profile's user (cascading to the profile) and redirect on success.
+
+        Args:
+            request: The current HTTP request.
+            *args: Positional URL arguments captured by the view.
+            **kwargs: Keyword URL arguments captured by the view.
+
+        Returns:
+            HttpResponseRedirect: a redirect to ``success_url`` after deletion.
+        """
         profile = self.get_object()
         user = profile.user
         user.delete()  # Delete the User (cascades to Profile)
@@ -479,6 +492,7 @@ def oauth_merge_account(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def recalculate_current_xp(request):
     # Recalculating XP for every current student invalidates and recomputes a cache per
     # profile; on a busy deck that is hundreds of profiles in one request, which has grown a
@@ -497,6 +511,7 @@ def recalculate_current_xp(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
@@ -506,6 +521,7 @@ def xp_toggle(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_archive(request, profile_id):
     """Archive a student by deactivating their account (``User.is_active = False``).
 
@@ -537,6 +553,7 @@ def profile_archive(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_restore(request, profile_id):
     """Restore an archived student by reactivating their account (``User.is_active = True``).
 
@@ -558,12 +575,28 @@ def profile_restore(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban_toggle(request, profile_id):
+    """Toggle whether a student is banned from commenting publicly.
+
+    The toggling form of :func:`comment_ban`: where that view only applies a ban, this one
+    lifts a ban that is already in place. Staff-only, and POST-only because it changes the
+    student's account (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST from a staff user.
+        profile_id: the id of the Profile to ban or unban.
+
+    Returns:
+        The HttpResponseRedirect from :func:`comment_ban`, back to the page the toggle was
+        clicked from.
+    """
     return comment_ban(request, profile_id, toggle=True)
 
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
     if toggle:

@@ -8,10 +8,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.db.utils import OperationalError
-from django.test import TestCase
+from django.test import TestCase, SimpleTestCase, override_settings
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
 
+from hackerspace_online.management.commands.initdb import get_homepage_content
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
@@ -68,7 +70,11 @@ class InitDbTest(TestCase, CommandMixin):
         public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
         with tenant_context(public_tenant):
-            FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            homepage = FlatPage.objects.get(url='/home/')  # will throw exception if doesn't exist
+            # ALL THREE seeded TRY IT buttons must point at the deck-request form:
+            # the old "#contact" anchor target no longer exists anywhere on the page
+            self.assertEqual(homepage.content.count('href="/decks/request/"'), 3)
+            self.assertNotIn('href="#contact"', homepage.content)
             user = User.objects.get(username='admin')
             self.assertTrue(user.is_superuser)
             self.assertTrue(Site.objects.exists())
@@ -148,6 +154,33 @@ class InitDbTest(TestCase, CommandMixin):
         )
 
 
+class GetHomepageContentTest(SimpleTestCase):
+    """The seeded public homepage HTML must build image URLs from STATIC_URL.
+
+    Guards against regressing to a hardcoded CDN domain (the real production
+    CloudFront distribution was previously baked into every seeded homepage).
+    """
+
+    def test_get_homepage_content__derives_image_urls_from_static_url(self):
+        """Every image src uses settings.STATIC_URL, with no hardcoded CDN domain."""
+        with override_settings(STATIC_URL='https://cdn.example.test/static/'):
+            html = get_homepage_content()
+        # All homepage images resolve against the STATIC_URL-derived base...
+        self.assertIn('https://cdn.example.test/static/public/images/wordmark-v2.png', html)
+        self.assertEqual(html.count('https://cdn.example.test/static/public/images/'), 10)
+        # ...and no real production CDN identifier is baked into the seed content.
+        self.assertNotIn('cloudfront.net', html)
+        self.assertNotIn('d10ge8y4vx8iud', html)
+
+    def test_get_homepage_content__local_static_url_yields_relative_paths(self):
+        """With the local dev STATIC_URL, image URLs are relative /static/ paths."""
+        with override_settings(STATIC_URL='/static/'):
+            html = get_homepage_content()
+        self.assertIn('/static/public/images/wordmark-v2.png', html)
+        self.assertEqual(html.count('/static/public/images/'), 10)
+        self.assertNotIn('cloudfront.net', html)
+
+
 class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
     """ generate_content adds items to an existing tenant.
     Dont need extensive testing as tests exist in "test_shell_utils.py"
@@ -178,6 +211,11 @@ class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):
         self.assertEqual(Quest.objects.count(), expected_quest_count)
         self.assertEqual(Category.objects.count(), expected_campaign_count)
         self.assertEqual(User.objects.count(), expected_user_count)
+
+    def test_generate_content__nonexistent_schema_raises_command_error(self):
+        """A schema name with no matching tenant raises CommandError instead of failing obscurely."""
+        with self.assertRaises(CommandError):
+            self.call_command('does_not_exist_schema')
 
 
 class FullCleanTest(TestCase, CommandMixin):

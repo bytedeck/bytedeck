@@ -567,6 +567,11 @@ EMAIL_USE_TLS = env('EMAIL_USE_TLS', default=True)
 
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default=None)
 
+# Where "Contact ByteDeck" copy points (subscription page, activation flow):
+# rendered as a mailto: link so users always have a way to actually reach us
+# (maintainer request, 2026-08-09).
+SUPPORT_EMAIL = env('SUPPORT_EMAIL', default='contact@bytedeck.com')
+
 # SERVER ERRORS EMAIL
 admins_raw = env('ADMINS', default=[])
 if admins_raw:  # pragma: no cover -- ADMINS env unset under the test harness
@@ -687,6 +692,28 @@ SILENCED_SYSTEM_CHECKS = ['django_tenants.W003']
 # nothing. Flip to True in production once a report-only cycle has been reviewed
 # (see docs/plans/PLAN-1729-automated-payments-onboarding.md §10.2).
 DECK_NOTICES_ENABLED = env.bool('DECK_NOTICES_ENABLED', default=False)
+
+# Release announcements to deck staff: when True, the hourly
+# tenant.tasks.poll_release_announcement task notifies every deck's staff (an
+# in-app notification linking to the GitHub announcement) when a new ByteDeck
+# version's changelog reaches production. Off by default, and inert without a
+# GITHUB_API_TOKEN: the poll queries GitHub's GraphQL API for the latest
+# Announcements discussion (the one announce-changelog.yml publishes). The first
+# poll after enabling only records a baseline, so it never notifies about a
+# release that shipped before the feature was turned on.
+RELEASE_NOTIFICATIONS_ENABLED = env.bool('RELEASE_NOTIFICATIONS_ENABLED', default=False)
+# A GitHub token with read access to the repo's Discussions. The repo is public,
+# so a minimal-scope token is enough; without it the poll no-ops.
+GITHUB_API_TOKEN = env('GITHUB_API_TOKEN', default='')
+# owner/name of the repo whose Announcements discussions carry the changelog.
+RELEASE_ANNOUNCEMENT_REPO = env('RELEASE_ANNOUNCEMENT_REPO', default='bytedeck/bytedeck')
+
+# External hosts a notification click-through may redirect to. The notifications
+# read view forwards its ?next= target, which for most notices is an internal
+# relative path but for the release-announcement notice is the GitHub Discussion
+# link, so github.com is trusted here; any other absolute URL is refused and the
+# user is sent to their notifications list instead (closes an open redirect).
+NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS = env.list('NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS', default=['github.com'])
 
 # STRIPE ##########################################################
 

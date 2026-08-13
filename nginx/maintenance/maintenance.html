@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Auto-retry: once the app is back up, the next refresh lands the visitor
+       back on the real site instead of leaving them stuck on this page. -->
+  <meta http-equiv="refresh" content="15">
+  <title>ByteDeck is updating</title>
+  <style>
+    :root { --brand:#4a90d9; --ink:#2c3e50; --muted:#6b7c8f; --bg:#f4f7fb; --card:#ffffff; }
+    * { box-sizing:border-box; }
+    html,body { height:100%; margin:0; }
+    body {
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      background:var(--bg); color:var(--ink);
+      display:flex; align-items:center; justify-content:center; padding:24px;
+    }
+    .card {
+      background:var(--card); max-width:520px; width:100%;
+      padding:48px 40px; border-radius:14px; text-align:center;
+      box-shadow:0 10px 40px rgba(44,62,80,.12);
+    }
+    .logo { width:210px; max-width:72%; height:auto; margin:0 auto 30px; display:block; }
+    h1 { font-size:1.6rem; margin:0 0 12px; font-weight:600; }
+    p { font-size:1.05rem; line-height:1.6; color:var(--muted); margin:0 0 8px; }
+    .dots { margin-top:30px; }
+    .dots span {
+      display:inline-block; width:10px; height:10px; margin:0 4px; border-radius:50%;
+      background:var(--brand); opacity:.35; animation:pulse 1.4s infinite ease-in-out both;
+    }
+    .dots span:nth-child(2){ animation-delay:.2s; }
+    .dots span:nth-child(3){ animation-delay:.4s; }
+    @keyframes pulse { 0%,80%,100%{ opacity:.35; transform:scale(.85); } 40%{ opacity:1; transform:scale(1); } }
+    .fine { margin-top:26px; font-size:.85rem; color:var(--muted); }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <img class="logo" src="data:image/png;base64,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" alt="ByteDeck">
+    <h1>We&rsquo;ll be right back</h1>
+    <p>ByteDeck is being updated and should be back online within a few minutes.</p>
+    <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    <p class="fine">This page refreshes automatically. Thanks for your patience!</p>
+  </main>
+</body>
+</html>

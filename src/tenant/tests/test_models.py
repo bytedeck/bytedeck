@@ -359,6 +359,93 @@ class TenantBillingStatusTest(SimpleTestCase):
         self.assertTrue(tenant.is_suspended)
         self.assertEqual(tenant.days_until_expiry, -(GRACE_PERIOD_DAYS + 5))
 
+    def test_subscription_status__one_slug_per_lifecycle_state(self):
+        """subscription_status maps each lifecycle state to its slug: the single
+        precedence chain behind the subscription page badge and the admin's
+        Subscription column."""
+        self.assertEqual(self.make_tenant().subscription_status, 'manual')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY).subscription_status, 'trial')
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=40).subscription_status, 'subscribed')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status, 'maintenance')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).subscription_status, 'grace')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), max_active_users=40).subscription_status,
+            'suspended')
+
+    def test_subscription_status__precedence_when_states_overlap(self):
+        """Where the underlying properties overlap, the more urgent state wins:
+        a deck in the paid clock's grace window is 'grace' even though
+        subscription_active (and the maintenance cap test) still hold there, and
+        a suspended deck is 'suspended' even though its old trial date still
+        exists. Unlimited (-1) paid decks are 'subscribed', never 'maintenance'."""
+        # paid grace: subscription_active is still True through the window, grace wins
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1), max_active_users=40).subscription_status, 'grace')
+        # a lapsing maintenance deck in grace is 'grace' too, not 'maintenance'
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1), max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status,
+            'grace')
+        # suspension outranks the stale never-cleared trial date
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY - timedelta(days=400),
+                paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 5),
+            ).subscription_status,
+            'suspended')
+        # unlimited seats is a real subscription, not maintenance
+        self.assertEqual(self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=-1).subscription_status, 'subscribed')
+        # the GOVERNING (latest) clock decides trial vs paid (#1734 B4): an
+        # admin-extended trial outranks an older paid_until even while that paid
+        # date's grace tail keeps subscription_active True (regression: this
+        # deck read as 'subscribed'/'maintenance' when only the paid flags were
+        # consulted), and also while the paid date is still current
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=30), paid_until=FROZEN_TODAY - timedelta(days=1),
+                max_active_users=40,
+            ).subscription_status,
+            'trial')
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=60), paid_until=FROZEN_TODAY + timedelta(days=30),
+            ).subscription_status,
+            'trial')
+        # a TIE between the clocks speaks subscription language (B4)
+        self.assertEqual(
+            self.make_tenant(
+                trial_end_date=FROZEN_TODAY + timedelta(days=30), paid_until=FROZEN_TODAY + timedelta(days=30),
+                max_active_users=40,
+            ).subscription_status,
+            'subscribed')
+
+    def test_subscription_status_label__human_label_for_every_slug(self):
+        """subscription_status_label renders the human word for the current slug,
+        for a deck in each of the six lifecycle states, and the label map holds
+        exactly those six labels (a typo in any one label fails here)."""
+        self.assertEqual(self.make_tenant().subscription_status_label, 'Managed manually')
+        self.assertEqual(self.make_tenant(trial_end_date=FROZEN_TODAY).subscription_status_label, 'Free trial')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=40).subscription_status_label, 'Subscribed')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY, max_active_users=TRIAL_MAX_ACTIVE_USERS).subscription_status_label,
+            'Maintenance')
+        self.assertEqual(
+            self.make_tenant(trial_end_date=FROZEN_TODAY - timedelta(days=1)).subscription_status_label, 'Grace period')
+        self.assertEqual(
+            self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)).subscription_status_label,
+            'Suspended')
+        self.assertEqual(
+            Tenant.SUBSCRIPTION_STATUS_LABELS,
+            {
+                'suspended': 'Suspended',
+                'grace': 'Grace period',
+                'maintenance': 'Maintenance',
+                'subscribed': 'Subscribed',
+                'trial': 'Free trial',
+                'manual': 'Managed manually',
+            })
+
 
 @freeze_time(FROZEN_NOW)
 class TenantDeletionClockTest(ByteDeckTenantTestCase):
@@ -862,3 +949,27 @@ class SyncPaymentGatingTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.paid_until, date(2027, 1, 15))
         self.assertEqual(self.tenant.max_active_users, 40)
+
+
+class TenantQuestCountTest(ByteDeckTenantTestCase):
+    """Tests for the cached quest-count stat's AVAILABLE-quests semantics
+    (maintainer request, 2026-08-09)."""
+
+    def test_get_quest_count__counts_only_the_available_quest_pool(self):
+        """get_quest_count() counts the pool the students' Available quests tab
+        draws from (published, past its start date, not expired, active campaign
+        or none), and excludes drafts, archived, expired, not-yet-started, and
+        inactive-campaign quests, which the old un-archived count included."""
+        from django.utils.timezone import localdate
+
+        baseline = self.tenant.get_quest_count()  # the seeded test deck may ship quests
+
+        baker.make('quest_manager.Quest', published=True)  # the one countable quest
+        inactive_campaign = baker.make('quest_manager.Category', published=False)
+        baker.make('quest_manager.Quest', published=True, campaign=inactive_campaign)
+        baker.make('quest_manager.Quest', published=False)  # draft
+        baker.make('quest_manager.Quest', published=True, archived=True)
+        baker.make('quest_manager.Quest', published=True, date_expired=localdate() - timedelta(days=1))
+        baker.make('quest_manager.Quest', published=True, date_available=localdate() + timedelta(days=1))
+
+        self.assertEqual(self.tenant.get_quest_count(), baseline + 1)

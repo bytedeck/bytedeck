@@ -5,7 +5,6 @@ from unittest.mock import MagicMock
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 from model_bakery.recipe import Recipe
@@ -24,10 +23,6 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
     def setUpTestData(cls):
         """Create a test campaign (Category) shared across the tests."""
         cls.category = baker.make(Category, title="Test Campaign")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_category__creation_and_str(self):
         """Creating a Category yields a Category instance whose str is its title."""
@@ -152,10 +147,6 @@ class QuestTestModel(ByteDeckTenantTestCase):
     def setUpTestData(cls):
         """Create a Quest shared across the tests."""
         cls.quest = baker.make(Quest)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_quest__creation_and_str(self):
         """Creating a Quest yields a Quest instance whose str is its name."""
@@ -457,10 +448,6 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
         """Capture the active semester shared across the tests."""
         cls.active_semester = SiteConfig.get().active_semester
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_all_approved__filters_by_semester_quest_and_user(self):
         """ Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
@@ -581,10 +568,6 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
         cls.submission = baker.make(QuestSubmission, quest__name="Test")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def test_submission__creation_and_quest_name(self):
         """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
@@ -753,10 +736,6 @@ class QuestExpiredAnnotationTest(ByteDeckTenantTestCase):
     it reuses an ``is_expired`` annotation from the queryset when one is present
     instead of issuing a query per call."""
 
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
-
     def test_expired__prefers_is_expired_annotation(self):
         """When the instance carries an is_expired annotation, expired() returns
         it without issuing a query."""
@@ -789,10 +768,6 @@ class QuestManagerPrefetchTest(ByteDeckTenantTestCase):
         # a teacher is needed both as staff caller and as each quest's editor
         cls.teacher = User.objects.create_user('teacher', is_staff=True)
         cls.campaign = baker.make(Category, title="Test Campaign")
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def _make_quests(self, **kwargs):
         """Create three quests with a campaign, editor and tags set, so the

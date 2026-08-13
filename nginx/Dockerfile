@@ -9,14 +9,23 @@ COPY nginx.conf /etc/nginx/nginx.conf
 # environment from ROOT_DOMAIN via docker-compose.prod.aws.yml (bytedeck.com for
 # production, bytedeck-staging.com for staging), so hardcoding a default here
 # would be misleading and could silently ship the wrong domain. The guard below
-# fails the build loudly if it is missing. envsubst is restricted to '${DOMAIN}'
-# so it substitutes only the domain and leaves nginx's own
-# $host/$scheme/$request_uri/$1 variables intact.
+# fails the build loudly if it is missing. envsubst is restricted to
+# '${DOMAIN} ${CDN_static}' so it substitutes only those two build args and
+# leaves nginx's own $host/$scheme/$request_uri/$1 variables intact.
 ARG DOMAIN
+# CDN_static is the S3/CloudFront domain, reused from the app's CDN_static .env
+# value (see docker-compose.prod.aws.yml). It is substituted into the legacy
+# /media/ redirect in the template so the real distribution is not hardcoded in
+# the repo. Like DOMAIN it is REQUIRED and guarded below: envsubst turns an empty
+# value into an invalid empty host (https:///public_media/$1), so the build fails
+# loudly instead. In prod and staging CDN_static is always set (the app needs it
+# for STATIC_URL under USE_S3).
+ARG CDN_static
 COPY bytedeck.conf.template /tmp/bytedeck.conf.template
 RUN test -n "$DOMAIN" || { echo "ERROR: DOMAIN build arg is required (normally supplied from ROOT_DOMAIN by docker-compose.prod.aws.yml; e.g. --build-arg DOMAIN=bytedeck.com)." >&2; exit 1; } \
+    && { test -n "$CDN_static" || { echo "ERROR: CDN_static build arg is required (supplied from the CDN_static .env value by docker-compose.prod.aws.yml; e.g. --build-arg CDN_static=xxxxxxxx.cloudfront.net); an empty value would render the /media/ redirect with an invalid empty host." >&2; exit 1; }; } \
     && mkdir -p /etc/nginx/sites-available \
-    && envsubst '${DOMAIN}' < /tmp/bytedeck.conf.template > /etc/nginx/sites-available/bytedeck.conf \
+    && envsubst '${DOMAIN} ${CDN_static}' < /tmp/bytedeck.conf.template > /etc/nginx/sites-available/bytedeck.conf \
     && rm /tmp/bytedeck.conf.template
 
 # SSL details
@@ -38,5 +47,12 @@ RUN touch /var/run/nginx.pid && \
 RUN chmod -R 755 /etc/nginx/sites-enabled
 #RUN chmod -R 755 /etc/letsencrypt/
 RUN mkdir -p /var/www/bytedeck/static
+
+# Static maintenance page served by nginx when the app backend is unreachable
+# (see the error_page directive in bytedeck.conf.template). Baked into the image
+# so it is always available, independent of the app containers or mounted
+# volumes. COPY leaves it world-readable (644), so the non-root nginx worker can
+# serve it.
+COPY maintenance/ /var/www/maintenance/
 
 CMD ["nginx", "-g", "daemon off;"]

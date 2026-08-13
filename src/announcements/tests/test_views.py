@@ -7,19 +7,18 @@ from django.forms.models import model_to_dict
 from django.urls import reverse
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from model_bakery import baker
 
 from announcements.forms import AnnouncementForm
 from announcements.models import Announcement
 from comments.models import Comment
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
 
-class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementViewTests(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
@@ -31,10 +30,6 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
 
         cls.test_announcement = baker.make(Announcement, draft=False)
         cls.ann_pk = cls.test_announcement.pk
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_announcement_form__has_unsaved_changes_guard(self):
         """The announcement create and edit forms opt into the unsaved-changes warning, and the guard script is loaded (#192)."""
@@ -119,6 +114,17 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             response=self.client.post(reverse('announcements:publish', args=[self.ann_pk])),
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
+
+    @patch('announcements.views.publish_announcement.apply_async')
+    def test_publish__get_is_rejected_and_broadcasts_nothing(self, mock_publish):
+        """Publishing broadcasts and emails an announcement to every student, so it must not happen
+        on a GET: a teacher following a link, or a page with an <img> pointing here, would otherwise
+        send it (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('announcements:publish', args=[self.ann_pk])
+
+        self.assertFalse(mock_publish.called)
 
     def test_archive_button__visible_to_teachers(self):
         """Teachers see the 'Archived' button on the announcements list."""
@@ -389,7 +395,7 @@ class AnnouncementViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertContains(response, "CustomAnnouncement commented on")
 
 
-class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
     """ Tests for archived announcements view and other archived processes
 
     Mostly this one:
@@ -403,10 +409,6 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_teacher = baker.make(User, is_staff=True)
         cls.test_student = baker.make(User)
         cls.test_announcement = baker.make(Announcement, draft=False)
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def test_archived_announcement__hidden_from_list(self):
         """ Archived announcements should not appear in announcements list"""
@@ -492,7 +494,7 @@ class AnnouncementArchivedViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
             self.assertTrue(announcement.archived)
 
 
-class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class AnnouncementCreateUpdateViewTests(ByteDeckTenantTestCase):
     """Covers the Create/Update CBV form_valid + success-message branches and EmptyPage paging."""
 
     @classmethod
@@ -500,10 +502,6 @@ class AnnouncementCreateUpdateViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCa
         """Create a staff author and one existing published announcement to edit."""
         cls.teacher = User.objects.create_user('cu_teacher', is_staff=True)
         cls.announcement = baker.make(Announcement, draft=False)
-
-    def setUp(self):
-        """Set up a tenant test client for each test."""
-        self.client = TenantClient(self.tenant)
 
     def _form_data(self, **overrides):
         """Return valid AnnouncementForm POST data (title/content/release), with overrides applied."""

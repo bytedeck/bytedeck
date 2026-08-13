@@ -12,6 +12,7 @@ from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonRespons
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
+from django.utils.html import format_html
 from django.utils.text import slugify
 from django.utils import timezone
 from django.views.generic.edit import CreateView
@@ -431,8 +432,10 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
     """Staff-facing "Subscription details" page for the current deck (epic #1729 PR 6).
 
     GET shows the deck's billing status, expiry dates, student-seat usage (live
-    count), and the upgrade/renew action. POST starts the Stripe flow: Checkout
-    for an unlinked deck, the Billing Portal for a linked one. When Stripe isn't
+    count), and the upgrade/renew action. POST starts the Stripe flow: the
+    Billing Portal when the deck has a live subscription to manage, otherwise a
+    Checkout (bound to the deck's existing Stripe customer, if any), so an
+    expired deck's button leads straight to renewal. When Stripe isn't
     configured the page says so and the action falls back to the public
     subscribe page. Linked from the admin menu for all staff.
     """
@@ -454,12 +457,13 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         from datetime import timedelta
 
-        from .billing import billing_configured, checkout_trial_end
+        from .billing import billing_configured, checkout_trial_end, subscription_plan_summary
         from .models import GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
         from .utils import get_public_subscribe_url
 
         context = super().get_context_data(**kwargs)
         deck = self.request.tenant
+        deck_owner = SiteConfig.get().deck_owner
         current_student_count = deck.get_active_user_count()  # live, not cached
         cap = deck.effective_max_active_users
         context.update({
@@ -499,11 +503,36 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # your trial ends" note beside the subscribe button
             'checkout_trial_end': checkout_trial_end(deck),
             'public_subscribe_url': get_public_subscribe_url(),
+            # what the linked subscription buys (product name, price, cadence),
+            # for the status line; None (no plan info shown) on unlinked decks
+            # or when Stripe can't say
+            'plan_summary': subscription_plan_summary(deck),
+            # managing the subscription is the deck OWNER's action alone; other
+            # staff see the button disabled with the owner's name in its popup
+            'is_deck_owner': self.request.user == deck_owner,
+            'deck_owner_name': deck_owner.get_username(),
+            'support_email': settings.SUPPORT_EMAIL,
         })
         return context
 
     def post(self, request, *args, **kwargs):
-        """Start the Stripe flow: Checkout (unlinked deck) or Billing Portal (linked).
+        """Start the Stripe flow: the Billing Portal or a Checkout, by live state.
+
+        The portal can only act on a LIVE subscription, so the routing asks
+        Stripe at click time: a deck whose linked subscription is alive gets the
+        portal; a deck with no live subscription (never linked, or its old one
+        fully canceled after expiry) gets a fresh Checkout instead, bound to its
+        existing Stripe customer when there is one. Routing on the customer id
+        alone sent expired decks to a portal with nothing actionable on it: a
+        dead end exactly when the deck is trying to come back (production find,
+        2026-08-09).
+
+        Args:
+            request (HttpRequest): The POST from the manage/subscribe button;
+                its ``tenant`` is the deck being billed and its ``user`` must be
+                that deck's owner.
+            *args: Positional URL arguments (this route takes none).
+            **kwargs: Keyword URL arguments (this route takes none).
 
         Returns:
             HttpResponse: A redirect to the Stripe-hosted page, or back to this
@@ -511,25 +540,42 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
         """
         import stripe as stripe_lib
 
-        from .billing import billing_configured, create_checkout_session, create_portal_session
+        from .billing import billing_configured, create_checkout_session, create_portal_session, has_manageable_subscription
 
         deck = request.tenant
         if not billing_configured():
             messages.error(request, "Online billing isn't configured on this server.")
+            return redirect('decks:subscription')
+        # Managing the subscription (checkout or the billing portal, where the
+        # card lives) is the deck OWNER's action alone; the page renders the
+        # button disabled for other staff, and this guard enforces it server-side.
+        deck_owner = SiteConfig.get().deck_owner
+        if request.user != deck_owner:
+            messages.error(
+                request,
+                f"Only the deck owner, {deck_owner.get_username()}, can manage the subscription."
+            )
             return redirect('decks:subscription')
         # An unlinked deck that is still inside its PAID period has a manually
         # managed subscription -- starting a Stripe checkout would double-bill it.
         # (Grace-period decks are past paid_until, so renewing via checkout is
         # exactly what they should do.)
         if not deck.stripe_customer_id and deck.subscription_active and not deck.in_grace_period:
+            # format_html marks the message safe so the message banner (which
+            # renders message HTML) shows a clickable contact link, while still
+            # escaping the interpolated address itself
             messages.error(
                 request,
-                "This deck's subscription is managed manually -- starting a new online "
-                "subscription would double-bill you. Contact ByteDeck to switch to online billing."
+                format_html(
+                    "This deck's subscription is managed manually -- starting a new online "
+                    'subscription would double-bill you. <a href="mailto:{0}">Contact ByteDeck</a> ({0}) '
+                    "to switch to online billing.",
+                    settings.SUPPORT_EMAIL,
+                )
             )
             return redirect('decks:subscription')
         try:
-            if deck.stripe_customer_id:
+            if deck.stripe_customer_id and has_manageable_subscription(deck):
                 url = create_portal_session(deck)
             else:
                 url = create_checkout_session(deck)
@@ -554,6 +600,12 @@ class SubscriptionActivating(NonPublicOnlyViewMixin, TemplateView):
     def dispatch(self, *args, **kwargs):
         """Require staff, like the subscription page it forwards back to."""
         return super().dispatch(*args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        """Add the support address for the check-later copy's contact link."""
+        context = super().get_context_data(**kwargs)
+        context['support_email'] = settings.SUPPORT_EMAIL
+        return context
 
 
 @non_public_only_view
@@ -611,7 +663,7 @@ def stripe_webhook(request):
 
     from django.db import transaction
 
-    from .billing import handle_webhook_event
+    from .billing import handle_webhook_event, to_plain_dict
     from .models import StripeEventLog
 
     if not settings.STRIPE_WEBHOOK_SECRET:
@@ -622,6 +674,10 @@ def stripe_webhook(request):
         )
     except (ValueError, stripe_lib.SignatureVerificationError):
         return HttpResponse('invalid payload or signature', status=400, content_type='text/plain')
+    # construct_event returns the SDK's Event object, which is not a dict
+    # (.get() raises on stripe-python 15.x, caught live on staging 2026-08-09);
+    # everything below speaks dict, so convert once at the boundary
+    event = to_plain_dict(event)
 
     with transaction.atomic():
         _, created = StripeEventLog.objects.get_or_create(

@@ -1,13 +1,21 @@
+from django.contrib.auth import get_user_model
 from django.utils import timezone
+
+from crispy_forms.utils import render_crispy_form
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from quest_manager.forms import (
+    TA_RESTRICTED_QUEST_FIELDS,
     QuestForm,
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     SubmissionReplyForm,
+    TAQuestForm,
 )
+from quest_manager.models import Quest
+
+User = get_user_model()
 
 
 class QuestFormTest(ByteDeckTenantTestCase):
@@ -92,6 +100,101 @@ class QuestFormTest(ByteDeckTenantTestCase):
 
         form = QuestForm(data=form_data)
         self.assertTrue(form.is_valid())
+
+    def test_QuestForm__still_binds_the_TA_restricted_fields(self):
+        """A teacher's quest form keeps the fields TAQuestForm drops: restricting a TA
+        must not take those settings away from the teachers who are meant to have them."""
+        form = QuestForm()
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertIn(field_name, form.fields)
+
+
+class TAQuestFormTest(ByteDeckTenantTestCase):
+    """A student TA's quest form must not carry the fields only a teacher may set (#2384)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Provide minimal valid quest form data and the users a TA form needs."""
+        cls.minimal_valid_data = {
+            "name": "Test Quest",
+            "xp": 0,
+            "max_repeats": 0,
+            "max_xp": -1,
+            "hours_between_repeats": 0,
+            "sort_order": 0,
+            "date_available": str(timezone.now().date()),
+            "time_available": "0:00:00",
+            "tags": "",
+        }
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.ta = User.objects.create_user('test_ta')
+        cls.ta.profile.is_TA = True
+        cls.ta.profile.save()
+
+    def test_TAQuestForm__does_not_bind_the_restricted_fields(self):
+        """The restricted fields are absent from the form, not merely hidden: a hidden widget
+        still binds whatever is posted, so hiding them only removed the control from the page."""
+        form = TAQuestForm()
+        rendered = str(form)
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertNotIn(field_name, form.fields)
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__crispy_layout_drops_the_restricted_fields_and_keeps_the_rest(self):
+        """The form renders through its crispy layout, which QuestForm builds naming fields this
+        form no longer has. Those are taken back out, and everything a TA may edit still renders."""
+        rendered = render_crispy_form(TAQuestForm())
+
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(dropped=field_name):
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+        # fields from the layout's top level and from inside its Advanced accordion, so a
+        # too-eager removal that emptied a nested group would be caught
+        for field_name in ('name', 'xp', 'instructions', 'sort_order', 'blocking'):
+            with self.subTest(kept=field_name):
+                self.assertIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__posted_restricted_fields_cannot_change_a_quest(self):
+        """A TA's POST claiming every restricted field leaves all of them as the teacher set
+        them: an unbound field is one a ModelForm never writes to its instance."""
+        quest = Quest.objects.create(
+            name="Teacher's Quest",
+            published=False,
+            archived=True,
+            available_outside_course=True,
+            editor=self.ta,
+        )
+
+        form = TAQuestForm(
+            data={
+                **self.minimal_valid_data,
+                'published': True,
+                'archived': False,
+                'available_outside_course': False,
+                'editor': self.teacher.id,
+            },
+            instance=quest,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertFalse(saved.published)
+        self.assertTrue(saved.archived)
+        self.assertTrue(saved.available_outside_course)
+        self.assertEqual(saved.editor, self.ta)
+
+    def test_TAQuestForm__saves_the_editable_fields(self):
+        """The restrictions don't stop a TA from doing their job: an ordinary edit still saves."""
+        quest = Quest.objects.create(name="Draft", published=False, editor=self.ta)
+
+        form = TAQuestForm(data={**self.minimal_valid_data, 'name': "Renamed by the TA"}, instance=quest)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertEqual(saved.name, "Renamed by the TA")
 
 
 class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):

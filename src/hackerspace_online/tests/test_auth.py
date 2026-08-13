@@ -1,26 +1,22 @@
 import re
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.shortcuts import reverse
 
-from django_tenants.test.client import TenantClient
 from django_tenants.utils import get_public_schema_name
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase, ViewTestUtilsMixin
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
 
 
-class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class NonPublicOnlyAuthViewTests(ByteDeckTenantTestCase):
     """
     Custom `non_public_only_view` decorator was applied on every `allauth` views.
     """
-
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        self.client = TenantClient(self.tenant)
 
     @patch('hackerspace_online.views.connection', schema_name=get_public_schema_name())
     @patch('tenant.views.connection', schema_name=get_public_schema_name())
@@ -50,11 +46,12 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         """
         self.assert200('account_signup')  # ok
         self.assert200('account_login')  # ok
-        self.assert302('account_logout')  # redirect
-        self.assert302('account_change_password')  # login required
-        self.assert302('account_set_password')  # login required
+        # logging out lands on ACCOUNT_LOGOUT_REDIRECT_URL, which this project points at the login page
+        self.assertRedirects(self.client.get(reverse('account_logout')), reverse(settings.LOGIN_URL))
+        self.assertRedirectsLogin('account_change_password')  # login required
+        self.assertRedirectsLogin('account_set_password')  # login required
         self.assert200('account_inactive')  # ok
-        self.assert302('account_email')  # login required
+        self.assertRedirectsLogin('account_email')  # login required
         self.assert200('account_email_verification_sent')  # ok
         self.assert200('account_confirm_email', kwargs={'key': '123'})  # ok
         self.assert200('account_reset_password')  # ok
@@ -63,7 +60,7 @@ class NonPublicOnlyAuthViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assert200('account_reset_password_from_key_done')  # ok
 
 
-class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class SuspendedDeckSignupTests(ByteDeckTenantTestCase):
     """Sign-up is closed on a suspended deck (#1734 redesign): a suspended deck is
     owner-only, so brand-new accounts must not be able to register and land in a
     signed-in session."""
@@ -76,7 +73,6 @@ class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         from tenant.models import Tenant
         from tenant.utils import deck_cache_key
 
-        self.client = TenantClient(self.tenant)
         cache.delete(deck_cache_key(self.tenant.schema_name))
         self.set_deck = lambda **fields: (
             Tenant.objects.filter(pk=self.tenant.pk).update(**fields),
@@ -131,7 +127,8 @@ class SuspendedDeckSignupTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         self.assertNotContains(response, 'Sign-up is currently closed')
 
 
-class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
+class ResetPasswordViewTests(ByteDeckTenantTestCase):
+    """Tests the password-reset request flow, including requests for unassigned email addresses."""
 
     @classmethod
     def setUpTestData(cls):
@@ -140,12 +137,8 @@ class ResetPasswordViewTests(ViewTestUtilsMixin, ByteDeckTenantTestCase):
         cls.test_password = 'password'
         cls.test_student1 = User.objects.create_user('test_student', email=cls.test_email, password=cls.test_password)
 
-    def setUp(self):
-        """Use a tenant-aware client for each test."""
-        self.client = TenantClient(self.tenant)
-
     def test_request_password_reset__fails_for_unassigned_email(self):
-        """ User should not be able to request password reset if they registered without an email """
+        """ User should not be able to request a password reset for an email address no account uses """
         data = {
             'email': 'nonexistentemail@gmail.com'
         }
