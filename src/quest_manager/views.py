@@ -32,7 +32,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from library.utils import from_library_schema_first
+from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -926,8 +926,8 @@ def ajax_quest_info(request, quest_id=None):
     if request.method == "POST":
         template = 'quest_manager/preview_content_quests_avail.html'
 
-        with from_library_schema_first(request):
-            is_library_view = (request.POST.get('use_schema') == 'library')
+        with library_schema_if_requested(request):
+            is_library_view = is_library_schema_requested(request)
             can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
