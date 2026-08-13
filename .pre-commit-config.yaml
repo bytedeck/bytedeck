@@ -20,13 +20,19 @@ repos:
   # autoflake (unused-import/variable removal via --fix on the F rules).
   # Config lives in pyproject.toml ([tool.ruff]); the formatter (ruff-format)
   # is deliberately not enabled.
-  # Keep this rev in step with the ruff pin in requirements.txt, so the hook and
-  # CI lint with the same version and cannot disagree about what passes.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.2
+  # This runs the ruff already installed from requirements.txt rather than a
+  # copy pinned here, so requirements.txt is the only place the version is set
+  # and the hook, CI and a local venv cannot lint with different rule sets.
+  # It needs ruff on PATH, so commit with the project venv active; the hook fails
+  # with "Executable `ruff` not found" if it isn't.
+  - repo: local
     hooks:
       - id: ruff
-        args: [ "--fix" ]
+        name: ruff
+        entry: ruff check --force-exclude --fix
+        language: system
+        types_or: [ python, pyi ]
+        require_serial: true
 
   ## Packages here are subjective...
   # - repo: https://github.com/asottile/reorder_python_imports
