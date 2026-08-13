@@ -170,6 +170,33 @@ class InitDbTest(TestCase, CommandMixin):
         self.assertEqual(domain_after.domain, 'library.' + settings.ROOT_DOMAIN)
         self.assertEqual(library.domains.count(), 1)
 
+    def test_initdb__setup_shared_library_drops_a_stale_domain_beside_the_correct_one(self):
+        """setup_shared_library removes any other domain on the library tenant, so the deck
+        answers on library.<ROOT_DOMAIN> and nothing else.
+
+        A tenant can end up with a second domain because the post_save signal derives one from
+        the tenant's name; leaving it in place would keep the Library reachable on a host nobody
+        intended (#2382).
+        """
+        from hackerspace_online.management.commands.initdb import Command
+
+        self.call_command()
+        library_schema = apps.get_app_config('library').TENANT_NAME
+        library = Tenant.objects.get(schema_name=library_schema)
+        library.domains.create(domain='stale.' + settings.ROOT_DOMAIN, is_primary=True)
+
+        # As above: patch out the non-idempotent library quest re-labelling, which would
+        # re-prefix names and overflow Quest.name on a second run.
+        with patch('quest_manager.models.Quest'):
+            Command().setup_shared_library()
+
+        self.assertEqual(
+            list(library.domains.values_list('domain', flat=True)),
+            [f'library.{settings.ROOT_DOMAIN}'],
+        )
+        # and the survivor is the primary, even though the stale one held that flag
+        self.assertEqual(library.get_primary_domain().domain, f'library.{settings.ROOT_DOMAIN}')
+
     def test_initdb__notes_when_public_tenant_already_existed(self):
         """When the public tenant already exists, initdb reports that (a not-created notice)
         instead of failing.
