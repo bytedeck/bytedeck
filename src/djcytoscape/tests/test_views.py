@@ -326,8 +326,9 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
         This is the point of the view, so the elements are wiped first to prove the request put
         them back, rather than asserting on a map that was never disturbed.
         """
-        original_node_count = CytoElement.objects.all_for_scape(self.map).nodes().count()
-        self.assertGreater(original_node_count, 0, "the fixture map should have nodes to rebuild")
+        original_elements = self.map.elements_dict()
+        original_labels = sorted(node['data'].get('label') for node in original_elements['nodes'])
+        self.assertGreater(len(original_labels), 0, "the fixture map should have nodes to rebuild")
         stale_regeneration = self.map.last_regeneration
 
         # A map goes stale when the objects it was built from change, so simulate the extreme of
@@ -337,9 +338,15 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
 
         self.client.get(reverse('djcytoscape:regenerate', args=[self.map.id]))
 
-        self.assertEqual(CytoElement.objects.all_for_scape(self.map).nodes().count(), original_node_count)
         rebuilt_map = CytoScape.objects.get(id=self.map.id)
-        self.assertEqual(len(json.loads(rebuilt_map.elements_json)['nodes']), original_node_count)
+        rebuilt_elements = rebuilt_map.elements_dict()
+        # The quests and badges behind the map are unchanged, so the same nodes and edges come back.
+        # The element rows are new ones, so compare labels rather than whole dicts (which carry ids).
+        self.assertEqual(sorted(node['data'].get('label') for node in rebuilt_elements['nodes']), original_labels)
+        self.assertEqual(len(rebuilt_elements['edges']), len(original_elements['edges']))
+        # The page renders from the cache, so it has to hold the whole rebuilt payload: nodes, edges
+        # and their order, not just a node count that a partial write could also satisfy.
+        self.assertEqual(json.loads(rebuilt_map.elements_json), json.loads(rebuilt_map.generate_elements_json()))
         self.assertGreater(rebuilt_map.last_regeneration, stale_regeneration)
 
     def test_regenerate__with_deleted_object(self):
