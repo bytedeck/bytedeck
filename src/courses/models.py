@@ -232,7 +232,9 @@ class SemesterQuerySet(models.query.QuerySet):
         return self.filter(status=Semester.Status.ARCHIVED)
 
 
-class SemesterManager(models.Manager):
+class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
+    """from_queryset so the lifecycle filters above are callable on the manager too,
+    e.g. Semester.objects.open()."""
 
     def get_queryset(self):
         return SemesterQuerySet(self.model, using=self._db).order_by('-first_day')
