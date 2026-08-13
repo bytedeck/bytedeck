@@ -378,7 +378,6 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             'category_displayed_quests': shared_quests,
             'local_category': local_category,
             'local_quest_import_ids': local_quest_import_ids,
-            'use_schema': get_library_schema_name(),
         }
         return render(request, self.template_name, context)
 
@@ -737,7 +736,6 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
                 - category_total_xp_available (int): Sum of XP from all publsihed quests in the campaign.
                 - category_displayed_quests (list[Quest]): List of quest objects to display.
                 - quest_info (list[dict]): List of dicts with detailed quest info.
-                - use_schema (str): Name of the library schema currently in use.
         """
         campaign_import_id = kwargs.get('campaign_import_id')
         context = super().get_context_data(**kwargs)
@@ -770,7 +768,6 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
                 'category_total_xp_available': category.xp_sum(),
                 'category_displayed_quests': displayed_quests,
                 'quest_info': quest_info,
-                'use_schema': get_library_schema_name(),
             })
 
         return context

@@ -235,25 +235,33 @@ data-classes="table table-no-bordered table-hover"
                     {#      Admin buttons #}
                     {% if view_type != VIEW_TYPES.STAFF %}
                         <td>
+                            {% comment %}
+                              The ban and skipping toggles change the student, so they post rather than link
+                              (#2383). One form wraps the group and each button names its own action, so the
+                              buttons stay direct children of the .btn-group and Bootstrap still joins them.
+                            {% endcomment %}
+                            <form method="post">
+                            {% csrf_token %}
                             <div class="btn-group action-btn-group">
-                                <a href="{% url 'profiles:comment_ban_toggle' object.id %}"
+                                <button type="submit" formaction="{% url 'profiles:comment_ban_toggle' object.id %}"
                                     title="{% if object.banned_from_comments %}Remove comment ban
                                 {% else %}Ban student from public comments{% endif %}"
                                     class="btn btn-sm {% if object.banned_from_comments %}btn-success{% else %}btn-default{% endif %}">
                                     <i class="fa fa-commenting-o"></i>
-                                </a>
-                                <a href="{% url 'profiles:xp_toggle' object.id %}"
+                                </button>
+                                <button type="submit" formaction="{% url 'profiles:xp_toggle' object.id %}"
                                     title="{% if object.not_earning_xp %}Turn quest skipping off
                                 {% else %}Allow user to skip quests. Gives user a button allowing them skip quests without approval. Skipped quests count as completed for prerequisite purposes but don't grant XP.{% endif %}"
                                     class="btn btn-sm
                             {% if object.not_earning_xp %}btn-success{% else %}btn-default{% endif %}">
                                     <i class="fa fa-magic"></i>
-                                </a>
+                                </button>
                                 <a href="{% url 'profiles:change_password' object.user.pk %}" class="btn btn-sm btn-default"
                                     title="Reset this student's password">
                                     <i class="fa fa-key"></i>
                                 </a>
                             </div>
+                            </form>
                         </td>
                     {% endif %}
                 {% endif %}

@@ -19,8 +19,11 @@
           {% endif %}
           <a class='btn btn-danger btn-xs' title='Delete this comment'
             href="{% url 'comments:delete' comment.id %}"><i class="fa fa-fw fa-trash-o"></i></a>
-          <a class='btn btn-danger btn-xs' title='Ban this user from public comments'
-            href="{% url 'profiles:comment_ban' comment.user.profile.id %}"><i class="fa fa-fw fa-ban"></i></a>
+          {# Banning changes the student's account, so it posts rather than links (#2383). #}
+          <form method="post" action="{% url 'profiles:comment_ban' comment.user.profile.id %}" class="preview-action-form">
+            {% csrf_token %}
+            <button type="submit" class='btn btn-danger btn-xs' title='Ban this user from public comments'><i class="fa fa-fw fa-ban"></i></button>
+          </form>
         </div>
         {% endif %}
 
