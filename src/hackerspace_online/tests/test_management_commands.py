@@ -147,6 +147,29 @@ class InitDbTest(TestCase, CommandMixin):
 
         self.assertTrue(library.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists())
 
+    def test_initdb__setup_shared_library_leaves_a_correct_domain_alone(self):
+        """setup_shared_library leaves the library tenant's domain untouched when it is already
+        the intended one, rather than deleting and re-creating it on every run.
+
+        The domain row's pk is the tell: a delete-and-recreate would hand out a new one.
+        """
+        from hackerspace_online.management.commands.initdb import Command
+
+        self.call_command()
+        library_schema = apps.get_app_config('library').TENANT_NAME
+        library = Tenant.objects.get(schema_name=library_schema)
+        domain_before = library.get_primary_domain()
+
+        # As above: patch out the non-idempotent library quest re-labelling, which would
+        # re-prefix names and overflow Quest.name on a second run.
+        with patch('quest_manager.models.Quest'):
+            Command().setup_shared_library()
+
+        domain_after = library.get_primary_domain()
+        self.assertEqual(domain_after.pk, domain_before.pk)
+        self.assertEqual(domain_after.domain, 'library.' + settings.ROOT_DOMAIN)
+        self.assertEqual(library.domains.count(), 1)
+
     def test_initdb__notes_when_public_tenant_already_existed(self):
         """When the public tenant already exists, initdb reports that (a not-created notice)
         instead of failing.
