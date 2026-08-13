@@ -33,7 +33,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from library.utils import from_library_schema_first
+from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -924,11 +924,40 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
+    """Return the rendered preview panel for one quest, for the accordion tables.
+
+    POST only, and XHR only (see the decorators). The accordion in
+    bootstrap-table-accordion.js calls this when a row is expanded and drops the
+    returned HTML into the row's detail area.
+
+    On a Library page the accordion sets ``use_library_schema=1``, which serves
+    the preview out of the shared Library schema instead of the caller's own
+    deck. That flag is a boolean by design: the schema name is resolved server
+    side from the library app's config, never taken from the request, so a
+    caller cannot name the schema its request runs against (schema names are the
+    decks' public subdomains, so accepting one would let any logged-in user read
+    another deck's content).
+
+    Args:
+        request (HttpRequest): the current request. Reads ``use_library_schema``
+            from POST; everything else comes from the URL and the session.
+        quest_id (int | None): primary key of the quest to preview, in whichever
+            schema the flag above selected. Staff may preview archived quests.
+
+    Returns:
+        JsonResponse: ``{"quest_info_html": "<rendered preview>"}``.
+
+    Raises:
+        Http404: if the request is not a POST, if no ``quest_id`` is given (the
+            "every quest at once" response was an unbounded per-request memory
+            hog with no staff gate, issue #2081), or if no matching quest is
+            visible to this user.
+    """
     if request.method == "POST":
         template = 'quest_manager/preview_content_quests_avail.html'
 
-        with from_library_schema_first(request):
-            is_library_view = (request.POST.get('use_schema') == 'library')
+        with library_schema_if_requested(request):
+            is_library_view = is_library_schema_requested(request)
             can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
