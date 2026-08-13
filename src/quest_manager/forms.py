@@ -16,6 +16,39 @@ from tags.forms import BootstrapTaggitSelect2Widget
 from .models import Category, Quest, CommonData
 
 
+#: Quest fields a student TA may not set. A TA works on drafts, so whether a quest is
+#: visible to students (``published``), who may keep editing it (``editor``), whether it is
+#: filed away (``archived``) and whether it escapes course enrolment
+#: (``available_outside_course``) all stay with the teacher.
+TA_RESTRICTED_QUEST_FIELDS = ('published', 'editor', 'archived', 'available_outside_course')
+
+
+def remove_layout_fields(layout_object, field_names):
+    """Remove the named fields from a crispy-forms layout tree, in place.
+
+    Used when a form subclass drops fields the shared layout still names, so crispy is
+    never asked to render a field the form does not have.
+
+    Args:
+        layout_object: a crispy ``Layout`` (or any nested layout object). Objects without
+            a ``fields`` list, such as ``HTML``, are left alone.
+        field_names: an iterable of field names to drop wherever they appear in the tree.
+
+    Returns:
+        None. The layout is modified in place.
+    """
+    fields = getattr(layout_object, 'fields', None)
+    if fields is None:
+        return
+
+    layout_object.fields = [
+        field for field in fields
+        if not (isinstance(field, str) and field in field_names)
+    ]
+    for child in layout_object.fields:
+        remove_layout_fields(child, field_names)
+
+
 class BadgeLabel:
     def label_from_instance(self, obj):
         return f"{str(obj)} ({obj.xp} XP)"
@@ -248,14 +281,28 @@ class QuestForm(forms.ModelForm):
 
 
 class TAQuestForm(QuestForm):
-    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    """QuestForm for a student TA, with the fields a TA may not set left off the form entirely.
+
+    Those fields (``TA_RESTRICTED_QUEST_FIELDS``) are not bound, so a hand-made POST cannot
+    reach them: an unbound field is one a ``ModelForm`` never writes to its instance. Editing
+    therefore leaves whatever the teacher set in place, and creating falls back to the model
+    defaults. ``QuestFormViewMixin.form_valid`` still forces ``published`` and ``editor`` for a
+    TA, which keeps a TA's quest a draft of their own no matter which form or view saved it.
+    """
+
+    class Meta(QuestForm.Meta):
+        fields = tuple(f for f in QuestForm.Meta.fields if f not in TA_RESTRICTED_QUEST_FIELDS)
+
     def __init__(self, *args, **kwargs):
+        """Build the TA form, then drop the restricted fields from the inherited layout.
+
+        Args:
+            *args: positional arguments passed through to ``QuestForm``.
+            **kwargs: keyword arguments passed through to ``QuestForm``.
+        """
         super().__init__(*args, **kwargs)
-        # SET published here to?
-        self.fields['published'].widget = forms.HiddenInput()
-        self.fields['available_outside_course'].widget = forms.HiddenInput()
-        self.fields['archived'].widget = forms.HiddenInput()
-        self.fields['editor'].widget = forms.HiddenInput()
+        # QuestForm's layout names fields this form doesn't have, so take them back out
+        remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
 class SubmissionForm(forms.Form):
