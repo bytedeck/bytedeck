@@ -2,6 +2,26 @@ from django.db import migrations, models
 from django.utils.timezone import localdate
 
 
+def _active_semester_id(connection):
+    """The deck's active semester, read straight from the siteconfig table.
+
+    Deliberately raw SQL rather than apps.get_model('siteconfig', ...): declaring a
+    dependency on siteconfig would pull its migrations (and the SiteConfig row their
+    field defaults create) ahead of the tables that row's signals write to. The table
+    is missing only on a schema so new that it has no semesters to classify either.
+
+    Returns:
+        int or None: the active semester's id, or None when it can't be determined.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT to_regclass('siteconfig_siteconfig')")
+        if cursor.fetchone()[0] is None:
+            return None
+        cursor.execute('SELECT active_semester_id FROM siteconfig_siteconfig LIMIT 1')
+        row = cursor.fetchone()
+    return row[0] if row else None
+
+
 def set_status_from_closed(apps, schema_editor):
     """Give every existing semester a lifecycle status (issue #2157).
 
@@ -17,10 +37,13 @@ def set_status_from_closed(apps, schema_editor):
       these semesters never had final marks recorded.
     """
     Semester = apps.get_model('courses', 'Semester')
-    SiteConfig = apps.get_model('siteconfig', 'SiteConfig')
 
-    siteconfig = SiteConfig.objects.first()  # None on schemas without one (e.g. public)
-    active_semester_id = siteconfig.active_semester_id if siteconfig else None
+    if not Semester.objects.exists():
+        # a schema being created from scratch has nothing to classify, and its
+        # siteconfig table may not exist yet at this point in the migration graph
+        return
+
+    active_semester_id = _active_semester_id(schema_editor.connection)
     today = localdate()
 
     for semester in Semester.objects.all():
@@ -47,7 +70,6 @@ def set_closed_from_status(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('siteconfig', '0032_remove_siteconfig_enable_submission_questions'),
         ('courses', '0028_semester_name'),
     ]
 
