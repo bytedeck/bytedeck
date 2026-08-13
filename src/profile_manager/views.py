@@ -577,6 +577,20 @@ def profile_restore(request, profile_id):
 @staff_member_required
 @require_POST
 def comment_ban_toggle(request, profile_id):
+    """Toggle whether a student is banned from commenting publicly.
+
+    The toggling form of :func:`comment_ban`: where that view only applies a ban, this one
+    lifts a ban that is already in place. Staff-only, and POST-only because it changes the
+    student's account (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST from a staff user.
+        profile_id: the id of the Profile to ban or unban.
+
+    Returns:
+        The HttpResponseRedirect from :func:`comment_ban`, back to the page the toggle was
+        clicked from.
+    """
     return comment_ban(request, profile_id, toggle=True)
 
 

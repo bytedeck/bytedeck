@@ -31,7 +31,8 @@
         {# Skipping completes and approves the submission, so it posts rather than links (#2383). #}
         <form method="post" action="{% url 'quests:skip' s.id %}" class="preview-action-form">
           {% csrf_token %}
-          <button type="submit" class="btn btn-warning">Skip</button>
+          <button type="submit" class="btn btn-warning"
+            title="Skip Quest: mark this quest as completed, but you won't get XP for it.">Skip</button>
         </form>
       {% endif %}
     {% else %}
