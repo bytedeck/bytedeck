@@ -335,7 +335,7 @@ request, so it redirects every request forever).
       -f '{{range $name, $net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}'  # web's IP per network
   ```
   The upstream address must match web's IP on the network it shares with nginx
-  (`backend-network`; web also sits on `frontend-network`, and that IP is not
+  (`frontend-network`; web also sits on `backend-network`, and that IP is not
   the one nginx dials). If they do not match, nginx is holding a stale address: confirm
   the site config still carries the `resolver` line and the `$web_upstream`
   variable in `uwsgi_pass` (see `nginx/bytedeck.conf.template`), since dropping

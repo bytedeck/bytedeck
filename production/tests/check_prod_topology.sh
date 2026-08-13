@@ -123,6 +123,15 @@ check yes "web can reach redis:6379" \
 check no "nginx drops a foreign Host header" \
     curl -sk --max-time 10 -o /dev/null https://127.0.0.1/ -H "Host: not-this-deck.example.com"
 
+# The legacy /media/ shim redirects to the CDN host the image was built with, so
+# a build that substituted the wrong value (or none) is caught here rather than
+# by a visitor following an old link. The build guard only proves the value was
+# non-empty; this proves it reached the rendered config.
+check yes "nginx redirects /media/ to the CDN_static host" \
+    bash -c "curl -sk --max-time 10 -o /dev/null -w '%{http_code} %{redirect_url}' \
+                  https://127.0.0.1/media/logo.png -H 'Host: $DOMAIN_UNDER_TEST' \
+             | grep -qx '301 https://cdn.$DOMAIN_UNDER_TEST/public_media/logo.png'"
+
 echo
 if [ "$failures" -gt 0 ]; then
     echo "$failures failure(s)"
