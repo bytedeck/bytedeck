@@ -3720,6 +3720,7 @@ class AjaxQuestInfoTest(ByteDeckTenantTestCase):
         """
         site_config = SiteConfig.get()
         site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
         site_config.full_clean()
         site_config.save()
         self.client.force_login(self.test_teacher)
@@ -4136,6 +4137,7 @@ class DetailViewTest(ByteDeckTenantTestCase):
 
         site_config = SiteConfig.get()
         site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
         site_config.full_clean()
         site_config.save()
 

@@ -31,9 +31,13 @@
     <form method="post" id="export-form">
       {% csrf_token %}
 
+      {% if licence_form.agree_license.errors %}
+        <div class="alert alert-danger">{{ licence_form.agree_license.errors.0 }}</div>
+      {% endif %}
+
       <div class="form-check mb-3">
-        <input type="checkbox" class="form-check-input" id="agreeLicense" name="agreeLicense" required />
-        <label class="form-check-label" for="agreeLicense">
+        <input type="checkbox" class="form-check-input" id="id_agree_license" name="agree_license" required />
+        <label class="form-check-label" for="id_agree_license">
           I agree to share this quest under the Creative Commons Attribution-ShareAlike 4.0 International License.*
         </label>
       </div>
