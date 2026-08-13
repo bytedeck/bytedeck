@@ -20,6 +20,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -1623,6 +1624,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting `archived=False` and ensure it is unpublished
@@ -2002,7 +2004,24 @@ def unhide(request, quest_id):
 
 
 @login_required
+@require_POST
 def skip(request, submission_id):
+    """Approve a submission as a transfer: complete and approved, but worth no XP.
+
+    Limited to staff and to a student marked as not earning XP acting on their own
+    submission, so a student cannot skip a quest by guessing the url. POST-only, because it
+    approves the quest outright (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        submission_id: the id of the QuestSubmission to transfer.
+
+    Returns:
+        An HttpResponseRedirect to the approvals queue for staff, or to the student's quests.
+
+    Raises:
+        Http404: when the requester may not skip this submission.
+    """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
@@ -2036,9 +2055,20 @@ def skip(request, submission_id):
 
 @non_public_only_view
 @login_required
+@require_POST
 def skipped(request, quest_id):
-    """A combination of the start and complete views, but automatically approved
-    regardless, and do_not_grant_xp = True
+    """Skip a quest the student never started: start it, then transfer it.
+
+    A combination of the start and complete views, but automatically approved regardless,
+    and do_not_grant_xp = True. POST-only, since it both creates a submission and approves
+    it (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        quest_id: the id of the Quest to start and transfer.
+
+    Returns:
+        The HttpResponseRedirect from :func:`skip`, which handles the approval.
     """
     quest = get_object_or_404(Quest, pk=quest_id)
     # create_submission always returns a submission: a new in-progress one, or the

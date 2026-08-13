@@ -115,6 +115,17 @@ class AnnouncementViewTests(ByteDeckTenantTestCase):
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
 
+    @patch('announcements.views.publish_announcement.apply_async')
+    def test_publish__get_is_rejected_and_broadcasts_nothing(self, mock_publish):
+        """Publishing broadcasts and emails an announcement to every student, so it must not happen
+        on a GET: a teacher following a link, or a page with an <img> pointing here, would otherwise
+        send it (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('announcements:publish', args=[self.ann_pk])
+
+        self.assertFalse(mock_publish.called)
+
     def test_archive_button__visible_to_teachers(self):
         """Teachers see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_teacher)
