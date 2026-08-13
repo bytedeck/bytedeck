@@ -1,9 +1,11 @@
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
+from django.db.utils import OperationalError, ProgrammingError
 
 from queryset_sequence import QuerySetSequence
 
@@ -184,6 +186,24 @@ class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
 
         self.assertTrue(models, "deepcopy should have rebuilt a non-empty choice list")
         self.assertEqual(models, IsAPrereqMixin.all_registered_model_classes())
+
+    def test_build__survives_the_content_types_table_not_being_queryable(self):
+        """A field built before the schema is ready gets an empty choice list instead of raising.
+
+        This is the failure mode the rebuild-on-copy exists for: the allowed models are looked up
+        from the content-types table, and a declared form field is constructed when its module is
+        imported, which can precede the migrations that create that table. Each error the lookup
+        can raise in that state is swallowed, and the deepcopy into a form instance fills the
+        choices in later.
+        """
+        from prerequisites.forms import PrereqGFKChoiceField
+
+        for error in (ContentType.DoesNotExist, ProgrammingError, OperationalError):
+            with self.subTest(error=error.__name__):
+                with patch.object(PrereqGFKChoiceField, 'get_allowed_model_classes', side_effect=error):
+                    field = PrereqGFKChoiceField()
+
+                self.assertEqual(list(field.queryset.get_querysets()), [])
 
     def test_form_instance__has_valid_choices_even_if_declared_field_is_empty(self):
         """A form using the field accepts a valid GFK selection through its copied field."""
