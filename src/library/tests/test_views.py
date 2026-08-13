@@ -701,6 +701,26 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertContains(response, f'<span class="badge">{quest_count}</span>', html=True)
         self.assertContains(response, f'<span class="badge">{campaign_count}</span>', html=True)
 
+    def test_campaigns_tab__shows_the_library_actions_not_the_local_ones(self):
+        """The Library's campaign list offers the import action, not the deck's own campaign
+        actions (edit, export, delete), and carries the Library's introductory blurb.
+
+        This page and the deck's own campaign list share
+        `quest_manager/tab_campaigns_list.html`, which tells them apart by the
+        `is_library_view` context flag, so this guards the flag being set here (issue #2380).
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:category_list'))
+
+        self.assertTrue(response.context['is_library_view'])
+        self.assertContains(response, reverse('library:import_category', args=[self.library_category.import_id]))
+        self.assertContains(response, 'Import this Campaign into your Deck')
+        self.assertContains(response, 'EXPERIMENTAL!')
+        # the local campaign actions act on the deck's own campaigns, which aren't what's listed here
+        self.assertNotContains(response, 'Edit this campaign')
+        self.assertNotContains(response, 'Export this Campaign to the Library')
+
     def test_campaigns_tab__only_shows_library_campaigns(self):
         """
         Ensure the campaigns tab only displays campaigns from the library schema.
@@ -791,13 +811,13 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
             # Make a library campaign that should be excluded because the quest isn't active (draft)
             excluded_invisible = baker.make(Category, title='Invisible Only')
 
-            # Make a current quest on the library and put it in a campaign — should be included
+            # Make a current quest on the library and put it in a campaign: should be included
             baker.make(Quest, campaign=included, published=True, archived=False)
 
-            # Make an archived quest on the library and put it in a campaign — should not count
+            # Make an archived quest on the library and put it in a campaign: should not count
             baker.make(Quest, campaign=excluded_archived, published=True, archived=True)
 
-            # Make and invisible quest (draft) on the library and put it in a campaign — should not count
+            # Make and invisible quest (draft) on the library and put it in a campaign: should not count
             baker.make(Quest, campaign=excluded_invisible, published=False, archived=False)
 
         # Go to the list on the local deck
@@ -1199,7 +1219,7 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
 
 class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
-    """Error-handling branches of ``library.exporter`` — the cases where a quest or
+    """Error-handling branches of ``library.exporter``: the cases where a quest or
     campaign export can't complete and the exporter re-raises a clearer exception."""
 
     def test_export_quest_to_library__unknown_import_id_raises_does_not_exist(self):

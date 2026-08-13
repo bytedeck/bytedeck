@@ -1,4 +1,4 @@
-{% if '/library/' in request.path %}
+{% if is_library_view %}
   <p>
     <span class="text-danger">EXPERIMENTAL!</span>
     The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
@@ -32,7 +32,7 @@
         <td>{{ object.quest_count }}</td>
         <td>{{ object.xp_sum }}</td>
         <td>
-          {% if not '/library/' in request.path %}
+          {% if not is_library_view %}
             <a class="btn btn-info"
                href="{% url 'quests:category_detail' object.id %}"
                role="button"

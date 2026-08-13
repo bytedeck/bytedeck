@@ -111,6 +111,9 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
         context_data['can_export'] = can_export
+        # these are the deck's own campaigns, so the shared campaign table shows the
+        # local actions (edit, publish, export, delete) rather than the Library's import action
+        context_data['is_library_view'] = False
 
         return context_data
 
