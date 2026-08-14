@@ -187,7 +187,7 @@ class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
         self.assertTrue(models, "deepcopy should have rebuilt a non-empty choice list")
         self.assertEqual(models, IsAPrereqMixin.all_registered_model_classes())
 
-    def test_build__survives_the_content_types_table_not_being_queryable(self):
+    def test_build_querysetsequence__survives_an_unqueryable_content_types_table(self):
         """A field built before the schema is ready gets an empty choice list instead of raising.
 
         This is the failure mode the rebuild-on-copy exists for: the allowed models are looked up
