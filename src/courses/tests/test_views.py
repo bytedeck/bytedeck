@@ -1706,6 +1706,22 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         response = self.client.post(reverse('courses:ajax_progress_chart', args=[0]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
+    @freeze_time('2024-01-06')  # a Saturday
+    def test_ajax_xp_data__empty_for_a_semester_with_no_class_days_yet(self):
+        """A semester with no dates set has no class days behind it, so there are no points to
+        plot. The weekend adjustment reads the last point, so an empty chart has to short
+        circuit before it rather than raising IndexError."""
+        self.semester.first_day = None
+        self.semester.last_day = None
+        self.semester.save()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
+
     def test_ajax_xp_data__empty_with_no_open_semester(self):
         """Between semesters there is no semester to chart progress through, so the chart gets
         an empty dataset instead of the page failing."""

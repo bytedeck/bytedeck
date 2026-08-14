@@ -805,17 +805,33 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
 @non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
+    """The data behind a student's XP-over-the-semester chart, as JSON for chart.js.
+
+    Args:
+        request: the ajax request; only POST returns data.
+        user_id (int): the student to chart, or 0 for the logged-in user.
+
+    Returns:
+        HttpResponse: JSON with `days_in_semester` (the semester's total class days) and
+        `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
+        when there is no semester to chart.
+
+    Raises:
+        Http404: for any method other than POST.
+    """
     if user_id == 0:
         user = request.user
     else:
         user = get_object_or_404(User, pk=user_id)
 
     if request.method == "POST":
-        sem = SiteConfig.get().active_semester
+        sem = SiteConfig.get().open_semester
 
-        if sem is None:
-            # between semesters: there is no semester to chart progress through, and nobody
-            # is registered in one, so hand the chart an empty dataset instead of failing
+        if sem is None or sem.days_so_far() <= 0:
+            # Nothing to plot: either the deck is between semesters, or the open semester has
+            # no class days behind it yet (a semester with no dates set has none at all). Hand
+            # the chart an empty dataset rather than building one from an empty date list,
+            # which the weekend adjustment below would then index into.
             return HttpResponse(json.dumps({"days_in_semester": 0, "xp_data": []}), content_type='application/json')
 
         # generate a list of dates, from first date of semester to today

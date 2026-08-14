@@ -506,6 +506,30 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         self.assertIsNone(Semester.objects.get_current())
         self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
 
+    def test_get_current__ignores_a_pointer_at_a_semester_that_is_not_open(self):
+        """A config pointing at an upcoming semester still means no current semester: the
+        pointer alone doesn't make a semester the one students are in, and the deck must
+        agree with has_no_open_semester() about that."""
+        config = SiteConfig.get()
+        config.active_semester = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+        self.assertIsNone(Semester.objects.get_current())
+        self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
+
+    def test_complete_active_semester__will_not_archive_a_semester_that_is_not_open(self):
+        """An upcoming semester has no final marks to record, so archiving refuses rather
+        than skipping it straight to the terminal stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config = SiteConfig.get()
+        config.active_semester = upcoming
+        config.save()
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+        upcoming.refresh_from_db()
+        self.assertTrue(upcoming.is_upcoming)
+
     def test_current_courses__is_empty(self):
         """Nobody is registered in a current course, so a student has none."""
         self.assertFalse(CourseStudent.objects.current_courses(self.student).exists())

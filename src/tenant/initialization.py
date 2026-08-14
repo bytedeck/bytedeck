@@ -31,7 +31,12 @@ intro_tag = "intro"
 
 
 def load_initial_tenant_data():
+    """Fill a newly created tenant schema with the data a deck needs to be usable.
 
+    Order matters: the SiteConfig singleton comes first (everything else reads it), and the
+    deck's semester is created and opened before the default course and blocks, so the first
+    student to register has a semester to join.
+    """
     if connection.schema_name == get_public_schema_name():
         return
 
@@ -136,7 +141,9 @@ def create_initial_semester():
     Its dates are the Semester defaults (today, and 135 days later); staff can rename it and
     adjust the dates from the semester list.
     """
-    semester = Semester.objects.create()
+    semester = Semester()
+    semester.full_clean()
+    semester.save()
     SiteConfig.get().set_active_semester(semester)
 
 

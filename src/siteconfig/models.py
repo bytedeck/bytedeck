@@ -352,6 +352,10 @@ class SiteConfig(models.Model):
             semester = get_object_or_404(Semester, id=semester)
 
         with transaction.atomic():
+            # Lock the singleton config row for the duration: two activations racing each
+            # other would otherwise each demote the other's target and leave both semesters
+            # open, with only the pointer picking a winner.
+            SiteConfig.objects.select_for_update().get(pk=self.pk)
             Semester.objects.open().exclude(pk=semester.pk).update(status=Semester.Status.UPCOMING)
             if not semester.is_open:
                 semester.status = Semester.Status.OPEN
@@ -428,6 +432,20 @@ class SiteConfig(models.Model):
             bool: True when there is no open semester for students to join.
         """
         return self.active_semester is None or not self.active_semester.is_open
+
+    @property
+    def open_semester(self):
+        """The semester students are currently in, as the rest of the deck should see it.
+
+        active_semester is the raw pointer; this is the pointer filtered through
+        has_no_open_semester(), so a semester that is set but not open never reads as the
+        deck's current semester. Everything user-facing (the semester list, archiving, the
+        progress chart) goes through here rather than the pointer.
+
+        Returns:
+            Semester or None: the open semester, or None when the deck is between semesters.
+        """
+        return None if self.has_no_open_semester() else self.active_semester
 
     @classmethod
     def cache_key(cls):

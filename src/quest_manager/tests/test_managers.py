@@ -782,6 +782,17 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         self.assertFalse(qs.exists())
         self.assertNotIn(orphaned, qs)
 
+    def test_create_submission__is_not_stamped_when_no_semester_is_open(self):
+        """A quest started between semesters belongs to no semester, so its XP counts toward
+        none. See #2413: starting a quest at all in that state is the open question."""
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
+
+        self.assertIsNone(submission.semester_id)
+
     def test_all_completed_past__returns_every_semester_when_none_is_open(self):
         """With no open semester every completed submission is in a past semester, so the
         student's past-submissions page still lists them."""

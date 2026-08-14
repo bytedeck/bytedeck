@@ -340,6 +340,9 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         """Assertions granted in `semester`.
 
+        Args:
+            semester: a Semester, or None when no semester is open.
+
         Returns:
             BadgeAssertionQuerySet: the assertions from that semester, or an empty queryset
             when there is no semester (no semester is open). Assertions granted while no

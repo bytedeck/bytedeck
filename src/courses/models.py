@@ -258,7 +258,7 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
             Semester or SemesterQuerySet: the deck's open semester (None when no semester is
             open), or when as_queryset is True a queryset holding it (empty when none is open).
         """
-        active_semester = SiteConfig.get().active_semester
+        active_semester = SiteConfig.get().open_semester
         if as_queryset:
             if active_semester is None:
                 return self.get_queryset().none()
@@ -276,8 +276,10 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
         """
         active_sem = self.get_current()
 
-        # nothing to archive: the deck is already between semesters
-        if active_sem is None or active_sem.is_archived:
+        # nothing to archive: the deck is already between semesters. get_current() is None
+        # for a pointer at a semester that isn't open, so an archived (or upcoming) one
+        # can't be archived through here either.
+        if active_sem is None:
             return Semester.NO_OPEN_SEMESTER
 
         # There are still quests awaiting approval, can't close!
@@ -593,6 +595,9 @@ class CourseStudentQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         """Registrations in `semester`.
 
+        Args:
+            semester: a Semester, or None when no semester is open.
+
         Returns:
             CourseStudentQuerySet: the registrations in that semester, or an empty queryset
             when there is no semester (no semester is open). Registrations whose semester was
@@ -604,6 +609,9 @@ class CourseStudentQuerySet(models.query.QuerySet):
 
     def get_not_semester(self, semester):
         """Registrations outside `semester`.
+
+        Args:
+            semester: a Semester, or None when no semester is open.
 
         Returns:
             CourseStudentQuerySet: the registrations in any other semester, or all of them when

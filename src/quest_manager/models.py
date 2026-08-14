@@ -840,6 +840,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         """Submissions made in `semester`.
 
+        Args:
+            semester: a Semester or its id, or None when no semester is open.
+
         Returns:
             QuestSubmissionQuerySet: the submissions in that semester, or an empty queryset
             when there is no semester (no semester is open). Submissions whose semester was
@@ -851,6 +854,9 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
 
     def get_not_semester(self, semester):
         """Submissions made outside `semester`.
+
+        Args:
+            semester: a Semester or its id, or None when no semester is open.
 
         Returns:
             QuestSubmissionQuerySet: the submissions from any other semester, or all of them
@@ -1150,7 +1156,9 @@ class QuestSubmission(models.Model):
     timestamp = models.DateTimeField(auto_now=False, auto_now_add=True)
     updated = models.DateTimeField(auto_now=True, auto_now_add=False)
     do_not_grant_xp = models.BooleanField(default=False, help_text='The student will not earn XP for this quest.')
-    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True)
+    # blank=True as well as null=True: a submission started while no semester is open belongs
+    # to none, and full_clean() (create_submission calls it) rejects an unset non-blank field
+    semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True, blank=True)
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",
