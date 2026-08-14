@@ -1,3 +1,7 @@
+from email.utils import formataddr
+from urllib.parse import urlsplit
+
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.shortcuts import get_object_or_404
@@ -33,8 +37,22 @@ def send_notifications(user_id, announcement_id):
 
 @app.task(name='announcements.tasks.send_announcement_emails')
 def send_announcement_emails(content, root_url, absolute_url):
+    """Send a published announcement by email to everyone on the announcement mailing list.
+
+    Args:
+        content: The announcement's HTML content (used as the email body).
+        root_url: The deck's root URL; its host names the deck in the subject and sender.
+        absolute_url: The announcement's absolute URL, linked from the email.
+
+    Returns:
+        list[str]: the recipient email addresses the announcement was bcc'd to.
+    """
     siteconfig = SiteConfig.get()
-    subject = f'{siteconfig.site_name_short} Announcement'
+    # Name the deck the email is from so recipients can tell decks apart even when a deck
+    # hasn't customised its logo (#2338). root_url is the deck's root URL, so its host is
+    # the deck's domain (e.g. "deckname.bytedeck.com"); .hostname drops any scheme/port.
+    deck_domain = urlsplit(root_url).hostname or root_url
+    subject = f'Announcement from {deck_domain}'
     text_content = content
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({
@@ -47,9 +65,14 @@ def send_announcement_emails(content, root_url, absolute_url):
 
     profile_emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
 
+    # Show the deck's domain as the sender name so a recipient can tell which deck an email is
+    # from at a glance, keeping the actual sending address (the one the mail server is
+    # authorised for) unchanged (#2338). Fall back to the default sender when unconfigured.
+    from_email = formataddr((deck_domain, settings.DEFAULT_FROM_EMAIL)) if settings.DEFAULT_FROM_EMAIL else None
     email_msg = EmailMultiAlternatives(
         subject,
         body=text_content,
+        from_email=from_email,
         to=['contact@bytedeck.com'],
         bcc=profile_emails,
     )

@@ -28,7 +28,12 @@
       </a>
 
       {% if request.user.profile.not_earning_xp %}
-        <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
+        {# Skipping completes and approves the submission, so it posts rather than links (#2383). #}
+        <form method="post" action="{% url 'quests:skip' s.id %}" class="preview-action-form">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning"
+            title="Skip Quest: mark this quest as completed, but you won't get XP for it.">Skip</button>
+        </form>
       {% endif %}
     {% else %}
       <a title="View Details: view the content of this quest or add to the submission."

@@ -367,6 +367,7 @@ class SiteConfig(models.Model):
 
         Rules:
             - Unauthenticated users cannot export.
+            - Nobody can export from a deck that has the Shared Library turned off.
             - Exports are blocked when on the Library schema.
             - The deck owner can export when not on the Library schema.
             - Staff members can export only if `allow_staff_export` is True.
@@ -381,6 +382,12 @@ class SiteConfig(models.Model):
             current_schema = connection.schema_name
 
         if not user.is_authenticated:
+            return False
+
+        # This decides whether the export buttons render; the views enforce the same
+        # feature flag, so without this a deck with the Shared Library off would show
+        # export buttons that lead straight to a 404.
+        if not self.enable_shared_library:
             return False
 
         if current_schema == get_library_schema_name():
