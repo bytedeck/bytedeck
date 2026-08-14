@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
+from django_tenants.utils import get_public_schema_name
 from django.utils import timezone
 
 from model_bakery import baker
@@ -11,7 +12,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
-from courses.views import SemesterActivate
+from courses.views import SemesterActivate, SemesterUpdate
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
@@ -1123,18 +1124,71 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         from, so the edit view refuses it (GET and POST alike) rather than rewriting a
         finished record. The list hides the button, but the URL is still reachable."""
         self.client.force_login(self.test_teacher)
-        archived = baker.make(Semester, status=Semester.Status.ARCHIVED, first_day=datetime.date(2020, 1, 1))
+        archived = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
         post_data = {
             'first_day': '2021-10-16',
             'last_day': '2021-12-16',
             **generate_formset_data(ExcludedDateFormset, quantity=0)
         }
 
-        for response in (self.client.get(reverse('courses:semester_update', args=[archived.pk])),
-                         self.client.post(reverse('courses:semester_update', args=[archived.pk]), data=post_data)):
-            self.assertRedirects(response, reverse('courses:semester_list'))
+        get_response = self.client.get(reverse('courses:semester_update', args=[archived.pk]))
+        self.assertRedirects(get_response, reverse('courses:semester_list'))
+        self.assertErrorMessage(get_response)
+
+        post_response = self.client.post(reverse('courses:semester_update', args=[archived.pk]), data=post_data)
+        self.assertRedirects(post_response, reverse('courses:semester_list'))
+        self.assertIn(SemesterUpdate.ARCHIVED_SEMESTER_ERROR,
+                      [str(message) for message in self.get_message_list(post_response)])
+
         archived.refresh_from_db()
         self.assertEqual(archived.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(archived.last_day, datetime.date(2020, 6, 1))
+
+    def test_SemesterUpdate_view__archive_race_does_not_modify_archived_semester(self):
+        """A semester archived while an edit was open can't be written by that edit.
+
+        The form carries the semester as it was when the page loaded, so saving it would write
+        the whole row back, dates and the stale open status alike. The re-read under a row lock
+        catches the archive that committed first; here the view is handed that stale instance
+        to stand in for the race.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
+        # what the view loaded before the archive committed
+        stale = Semester.objects.get(pk=semester.pk)
+        stale.status = Semester.Status.OPEN
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        with patch.object(SemesterUpdate, 'get_object', return_value=stale):
+            response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        semester.refresh_from_db()
+        self.assertTrue(semester.is_archived)
+        self.assertEqual(semester.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(semester.last_day, datetime.date(2020, 6, 1))
+
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_SemesterUpdate_view__public_schema_is_404(self, mock_connection):
+        """The semester views are tenant-only, so a public-schema request gets the
+        NonPublicOnlyViewMixin's 404. The archived check has to run after that mixin, or it
+        would query a tenant-only table on a schema that doesn't have it."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assert404('courses:semester_update', args=[archived.pk])
+        self.assert404('courses:semester_delete', args=[archived.pk])
 
     def test_SemesterList_view__status_column_names_each_lifecycle_stage(self):
         """The status column shows the semester's own lifecycle stage, so a semester being set
@@ -1148,6 +1202,18 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, '>Upcoming<')
         self.assertContains(response, '>Open<')
         self.assertContains(response, '>Archived<')
+
+    def test_SemesterList_view__open_semester_past_its_last_day_is_flagged(self):
+        """An open semester whose last day has passed reads as Open - ended, the nudge to
+        archive it and free the students' seats."""
+        self.client.force_login(self.test_teacher)
+        open_semester = SiteConfig.get().open_semester
+        open_semester.last_day = datetime.date.today() - datetime.timedelta(days=1)
+        open_semester.save()
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Open - ended<')
 
     def test_SemesterUpdate__add_data__view(self):
         """
