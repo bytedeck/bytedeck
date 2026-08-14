@@ -939,6 +939,40 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
+    def test_complete__another_student_cannot_complete_someone_elses_submission(self):
+        """A student POSTing complete for another student's submission 404s and changes nothing (#2167).
+
+        Completing publishes the submission's comment and question answers as the owner and marks
+        their quest done, so a forged POST would otherwise let one student submit work in another
+        student's name.
+        """
+        other_student = User.objects.create_user('other_student')
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[self.sub.id]),
+            data={'complete': True, 'comment_text': "not my submission"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+        self.assertEqual(self.sub.draft_comment.text, "test draft comment")
+
+    def test_complete__staff_can_complete_another_users_submission(self):
+        """Staff are not blocked by the ownership guard, matching submission() and drop() (#2167)."""
+        self.client.force_login(self.test_teacher)
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]),
+                data={'complete': True, 'comment_text': "marked on the student's behalf"},
+            )
+
+        self.assertNotEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
     def test_complete__no_comment_and_not_completed_returns_404(self):
         """POSTing complete for an in-progress submission with no draft comment 404s.
 

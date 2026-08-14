@@ -1728,6 +1728,12 @@ def complete(request, submission_id):
 
     # EARLY EXIT CONDITIONS: ####################
 
+    # Completing publishes the submission's comment and question answers under the owner's name
+    # and marks their quest done, so only the owner may do it. Staff act on other students'
+    # submissions through the approve view, not this one. Matches submission() and drop().
+    if submission.user != request.user and not request.user.is_staff:
+        raise Http404("You can only submit your own quests.")
+
     # This view should only be access when a student submits a submission comment form
     if request.method != "POST":
         raise Http404
