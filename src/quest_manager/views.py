@@ -32,7 +32,7 @@ from comments.sanitize import sanitize_comment_html
 from comments.utils import save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import save_draft_file_answers, sync_draft_question_submissions
+from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
@@ -1349,6 +1349,10 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             blank_comment_text = (
                 "<p>(Skipped - You were not granted XP for this quest)</p>"
             )
+            # Matches the skip view: waiving the quest drops the answers the student drafted but
+            # never submitted, so they don't linger as rows nothing will ever show (#2164). The
+            # answers of any cycle they did submit stay published with their own comment.
+            discard_draft_question_submissions(self.submission)
             self.submission.mark_approved(transfer=True)
 
         notification_kwargs.update({
@@ -2108,6 +2112,10 @@ def skip(request, submission_id):
         #     text=comment_text,
         #     target=submission,
         # )
+
+        # The quest is being waived, so any answers the student drafted will never be submitted
+        # and nothing renders them; drop them rather than leave invisible rows behind (#2164).
+        discard_draft_question_submissions(submission)
 
         # approve quest automatically, and mark as transfer.
         submission.mark_completed()
