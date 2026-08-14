@@ -29,6 +29,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
+from comments.utils import save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import save_draft_file_answers, sync_draft_question_submissions
@@ -1805,12 +1806,17 @@ def complete(request, submission_id):
         # on a quest that has `xp_can_be_entered_by_student`; re-rendering shows the full form
         # so they can enter XP. The formset path re-renders with each question's errors visible.
 
-        # Keep any file answers that did validate, since the re-rendered file inputs come back
-        # empty and the student would otherwise lose the upload with no warning (#2165).
-        if question_formset and save_draft_file_answers(question_formset, request.FILES):
+        # Keep the uploads that did validate, both the comment's attachments and the file
+        # answers, since the re-rendered file inputs come back empty and the student would
+        # otherwise lose them with no warning (#2165, #2427).
+        kept_files = save_draft_attachments(form, submission.draft_comment)
+        if question_formset:
+            kept_files += save_draft_file_answers(question_formset, request.FILES)
+        if kept_files:
+            noun, verb, pronoun = ("file", "was", "it") if kept_files == 1 else ("files", "were", "them")
             messages.info(
                 request,
-                "Your attached file was saved, so you don't need to choose it again. "
+                f"Your attached {noun} {verb} saved, so you don't need to choose {pronoun} again. "
                 "Fix the problems below and submit the quest again.",
             )
 

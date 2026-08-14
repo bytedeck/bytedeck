@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
@@ -986,6 +987,91 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(sub.draft_comment)
         response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
         self.assertEqual(response.status_code, 404)
+
+    def custom_xp_submission(self):
+        """Return a fresh in-progress submission (with its draft comment) of a quest whose XP the
+        student enters: POSTing it without an XP value is the simplest way to fail form validation."""
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True)
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=quest, semester=self.semester)
+        sub.draft_comment = Comment.objects.create_comment(
+            user=self.test_student, path=sub.get_absolute_url(), text="", target=None)
+        sub.save()
+        return sub
+
+    def test_complete__attached_file_survives_a_failed_submit(self):
+        """A file attached alongside a missing XP value is kept, not silently dropped (#2427).
+
+        Browsers never repopulate a file input, so without saving the upload the student's file
+        vanishes on the re-render with nothing to say so, and they submit again believing the
+        file went with it.
+        """
+        sub = self.custom_xp_submission()
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        # no xp_requested, which the custom-XP form requires, so the page re-renders with errors
+        response = self.client.post(
+            reverse('quests:complete', args=[sub.id]),
+            data={'complete': True, 'comment_text': "<p>my work is attached</p>", 'attachments': upload},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sub.refresh_from_db()
+        documents = list(sub.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1, "the attachment was dropped on re-render")
+        self.assertIn("my-work", documents[0].docfile.name)
+        # the re-rendered page lists it, so the student can see it was kept
+        self.assertContains(response, "my-work")
+        self.assertIn(
+            "Your attached file was saved, so you don't need to choose it again. "
+            "Fix the problems below and submit the quest again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__several_attached_files_survive_a_failed_submit(self):
+        """Every attachment is kept, and the notice reads for more than one file (#2427)."""
+        sub = self.custom_xp_submission()
+        uploads = [
+            SimpleUploadedFile("first-file.png", b"file_content", content_type="image/png"),
+            SimpleUploadedFile("second-file.png", b"file_content", content_type="image/png"),
+        ]
+
+        response = self.client.post(
+            reverse('quests:complete', args=[sub.id]),
+            data={'complete': True, 'comment_text': "<p>both attached</p>", 'attachments': uploads},
+        )
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.draft_comment.document_set.count(), 2)
+        self.assertContains(response, "first-file")
+        self.assertContains(response, "second-file")
+        self.assertIn(
+            "Your attached files were saved, so you don't need to choose them again. "
+            "Fix the problems below and submit the quest again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__kept_attachment_publishes_with_the_comment_on_the_retry(self):
+        """The file kept from a failed submit publishes with the comment when the student submits
+        again, without re-choosing it and without it being attached twice (#2427).
+
+        The second attempt only fixes the XP, leaving the file input empty as browsers force the
+        student to; that must neither lose the kept file nor duplicate it.
+        """
+        sub = self.custom_xp_submission()
+        url = reverse('quests:complete', args=[sub.id])
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        self.client.post(url, data={'complete': True, 'comment_text': "<p>attached</p>", 'attachments': upload})
+        sub.refresh_from_db()
+        kept_comment = sub.draft_comment
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            self.client.post(url, data={'complete': True, 'comment_text': "<p>attached</p>", 'xp_requested': 5})
+
+        sub.refresh_from_db()
+        self.assertTrue(sub.is_completed)
+        self.assertEqual(kept_comment.document_set.count(), 1)
+        self.assertIn(kept_comment, sub.get_comments())
 
     def test_skip__student_not_earning_xp_transfers_their_own_submission(self):
         """A student who is not earning XP can skip their own submission: it is approved as a transfer.
