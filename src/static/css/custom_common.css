@@ -1277,3 +1277,20 @@ table[data-toggle="table"].bt-reveal {
     font-size: 0.7em;
     top: 0.12em;
 }
+
+
+/* #2379: a server-side search box above a list (the Library's quest tab), as opposed to
+   bootstrap-table's own client-side box that lives inside .fixed-table-toolbar. It sits
+   right-aligned like the built-in one, so the two read as the same control wherever a
+   page has both, with a gap before the table beneath it. Reusable by any list that
+   searches on the server. */
+.list-search-form {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+/* wide enough for the placeholder naming what the box searches, which is the only
+   thing telling the reader that the search reaches past the quest names */
+.list-search-form .form-control {
+    min-width: 320px;
+}
