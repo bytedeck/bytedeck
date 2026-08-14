@@ -3,6 +3,10 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        # Leave vendored font files alone. fontawesome-webfont.svg ships with
+        # trailing whitespace on 709 lines, so a `pre-commit run --all-files`
+        # rewrites it and drifts it from upstream for no benefit.
+        exclude: ^src/static/fonts/
       - id: check-yaml
       - id: check-merge-conflict
       - id: debug-statements
