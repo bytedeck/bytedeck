@@ -11,7 +11,7 @@ from model_bakery import baker
 
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from quest_manager.models import QuestSubmission
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -615,6 +615,37 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
         Semester.objects.complete_active_semester()
         self.assertTrue(self.other_semester.is_open)
         self.assertIsNone(CourseStudent.objects.current_semester(self.student))
+
+    def test_xp_totals__count_what_was_earned_in_the_students_own_semester(self):
+        """The end-to-end pairing of stamping and reading. A quest approved and a badge
+        granted for a student in the semester the deck does not point at are stamped with
+        their semester, and their XP total then counts both. Reading through the deck's
+        semester instead would leave the student looking at zero XP they can't explain."""
+        from badges.models import Badge, BadgeAssertion
+
+        quest = baker.make(Quest, xp=25, published=True)
+        submission = QuestSubmission.objects.create_submission(self.other_student, quest)
+        submission.mark_completed()
+        submission.mark_approved()
+        BadgeAssertion.objects.create_assertion(self.other_student, baker.make(Badge, xp=10))
+
+        self.assertEqual(submission.semester, self.other_semester)
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 35)
+
+    def test_xp_totals__ignore_xp_earned_in_a_different_semester(self):
+        """XP stays scoped: a submission stamped with someone else's open semester is not
+        added to this student's total just because both semesters are open."""
+        from badges.models import Badge, BadgeAssertion
+
+        baker.make(
+            QuestSubmission, user=self.other_student, quest__xp=100, semester=self.deck_semester,
+            is_completed=True, is_approved=True,
+        )
+        BadgeAssertion.objects.create_assertion(
+            self.other_student, baker.make(Badge, xp=50), active_semester=self.deck_semester.pk,
+        )
+
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 0)
 
     def test_current_courses__covers_every_course_in_that_semester(self):
         """A student holds registrations in several courses and groups within their one

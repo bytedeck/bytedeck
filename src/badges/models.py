@@ -357,16 +357,29 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
 
 
 class BadgeAssertionManager(models.Manager):
-    def get_queryset(self, active_semester_only=False):
+    def get_queryset(self, active_semester_only=False, user=None):
+        """Assertions, optionally limited to the semester being earned in right now.
+
+        Args:
+            active_semester_only (bool): limit to the current semester's assertions.
+            user (User): whose semester to limit to. Their registration names it (issue
+                #2157 Phase 3). Without a user this is a deck-wide staff view, which uses
+                the deck's open semester.
+
+        Returns:
+            BadgeAssertionQuerySet: the matching assertions.
+        """
+        from courses.models import semester_for  # locally: courses imports this app's models
+
         # badge/badge_type are needed almost everywhere assertions are rendered
         qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
-            return qs.get_semester(SiteConfig.get().open_semester)
+            return qs.get_semester(semester_for(user))
         else:
             return qs
 
     def all_for_user_badge(self, user, badge, active_semester_only):
-        return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
+        return self.get_queryset(active_semester_only, user=user).get_user(user).get_badge(badge)
 
     def user_badge_assertion_count(self, badge, active_semester_only=False):
         """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.
@@ -384,7 +397,7 @@ class BadgeAssertionManager(models.Manager):
         return users.exclude(assertion_count=0).select_related('profile').order_by('-assertion_count')
 
     def all_for_user(self, user):
-        return self.get_queryset(True).get_user(user)
+        return self.get_queryset(True, user=user).get_user(user)
 
     def all_for_user_distinct(self, user):
         """
@@ -450,13 +463,13 @@ class BadgeAssertionManager(models.Manager):
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
-            from courses.models import CourseStudent
+            from courses.models import semester_for
 
             # the recipient's own semester, so a badge counts toward the semester that
             # student is in rather than whichever one the deck points at. None when they
             # are in none: the badge is still granted, it just isn't counted toward any
             # semester's XP
-            semester = CourseStudent.objects.current_semester(user)
+            semester = semester_for(user)
             active_semester = semester.pk if semester is not None else None
 
         new_assertion = BadgeAssertion(
@@ -485,7 +498,7 @@ class BadgeAssertionManager(models.Manager):
     def get_by_type_for_user(self, user):
         self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
-        qs = self.get_queryset(True).get_user(user)
+        qs = self.get_queryset(True, user=user).get_user(user)
         by_type = [
             {
                 'badge_type': t,
@@ -496,7 +509,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
-        total_xp = self.get_queryset(True).grant_xp().get_user(user).aggregate(Sum('badge__xp'))
+        total_xp = self.get_queryset(True, user=user).grant_xp().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
@@ -504,7 +517,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # self.check_for_new_assertions(user)
-        qs = self.get_queryset(True).grant_xp().get_user(user)
+        qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
         qs = qs.get_issued_before(date)
         total_xp = qs.aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']

@@ -746,6 +746,25 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).values_list('block__current_teacher', flat=True)
 
 
+def semester_for(user=None):
+    """The semester that counts as "this semester" when reading or stamping XP.
+
+    The single place that answers it, so a submission is never stamped with one semester
+    and then filtered out by a query using another (issue #2157 Phase 3).
+
+    Args:
+        user (User): the student whose XP is in view, or None for a deck-wide view
+            covering every student at once (a staff approval queue, for instance).
+
+    Returns:
+        Semester or None: that student's own semester, or the deck's open semester when no
+        particular student is in view. None when neither exists, between semesters.
+    """
+    if user is None:
+        return SiteConfig.get().open_semester
+    return CourseStudent.objects.current_semester(user)
+
+
 class CourseStudent(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     semester = models.ForeignKey(Semester, on_delete=models.SET_NULL, null=True)

@@ -69,11 +69,10 @@ def get_badge_assertion_by_tags(user, tags):
     """
     # get model through here to prevent circular imports
     BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
-    CourseStudent = apps.get_model("courses", "CourseStudent")
 
+    # all_for_user() is already limited to the semester this student is earning in
     return BadgeAssertion.objects.all_for_user(user).filter(
         badge__tags__name__in=list(tags),
-        semester=CourseStudent.objects.current_semester(user),
         do_not_grant_xp=False
     ).distinct()
 

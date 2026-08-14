@@ -901,11 +901,27 @@ class QuestSubmissionManager(models.Manager):
                      active_semester_only=False,
                      exclude_archived_quests=True,
                      exclude_quests_not_published=True,
-                     include_related=True):
+                     include_related=True,
+                     user=None):
+        """Submissions, optionally limited to the semester being earned in right now.
+
+        Args:
+            active_semester_only (bool): limit to the current semester's submissions.
+            exclude_archived_quests (bool): drop submissions of archived quests.
+            exclude_quests_not_published (bool): drop submissions of draft quests.
+            include_related (bool): join the related objects the templates almost always need.
+            user (User): whose semester to limit to. Their registration names it (issue #2157
+                Phase 3). Without a user this is a deck-wide staff view, which uses the deck's
+                open semester.
+
+        Returns:
+            QuestSubmissionQuerySet: the matching submissions.
+        """
+        from courses.models import semester_for  # locally, since courses imports this module
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(SiteConfig.get().open_semester_id)
+            qs = qs.get_semester(semester_for(user))
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:
@@ -929,7 +945,8 @@ class QuestSubmissionManager(models.Manager):
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         """
         qs = self.get_queryset(active_semester_only,
-                               exclude_quests_not_published=False
+                               exclude_quests_not_published=False,
+                               user=user,
                                ).approved()
 
         if user:
@@ -957,19 +974,32 @@ class QuestSubmissionManager(models.Manager):
             return self.get_queryset(active_semester_only).not_completed()
 
         # only returned quests will have a time completed, placing them on top
-        qs = self.get_queryset(active_semester_only).get_user(user).not_completed()
+        qs = self.get_queryset(active_semester_only, user=user).get_user(user).not_completed()
         if blocking:
             return qs.block_if_needed()
         else:
             return qs
 
     def all_completed_past(self, user):
+        """This user's completed submissions from before the semester they are in now.
+
+        Args:
+            user: the student whose past submissions are wanted.
+
+        Returns:
+            QuestSubmissionQuerySet: their completed submissions outside their current
+            semester, awaiting-approval ones first. Between semesters they are in none, so
+            every completed submission counts as past.
+        """
+        from courses.models import semester_for  # locally, since courses imports this module
+
         qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
-        return qs.get_not_semester(SiteConfig.get().open_semester_id).order_by('is_approved', '-time_approved')
+        return qs.get_not_semester(semester_for(user)).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
-                               exclude_quests_not_published=False
+                               exclude_quests_not_published=False,
+                               user=user,
                                )
         if user is None:
             qs = qs.completed()
@@ -983,7 +1013,7 @@ class QuestSubmissionManager(models.Manager):
             qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
                 .for_teacher_only(teacher)
             return qs
-        return self.get_queryset(True).get_user(user).not_approved().completed()
+        return self.get_queryset(True, user=user).get_user(user).not_approved().completed()
 
     def all_returned(self, user=None):
         # completion date indicates the quest was submitted, but since completed
@@ -995,10 +1025,10 @@ class QuestSubmissionManager(models.Manager):
             q = returned_qs.extra(select={'date_null': 'time_returned is null'})
             return q.extra(order_by=['date_null', '-time_returned'])
             # return returned_qs
-        return self.get_queryset(True).get_user(user).not_completed().has_completion_date().order_by('-time_returned')
+        return self.get_queryset(True, user=user).get_user(user).not_completed().has_completion_date().order_by('-time_returned')
 
     def all_for_user_quest(self, user, quest, active_semester_only):
-        return self.get_queryset(active_semester_only).get_user(user).get_quest(quest)
+        return self.get_queryset(active_semester_only, user=user).get_user(user).get_quest(quest)
 
     def num_submissions(self, user, quest):
         qs = self.all_for_user_quest(user, quest, False)
@@ -1066,11 +1096,11 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
-        from courses.models import CourseStudent  # locally, since courses imports this module
+        from courses.models import semester_for  # locally, since courses imports this module
 
         # the student's own semester, not the deck's: with more than one semester open the
         # deck can't say which one this student earns XP in, but their registration can
-        semester = CourseStudent.objects.current_semester(user)
+        semester = semester_for(user)
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
@@ -1259,9 +1289,10 @@ class QuestSubmission(models.Model):
         # linked to the old semester, so it never appeared in the student's current in-progress
         # list and, once re-approved, granted its XP in the archived semester. Returning always
         # happens "now", so the redo belongs to whatever semester the student is in at this point.
-        from courses.models import CourseStudent  # locally, since courses imports this module
+        from courses.models import semester_for  # locally, since courses imports this module
 
-        self.semester = CourseStudent.objects.current_semester(self.user)
+        self.semester = semester_for(self.user)
+        self.full_clean()
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP
 
