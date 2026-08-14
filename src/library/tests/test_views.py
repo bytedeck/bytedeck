@@ -13,7 +13,7 @@ from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.models import ContentOrigin
-from library.views import shared_library_enabled_view
+from library.views import LibraryQuestListView, shared_library_enabled_view
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import (
     build_library_clone_name,
@@ -1199,6 +1199,157 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
         # "Quests" should be the active tab
         self.assertEqual(response.context['tab'], 'quests')
+
+    def test_library_overview__quests_tab_is_paginated(self):
+        """The quests tab sends one page of quests, not the whole Library (#2379).
+
+        With more quests than fit on a page, the first page carries exactly `paginate_by` of
+        them and the pagination controls appear; the second page carries the rest.
+        """
+        page_size = LibraryQuestListView.paginate_by
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(page_size):
+                baker.make(Quest, name=f'Paged library quest {i}', campaign=self.library_campaign, published=True)
+            total = Quest.objects.get_active().count()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('library:quest_list'))
+
+        self.assertGreater(total, page_size)
+        self.assertEqual(len(response.context['library_quests']), page_size)
+        self.assertEqual(response.context['page_obj'].paginator.count, total)
+        self.assertEqual(response.context['num_quests'], total)
+        self.assertContains(response, 'page=2')
+
+        response = self.client.get(reverse('library:quest_list'), {'page': 2})
+        self.assertEqual(len(response.context['library_quests']), min(page_size, total - page_size))
+
+    def test_library_overview__quests_tab_page_out_of_range_shows_the_last_page(self):
+        """A ?page= that is junk or past the end lands on a real page instead of erroring.
+
+        Someone editing the URL, or following a stale link after quests were removed, should
+        get the nearest page rather than a 404.
+        """
+        self.client.force_login(self.test_teacher)
+
+        for bad_page in ('9999', 'not-a-number'):
+            with self.subTest(page=bad_page):
+                response = self.client.get(reverse('library:quest_list'), {'page': bad_page})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['page_obj'].number, 1)
+
+    def test_library_overview__quests_tab_page_below_one_shows_the_first_page(self):
+        """`?page=0` and `?page=-1` land on the first page, not the last.
+
+        Django's `get_page()` treats any out-of-range number as "the last page", which is
+        right for a stale link to a page that no longer exists and wrong for a number that
+        was never a page: nobody typing 0 or -1 is asking for the end of the list.
+        """
+        page_size = LibraryQuestListView.paginate_by
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(page_size):
+                baker.make(Quest, name=f'Clamped page quest {i}', published=True)
+
+        self.client.force_login(self.test_teacher)
+
+        for bad_page in ('0', '-1'):
+            with self.subTest(page=bad_page):
+                response = self.client.get(reverse('library:quest_list'), {'page': bad_page})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['page_obj'].number, 1)
+                self.assertGreater(response.context['page_obj'].paginator.num_pages, 1)
+
+    def test_library_overview__quests_tab_search_matches_name_campaign_and_tag(self):
+        """Searching covers the whole Library, and matches a quest's name, campaign or tag.
+
+        The search runs in the database rather than over the rows already sent to the browser
+        (#2379), so a match on a later page is still found.
+        """
+        with library_schema_context():
+            campaign = baker.make(Category, title='Recursion Fundamentals', published=True)
+            by_name = baker.make(Quest, name='All about recursion', published=True)
+            by_campaign = baker.make(Quest, name='Towers of Hanoi', campaign=campaign, published=True)
+            by_tag = baker.make(Quest, name='Fractal trees', published=True)
+            by_tag.tags.add('recursion')
+            total = Quest.objects.get_active().count()
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('library:quest_list'), {'q': 'recursion'})
+
+        listed = response.context['library_quests']
+        self.assertCountEqual(listed, [by_name, by_campaign, by_tag])
+        # the quest seeded by setUpTestData matches none of the three, so it is filtered out
+        self.assertNotIn(self.library_quest, listed)
+        self.assertEqual(response.context['search_term'], 'recursion')
+        self.assertEqual(response.context['num_matching_quests'], 3)
+        # the tab badge keeps counting the whole Library, not the search results
+        self.assertEqual(response.context['num_quests'], total)
+
+    def test_library_overview__quests_tab_search_narrows_on_every_word(self):
+        """Several search words all have to match, though not all against the same field.
+
+        This is what the in-browser search did before the search moved to the server, and it
+        is what makes a two-word search useful: "recursion python" is a narrowing, not a
+        request for everything about either.
+        """
+        with library_schema_context():
+            both = baker.make(Quest, name='Recursion: base cases', published=True)
+            both.tags.add('python')
+            only_recursion = baker.make(Quest, name='Recursion in art', published=True)
+            only_recursion.tags.add('graphics')
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('library:quest_list'), {'q': 'recursion python'})
+
+        listed = response.context['library_quests']
+        self.assertIn(both, listed)
+        self.assertNotIn(only_recursion, listed)
+
+    def test_library_overview__quests_tab_search_lists_each_quest_once(self):
+        """A quest whose name and tags both match the search is still listed once.
+
+        Joining on tags multiplies the row per matching tag, so without a distinct() the same
+        quest would appear several times.
+        """
+        with library_schema_context():
+            quest = baker.make(Quest, name='Recursion practice', published=True)
+            quest.tags.add('recursion', 'recursion-drills')
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('library:quest_list'), {'q': 'recursion'})
+
+        self.assertEqual(list(response.context['library_quests']), [quest])
+        self.assertEqual(response.context['num_matching_quests'], 1)
+
+    def test_library_overview__quests_tab_search_with_no_matches(self):
+        """A search that matches nothing says so, and offers a way back to the full Library."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'), {'q': 'nothing matches this'})
+
+        self.assertEqual(list(response.context['library_quests']), [])
+        self.assertContains(response, 'No quests in the Library match')
+        self.assertContains(response, 'Clear this search')
+
+    def test_library_overview__quests_tab_pagination_links_keep_the_search(self):
+        """Paging through search results keeps the search: page links carry the `q` term.
+
+        Without it, clicking page 2 would silently drop back to the unfiltered Library.
+        """
+        page_size = LibraryQuestListView.paginate_by
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(page_size + 1):
+                baker.make(Quest, name=f'Recursion drill {i}', published=True)
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('library:quest_list'), {'q': 'recursion'})
+
+        self.assertContains(response, 'q=recursion')
+        self.assertContains(response, 'page=2')
 
     def test_library_overview__campaigns_tab(self):
         """

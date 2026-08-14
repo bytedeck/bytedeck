@@ -2,7 +2,9 @@ import functools
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db import connection
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -187,17 +189,97 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     # Shared template, tab context determines which section is shown
     template_name = 'library/library_overview.html'
 
+    #: Quests per page, matching the campaigns tab.
+    paginate_by = 15
+
+    def get_search_term(self):
+        """The search term the user typed, from the `q` query parameter.
+
+        Returns:
+            str: the trimmed search term, or '' when the box was left empty.
+        """
+        return self.request.GET.get('q', '').strip()
+
+    def get_page_number(self):
+        """The page the user asked for, with anything below the first page treated as the first.
+
+        `Paginator.get_page()` maps an out-of-range number to the *last* page, which is the
+        right answer for a stale link to page 40 of a Library that has shrunk to 3 pages,
+        and the wrong one for `?page=0` or `?page=-1`: those aren't a request for the end of
+        the list, they're a number that isn't a page at all. Clamping them here keeps the
+        useful half of that behaviour and drops the surprising half.
+
+        Returns:
+            int | str: the requested page, never below 1. Non-numeric input is passed
+            through untouched, for `get_page()` to turn into the first page.
+        """
+        requested = self.request.GET.get('page')
+
+        try:
+            return max(int(requested), 1)
+        except (TypeError, ValueError):
+            return requested
+
+    def get_library_quests(self, search_term):
+        """The active Library quests to list, narrowed by the search term.
+
+        Must be called from within the library schema context, and the queryset must be
+        evaluated there too: the caller paginates it, which is what runs the queries.
+
+        A quest matches on its own name, on its campaign's title, or on one of its tags,
+        which is what the column headings promise the reader they can search by. Several
+        words narrow the results rather than widening them: every word has to match
+        something, though not all the same thing, so "recursion python" finds the quest
+        named "Recursion: base cases" that is tagged python. That is how the search box
+        behaved when it filtered rows in the browser, and it is the more useful of the two
+        readings once the Library is big enough to need narrowing.
+
+        Args:
+            search_term (str): what the user typed, or '' for no filtering.
+
+        Returns:
+            QuerySet[Quest]: the matching quests, campaign and tags pre-fetched.
+        """
+        quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
+
+        for word in search_term.split():
+            quests = quests.filter(
+                Q(name__icontains=word)
+                | Q(campaign__title__icontains=word)
+                | Q(tags__name__icontains=word)
+            )
+
+        if search_term:
+            # distinct() because the tags join multiplies a quest by its matching tags
+            quests = quests.distinct()
+
+        return quests
+
     def get_context_data(self, **kwargs):
         """
-        Populate context with active quests from the shared library.
+        Populate context with a page of active quests from the shared library.
+
+        The Library is read one page at a time: the whole thing used to be loaded into
+        memory and rendered on every request, which does not survive a Library worth
+        browsing (#2379). Searching happens in the database for the same reason, so it
+        covers every quest rather than only the ones already sent to the browser.
+
+        Args:
+            **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
 
         Returns:
             dict: Template context including:
                 - heading (str): Page title.
                 - tab (str): Active tab identifier.
-                - library_quests (QuerySet[Quest]): Evaluated queryset of active quest objects,
-                    with related Campaign and tags prefetched.
-                - num_quests (int): Number of quests in the displayed list, used for the UI badge.
+                - library_quests (list[Quest]): The current page of active quests, with
+                    related Campaign and tags prefetched.
+                - page_obj (Page): The current page, for the pagination controls.
+                - search_term (str): What the user searched for, to keep the box filled in.
+                - num_matching_quests (int): How many quests the search matched, across
+                    every page.
+                - num_quests (int): Number of active quests in the Library, used for the UI
+                    badge. This is the whole Library, not the search results, so the badge
+                    doesn't change as the user types.
                 - num_campaigns (int): Number of active Campaigns with importable quests,
                     used for the UI badge in the Campaign tab.
 
@@ -205,12 +287,18 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         list can attribute it to the deck and person who shared it (#2377).
         """
         context = super().get_context_data(**kwargs)
+        search_term = self.get_search_term()
 
         with library_schema_context():
-            # Explicitly call len() to force evaluation inside the library context
-            # this forces all quests to load.
-            quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
-            num_quests = len(quests)
+            quests = self.get_library_quests(search_term)
+            paginator = Paginator(quests, self.paginate_by)
+            # get_page (rather than page) turns a junk or out-of-range ?page= into the
+            # nearest real page instead of raising
+            page = paginator.get_page(self.get_page_number())
+            # Force evaluation inside the library context: the template renders this after
+            # the schema has switched back to the caller's own deck.
+            page_quests = list(page.object_list)
+            num_quests = Quest.objects.get_active().count() if search_term else paginator.count
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
             # one query for the whole list rather than one per row
@@ -226,7 +314,10 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         context.update({
             'heading': 'Library',
             'tab': 'quests',
-            'library_quests': quests,
+            'library_quests': page_quests,
+            'page_obj': page,
+            'search_term': search_term,
+            'num_matching_quests': paginator.count,
             'num_quests': num_quests,
             'num_campaigns': num_campaigns,
         })

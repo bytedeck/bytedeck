@@ -29,9 +29,10 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
+from comments.utils import save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import sync_draft_question_submissions
+from questions.utils import save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
@@ -1728,6 +1729,12 @@ def complete(request, submission_id):
 
     # EARLY EXIT CONDITIONS: ####################
 
+    # Completing publishes the submission's comment and question answers under the owner's name
+    # and marks their quest done, so only the owner may do it. Staff act on other students'
+    # submissions through the approve view, not this one. Matches submission() and drop().
+    if submission.user != request.user and not request.user.is_staff:
+        raise Http404("You can only submit your own quests.")
+
     # This view should only be access when a student submits a submission comment form
     if request.method != "POST":
         raise Http404
@@ -1798,6 +1805,21 @@ def complete(request, submission_id):
         # The main form path should only occur if a student tries to use the quick reply form
         # on a quest that has `xp_can_be_entered_by_student`; re-rendering shows the full form
         # so they can enter XP. The formset path re-renders with each question's errors visible.
+
+        # Keep the uploads that did validate, both the comment's attachments and the file
+        # answers, since the re-rendered file inputs come back empty and the student would
+        # otherwise lose them with no warning (#2165, #2427).
+        kept_files = save_draft_attachments(form, submission.draft_comment)
+        if question_formset:
+            kept_files += save_draft_file_answers(question_formset, request.FILES)
+        if kept_files:
+            noun, verb, pronoun = ("file", "was", "it") if kept_files == 1 else ("files", "were", "them")
+            messages.info(
+                request,
+                f"Your attached {noun} {verb} saved, so you don't need to choose {pronoun} again. "
+                "Fix the problems below and submit the quest again.",
+            )
+
         context = {
             "heading": submission.quest.name,
             "submission": submission,
