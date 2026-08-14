@@ -575,7 +575,7 @@ class SemesterDelete(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredM
 
     def form_valid(self, form):
         """Delete the semester, converting a ProtectedError from the delete itself into the
-        same redirect + error: the dispatch() pre-check can race a concurrent activation
+        same redirect + error: the refusal_message() pre-check can race a concurrent activation
         (another request making this semester active between the check and the delete).
         The success message is added here, after the delete succeeds, because Django calls
         get_success_url() before deleting.
