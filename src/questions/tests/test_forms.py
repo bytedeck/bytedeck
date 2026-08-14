@@ -1,3 +1,5 @@
+import html
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from model_bakery import baker
@@ -152,10 +154,37 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": "An answer"}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_clean__short_answer_over_200_chars_is_invalid(self):
-        """The 200-character short answer limit is enforced server-side, not just by the widget."""
+    def test_clean__short_answer_limit_is_on_raw_input_not_escaped_length(self):
+        """The 200-character short-answer limit is on the raw text the student types (matching the
+        input's maxlength), enforced server-side by the field's max_length before sanitization:
+
+        - exactly 200 raw characters is accepted, 201 is rejected;
+        - an answer within the 200-char raw cap is accepted even when HTML-escaping expands it past
+          200 stored characters ('<' -> '&lt;'), because that stored value unescapes back to the
+          same <=200 characters the student typed (#2170).
+        """
+        # The raw boundary: 200 accepted, 201 rejected.
+        form = QuestionSubmissionForm(data={"response_text": "x" * 200}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
         form = QuestionSubmissionForm(data={"response_text": "x" * 201}, instance=self.short_answer)
         self.assertFalse(form.is_valid())
+
+        # Within the raw cap but entity-expanding: accepted, and the stored value is longer than 200
+        # (each '<' escapes to '&lt;'). That is the behaviour #2170 asked about, and it is fine
+        # because unescaping the stored value returns exactly what the student typed. No leading or
+        # trailing whitespace here, so the field's strip=True can't affect the comparison.
+        expanding = "<3" * 99  # 198 raw characters, escaping to 495
+        form = QuestionSubmissionForm(data={"response_text": expanding}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        # assert against the value that actually reaches the database, since the claim being
+        # tested is about the *stored* answer (response_text is a TextField, so it fits)
+        form.save()
+        self.short_answer.refresh_from_db()
+        stored = self.short_answer.response_text
+        self.assertGreater(len(stored), 200)
+        self.assertEqual(html.unescape(stored), expanding)
 
     def test_clean__required_file_missing_is_invalid(self):
         """A required file question rejects a POST with no file, and accepts an allowed one."""
