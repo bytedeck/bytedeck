@@ -220,15 +220,27 @@ class Grade(IsAPrereqMixin, models.Model):
 class SemesterQuerySet(models.query.QuerySet):
 
     def upcoming(self):
-        """Semesters being set up, which students can't join yet."""
+        """Semesters being set up, which students can't join yet.
+
+        Returns:
+            SemesterQuerySet: the semesters with an UPCOMING status.
+        """
         return self.filter(status=Semester.Status.UPCOMING)
 
     def open(self):
-        """Semesters students can currently be registered in."""
+        """Semesters students can currently be registered in.
+
+        Returns:
+            SemesterQuerySet: the semesters with an OPEN status.
+        """
         return self.filter(status=Semester.Status.OPEN)
 
     def archived(self):
-        """Semesters that have been archived: final marks recorded, read-only."""
+        """Semesters that have been archived: final marks recorded, read-only.
+
+        Returns:
+            SemesterQuerySet: the semesters with an ARCHIVED status.
+        """
         return self.filter(status=Semester.Status.ARCHIVED)
 
 

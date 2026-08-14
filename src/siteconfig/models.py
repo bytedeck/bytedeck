@@ -404,6 +404,9 @@ class SiteConfig(models.Model):
         Archiving a semester (``Semester.complete_active_semester``) leaves it as the active
         semester, so "no open semester" means the active semester is missing or no longer
         open. Used to block student registration and to warn staff.
+
+        Returns:
+            bool: True when there is no open semester for students to join.
         """
         return self.active_semester is None or not self.active_semester.is_open
 
