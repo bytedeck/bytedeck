@@ -3584,6 +3584,27 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:categories'))
         self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
 
+    def test_CategoryList_view__shows_the_decks_own_campaign_actions(self):
+        """The deck's campaign list offers the local actions (details, edit, delete), not the
+        Library's import action, and doesn't carry the Library's introductory blurb.
+
+        This page and the Library's campaign list share
+        `quest_manager/tab_campaigns_list.html`, which tells them apart by the
+        `is_library_view` context flag, so this guards the flag being set here (issue #2380).
+        """
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertFalse(response.context['is_library_view'])
+        self.assertContains(response, reverse('quests:category_update', args=[campaign.id]))
+        self.assertContains(response, 'Edit this campaign')
+        # the Library's import action and its blurb belong to the Library's copy of this table
+        self.assertNotContains(response, 'Import this Campaign into your Deck')
+        self.assertNotContains(response, 'EXPERIMENTAL!')
+
     def test_CategoryDetail_view__staff_see_unpublished_quests_of_unpublished_campaign(self):
         """Staff must see a campaign's unpublished quests on the campaign detail page
         regardless of whether the campaign itself is published; only archived quests

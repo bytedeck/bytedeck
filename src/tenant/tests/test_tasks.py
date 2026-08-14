@@ -167,7 +167,8 @@ class DeckStatusCheckTaskTests(ByteDeckTenantTestCase):
         self.assertTrue(result.successful())
         self.assertIn('closed semester', result.result)
 
-        self.assertTrue(SiteConfig.get().active_semester.closed)
+        # the close archives the semester and leaves the deck with no open one
+        self.assertIsNone(SiteConfig.get().active_semester)
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.active_user_count, 0)  # refreshed AFTER the close
 

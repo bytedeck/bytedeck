@@ -217,46 +217,100 @@ class Grade(IsAPrereqMixin, models.Model):
             return False
 
 
-class SemesterManager(models.Manager):
+class SemesterQuerySet(models.query.QuerySet):
+
+    def upcoming(self):
+        """Semesters being set up, which students can't join yet.
+
+        Returns:
+            SemesterQuerySet: the semesters with an UPCOMING status.
+        """
+        return self.filter(status=Semester.Status.UPCOMING)
+
+    def open(self):
+        """Semesters students can currently be registered in.
+
+        Returns:
+            SemesterQuerySet: the semesters with an OPEN status.
+        """
+        return self.filter(status=Semester.Status.OPEN)
+
+    def archived(self):
+        """Semesters that have been archived: final marks recorded, read-only.
+
+        Returns:
+            SemesterQuerySet: the semesters with an ARCHIVED status.
+        """
+        return self.filter(status=Semester.Status.ARCHIVED)
+
+
+class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
+    """from_queryset so the lifecycle filters above are callable on the manager too,
+    e.g. Semester.objects.open()."""
 
     def get_queryset(self):
-        return models.query.QuerySet(self.model, using=self._db).order_by('-first_day')
+        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day')
 
     def get_current(self, as_queryset=False):
+        """The semester students are currently earning XP in, or nothing when none is open.
+
+        Returns:
+            Semester or SemesterQuerySet: the deck's open semester (None when no semester is
+            open), or when as_queryset is True a queryset holding it (empty when none is open).
+        """
+        active_semester = SiteConfig.get().open_semester
         if as_queryset:
-            return self.get_queryset().filter(pk=SiteConfig.get().active_semester.pk)
+            if active_semester is None:
+                return self.get_queryset().none()
+            return self.get_queryset().filter(pk=active_semester.pk)
         else:
-            return SiteConfig.get().active_semester
+            return active_semester
 
     def complete_active_semester(self, clamp_negative_xp=False):
-        """Close the active semester, or return a Semester error sentinel.
+        """Archive the open semester and leave the deck with no open semester, or return a
+        Semester error sentinel.
 
         clamp_negative_xp: record a negative final XP as zero instead of refusing
         to close (the deck-suspension auto-close uses this, #1734 redesign B2;
         the staff-driven close keeps the refusal so a teacher can investigate).
         """
-        active_sem = self.get_current()
-
-        # This semester has already been closed
-        if active_sem.closed:
-            return Semester.CLOSED
-
-        # There are still quests awaiting approval, can't close!
-        if QuestSubmission.objects.all_awaiting_approval():
-            return Semester.QUEST_AWAITING_APPROVAL
-
         # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
         # saves each registration as it iterates and raises on a negative-XP student,
         # so without the transaction the students processed before it would stay finalized.
         try:
             with transaction.atomic():
+                # Lock the config row before reading which semester is open, the same lock
+                # set_active_semester() takes. Without it an activation running alongside this
+                # could open its semester and then have this archive clear the pointer,
+                # leaving a semester open that the deck no longer points at (so students
+                # couldn't use it).
+                SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
+
+                active_sem = self.get_current()
+
+                # nothing to archive: the deck is already between semesters. get_current() is
+                # None for a pointer at a semester that isn't open, so an archived (or
+                # upcoming) one can't be archived through here either.
+                if active_sem is None:
+                    return Semester.NO_OPEN_SEMESTER
+
+                # There are still quests awaiting approval, can't close!
+                if QuestSubmission.objects.all_awaiting_approval():
+                    return Semester.QUEST_AWAITING_APPROVAL
+
                 # need to calculate all user XP and store in their Course
                 CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
 
                 QuestSubmission.objects.remove_in_progress()
 
-                active_sem.closed = True
+                active_sem.status = Semester.Status.ARCHIVED
                 active_sem.save()
+
+                # the deck now has no open semester (issue #1177): students can't join a
+                # course or earn XP until staff open the next one
+                siteconfig = SiteConfig.get()
+                siteconfig.active_semester = None
+                siteconfig.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
 
@@ -268,9 +322,21 @@ def default_end_date():
 
 
 class Semester(models.Model):
-    CLOSED = -1
+    """A period of time that student course registrations, quest submissions, and XP belong to.
+
+    A semester moves through a one-way lifecycle (see Status): it is set up while UPCOMING,
+    students earn XP in it while OPEN, and archiving records their final marks and makes it
+    ARCHIVED, which is terminal.
+    """
+    NO_OPEN_SEMESTER = -1
     QUEST_AWAITING_APPROVAL = -2
     STUDENTS_WITH_NEGATIVE_XP = -3
+
+    class Status(models.TextChoices):
+        """The stages of a semester's lifecycle, in order. Archiving is one-way."""
+        UPCOMING = 'upcoming', 'Upcoming'
+        OPEN = 'open', 'Open'
+        ARCHIVED = 'archived', 'Archived'
 
     name = models.CharField(
         blank=True, unique=False, max_length=50,
@@ -279,9 +345,10 @@ class Semester(models.Model):
 
     first_day = models.DateField(null=True, default=date.today)
     last_day = models.DateField(null=True, default=default_end_date)
-    closed = models.BooleanField(
-        default=False,
-        help_text="All student courses in this semester have been closed and final marks recorded."
+    status = models.CharField(
+        max_length=10, choices=Status.choices, default=Status.UPCOMING,
+        help_text="Upcoming: still being set up. Open: students can be registered in it and earn XP. "
+                  "Archived: final marks have been recorded and it can no longer be changed."
     )
 
     objects = SemesterManager()
@@ -297,11 +364,26 @@ class Semester(models.Model):
             return self.first_day.strftime("%b-%Y")
         return f"Semester {self.pk}"
 
-    def active_by_date(self):
-        # use local date `datetime.date.today()` instead of UTC date from `timezone.now().date()`
-        return (self.last_day + timedelta(days=5)) > date.today() > (self.first_day - timedelta(days=20))
+    @property
+    def is_upcoming(self):
+        """Whether this semester is still being set up (students can't join it yet)."""
+        return self.status == self.Status.UPCOMING
 
+    @property
     def is_open(self):
+        """Whether students can be registered in this semester and earn XP in it.
+
+        This is the lifecycle status, not a date comparison: a semester stays open until
+        it is archived, even once its last day has passed (see is_within_dates()).
+        """
+        return self.status == self.Status.OPEN
+
+    @property
+    def is_archived(self):
+        """Whether this semester's final marks have been recorded, making it read-only."""
+        return self.status == self.Status.ARCHIVED
+
+    def is_within_dates(self):
         """
         :return: True if the current date falls within the semeseter's first and last day (inclusive)
         """
@@ -311,7 +393,7 @@ class Semester(models.Model):
 
     def has_ended(self):
         """Whether the semester's last day is in the past (local date, consistent with
-        is_open()). Used by the semester list to flag an active semester that has run
+        is_within_dates()). Used by the semester list to flag an open semester that has run
         past its end date and is probably due to be archived.
 
         Returns:
@@ -404,10 +486,15 @@ class Semester(models.Model):
         return timezone.make_aware(dt, timezone.get_default_timezone())
 
     def reset_students_xp_cached(self):
+        """Zero the cached XP of every student registered in this semester.
 
+        Scoped to this semester's own registrations rather than the deck's active semester,
+        because archiving clears that pointer: the students whose XP needs resetting are the
+        ones who earned it here.
+        """
         from profile_manager.models import Profile
-        profile_ids = CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('profile',
-                                                                                                          flat=True)
+        profile_ids = CourseStudent.objects.all_for_semester(self, students_only=True).values_list('user__profile',
+                                                                                                   flat=True)
         profile_ids = set(profile_ids)
         profiles = Profile.objects.filter(id__in=profile_ids)
 
@@ -513,9 +600,32 @@ class CourseStudentQuerySet(models.query.QuerySet):
         return self.filter(user=user)
 
     def get_semester(self, semester):
+        """Registrations in `semester`.
+
+        Args:
+            semester: a Semester, or None when no semester is open.
+
+        Returns:
+            CourseStudentQuerySet: the registrations in that semester, or an empty queryset
+            when there is no semester (no semester is open). Registrations whose semester was
+            deleted are left out either way: they belong to no semester rather than to this one.
+        """
+        if semester is None:
+            return self.none()
         return self.filter(semester=semester)
 
     def get_not_semester(self, semester):
+        """Registrations outside `semester`.
+
+        Args:
+            semester: a Semester, or None when no semester is open.
+
+        Returns:
+            CourseStudentQuerySet: the registrations in any other semester, or all of them when
+            there is no semester (with none open, every registration is in a past semester).
+        """
+        if semester is None:
+            return self
         return self.exclude(semester=semester)
 
     def get_active(self):
@@ -594,7 +704,7 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        return self.all_for_user(user).get_semester(SiteConfig.get().active_semester)
+        return self.all_for_user(user).get_semester(SiteConfig.get().open_semester)
 
     def all_users_for_active_semester(self, students_only=False, active_only=False):
         """
@@ -604,7 +714,7 @@ class CourseStudentManager(models.Manager):
         (e.g. suspension-closed) semester contributes no users.
         """
         try:
-            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only, active_only=active_only)
+            courses = self.all_for_semester(SiteConfig.get().open_semester, students_only=students_only, active_only=active_only)
             user_list = courses.values_list('user', flat=True)
             user_list = set(user_list)  # removes doubles
             return User.objects.filter(id__in=user_list, is_active=True)

@@ -99,8 +99,6 @@ class QuestResource(resources.ModelResource):
     Related behavior like prerequisites and tags are handled by associated mixins
     on the Quest model, not directly by this class.
     """
-    local_visibility_map = {}
-
     prereq_import_ids = Field(column_name='prereq_import_ids')
     campaign_title = Field()
     campaign_icon = Field()
@@ -111,6 +109,21 @@ class QuestResource(resources.ModelResource):
         model = Quest
         import_id_fields = ('import_id',)
         exclude = ('id', 'editor', 'specific_teacher_to_notify', 'campaign', 'common_data')
+
+    def __init__(self, *args, **kwargs):
+        """Build the resource with its own empty visibility map.
+
+        `local_visibility_map` (a `{import_id: published}` mapping that keeps a deck's
+        own show/hide choice when re-importing a quest it already has) is filled in per
+        import by `after_import`, from `import_data(local_visibility_map=...)`. It is set
+        here, per instance, so one import can never be read as another's default.
+
+        Args:
+            *args: positional arguments passed through to `ModelResource`.
+            **kwargs: keyword arguments passed through to `ModelResource`.
+        """
+        super().__init__(*args, **kwargs)
+        self.local_visibility_map = {}
 
     def dehydrate_prereq_import_ids(self, quest):
         """

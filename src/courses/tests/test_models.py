@@ -151,13 +151,31 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
-    def test_complete_active_semester__returns_closed_when_already_closed(self):
-        """Trying to close an already-closed semester short-circuits with the CLOSED sentinel."""
+    def test_complete_active_semester__returns_sentinel_when_pointed_at_archived_semester(self):
+        """A config left pointing at an archived semester has nothing to archive either."""
         active_sem = Semester.objects.get_current()
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.CLOSED)
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_active_semester__returns_sentinel_when_no_semester_is_open(self):
+        """With no active semester (the state archiving leaves behind), there is nothing to
+        archive and the sentinel comes back instead of an error."""
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_active_semester__leaves_the_deck_with_no_open_semester(self):
+        """Archiving clears the active semester, so the deck sits between semesters
+        (issue #1177) instead of pointing at an archived one."""
+        archived = Semester.objects.complete_active_semester()
+
+        self.assertTrue(archived.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
 
     def test_complete_active_semester__returns_awaiting_approval_with_pending_submissions(self):
         """A semester can't be closed while quests are still awaiting approval."""
@@ -182,8 +200,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
             self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
             result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
 
-        self.assertEqual(result, SiteConfig.get().active_semester)
-        self.assertTrue(result.closed)
+        self.assertTrue(result.is_archived)
         registration.refresh_from_db()
         self.assertEqual(registration.final_xp, 0)
         self.assertFalse(registration.active)
@@ -234,7 +251,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         self.assertTrue(fine_registration.active)
         self.assertIsNone(fine_registration.final_xp)
         active_semester.refresh_from_db()
-        self.assertFalse(active_semester.closed)
+        self.assertFalse(active_semester.is_archived)
 
 
 class SemesterModelTest(ByteDeckTenantTestCase):
@@ -280,29 +297,29 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         self.assertEqual(semester.num_days(), 0)
         self.assertEqual(semester.num_days(upto_today=True), 0)
 
-    def test_is_open__within_and_outside_dates(self):
-        """is_open() is True on and between the first and last day, and False outside them."""
+    def test_is_within_dates__within_and_outside_dates(self):
+        """is_within_dates() is True on and between the first and last day, and False outside them."""
         # before semester starts: False
         before_start = self.semester_start - timedelta(days=1)
         with freeze_time(before_start, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # after semester ends: False
         after_end = self.semester_end + timedelta(days=1)
         with freeze_time(after_end, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # during semester: True
         during = self.semester_start + timedelta(days=1)
         with freeze_time(during, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # first day: True
         with freeze_time(self.semester_start, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
         # last day: True
         with freeze_time(self.semester_end, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # Timezone problems?
 
@@ -318,24 +335,47 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         dateless_semester = baker.make(Semester, name='dateless', first_day=None, last_day=None)
         self.assertFalse(dateless_semester.has_ended())
 
-    def test_active_by_date__true_inside_padded_window_false_outside(self):
-        """active_by_date() is True from 20 days before the first day to 5 days after the last day,
-        a padded window wider than is_open()."""
-        # comfortably inside the semester: True
-        with freeze_time(self.today_fake, tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
+    def test_status_properties__match_the_lifecycle_stage(self):
+        """Exactly one of is_upcoming/is_open/is_archived is True at each stage of the
+        lifecycle, and a semester defaults to upcoming until it is started."""
+        semester = baker.make(Semester)
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (True, False, False)
+        )
 
-        # within the leading 20-day / trailing 5-day padding: still True
-        with freeze_time(self.semester_start - timedelta(days=10), tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
-        with freeze_time(self.semester_end + timedelta(days=4), tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
+        semester.status = Semester.Status.OPEN
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, True, False)
+        )
 
-        # outside the padded window: False
-        with freeze_time(self.semester_start - timedelta(days=30), tz_offset=0):
-            self.assertFalse(self.semester.active_by_date())
-        with freeze_time(self.semester_end + timedelta(days=10), tz_offset=0):
-            self.assertFalse(self.semester.active_by_date())
+        semester.status = Semester.Status.ARCHIVED
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, False, True)
+        )
+
+    def test_status_properties__is_open_ignores_the_dates(self):
+        """is_open is the lifecycle status, not a date check: a semester whose last day has
+        passed stays open until it is archived (that gap is what has_ended() flags)."""
+        ended = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=date.today() - timedelta(days=100), last_day=date.today() - timedelta(days=10),
+        )
+
+        self.assertTrue(ended.is_open)
+        self.assertFalse(ended.is_within_dates())
+        self.assertTrue(ended.has_ended())
+
+    def test_queryset_helpers__filter_by_lifecycle_stage(self):
+        """The queryset helpers select semesters by lifecycle stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        open_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assertIn(upcoming, Semester.objects.upcoming())
+        self.assertIn(open_semester, Semester.objects.open())
+        self.assertIn(archived, Semester.objects.archived())
+        self.assertNotIn(archived, Semester.objects.open())
+        self.assertNotIn(upcoming, Semester.objects.archived())
 
     def test_num_days__excludes_weekends_and_excluded_dates(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
@@ -438,6 +478,90 @@ class SemesterModelTest(ByteDeckTenantTestCase):
 
         active_semester.reset_students_xp_cached()
         self.assertEqual(student.profile.xp_cached, 0)
+
+
+class NoOpenSemesterTest(ByteDeckTenantTestCase):
+    """A deck between semesters, which is what archiving now leaves behind (issue #1177).
+
+    Nothing is open, so everything scoped to the deck's semester is empty rather than
+    broken, and registrations from the semester that was archived count as past.
+    """
+
+    def setUp(self):
+        """Register a student, then archive the semester so the deck has none open."""
+        self.student = baker.make(User)
+        self.registration = baker.make(
+            CourseStudent, user=self.student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
+        self.archived_semester = Semester.objects.complete_active_semester()
+
+    def test_archiving__leaves_no_active_semester(self):
+        """The state under test: the semester is archived and nothing is pointed at."""
+        self.assertTrue(self.archived_semester.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+
+    def test_get_current__returns_nothing(self):
+        """There is no current semester, and the queryset form is empty (not one row of None)."""
+        self.assertIsNone(Semester.objects.get_current())
+        self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
+
+    def test_get_current__ignores_a_pointer_at_a_semester_that_is_not_open(self):
+        """A config pointing at an upcoming semester still means no current semester: the
+        pointer alone doesn't make a semester the one students are in, and the deck must
+        agree with has_no_open_semester() about that."""
+        config = SiteConfig.get()
+        config.active_semester = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+        self.assertIsNone(Semester.objects.get_current())
+        self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
+
+    def test_complete_active_semester__will_not_archive_a_semester_that_is_not_open(self):
+        """An upcoming semester has no final marks to record, so archiving refuses rather
+        than skipping it straight to the terminal stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config = SiteConfig.get()
+        config.active_semester = upcoming
+        config.save()
+
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+        upcoming.refresh_from_db()
+        self.assertTrue(upcoming.is_upcoming)
+
+    def test_current_courses__is_empty(self):
+        """Nobody is registered in a current course, so a student has none."""
+        self.assertFalse(CourseStudent.objects.current_courses(self.student).exists())
+        self.assertIsNone(CourseStudent.objects.current_course(self.student))
+
+    def test_all_users_for_active_semester__is_empty(self):
+        """No user is in the active semester, so staff lists and task recipients come back
+        empty instead of picking up registrations whose semester was deleted."""
+        orphaned = baker.make(CourseStudent, user=baker.make(User), semester=None)
+
+        users = CourseStudent.objects.all_users_for_active_semester()
+
+        self.assertFalse(users.exists())
+        self.assertNotIn(orphaned.user, users)
+
+    def test_all_for_user_not_semester__returns_every_registration(self):
+        """With none open, every registration the student has is in a past semester."""
+        past = CourseStudent.objects.all_for_user_not_semester(self.student, None)
+
+        self.assertQuerySetEqual(past, [self.registration])
+        self.assertTrue(self.student.profile.has_past_courses)
+
+    def test_reset_students_xp_cached__still_zeroes_the_archived_semesters_students(self):
+        """Archiving clears the active semester pointer, so the XP reset works off the
+        semester's own registrations: its students' cached XP still gets zeroed."""
+        self.student.profile.xp_cached = 100
+        self.student.profile.save()
+
+        self.archived_semester.reset_students_xp_cached()
+
+        self.student.profile.refresh_from_db()
+        self.assertEqual(self.student.profile.xp_cached, 0)
 
 
 class CourseModelTest(ByteDeckTenantTestCase):

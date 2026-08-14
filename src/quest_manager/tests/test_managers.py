@@ -704,6 +704,41 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.all()
         self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
 
+    def test_for_teacher_only__ignores_a_pointer_at_a_semester_that_is_not_open(self):
+        """A pointer left on a semester that isn't open means no open semester, so nobody has a
+        current teacher and the block-based half of the filter drops out."""
+        semester = baker.make(Semester)
+        SiteConfig.get().set_active_semester(semester.id)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=semester)
+        block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
+
+        semester.status = Semester.Status.UPCOMING
+        semester.save()
+
+        self.assertNotIn(block_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+
+    def test_for_teacher_only__no_open_semester_keeps_only_notify_submissions(self):
+        """With no open semester nobody has a current teacher, so a teacher's queue holds only
+        the quests they asked to be notified about, not students whose registration has no
+        semester left."""
+        semester = baker.make(Semester)
+        SiteConfig.get().set_active_semester(semester.id)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        # a registration with no semester, as deleting a semester leaves behind
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=None)
+        block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
+        notify_sub = baker.make(QuestSubmission, semester=semester, quest__specific_teacher_to_notify=self.teacher)
+
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        qs = QuestSubmission.objects.all().for_teacher_only(self.teacher)
+
+        self.assertQuerySetEqual(qs, [notify_sub])
+        self.assertNotIn(block_sub, qs)
+
     def test_for_teachers_only__with_deleted_quest(self):
         """for_teachers_only QuestSubmissions should be deleted for that quest if it is deleted"""
 
@@ -747,6 +782,40 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         """get_queryset with active_semester_only limits results to the active semester's submissions."""
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
         self.assertQuerySetEqual(qs, [self.sub1])
+
+    def test_get_queryset__active_semester_only_is_empty_with_no_open_semester(self):
+        """Between semesters nothing was earned "this semester", so the semester-scoped
+        queryset is empty instead of matching submissions whose semester was deleted."""
+        orphaned = baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=False, semester=None)
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
+
+        self.assertFalse(qs.exists())
+        self.assertNotIn(orphaned, qs)
+
+    def test_create_submission__is_not_stamped_when_no_semester_is_open(self):
+        """A quest started between semesters belongs to no semester, so its XP counts toward
+        none. See #2413: starting a quest at all in that state is the open question."""
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
+
+        self.assertIsNone(submission.semester_id)
+
+    def test_all_completed_past__returns_every_semester_when_none_is_open(self):
+        """With no open semester every completed submission is in a past semester, so the
+        student's past-submissions page still lists them."""
+        self.sub1.mark_completed()
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
+
+        self.assertIn(self.sub1, QuestSubmission.objects.all_completed_past(self.sub1.user))
 
     def test_get_queryset__includes_archived_and_unpublished(self):
         """get_queryset returns every submission when archived and unpublished filters are disabled."""

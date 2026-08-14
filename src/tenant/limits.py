@@ -56,9 +56,10 @@ def can_add_current_student(user):
         return True
 
     CourseStudent = apps.get_model('courses', 'CourseStudent')
-    already_current = CourseStudent.objects.filter(
-        user=user, active=True, semester=SiteConfig.get().active_semester
-    ).exists()
+    # all_for_user_semester() is empty when no semester is open, so nobody holds a seat then
+    already_current = CourseStudent.objects.all_for_user_semester(
+        user, SiteConfig.get().open_semester
+    ).get_active().exists()
     if already_current:
         return True
 

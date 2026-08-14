@@ -13,10 +13,17 @@
 {% block content %}
 <p>This page is visible to staff only.</p>
 
-<h3>Current Active Semester: {{ config.active_semester }}</h3>
+{% if config.open_semester %}
+<h3>Current Active Semester: {{ config.open_semester }}</h3>
 
 <p>When students join a course it will be connected to the active semester.
   When a semester is over, archive it to record final marks and free up your students' seats.</p>
+{% else %}
+<h3>No semester is open</h3>
+
+<p>Students can't join a course or earn XP between semesters. Activate a semester below to start
+  the next one, or create a new one first.</p>
+{% endif %}
 <p>The first and last day of the semester are only relevant if you are using the
   <a href="{% url 'courses:my_marks' %}">mark calculations</a> page, activated
   with the "Use mark percentages" setting in your
@@ -38,7 +45,7 @@
   </thead>
   <tbody>
     {% for object in object_list %}
-    <tr {% if object == config.active_semester %}class="success" title="This is your currently active semester."{% endif %}>
+    <tr {% if object == config.open_semester %}class="success" title="This is your currently active semester."{% endif %}>
       <td>{{ object }}</td>
       <td>{{ object.first_day }}</td>
       <td>{{ object.last_day }}</td>
@@ -46,9 +53,9 @@
       <td>{{ object.excludeddate_set.count }}</td>
       <td>{{ object.coursestudent_set.count }}</td>
       <td>
-        {% if object.closed %}
+        {% if object.is_archived %}
         <span class="label label-default">Archived</span>
-        {% elif object == config.active_semester %}
+        {% elif object == config.open_semester %}
           {% if object.has_ended %}
           <span class="label label-success" title="This semester's last day has passed. Archive it to record final marks and free up student seats.">Active - ended</span>
           {% else %}
@@ -59,18 +66,18 @@
         {% endif %}
       </td>
       <td>
-        {% if not object.closed %}
+        {% if not object.is_archived %}
         <a class="btn btn-warning" href="{% url 'courses:semester_update' object.id %}" role="button" title="Edit this semester">
           <i class="fa fa-edit"></i>
         </a>
         {% endif %}
-        {% if not object.closed and object == config.active_semester %}
+        {% if not object.is_archived and object == config.open_semester %}
         <a class="btn btn-danger" href="{% url 'courses:semester_archive' %}" role="button"
           title="Archive this semester: record all students' final XP and free up their seats.">
           <i class="fa fa-archive"></i>
         </a>
         {% endif %}
-        {% if not object.closed and object != config.active_semester %}
+        {% if not object.is_archived and object != config.open_semester %}
         <form class="preview-action-form" action="{% url 'courses:semester_activate' object.id %}" method="post">{% csrf_token %}
           <button type="submit" class="btn btn-success" title="Activate this semester">
             <i class="fa fa-calendar-check-o"></i>
