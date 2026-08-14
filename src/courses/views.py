@@ -30,6 +30,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
+from django.db import transaction
 from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
@@ -477,8 +478,68 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+class RefuseSemesterMixin:
+    """Refuse GET and POST alike when the semester they target is off limits.
+
+    Subclasses implement refusal_message(), returning the message to show, or None to let
+    the request through. The check lives in the handlers rather than in dispatch() on
+    purpose: a dispatch() override runs *before* NonPublicOnlyViewMixin's, so looking the
+    semester up there would query a tenant-only table on the public schema instead of
+    letting that mixin raise its 404.
+    """
+
+    def refusal_message(self):
+        """The reason this semester can't be acted on, or None when it can.
+
+        Returns:
+            str or None: the error message to show the user, or None to allow the request.
+        """
+        raise NotImplementedError
+
+    def _refuse(self, request):
+        """Turn a refusal into a redirect, or return None to let the handler run.
+
+        Args:
+            request: the request being served, to attach the message to.
+
+        Returns:
+            HttpResponse or None: a redirect to the semester list when refused.
+        """
+        message = self.refusal_message()
+        if message is None:
+            return None
+        messages.error(request, message)
+        return redirect('courses:semester_list')
+
+    def get(self, request, *args, **kwargs):
+        """Refuse the semester or render the page.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        """Refuse the semester or perform the action.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().post(request, *args, **kwargs)
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+class SemesterDelete(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     """Staff-only confirm-and-delete view for a Semester.
 
     Two semesters are off limits, and both are refused for GET and POST alike (the delete
@@ -496,26 +557,25 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
     ARCHIVED_SEMESTER_ERROR = "An archived semester can't be deleted: it holds your students' final marks."
 
-    def dispatch(self, request, *args, **kwargs):
-        """Refuse to serve the view at all (GET or POST) for the active or an archived semester.
+    def refusal_message(self):
+        """Whether this semester is one of the two that can't be deleted.
 
         Returns:
-            HttpResponse: a redirect to the semester list with an error message when the
-            target can't be deleted; otherwise the normal DeleteView response.
+            str or None: the error message when the target is archived or is the active
+            semester, otherwise None.
         """
-        if self.get_object().is_archived:
-            messages.error(request, self.ARCHIVED_SEMESTER_ERROR)
-            return redirect('courses:semester_list')
+        semester = self.get_object()
+        if semester.is_archived:
+            return self.ARCHIVED_SEMESTER_ERROR
         # the raw pointer, not open_semester: PROTECT blocks deleting whatever active_semester
         # references, whatever its status, so this check has to match the constraint
-        if self.get_object() == SiteConfig.get().active_semester:
-            messages.error(request, self.ACTIVE_SEMESTER_ERROR)
-            return redirect('courses:semester_list')
-        return super().dispatch(request, *args, **kwargs)
+        if semester == SiteConfig.get().active_semester:
+            return self.ACTIVE_SEMESTER_ERROR
+        return None
 
     def form_valid(self, form):
         """Delete the semester, converting a ProtectedError from the delete itself into the
-        same redirect + error: the dispatch() pre-check can race a concurrent activation
+        same redirect + error: the refusal_message() pre-check can race a concurrent activation
         (another request making this semester active between the check and the delete).
         The success message is added here, after the delete succeeds, because Django calls
         get_success_url() before deleting.
@@ -612,10 +672,51 @@ class SemesterCreate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+class SemesterUpdate(RefuseSemesterMixin, SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    """Staff-only edit view for a Semester.
+
+    An archived semester is refused: its dates and excluded days are what its students' final
+    marks were calculated from, so editing them would rewrite a finished record. The list hides
+    the edit button for archived semesters, but the URL is still reachable directly.
+    """
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
+
+    ARCHIVED_SEMESTER_ERROR = ("An archived semester can't be edited: its dates are what your students' "
+                               "final marks were calculated from.")
+
+    def refusal_message(self):
+        """Whether this semester is archived, and so can't be edited.
+
+        Returns:
+            str or None: the error message when the target is archived, otherwise None.
+        """
+        return self.ARCHIVED_SEMESTER_ERROR if self.get_object().is_archived else None
+
+    def form_valid(self, form, formset):
+        """Save the semester and its excluded dates, unless it was archived in the meantime.
+
+        The form holds the semester as it was when the page was loaded, so saving it writes
+        every field back, including a status that is no longer current. Re-reading under a row
+        lock closes that window: an archive committing first is seen here (and refused), and
+        one arriving later waits for this save rather than being undone by it.
+
+        Args:
+            form: the validated SemesterForm.
+            formset: the validated ExcludedDateFormset.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with an error message when the
+            semester was archived while this edit was open.
+        """
+        with transaction.atomic():
+            if Semester.objects.select_for_update().filter(
+                pk=self.object.pk, status=Semester.Status.ARCHIVED,
+            ).exists():
+                messages.error(self.request, self.ARCHIVED_SEMESTER_ERROR)
+                return redirect('courses:semester_list')
+            return super().form_valid(form, formset)
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Semester'
