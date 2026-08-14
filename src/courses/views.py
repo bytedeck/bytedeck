@@ -626,13 +626,17 @@ class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     http_method_names = ['post']
 
     def post(self, request, *args, **kwargs):
-        """Point SiteConfig.active_semester at the semester whose pk is in the URL.
+        """Start the semester whose pk is in the URL: open it and point
+        SiteConfig.active_semester at it, so students can join a course in it.
 
         Returns:
             HttpResponse: a redirect to the semester list (404 if the pk doesn't exist).
         """
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
+        if semester.is_upcoming:
+            semester.status = Semester.Status.OPEN
+            semester.save()
         siteconfig = SiteConfig.get()
         siteconfig.active_semester = semester
         siteconfig.save()
@@ -746,7 +750,7 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
         """
         sem = Semester.objects.complete_active_semester()
         semester_warnings = {
-            Semester.CLOSED: 'Semester is already archived, no action taken.',
+            Semester.ALREADY_ARCHIVED: 'Semester is already archived, no action taken.',
             Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. "
                                               "Can't archive the semester until they are approved or returned.",
             Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't archive the semester until it is fixed.",

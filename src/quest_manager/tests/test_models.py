@@ -697,7 +697,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         """
         past_semester = baker.make(
             Semester, name="Past", first_day=datetime.date(2020, 1, 1),
-            last_day=datetime.date(2020, 6, 1), closed=True,
+            last_day=datetime.date(2020, 6, 1), status=Semester.Status.ARCHIVED,
         )
         active_semester = SiteConfig.get().active_semester
         self.assertNotEqual(past_semester, active_semester)

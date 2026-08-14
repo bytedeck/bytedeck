@@ -151,13 +151,13 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
-    def test_complete_active_semester__returns_closed_when_already_closed(self):
-        """Trying to close an already-closed semester short-circuits with the CLOSED sentinel."""
+    def test_complete_active_semester__returns_sentinel_when_already_archived(self):
+        """Trying to archive an already-archived semester short-circuits with the sentinel."""
         active_sem = Semester.objects.get_current()
-        active_sem.closed = True
+        active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.CLOSED)
+        self.assertEqual(Semester.objects.complete_active_semester(), Semester.ALREADY_ARCHIVED)
 
     def test_complete_active_semester__returns_awaiting_approval_with_pending_submissions(self):
         """A semester can't be closed while quests are still awaiting approval."""
@@ -183,7 +183,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
             result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
 
         self.assertEqual(result, SiteConfig.get().active_semester)
-        self.assertTrue(result.closed)
+        self.assertTrue(result.is_archived)
         registration.refresh_from_db()
         self.assertEqual(registration.final_xp, 0)
         self.assertFalse(registration.active)
@@ -234,7 +234,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         self.assertTrue(fine_registration.active)
         self.assertIsNone(fine_registration.final_xp)
         active_semester.refresh_from_db()
-        self.assertFalse(active_semester.closed)
+        self.assertFalse(active_semester.is_archived)
 
 
 class SemesterModelTest(ByteDeckTenantTestCase):
@@ -280,29 +280,29 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         self.assertEqual(semester.num_days(), 0)
         self.assertEqual(semester.num_days(upto_today=True), 0)
 
-    def test_is_open__within_and_outside_dates(self):
-        """is_open() is True on and between the first and last day, and False outside them."""
+    def test_is_within_dates__within_and_outside_dates(self):
+        """is_within_dates() is True on and between the first and last day, and False outside them."""
         # before semester starts: False
         before_start = self.semester_start - timedelta(days=1)
         with freeze_time(before_start, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # after semester ends: False
         after_end = self.semester_end + timedelta(days=1)
         with freeze_time(after_end, tz_offset=0):
-            self.assertFalse(self.semester.is_open())
+            self.assertFalse(self.semester.is_within_dates())
 
         # during semester: True
         during = self.semester_start + timedelta(days=1)
         with freeze_time(during, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # first day: True
         with freeze_time(self.semester_start, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
         # last day: True
         with freeze_time(self.semester_end, tz_offset=0):
-            self.assertTrue(self.semester.is_open())
+            self.assertTrue(self.semester.is_within_dates())
 
         # Timezone problems?
 
@@ -318,24 +318,47 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         dateless_semester = baker.make(Semester, name='dateless', first_day=None, last_day=None)
         self.assertFalse(dateless_semester.has_ended())
 
-    def test_active_by_date__true_inside_padded_window_false_outside(self):
-        """active_by_date() is True from 20 days before the first day to 5 days after the last day,
-        a padded window wider than is_open()."""
-        # comfortably inside the semester: True
-        with freeze_time(self.today_fake, tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
+    def test_status_properties__match_the_lifecycle_stage(self):
+        """Exactly one of is_upcoming/is_open/is_archived is True at each stage of the
+        lifecycle, and a semester defaults to upcoming until it is started."""
+        semester = baker.make(Semester)
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (True, False, False)
+        )
 
-        # within the leading 20-day / trailing 5-day padding: still True
-        with freeze_time(self.semester_start - timedelta(days=10), tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
-        with freeze_time(self.semester_end + timedelta(days=4), tz_offset=0):
-            self.assertTrue(self.semester.active_by_date())
+        semester.status = Semester.Status.OPEN
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, True, False)
+        )
 
-        # outside the padded window: False
-        with freeze_time(self.semester_start - timedelta(days=30), tz_offset=0):
-            self.assertFalse(self.semester.active_by_date())
-        with freeze_time(self.semester_end + timedelta(days=10), tz_offset=0):
-            self.assertFalse(self.semester.active_by_date())
+        semester.status = Semester.Status.ARCHIVED
+        self.assertEqual(
+            (semester.is_upcoming, semester.is_open, semester.is_archived), (False, False, True)
+        )
+
+    def test_status_properties__is_open_ignores_the_dates(self):
+        """is_open is the lifecycle status, not a date check: a semester whose last day has
+        passed stays open until it is archived (that gap is what has_ended() flags)."""
+        ended = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=date.today() - timedelta(days=100), last_day=date.today() - timedelta(days=10),
+        )
+
+        self.assertTrue(ended.is_open)
+        self.assertFalse(ended.is_within_dates())
+        self.assertTrue(ended.has_ended())
+
+    def test_queryset_helpers__filter_by_lifecycle_stage(self):
+        """The queryset helpers select semesters by lifecycle stage."""
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        open_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assertIn(upcoming, Semester.objects.upcoming())
+        self.assertIn(open_semester, Semester.objects.open())
+        self.assertIn(archived, Semester.objects.archived())
+        self.assertNotIn(archived, Semester.objects.open())
+        self.assertNotIn(upcoming, Semester.objects.archived())
 
     def test_num_days__excludes_weekends_and_excluded_dates(self):
         """The number of classes in the semester, from start to end date excluding weekends and excluded dates
