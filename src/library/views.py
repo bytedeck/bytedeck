@@ -170,6 +170,26 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         return self.request.GET.get('q', '').strip()
 
+    def get_page_number(self):
+        """The page the user asked for, with anything below the first page treated as the first.
+
+        `Paginator.get_page()` maps an out-of-range number to the *last* page, which is the
+        right answer for a stale link to page 40 of a Library that has shrunk to 3 pages,
+        and the wrong one for `?page=0` or `?page=-1`: those aren't a request for the end of
+        the list, they're a number that isn't a page at all. Clamping them here keeps the
+        useful half of that behaviour and drops the surprising half.
+
+        Returns:
+            int | str: the requested page, never below 1. Non-numeric input is passed
+            through untouched, for `get_page()` to turn into the first page.
+        """
+        requested = self.request.GET.get('page')
+
+        try:
+            return max(int(requested), 1)
+        except (TypeError, ValueError):
+            return requested
+
     def get_library_quests(self, search_term):
         """The active Library quests to list, narrowed by the search term.
 
@@ -241,7 +261,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             paginator = Paginator(quests, self.paginate_by)
             # get_page (rather than page) turns a junk or out-of-range ?page= into the
             # nearest real page instead of raising
-            page = paginator.get_page(self.request.GET.get('page'))
+            page = paginator.get_page(self.get_page_number())
             # Force evaluation inside the library context: the template renders this after
             # the schema has switched back to the caller's own deck.
             page_quests = list(page.object_list)

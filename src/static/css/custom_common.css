@@ -1294,3 +1294,13 @@ table[data-toggle="table"].bt-reveal {
 .list-search-form .form-control {
     min-width: 320px;
 }
+/* On a phone that minimum is wider than the screen once the search and clear buttons
+   are added, which pushes the page into a horizontal scroll, so let it shrink there. */
+@media (max-width: 480px) {
+    .list-search-form .input-group {
+        width: 100%;
+    }
+    .list-search-form .form-control {
+        min-width: 0;
+    }
+}

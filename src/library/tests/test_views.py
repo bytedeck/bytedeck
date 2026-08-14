@@ -1238,6 +1238,29 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.context['page_obj'].number, 1)
 
+    def test_library_overview__quests_tab_page_below_one_shows_the_first_page(self):
+        """`?page=0` and `?page=-1` land on the first page, not the last.
+
+        Django's `get_page()` treats any out-of-range number as "the last page", which is
+        right for a stale link to a page that no longer exists and wrong for a number that
+        was never a page: nobody typing 0 or -1 is asking for the end of the list.
+        """
+        page_size = LibraryQuestListView.paginate_by
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(page_size):
+                baker.make(Quest, name=f'Clamped page quest {i}', published=True)
+
+        self.client.force_login(self.test_teacher)
+
+        for bad_page in ('0', '-1'):
+            with self.subTest(page=bad_page):
+                response = self.client.get(reverse('library:quest_list'), {'page': bad_page})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['page_obj'].number, 1)
+                self.assertGreater(response.context['page_obj'].paginator.num_pages, 1)
+
     def test_library_overview__quests_tab_search_matches_name_campaign_and_tag(self):
         """Searching covers the whole Library, and matches a quest's name, campaign or tag.
 
