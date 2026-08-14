@@ -243,6 +243,9 @@ class QuestionSubmissionForm(forms.ModelForm):
         advertised limit still holds from the student's point of view. Capping the escaped
         length instead would reject <=200-character answers the browser accepted (e.g. one
         with a few ``<``/``&``), which would be a confusing client/server mismatch (#2170).
+
+        Returns:
+            str: the answer with dangerous HTML removed, ready to store and render with |safe.
         """
         return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 

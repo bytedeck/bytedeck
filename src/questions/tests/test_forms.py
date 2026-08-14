@@ -178,7 +178,11 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": expanding}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
-        stored = form.cleaned_data["response_text"]
+        # assert against the value that actually reaches the database, since the claim being
+        # tested is about the *stored* answer (response_text is a TextField, so it fits)
+        form.save()
+        self.short_answer.refresh_from_db()
+        stored = self.short_answer.response_text
         self.assertGreater(len(stored), 200)
         self.assertEqual(html.unescape(stored), expanding)
 
