@@ -1066,12 +1066,16 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
-        active_semester_pk = SiteConfig.get().open_semester_id
+        from courses.models import CourseStudent  # locally, since courses imports this module
+
+        # the student's own semester, not the deck's: with more than one semester open the
+        # deck can't say which one this student earns XP in, but their registration can
+        semester = CourseStudent.objects.current_semester(user)
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
             ordinal=ordinal,
-            semester_id=active_semester_pk,
+            semester=semester,
         )
         try:
             # Wrapped in atomic() so a constraint violation doesn't break the
@@ -1092,7 +1096,7 @@ class QuestSubmissionManager(models.Manager):
             existing_submission = self.model._base_manager.filter(
                 user=user,
                 quest=quest,
-                semester_id=active_semester_pk,
+                semester=semester,
                 is_completed=False,
                 first_time_completed__isnull=True,
             ).first()
@@ -1250,12 +1254,14 @@ class QuestSubmission(models.Model):
         self.is_approved = False
         self.do_not_grant_xp = False
         self.time_returned = timezone.now()
-        # Re-attach the submission to the current semester (issue #1231). A quest completed in a past
-        # (now closed) semester and returned for a redo would otherwise stay linked to the old semester,
-        # so it never appeared in the student's current in-progress list and, once re-approved, granted
-        # its XP in the closed semester. Returning always happens "now", so the redo belongs to the
-        # active semester. When the submission is already in the active semester this is a no-op.
-        self.semester = SiteConfig.get().open_semester
+        # Re-attach the submission to the semester the student is in now (issue #1231). A quest
+        # completed in a past (now archived) semester and returned for a redo would otherwise stay
+        # linked to the old semester, so it never appeared in the student's current in-progress
+        # list and, once re-approved, granted its XP in the archived semester. Returning always
+        # happens "now", so the redo belongs to whatever semester the student is in at this point.
+        from courses.models import CourseStudent  # locally, since courses imports this module
+
+        self.semester = CourseStudent.objects.current_semester(self.user)
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP
 

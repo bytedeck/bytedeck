@@ -714,6 +714,25 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.semester, active_semester)
 
+    def test_mark_returned__moves_submission_to_the_students_own_semester(self):
+        """The redo lands in the semester the student is in, not the one the deck points at
+        (issue #2157 Phase 3): a returned quest is re-attached from their registration."""
+        from courses.models import Course, CourseStudent
+
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+        sub = baker.make(
+            QuestSubmission, user=self.student,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, other_semester)
+        self.assertNotEqual(sub.semester, SiteConfig.get().open_semester)
+
     def test_mark_returned__does_not_stamp_a_semester_that_is_not_open(self):
         """Returning always happens "now", so with no semester open the submission is left
         belonging to none rather than being stamped with a semester students aren't in."""

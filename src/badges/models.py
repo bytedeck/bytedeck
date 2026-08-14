@@ -450,9 +450,14 @@ class BadgeAssertionManager(models.Manager):
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
-            # None when no semester is open: the badge is still granted, it just isn't
-            # counted toward any semester's XP
-            active_semester = SiteConfig.get().open_semester_id
+            from courses.models import CourseStudent
+
+            # the recipient's own semester, so a badge counts toward the semester that
+            # student is in rather than whichever one the deck points at. None when they
+            # are in none: the badge is still granted, it just isn't counted toward any
+            # semester's XP
+            semester = CourseStudent.objects.current_semester(user)
+            active_semester = semester.pk if semester is not None else None
 
         new_assertion = BadgeAssertion(
             badge=badge,

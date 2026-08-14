@@ -6,7 +6,7 @@ from django.utils.timezone import localtime
 from freezegun import freeze_time
 from model_bakery import baker
 
-from courses.models import Semester
+from courses.models import Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission, Category
 from siteconfig.models import SiteConfig
@@ -806,6 +806,25 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
 
         self.assertIsNone(submission.semester_id)
+
+    def test_create_submission__is_stamped_with_the_students_own_semester(self):
+        """A quest is stamped with the semester the student is registered in, not the one the
+        deck points at (issue #2157 Phase 3). The two are the same until several semesters can
+        be open at once, so the second one here is built directly to tell them apart."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+
+        submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
+
+        self.assertEqual(submission.semester_id, other_semester.id)
+        self.assertNotEqual(submission.semester_id, SiteConfig.get().open_semester_id)
+
+    def test_create_submission__unregistered_user_still_uses_the_deck_semester(self):
+        """A teacher trying out a quest has no registration to read a semester from, so their
+        submission keeps landing in the deck's open semester as it always did."""
+        submission = QuestSubmission.objects.create_submission(self.teacher, baker.make(Quest, published=True))
+
+        self.assertEqual(submission.semester_id, SiteConfig.get().open_semester_id)
 
     def test_all_completed_past__returns_every_semester_when_none_is_open(self):
         """With no open semester every completed submission is in a past semester, so the

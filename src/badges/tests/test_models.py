@@ -391,6 +391,22 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         )
         self.assertEqual(new_assertion.semester_id, explicit_semester.id)
 
+    def test_create_assertion__is_stamped_with_the_recipients_own_semester(self):
+        """A badge counts toward the semester the student is registered in rather than the one
+        the deck points at (issue #2157 Phase 3), so granting it to a student in another open
+        semester adds XP where that student is actually earning it."""
+        from courses.models import Course, CourseStudent
+
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher
+        )
+
+        self.assertEqual(new_assertion.semester_id, other_semester.id)
+        self.assertNotEqual(new_assertion.semester_id, SiteConfig.get().open_semester_id)
+
     def test_create_assertion__no_open_semester_grants_an_unstamped_assertion(self):
         """Staff can still grant a badge between semesters (issue #1177). The assertion isn't
         stamped with a semester, so it doesn't count toward the next one's XP."""
