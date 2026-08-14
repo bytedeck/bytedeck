@@ -25,6 +25,15 @@ class Command(BaseCommand):
             '\nThis should only be run on a fresh db')
 
     def setup_shared_library(self):
+        """Create the Shared Library deck, give it its domain, and label its quests.
+
+        The Library is the tenant whose schema holds the cross-deck library of quests and
+        campaigns. This gets (or creates) that tenant, makes `library.<ROOT_DOMAIN>` its one
+        and only domain, and prefixes the names of any quests already in its schema with
+        `[Shared Library] - ` so they are recognisable wherever they are listed.
+
+        Takes no arguments and returns nothing; it writes its progress to the command's stdout.
+        """
         self.stdout.write('\n** Setting up shared library...')
         # Look up by the unique schema_name only (name is set on create). Matching
         # on name too would miss an existing 'library' tenant created with a
@@ -35,11 +44,18 @@ class Command(BaseCommand):
             defaults={'name': 'Shared Library'},
         )
 
-        if not created and not library_tenant.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists():
-            library_tenant.domains.create(
-                domain='library.' + settings.ROOT_DOMAIN,
-                is_primary=True
-            )
+        # Set the domain whether or not the tenant was just created. A new tenant already has
+        # one, because the post_save signal derives a domain from the tenant's *name*, and
+        # 'Shared Library' contains a space, so that domain can never be reached: on a fresh
+        # database the Library deck was unreachable at library.<ROOT_DOMAIN> until initdb was
+        # run a second time (#2382).
+        library_domain = 'library.' + settings.ROOT_DOMAIN
+        library_tenant.domains.exclude(domain=library_domain).delete()
+        domain, _ = library_tenant.domains.get_or_create(domain=library_domain)
+        # A domain that already existed may not be the primary one (the signal-derived domain
+        # was), and a tenant with no primary domain has no root URL, so claim it either way.
+        domain.is_primary = True
+        domain.save()
         from django.db import models
         from django.db.models.functions import Concat
         from quest_manager.models import Quest
