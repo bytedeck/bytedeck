@@ -184,7 +184,12 @@ class TagCRUDViewTests(ByteDeckTenantTestCase):
                 is_approved=True,
                 semester=SiteConfig().get().active_semester,
             )
-            baker.make('badges.badgeassertion', badge=badge_set[0], user=self.test_student)
+            baker.make(
+                'badges.badgeassertion', badge=badge_set[0], user=self.test_student,
+                # as create_assertion() does: the field is nullable, so an unstamped
+                # assertion belongs to no semester and wouldn't count toward this one
+                semester=SiteConfig().get().active_semester,
+            )
 
         self.client.force_login(self.test_student)
         response = self.client.get(reverse('tags:detail_student', args=[self.tag.pk, self.test_student.pk]))

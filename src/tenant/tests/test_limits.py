@@ -7,6 +7,7 @@ from django.utils.timezone import localdate
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from tenant.limits import can_add_current_student
@@ -44,6 +45,17 @@ class CanAddCurrentStudentTest(ByteDeckTenantTestCase):
         """A student who already counts (registered this semester) may register again
         (e.g. a second course) even with the deck at its cap."""
         occupant = self.fill_the_single_seat()
+        self.assertTrue(can_add_current_student(occupant))
+
+    def test_can_add_current_student__no_open_semester_frees_the_seats(self):
+        """Archiving the semester frees every seat (that is what it is for), so the deck is
+        no longer at its cap even though the registrations are still there."""
+        occupant = self.fill_the_single_seat()
+        self.assertFalse(can_add_current_student(baker.make(User)))
+
+        Semester.objects.complete_active_semester()
+
+        self.assertTrue(can_add_current_student(baker.make(User)))
         self.assertTrue(can_add_current_student(occupant))
 
     def test_can_add_current_student__staff_superusers_and_test_accounts_never_blocked(self):

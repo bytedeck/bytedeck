@@ -774,7 +774,8 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         self.assertIn('closed semester', summary)
         self.assertIn('returned 1 awaiting-approval submission(s)', summary)
 
-        self.assertTrue(SiteConfig.get().active_semester.is_archived)
+        # the close archives the semester and leaves the deck with no open one
+        self.assertIsNone(SiteConfig.get().active_semester)
         self.assertEqual(self.tenant.get_active_user_count(), 0)
         # the returned submission was then swept by the close's normal
         # in-progress cleanup: nothing stays stuck in a teacher's queue
@@ -796,7 +797,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         sem.status = Semester.Status.ARCHIVED
         sem.save()
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
-        self.assertEqual(self.close(), 'semester was already archived')
+        self.assertEqual(self.close(), 'no open semester to close')
         self.assertEqual(self.close(), 'semester close already handled this episode')
 
     def test_close__clamps_negative_xp_to_zero(self):
