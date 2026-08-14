@@ -4,11 +4,11 @@ from uuid import uuid4
 import tablib
 
 from django_tenants.utils import schema_context
-from quest_manager.admin import QuestResource
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
+from .resources import LibraryQuestResource
 from .utils import library_schema_context, get_library_conflicting_quests
 
 
@@ -48,7 +48,7 @@ def clone_quests_into_library(*, source_schema, quests):
     Library under the same `import_id`: those get a new copy rather than
     overwriting what is there.
 
-    The copies travel through `QuestResource`, the same serialization the rest of
+    The copies travel through `LibraryQuestResource`, the same serialization the rest of
     the export uses, with the `import_id` and `name` columns rewritten per row.
     Going through the resource is what keeps this safe: `Meta.exclude` drops
     `editor`, `specific_teacher_to_notify` and `common_data`, which are primary
@@ -68,7 +68,7 @@ def clone_quests_into_library(*, source_schema, quests):
         return None
 
     with schema_context(source_schema):
-        export_data = QuestResource().export(quests)
+        export_data = LibraryQuestResource().export(quests)
 
     with library_schema_context():
         # Archived quests count: the unique constraint does not care that the
@@ -91,7 +91,7 @@ def clone_quests_into_library(*, source_schema, quests):
             clone_data.append([row[header] for header in clone_data.headers])
 
         try:
-            return QuestResource().import_data(
+            return LibraryQuestResource().import_data(
                 clone_data,
                 dry_run=False,
                 raise_errors=True,
@@ -127,11 +127,11 @@ def export_quest_to_library(*, source_schema, quest_import_id):
             quest = Quest.objects.get(import_id=quest_import_id)
         except ObjectDoesNotExist as e:
             raise Quest.DoesNotExist(f"Quest with import_id={quest_import_id} not found in schema {source_schema}") from e
-        export_data = QuestResource().export([quest])
+        export_data = LibraryQuestResource().export([quest])
 
     with library_schema_context():
         try:
-            result = QuestResource().import_data(
+            result = LibraryQuestResource().import_data(
                 export_data,
                 dry_run=False,
                 raise_errors=True,
@@ -186,14 +186,14 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
 
         if not quests.exists() and not skip_import_ids:
             raise ValidationError("Cannot export a campaign without any published quests.")
-        export_data = QuestResource().export(quests)
+        export_data = LibraryQuestResource().export(quests)
 
     # Prepare visibility map for library: all quests unpublished
     exported_visibility_map = {str(q.import_id): False for q in quests}
 
     with library_schema_context():
         try:
-            result = QuestResource().import_data(
+            result = LibraryQuestResource().import_data(
                 export_data,
                 dry_run=False,
                 raise_errors=True,

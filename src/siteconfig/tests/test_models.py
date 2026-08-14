@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from redis import exceptions as redis_exceptions
 
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig, get_default_deck_owner, invalidate_siteconfig_cache_signal
 
@@ -43,8 +44,10 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.assertEqual(SiteConfig.objects.count(), 1)
 
     def test_active_semester__created_by_default(self):
-        """If one doesn't exist yet, a semester is created to act as the active semester."""
+        """If one doesn't exist yet, an open semester is created to act as the active semester,
+        so students can join a course in a brand new deck without staff opening one first."""
         self.assertIsNotNone(self.config.active_semester)
+        self.assertEqual(self.config.active_semester.status, Semester.Status.OPEN)
 
     def test_get_absolute_url__returns_update_form_url(self):
         """Provides url to the update form."""

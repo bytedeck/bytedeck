@@ -206,11 +206,14 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
         """
         Populate context with active campaigns from the shared library.
 
+        Args:
+            **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
+
         Returns:
             dict: Template context including:
                 - heading (str): Page title.
                 - tab (str): Active tab identifier.
-                - library_campaigns (QuerySet[Category]): A queryset of active campaigns
+                - library_categories (QuerySet[Category]): A queryset of active campaigns
                     (categories) from the shared library. Each campaign includes at least one
                     quest that is:
                         - published=True
@@ -218,6 +221,8 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
                 - num_campaigns (int): Number of campaigns in the displayed list, used for the UI badge.
                 - num_quests (int): Total number of visible (published and not archived) quests,
                     used for the UI badge in the quest tab.
+                - is_library_view (bool): True, so the campaign table shared with the deck's own
+                    campaign list shows the Library's import action instead of the local ones.
         """
         context = super().get_context_data(**kwargs)
 
@@ -234,6 +239,7 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
             'library_categories': campaigns,
             'num_campaigns': num_campaigns,
             'num_quests': quests_count,
+            'is_library_view': True,
         })
         return context
 
@@ -548,7 +554,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified — "
+            f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
         return redirect('quests:quests')
@@ -685,7 +691,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified — "
+            f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
         return redirect('quests:categories')
