@@ -54,14 +54,16 @@ library_schema_context = functools.partial(schema_context, get_library_schema_na
 
 def get_library_conflicting_quests(local_quests):
     """
-    Given a list of local Quest objects, return any quests in the library
-    that share the same import_id (i.e., conflicts).
+    Given a list of local Quest objects, return the import_ids of any quests in
+    the library that share an import_id with them (i.e., conflicts).
 
     Args:
         local_quests (List[Quest]): Local quests to check.
 
     Returns:
-        list[Quest]: List of conflicting Quest objects from the library.
+        list[UUID]: The import_ids that already exist in the library. Callers use
+            these to tell which of the local quests would collide, so this is a
+            list of ids rather than of the library's Quest objects.
     """
     from quest_manager.models import Quest
     quest_import_ids = [q.import_id for q in local_quests]

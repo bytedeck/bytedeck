@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from redis import exceptions as redis_exceptions
 
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig, get_default_deck_owner, invalidate_siteconfig_cache_signal
 
@@ -43,8 +44,10 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.assertEqual(SiteConfig.objects.count(), 1)
 
     def test_active_semester__created_by_default(self):
-        """If one doesn't exist yet, a semester is created to act as the active semester."""
+        """If one doesn't exist yet, an open semester is created to act as the active semester,
+        so students can join a course in a brand new deck without staff opening one first."""
         self.assertIsNotNone(self.config.active_semester)
+        self.assertEqual(self.config.active_semester.status, Semester.Status.OPEN)
 
     def test_get_absolute_url__returns_update_form_url(self):
         """Provides url to the update form."""
@@ -132,6 +135,58 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.config.set_active_semester(new_semester)
         # make sure it is now the active semester
         self.assertEqual(self.config.active_semester.id, new_semester.id)
+
+    def test_set_active_semester__opens_the_semester(self):
+        """The semester being made active is opened, so students can join a course in it."""
+        new_semester = baker.make('courses.Semester', status=Semester.Status.UPCOMING)
+
+        self.config.set_active_semester(new_semester)
+
+        new_semester.refresh_from_db()
+        self.assertTrue(new_semester.is_open)
+        self.assertFalse(self.config.has_no_open_semester())
+
+    def test_set_active_semester__returns_the_previous_open_semester_to_upcoming(self):
+        """A deck runs one semester at a time, so opening another closes the books on none of
+        them: the previously open semester goes back to Upcoming, not Archived."""
+        previously_open = self.config.active_semester
+        self.assertTrue(previously_open.is_open)
+
+        self.config.set_active_semester(baker.make('courses.Semester'))
+
+        previously_open.refresh_from_db()
+        self.assertTrue(previously_open.is_upcoming)
+        self.assertEqual(Semester.objects.open().count(), 1)
+
+    def test_set_active_semester__accepts_a_semester_id(self):
+        """A semester id can be passed instead of the object (what the semester views hold)."""
+        new_semester = baker.make('courses.Semester')
+
+        self.config.set_active_semester(new_semester.id)
+
+        self.assertEqual(self.config.active_semester, new_semester)
+
+    def test_has_no_open_semester__true_when_there_is_no_active_semester(self):
+        """No active semester at all is the between-semesters state (issue #1177), not an error."""
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__true_when_the_active_semester_is_archived(self):
+        """A config left pointing at an archived semester counts as having none open, so a deck
+        can't get stuck with students unable to join."""
+        semester = self.config.active_semester
+        semester.status = Semester.Status.ARCHIVED
+        semester.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_a_semester_is_open(self):
+        """With an open semester, students can join a course."""
+        self.assertTrue(self.config.active_semester.is_open)
+
+        self.assertFalse(self.config.has_no_open_semester())
 
     def test_get__caches_config(self):
         """SiteConfig should be in cache after get()."""

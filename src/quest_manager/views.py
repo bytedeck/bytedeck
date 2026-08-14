@@ -104,6 +104,22 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return queryset
 
     def get_context_data(self, *args, **kwargs):
+        """Add the tab state and the campaign table's flags to the deck's campaign list.
+
+        Args:
+            *args: positional arguments passed through to `ListView.get_context_data`.
+            **kwargs: keyword arguments passed through to `ListView.get_context_data`.
+
+        Returns:
+            dict: the template context, with
+                - available_tab_active (bool): the Available tab is the one being shown.
+                - inactive_tab_active (bool): the Inactive tab is the one being shown.
+                - can_export (bool): this user may push a campaign to the Shared Library,
+                    so the export action is offered.
+                - is_library_view (bool): False. The campaign table is shared with the
+                    Library's campaign list, and this is the deck's own copy, so it shows
+                    the local actions rather than the Library's import action.
+        """
         context_data = super().get_context_data(*args, **kwargs)
 
         can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
@@ -111,6 +127,9 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
         context_data['can_export'] = can_export
+        # these are the deck's own campaigns, so the shared campaign table shows the
+        # local actions (edit, publish, export, delete) rather than the Library's import action
+        context_data['is_library_view'] = False
 
         return context_data
 
@@ -1105,7 +1124,7 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
-    active_semester = SiteConfig.get().active_semester
+    active_semester = SiteConfig.get().open_semester
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset
@@ -1117,8 +1136,8 @@ def quest_user_status(request, quest_id):
         CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
-        CourseStudent.objects.filter(
-            semester=active_semester, block__current_teacher=request.user
+        CourseStudent.objects.get_queryset().get_semester(active_semester).filter(
+            block__current_teacher=request.user
         ).values_list('user_id', flat=True)
     ) & active_ids
 

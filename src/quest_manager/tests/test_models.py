@@ -697,7 +697,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         """
         past_semester = baker.make(
             Semester, name="Past", first_day=datetime.date(2020, 1, 1),
-            last_day=datetime.date(2020, 6, 1), closed=True,
+            last_day=datetime.date(2020, 6, 1), status=Semester.Status.ARCHIVED,
         )
         active_semester = SiteConfig.get().active_semester
         self.assertNotEqual(past_semester, active_semester)
@@ -713,6 +713,23 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         sub.mark_returned()
         sub.refresh_from_db()
         self.assertEqual(sub.semester, active_semester)
+
+    def test_mark_returned__does_not_stamp_a_semester_that_is_not_open(self):
+        """Returning always happens "now", so with no semester open the submission is left
+        belonging to none rather than being stamped with a semester students aren't in."""
+        config = SiteConfig.get()
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.active_semester = upcoming
+        config.save()
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertIsNone(sub.semester)
 
     def test_mark_returned__keeps_active_semester_submission_on_active_semester(self):
         """Returning a submission already in the active semester leaves it there (issue #1231).
