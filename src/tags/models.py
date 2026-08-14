@@ -74,7 +74,7 @@ def get_badge_assertion_by_tags(user, tags):
 
     return BadgeAssertion.objects.all_for_user(user).filter(
         badge__tags__name__in=list(tags),
-        semester=SiteConfig.get().active_semester,
+        semester=SiteConfig.get().open_semester,
         do_not_grant_xp=False
     ).distinct()
 

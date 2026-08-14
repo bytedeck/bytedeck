@@ -70,7 +70,9 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         profiles_qs = profiles_qs.prefetch_related(
             Prefetch(
                 'user__coursestudent_set',
-                queryset=CourseStudent.objects.filter(semester=SiteConfig.get().active_semester).select_related('course', 'block'),
+                # nothing to prefetch when no semester is open: nobody has a current course
+                queryset=CourseStudent.objects.get_queryset().get_semester(
+                    SiteConfig.get().open_semester).select_related('course', 'block'),
             )
         )
 
