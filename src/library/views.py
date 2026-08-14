@@ -27,6 +27,7 @@ from notifications.signals import notify
 from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
+from .models import ContentOrigin
 from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
@@ -100,6 +101,35 @@ def redirect_awaiting_review(request, content_type, redirect_to):
     return redirect(redirect_to)
 
 
+def record_push_origin(content_type, import_ids, request, source_deck_url):
+    """Record which deck and which user shared this content to the Library (#2377).
+
+    Content travels under CC BY-SA 4.0, which asks for attribution, so the two halves of
+    it (the deck and the person) are stored at push time. They are both already known
+    here; nothing was keeping them.
+
+    Must be called from *within* the library schema context: the origin rows live in the
+    library schema beside the content they describe. Resolve `source_deck_url` on the
+    source deck (`request.tenant.get_root_url()`) before entering that context.
+
+    Args:
+        content_type (str): `ContentOrigin.QUEST` or `ContentOrigin.CAMPAIGN`.
+        import_ids (Iterable[UUID]): the import_ids of the content that was just pushed.
+            A campaign push passes its quests' ids too, so each quest carries its own
+            attribution when it is imported on its own.
+        request (HttpRequest): the current request, for the sharing user and deck name.
+        source_deck_url (str): root URL of the deck the content was shared from.
+    """
+    for import_id in import_ids:
+        ContentOrigin.record(
+            import_id=import_id,
+            content_type=content_type,
+            deck_name=request.tenant.name,
+            deck_url=source_deck_url,
+            shared_by=request.user.username,
+        )
+
+
 def email_library_staff_of_push(content_type, content_name, exported_obj, sharer, source_deck_url):
     """Email active Library staff that freshly pushed content is awaiting review.
 
@@ -170,6 +200,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
                 - num_quests (int): Number of quests in the displayed list, used for the UI badge.
                 - num_campaigns (int): Number of active Campaigns with importable quests,
                     used for the UI badge in the Campaign tab.
+
+        Each listed quest carries an `origin` attribute (a `ContentOrigin` or None), so the
+        list can attribute it to the deck and person who shared it (#2377).
         """
         context = super().get_context_data(**kwargs)
 
@@ -179,6 +212,16 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
             num_quests = len(quests)
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
+
+            # one query for the whole list rather than one per row
+            origins = ContentOrigin.for_content(
+                import_ids=[quest.import_id for quest in quests],
+                content_type=ContentOrigin.QUEST,
+            )
+            for quest in quests:
+                # Attached to the quest so the template can read it beside the quest's own
+                # fields; quests shared before origins were recorded simply have None.
+                quest.origin = origins.get(quest.import_id)
 
         context.update({
             'heading': 'Library',
@@ -317,7 +360,15 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
-        messages.success(request, f"Successfully imported '{link}' to your deck.")
+        # An imported quest arrives as an unpublished draft with no prerequisite, so it is
+        # invisible to students and unreachable on the map. Saying so is the difference
+        # between "imported" and "usable" (#2377).
+        messages.success(
+            request,
+            f"Successfully imported '{link}' to your deck. Two things left to do before "
+            "students can see it: <strong>publish it</strong>, and give it a "
+            "<strong>prerequisite</strong> so it is reachable on the quest map."
+        )
 
         return redirect('quests:drafts')
 
@@ -422,7 +473,15 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
-        messages.success(request, f"Successfully imported '{link}' to your deck.")
+        # As with a single quest: the campaign and its quests arrive unpublished and
+        # unreachable, so the import is only half the job (#2377).
+        messages.success(
+            request,
+            f"Successfully imported '{link}' to your deck. Two things left to do before "
+            "students can see it: <strong>publish the campaign</strong> (which publishes its "
+            "quests), and give its first quest a <strong>prerequisite</strong> so the campaign "
+            "is reachable on the quest map."
+        )
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')
@@ -549,6 +608,8 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
 
             # Email active Library staff so they know there's a quest to review/publish (#1949).
             email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
+
+            record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
 
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
@@ -688,6 +749,16 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             # Email active Library staff so they know there's a campaign to review/publish (#1949).
             email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
 
+            record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
+            # ...and each quest that travelled with it, so a quest imported on its own still
+            # says where it came from
+            record_push_origin(
+                ContentOrigin.QUEST,
+                exported_campaign.quest_set.values_list('import_id', flat=True),
+                request,
+                source_deck_url,
+            )
+
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
             request,
@@ -742,6 +813,9 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
                 - category_total_xp_available (int): Sum of XP from all publsihed quests in the campaign.
                 - category_displayed_quests (list[Quest]): List of quest objects to display.
                 - quest_info (list[dict]): List of dicts with detailed quest info.
+                - origin (ContentOrigin | None): Who shared this campaign and from which deck,
+                    for the attribution the content's licence asks for (#2377). None for
+                    campaigns shared before origins were recorded.
         """
         campaign_import_id = kwargs.get('campaign_import_id')
         context = super().get_context_data(**kwargs)
@@ -766,7 +840,10 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
             else:
                 quest_info = []
 
+            origins = ContentOrigin.for_content(import_ids=[category.import_id], content_type=ContentOrigin.CAMPAIGN)
+
             context.update({
+                'origin': origins.get(category.import_id),
                 'category': category,
                 'category_id': category.pk,
                 'category_campaign_name': category.title,

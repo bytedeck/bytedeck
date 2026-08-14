@@ -44,6 +44,11 @@
           </td>
           <td class="col-sm-5 col-xs-8">{{q.name}}
             {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
+            {% comment %} Attribution: content travels under CC BY-SA, which asks for it (#2377) {% endcomment %}
+            {% if q.origin %}
+              <br><small class="text-muted">Shared by {{ q.origin.shared_by }} of
+                <a href="{{ q.origin.deck_url }}">{{ q.origin.deck_name }}</a></small>
+            {% endif %}
           </td>
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
           <td class="col-sm-2 text-center hidden-xs"><small>{% if q.campaign %}{{ q.campaign }}{% endif %}</small></td>

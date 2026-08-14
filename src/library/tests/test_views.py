@@ -12,6 +12,7 @@ from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
+from library.models import ContentOrigin
 from library.views import shared_library_enabled_view
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import (
@@ -1456,6 +1457,145 @@ class ShareLicenceAgreementTests(LibraryTenantTestCaseMixin):
         ):
             with self.subTest(url=url):
                 self.assertContains(self.client.get(url), 'name="agree_license"')
+
+
+class ContentOriginTests(LibraryTenantTestCaseMixin):
+    """Where shared content came from is recorded on the push, and shown as attribution.
+
+    Content travels under CC BY-SA 4.0, which asks for attribution, and nothing was
+    recording who had shared what (#2377).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a local quest and campaign to share, and the staff user who shares them."""
+        cls.local_quest = baker.make(Quest, name='A quest with an author', published=True, archived=False)
+        cls.local_campaign = baker.make(Category, title='A campaign with an author')
+        cls.campaign_quest = baker.make(Quest, campaign=cls.local_campaign, published=True, archived=False)
+        cls.test_teacher = User.objects.create_user('sharing_teacher', is_staff=True)
+
+    def setUp(self):
+        """Allow staff to export, and log in as one."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+    def test_export_quest_post__records_who_shared_it_and_from_where(self):
+        """Pushing a quest stores the deck and the user, which is what attribution needs."""
+        self.client.post(reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE)
+
+        with library_schema_context():
+            origin = ContentOrigin.objects.get(
+                import_id=self.local_quest.import_id, content_type=ContentOrigin.QUEST
+            )
+
+        self.assertEqual(origin.shared_by, 'sharing_teacher')
+        self.assertEqual(origin.deck_name, self.tenant.name)
+        self.assertIn(self.tenant.name, origin.deck_url)
+
+    def test_export_campaign_post__records_the_campaign_and_each_of_its_quests(self):
+        """A campaign push attributes the campaign and every quest that travelled with it.
+
+        A quest from a shared campaign can be imported on its own, so it needs its own
+        attribution rather than only the campaign's.
+        """
+        self.client.post(reverse('library:export_category', args=[self.local_campaign.import_id]), data=AGREED_LICENCE)
+
+        with library_schema_context():
+            campaign_origin = ContentOrigin.objects.get(
+                import_id=self.local_campaign.import_id, content_type=ContentOrigin.CAMPAIGN
+            )
+            quest_origin = ContentOrigin.objects.get(
+                import_id=self.campaign_quest.import_id, content_type=ContentOrigin.QUEST
+            )
+
+        self.assertEqual(campaign_origin.shared_by, 'sharing_teacher')
+        self.assertEqual(quest_origin.shared_by, 'sharing_teacher')
+        self.assertEqual(quest_origin.deck_name, self.tenant.name)
+
+    def test_library_quest_list__attributes_a_shared_quest(self):
+        """The Library's quest list names who shared each quest and links to their deck."""
+        self.client.post(reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE)
+        with library_schema_context():
+            library_quest = Quest.objects.get(import_id=self.local_quest.import_id)
+            library_quest.published = True
+            library_quest.save()
+
+        response = self.client.get(reverse('library:quest_list'))
+
+        self.assertContains(response, 'Shared by sharing_teacher of')
+        self.assertContains(response, self.tenant.name)
+
+    def test_library_campaign_detail__attributes_a_shared_campaign(self):
+        """The Library's campaign page carries the same attribution."""
+        self.client.post(reverse('library:export_category', args=[self.local_campaign.import_id]), data=AGREED_LICENCE)
+        with library_schema_context():
+            library_campaign = Category.objects.get(import_id=self.local_campaign.import_id)
+            library_campaign.published = True
+            library_campaign.save()
+
+        response = self.client.get(
+            reverse('library:category_detail_view', args=[self.local_campaign.import_id])
+        )
+
+        self.assertContains(response, 'Shared by sharing_teacher of')
+
+    def test_library_quest_list__says_nothing_about_content_with_no_recorded_origin(self):
+        """Content shared before origins were recorded is listed without a false attribution."""
+        with library_schema_context():
+            baker.make(Quest, name='An older library quest', published=True, archived=False)
+
+        response = self.client.get(reverse('library:quest_list'))
+
+        self.assertContains(response, 'An older library quest')
+        self.assertNotContains(response, 'Shared by')
+
+
+class ImportNextStepsTests(LibraryTenantTestCaseMixin):
+    """A successful import says what is left to do, instead of leaving the quest invisible.
+
+    An imported quest is an unpublished orphan: students can't see it and it isn't on the
+    map. Saying so is the difference between "imported" and "usable" (#2377).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Put a published quest and campaign in the Library, and make a teacher to import them."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, title='An importable campaign', published=True)
+            cls.library_campaign_quest = baker.make(
+                Quest, campaign=cls.library_campaign, published=True, archived=False
+            )
+            cls.library_quest = baker.make(Quest, name='An importable quest', published=True, archived=False)
+
+        cls.test_teacher = User.objects.create_user('importing_teacher', is_staff=True)
+
+    def setUp(self):
+        """Log in as the importing teacher."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+    def test_import_quest_post__tells_the_user_to_publish_and_add_a_prerequisite(self):
+        """The quest import message names both remaining steps."""
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True
+        )
+
+        message = str(list(response.context['messages'])[0])
+        self.assertIn('publish it', message)
+        self.assertIn('prerequisite', message)
+
+    def test_import_campaign_post__tells_the_user_to_publish_and_add_a_prerequisite(self):
+        """The campaign import message names both remaining steps."""
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True
+        )
+
+        message = str(list(response.context['messages'])[0])
+        self.assertIn('publish the campaign', message)
+        self.assertIn('prerequisite', message)
 
 
 class LibraryViewsOnPublicSchemaTests(LibraryTenantTestCaseMixin):
