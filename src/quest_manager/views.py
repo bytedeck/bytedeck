@@ -31,7 +31,7 @@ from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import sync_draft_question_submissions
+from questions.utils import save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
@@ -1804,6 +1804,16 @@ def complete(request, submission_id):
         # The main form path should only occur if a student tries to use the quick reply form
         # on a quest that has `xp_can_be_entered_by_student`; re-rendering shows the full form
         # so they can enter XP. The formset path re-renders with each question's errors visible.
+
+        # Keep any file answers that did validate, since the re-rendered file inputs come back
+        # empty and the student would otherwise lose the upload with no warning (#2165).
+        if question_formset and save_draft_file_answers(question_formset, request.FILES):
+            messages.info(
+                request,
+                "Your attached file was saved, so you don't need to choose it again. "
+                "Fix the problems below and submit the quest again.",
+            )
+
         context = {
             "heading": submission.quest.name,
             "submission": submission,
