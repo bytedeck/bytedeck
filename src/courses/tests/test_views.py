@@ -1118,6 +1118,37 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
 
+    def test_SemesterUpdate_view__archived_semester_is_blocked(self):
+        """An archived semester's dates are what its students' final marks were calculated
+        from, so the edit view refuses it (GET and POST alike) rather than rewriting a
+        finished record. The list hides the button, but the URL is still reachable."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED, first_day=datetime.date(2020, 1, 1))
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        for response in (self.client.get(reverse('courses:semester_update', args=[archived.pk])),
+                         self.client.post(reverse('courses:semester_update', args=[archived.pk]), data=post_data)):
+            self.assertRedirects(response, reverse('courses:semester_list'))
+        archived.refresh_from_db()
+        self.assertEqual(archived.first_day, datetime.date(2020, 1, 1))
+
+    def test_SemesterList_view__status_column_names_each_lifecycle_stage(self):
+        """The status column shows the semester's own lifecycle stage, so a semester being set
+        up reads as Upcoming instead of being lumped in with everything that isn't active."""
+        self.client.force_login(self.test_teacher)
+        baker.make(Semester, status=Semester.Status.UPCOMING)
+        baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Upcoming<')
+        self.assertContains(response, '>Open<')
+        self.assertContains(response, '>Archived<')
+
     def test_SemesterUpdate__add_data__view(self):
         """
              Test for SemesterUpdate with correct/valid post data.

@@ -613,9 +613,30 @@ class SemesterCreate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    """Staff-only edit view for a Semester.
+
+    An archived semester is refused: its dates and excluded days are what its students' final
+    marks were calculated from, so editing them would rewrite a finished record. The list hides
+    the edit button for archived semesters, but the URL is still reachable directly.
+    """
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
+
+    ARCHIVED_SEMESTER_ERROR = ("An archived semester can't be edited: its dates are what your students' "
+                               "final marks were calculated from.")
+
+    def dispatch(self, request, *args, **kwargs):
+        """Refuse to serve the view at all (GET or POST) for an archived semester.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with an error message when the
+            target is archived; otherwise the normal UpdateView response.
+        """
+        if self.get_object().is_archived:
+            messages.error(request, self.ARCHIVED_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        return super().dispatch(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Semester'
