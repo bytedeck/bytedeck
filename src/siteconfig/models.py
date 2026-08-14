@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.exceptions import MultipleObjectsReturned
-from django.db import connection, models
+from django.db import connection, models, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
@@ -55,12 +55,13 @@ def get_superadmin():
     return superadmin.id
 
 
-def get_active_semester():
-    """ Need to initialize a semester if none exists yet. """
+def get_active_semester():  # pragma: no cover
+    """Historical default for SiteConfig.active_semester, kept only so the migrations that
+    reference it stay importable (0005 and 0012). Nothing calls it: the field has no default
+    now, and a deck's first semester is created explicitly by tenant initialization.
+    """
     from courses.models import Semester  # import here to prevent ciruclar imports
     try:
-        # is this only needed for tests? If not then need a unique username probably, not this!
-        # a deck's first semester starts open, so students can join a course right away
         semester, created = Semester.objects.get_or_create(defaults={'status': Semester.Status.OPEN})
     except MultipleObjectsReturned:
         semester = Semester.objects.order_by('-first_day')[0]
@@ -155,9 +156,10 @@ class SiteConfig(models.Model):
     )
 
     active_semester = models.ForeignKey(
-        'courses.Semester',
-        verbose_name="Active Semester", default=get_active_semester, on_delete=models.PROTECT,
-        help_text="Your currently active semester.  New semesters can be created from the admin menu."
+        'courses.Semester', null=True, blank=True,
+        verbose_name="Active Semester", on_delete=models.PROTECT,
+        help_text="The semester students join and earn XP in. It is empty between semesters, "
+                  "when no semester is open."
     )
 
     color_headers_by_mark = models.BooleanField(
@@ -332,14 +334,30 @@ class SiteConfig(models.Model):
             return static('img/banner.png')
 
     def set_active_semester(self, semester):
+        """Make `semester` the one students join and earn XP in: open it and point
+        active_semester at it.
+
+        A deck runs one semester at a time, so any other open semester is returned to Upcoming.
+        That semester was never archived, so no final marks were recorded and nothing is lost;
+        it can be opened again later. Callers are responsible for not passing an archived
+        semester (archiving is one-way).
+
+        Args:
+            semester: a Semester, or the id of one (404 when no semester has that id).
+        """
         from courses.models import Semester  # import here to prevent ciruclar imports
 
         # check if id or model object was given
-        if isinstance(semester, Semester):
+        if not isinstance(semester, Semester):  # assume it's an id
+            semester = get_object_or_404(Semester, id=semester)
+
+        with transaction.atomic():
+            Semester.objects.open().exclude(pk=semester.pk).update(status=Semester.Status.UPCOMING)
+            if not semester.is_open:
+                semester.status = Semester.Status.OPEN
+                semester.save()
             self.active_semester = semester
-        else:  # assume it's an id
-            self.active_semester = get_object_or_404(Semester, id=semester)
-        self.save()
+            self.save()
 
     def _propagate_google_provider(self):
         """
@@ -401,9 +419,10 @@ class SiteConfig(models.Model):
     def has_no_open_semester(self):
         """Whether there is no semester open for students to join a course into (issue #2060).
 
-        Archiving a semester (``Semester.complete_active_semester``) leaves it as the active
-        semester, so "no open semester" means the active semester is missing or no longer
-        open. Used to block student registration and to warn staff.
+        This is a first-class state, not an error: archiving a semester clears active_semester,
+        so a deck sits here between semesters until staff open the next one (issue #1177). Used
+        to block student registration and to warn staff. A semester that is set but not open is
+        also treated as no open semester, so data edited by hand can't leave the deck stuck.
 
         Returns:
             bool: True when there is no open semester for students to join.

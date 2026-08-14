@@ -15,7 +15,7 @@ from django.db import connection
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name
 
-from courses.models import Grade, Rank, Course, Block, MarkRange
+from courses.models import Grade, Rank, Course, Block, MarkRange, Semester
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
@@ -37,6 +37,7 @@ def load_initial_tenant_data():
 
     create_users()
     create_site_config_object()
+    create_initial_semester()
     create_initial_course()
     create_initial_blocks()
     create_initial_markranges()
@@ -127,6 +128,16 @@ def create_site_config_object():
         config.site_name = f"{name} Deck"[:site_name_max]
         config.site_name_short = name[:site_name_short_max]
         config.save()
+
+
+def create_initial_semester():
+    """Give the new deck a semester and open it, so students can join a course right away.
+
+    Its dates are the Semester defaults (today, and 135 days later); staff can rename it and
+    adjust the dates from the semester list.
+    """
+    semester = Semester.objects.create()
+    SiteConfig.get().set_active_semester(semester)
 
 
 def create_initial_course():

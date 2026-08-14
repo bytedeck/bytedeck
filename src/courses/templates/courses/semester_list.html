@@ -13,10 +13,17 @@
 {% block content %}
 <p>This page is visible to staff only.</p>
 
+{% if config.active_semester %}
 <h3>Current Active Semester: {{ config.active_semester }}</h3>
 
 <p>When students join a course it will be connected to the active semester.
   When a semester is over, archive it to record final marks and free up your students' seats.</p>
+{% else %}
+<h3>No semester is open</h3>
+
+<p>Students can't join a course or earn XP between semesters. Activate a semester below to start
+  the next one, or create a new one first.</p>
+{% endif %}
 <p>The first and last day of the semester are only relevant if you are using the
   <a href="{% url 'courses:my_marks' %}">mark calculations</a> page, activated
   with the "Use mark percentages" setting in your

@@ -838,9 +838,26 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(do_not_grant_xp=False)
 
     def get_semester(self, semester):
+        """Submissions made in `semester`.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions in that semester, or an empty queryset
+            when there is no semester (no semester is open). Submissions whose semester was
+            deleted are left out either way: they belong to no semester rather than to this one.
+        """
+        if semester is None:
+            return self.none()
         return self.filter(semester=semester)
 
     def get_not_semester(self, semester):
+        """Submissions made outside `semester`.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions from any other semester, or all of them
+            when there is no semester (with none open, every submission is from a past one).
+        """
+        if semester is None:
+            return self
         return self.exclude(semester=semester)
 
     def get_completed_before(self, date):
@@ -856,13 +873,15 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         else:
             # The student's "current teachers" are the teachers of the blocks of their
             # course registrations in the active semester (Profile.teachers()), so the
-            # block filter must be scoped to the active semester to match.
-            active_semester = SiteConfig.get().active_semester
-            return self.filter(
-                Q(user__coursestudent__semester=active_semester,
-                  user__coursestudent__block__current_teacher=teacher) |
-                Q(quest__specific_teacher_to_notify=teacher)
-            ).distinct()
+            # block filter must be scoped to the active semester to match. With no open
+            # semester nobody has a current teacher, leaving only the quests this teacher
+            # asked to be notified about.
+            active_semester_id = SiteConfig.get().active_semester_id
+            teacher_filter = Q(quest__specific_teacher_to_notify=teacher)
+            if active_semester_id is not None:
+                teacher_filter |= Q(user__coursestudent__semester=active_semester_id,
+                                    user__coursestudent__block__current_teacher=teacher)
+            return self.filter(teacher_filter).distinct()
 
     def exclude_archived_quests(self):
         return self.exclude(quest__archived=True)
@@ -880,7 +899,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(SiteConfig.get().active_semester.pk)
+            qs = qs.get_semester(SiteConfig.get().active_semester_id)
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:
@@ -940,7 +959,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
-        return qs.get_not_semester(SiteConfig.get().active_semester.pk).order_by('is_approved', '-time_approved')
+        return qs.get_not_semester(SiteConfig.get().active_semester_id).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
@@ -1041,7 +1060,7 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
-        active_semester_pk = SiteConfig.get().active_semester.pk
+        active_semester_pk = SiteConfig.get().active_semester_id
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
