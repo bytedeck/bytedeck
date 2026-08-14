@@ -338,6 +338,18 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
         return self.filter(do_not_grant_xp=False)
 
     def get_semester(self, semester):
+        """Assertions granted in `semester`.
+
+        Args:
+            semester: a Semester, or None when no semester is open.
+
+        Returns:
+            BadgeAssertionQuerySet: the assertions from that semester, or an empty queryset
+            when there is no semester (no semester is open). Assertions granted while no
+            semester was open belong to no semester, so they are left out either way.
+        """
+        if semester is None:
+            return self.none()
         return self.filter(semester=semester)
 
     def get_issued_before(self, date):
@@ -349,7 +361,7 @@ class BadgeAssertionManager(models.Manager):
         # badge/badge_type are needed almost everywhere assertions are rendered
         qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
-            return qs.get_semester(SiteConfig.get().active_semester)
+            return qs.get_semester(SiteConfig.get().open_semester)
         else:
             return qs
 
@@ -438,7 +450,9 @@ class BadgeAssertionManager(models.Manager):
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
-            active_semester = SiteConfig.get().active_semester.id
+            # None when no semester is open: the badge is still granted, it just isn't
+            # counted toward any semester's XP
+            active_semester = SiteConfig.get().open_semester_id
 
         new_assertion = BadgeAssertion(
             badge=badge,
@@ -504,7 +518,7 @@ class BadgeAssertion(models.Model):
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by',
                                   on_delete=models.SET_NULL)
     do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
-    semester = models.ForeignKey('courses.Semester', default=1, on_delete=models.SET_DEFAULT)
+    semester = models.ForeignKey('courses.Semester', null=True, blank=True, on_delete=models.SET_NULL)
 
     objects = BadgeAssertionManager()
 

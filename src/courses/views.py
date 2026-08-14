@@ -30,6 +30,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
 
+from django.db import transaction
 from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
@@ -346,9 +347,9 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
             bool: True if the user may access the registration view (they are not yet actively
                 registered for the active semester), False otherwise.
         """
-        return not CourseStudent.objects.filter(
-            user=self.request.user, active=True, semester=SiteConfig.get().active_semester
-        ).exists()
+        return not CourseStudent.objects.all_for_user_semester(
+            self.request.user, SiteConfig.get().open_semester
+        ).get_active().exists()
 
     model = CourseStudent
     form_class = CourseStudentForm
@@ -404,7 +405,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
             # can get active objects directly with first() and siteconfig.active_semester
             obj, created = CourseStudent.objects.get_or_create(
                     user=self.request.user,
-                    semester=SiteConfig.get().active_semester,
+                    semester=SiteConfig.get().open_semester,
                     block=Block.objects.filter(active=True).first(),
                     course=Course.objects.filter(active=True).first()
             )
@@ -436,7 +437,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
         # user is always hidden and semester always sets default, so can set both non-conditionally
         kwargs['instance'] = CourseStudent(user=self.request.user,
-                                           semester=SiteConfig.get().active_semester)
+                                           semester=SiteConfig.get().open_semester)
 
         # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
         block_qs = Block.objects.filter(active=True)
@@ -477,36 +478,104 @@ class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
     model = Semester
 
 
+class RefuseSemesterMixin:
+    """Refuse GET and POST alike when the semester they target is off limits.
+
+    Subclasses implement refusal_message(), returning the message to show, or None to let
+    the request through. The check lives in the handlers rather than in dispatch() on
+    purpose: a dispatch() override runs *before* NonPublicOnlyViewMixin's, so looking the
+    semester up there would query a tenant-only table on the public schema instead of
+    letting that mixin raise its 404.
+    """
+
+    def refusal_message(self):
+        """The reason this semester can't be acted on, or None when it can.
+
+        Returns:
+            str or None: the error message to show the user, or None to allow the request.
+        """
+        raise NotImplementedError
+
+    def _refuse(self, request):
+        """Turn a refusal into a redirect, or return None to let the handler run.
+
+        Args:
+            request: the request being served, to attach the message to.
+
+        Returns:
+            HttpResponse or None: a redirect to the semester list when refused.
+        """
+        message = self.refusal_message()
+        if message is None:
+            return None
+        messages.error(request, message)
+        return redirect('courses:semester_list')
+
+    def get(self, request, *args, **kwargs):
+        """Refuse the semester or render the page.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        """Refuse the semester or perform the action.
+
+        Args:
+            request: the incoming request.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments.
+
+        Returns:
+            HttpResponse: the redirect from _refuse(), or the normal response.
+        """
+        return self._refuse(request) or super().post(request, *args, **kwargs)
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
+class SemesterDelete(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
     """Staff-only confirm-and-delete view for a Semester.
 
-    The active semester can't be deleted (SiteConfig.active_semester protects it with
-    on_delete=PROTECT), so requests targeting it are redirected back to the semester
-    list with an error message instead of crashing on the constraint.
+    Two semesters are off limits, and both are refused for GET and POST alike (the delete
+    template hides the form for them, but the URL is still reachable directly):
+
+    * the active semester, whose deletion SiteConfig.active_semester blocks with
+      on_delete=PROTECT anyway, so this redirects instead of crashing on the constraint;
+    * an archived semester, which holds its students' final marks. Nothing points at it once
+      it is archived, so only this guard stands between a stray URL and that record.
     """
     model = Semester
     success_url = reverse_lazy('courses:semester_list')
     success_message = "Semester deleted."
 
     ACTIVE_SEMESTER_ERROR = "The active semester can't be deleted. Activate a different semester first."
+    ARCHIVED_SEMESTER_ERROR = "An archived semester can't be deleted: it holds your students' final marks."
 
-    def dispatch(self, request, *args, **kwargs):
-        """Refuse to serve the view at all (GET or POST) for the active semester, since the
-        deletion would be blocked by the PROTECT constraint anyway.
+    def refusal_message(self):
+        """Whether this semester is one of the two that can't be deleted.
 
         Returns:
-            HttpResponse: a redirect to the semester list with an error message when the
-            target is the active semester; otherwise the normal DeleteView response.
+            str or None: the error message when the target is archived or is the active
+            semester, otherwise None.
         """
-        if self.get_object() == SiteConfig.get().active_semester:
-            messages.error(request, self.ACTIVE_SEMESTER_ERROR)
-            return redirect('courses:semester_list')
-        return super().dispatch(request, *args, **kwargs)
+        semester = self.get_object()
+        if semester.is_archived:
+            return self.ARCHIVED_SEMESTER_ERROR
+        # the raw pointer, not open_semester: PROTECT blocks deleting whatever active_semester
+        # references, whatever its status, so this check has to match the constraint
+        if semester == SiteConfig.get().active_semester:
+            return self.ACTIVE_SEMESTER_ERROR
+        return None
 
     def form_valid(self, form):
         """Delete the semester, converting a ProtectedError from the delete itself into the
-        same redirect + error: the dispatch() pre-check can race a concurrent activation
+        same redirect + error: the refusal_message() pre-check can race a concurrent activation
         (another request making this semester active between the check and the delete).
         The success message is added here, after the delete succeeds, because Django calls
         get_success_url() before deleting.
@@ -603,10 +672,51 @@ class SemesterCreate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, L
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterUpdate(SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+class SemesterUpdate(RefuseSemesterMixin, SemesterCreateUpdateFormsetMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, UpdateView):
+    """Staff-only edit view for a Semester.
+
+    An archived semester is refused: its dates and excluded days are what its students' final
+    marks were calculated from, so editing them would rewrite a finished record. The list hides
+    the edit button for archived semesters, but the URL is still reachable directly.
+    """
     model = Semester
     form_class = SemesterForm
     success_url = reverse_lazy('courses:semester_list')
+
+    ARCHIVED_SEMESTER_ERROR = ("An archived semester can't be edited: its dates are what your students' "
+                               "final marks were calculated from.")
+
+    def refusal_message(self):
+        """Whether this semester is archived, and so can't be edited.
+
+        Returns:
+            str or None: the error message when the target is archived, otherwise None.
+        """
+        return self.ARCHIVED_SEMESTER_ERROR if self.get_object().is_archived else None
+
+    def form_valid(self, form, formset):
+        """Save the semester and its excluded dates, unless it was archived in the meantime.
+
+        The form holds the semester as it was when the page was loaded, so saving it writes
+        every field back, including a status that is no longer current. Re-reading under a row
+        lock closes that window: an archive committing first is seen here (and refused), and
+        one arriving later waits for this save rather than being undone by it.
+
+        Args:
+            form: the validated SemesterForm.
+            formset: the validated ExcludedDateFormset.
+
+        Returns:
+            HttpResponse: a redirect to the semester list, with an error message when the
+            semester was archived while this edit was open.
+        """
+        with transaction.atomic():
+            if Semester.objects.select_for_update().filter(
+                pk=self.object.pk, status=Semester.Status.ARCHIVED,
+            ).exists():
+                messages.error(self.request, self.ARCHIVED_SEMESTER_ERROR)
+                return redirect('courses:semester_list')
+            return super().form_valid(form, formset)
 
     def get_context_data(self, **kwargs):
         kwargs['heading'] = 'Update Semester'
@@ -625,21 +735,25 @@ class SemesterActivate(NonPublicOnlyViewMixin, LoginRequiredMixin, View):
     """
     http_method_names = ['post']
 
+    ARCHIVED_SEMESTER_ERROR = "An archived semester can't be reopened. Create a new semester instead."
+
     def post(self, request, *args, **kwargs):
         """Start the semester whose pk is in the URL: open it and point
         SiteConfig.active_semester at it, so students can join a course in it.
+
+        Archiving is one-way, so an archived semester is refused: reopening one would put
+        students back into a semester whose final marks have already been recorded.
 
         Returns:
             HttpResponse: a redirect to the semester list (404 if the pk doesn't exist).
         """
         semester_pk = self.kwargs['pk']
         semester = get_object_or_404(Semester, pk=semester_pk)
-        if semester.is_upcoming:
-            semester.status = Semester.Status.OPEN
-            semester.save()
-        siteconfig = SiteConfig.get()
-        siteconfig.active_semester = semester
-        siteconfig.save()
+        if semester.is_archived:
+            messages.error(request, self.ARCHIVED_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+
+        SiteConfig.get().set_active_semester(semester)
         messages.success(request, f'Semester {semester} is now the active semester.')
 
         return redirect('courses:semester_list')
@@ -712,6 +826,21 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
     """
     template_name = 'courses/semester_archive.html'
 
+    NO_OPEN_SEMESTER_ERROR = 'No semester is open, so there is nothing to archive.'
+
+    def dispatch(self, request, *args, **kwargs):
+        """Refuse to serve the view at all (GET or POST) when the deck is between semesters:
+        there is no semester to preview or archive.
+
+        Returns:
+            HttpResponse: a redirect to the semester list with a warning when no semester is
+            open; otherwise the normal response.
+        """
+        if SiteConfig.get().has_no_open_semester():
+            messages.warning(request, self.NO_OPEN_SEMESTER_ERROR)
+            return redirect('courses:semester_list')
+        return super().dispatch(request, *args, **kwargs)
+
     def get_context_data(self, **kwargs):
         """Assemble the preview counts and blockers for archiving the active semester.
 
@@ -721,7 +850,7 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
             refused (pending approvals or negative XP).
         """
         context = super().get_context_data(**kwargs)
-        semester = SiteConfig.get().active_semester
+        semester = SiteConfig.get().open_semester
         registrations = CourseStudent.objects.all_for_semester(semester)
         context['semester'] = semester
         context['num_registrations'] = registrations.count()
@@ -745,12 +874,14 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
 
         Returns:
             HttpResponse: a redirect to the semester list with a success message, or a
-            warning message when archiving was refused (already archived, submissions
-            awaiting approval, or students with negative XP).
+            warning message when archiving was refused (no semester open by the time the
+            POST ran, submissions awaiting approval, or students with negative XP).
         """
         sem = Semester.objects.complete_active_semester()
         semester_warnings = {
-            Semester.ALREADY_ARCHIVED: 'Semester is already archived, no action taken.',
+            # dispatch() already redirects when nothing is open, so this only comes up when
+            # another request archived the semester between that check and this one
+            Semester.NO_OPEN_SEMESTER: 'No semester is open, so there is nothing to archive.',
             Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. "
                                               "Can't archive the semester until they are approved or returned.",
             Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't archive the semester until it is fixed.",
@@ -777,13 +908,35 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
 @non_public_only_view
 @login_required
 def ajax_progress_chart(request, user_id=0):
+    """The data behind a student's XP-over-the-semester chart, as JSON for chart.js.
+
+    Args:
+        request: the ajax request; only POST returns data.
+        user_id (int): the student to chart, or 0 for the logged-in user.
+
+    Returns:
+        HttpResponse: JSON with `days_in_semester` (the semester's total class days) and
+        `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
+        when there is nothing to chart: no semester is open, or the open one has no class
+        days behind it yet.
+
+    Raises:
+        Http404: for any method other than POST.
+    """
     if user_id == 0:
         user = request.user
     else:
         user = get_object_or_404(User, pk=user_id)
 
     if request.method == "POST":
-        sem = SiteConfig.get().active_semester
+        sem = SiteConfig.get().open_semester
+
+        if sem is None or sem.days_so_far() <= 0:
+            # Nothing to plot: either the deck is between semesters, or the open semester has
+            # no class days behind it yet (a semester with no dates set has none at all). Hand
+            # the chart an empty dataset rather than building one from an empty date list,
+            # which the weekend adjustment below would then index into.
+            return HttpResponse(json.dumps({"days_in_semester": 0, "xp_data": []}), content_type='application/json')
 
         # generate a list of dates, from first date of semester to today
         datelist = []

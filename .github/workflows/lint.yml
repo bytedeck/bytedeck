@@ -22,29 +22,15 @@ jobs:
       with:
         python-version: '3.12'
     - name: Install ruff
-      # Install the constraint requirements.txt pins, so CI, the pre-commit hook
-      # and a local venv all lint with the same ruff. requirements.txt stays the
-      # single place the version is set, and its upper cap applies here too, so a
-      # new ruff minor cannot reach CI unpinned and fail the build on new rules.
+      # Install the version requirements.txt pins, so CI, the pre-commit hook and
+      # a local venv all lint with the same ruff. requirements.txt is the single
+      # place the version is set: the pre-commit hook runs whatever ruff is
+      # installed rather than pinning its own copy, so there is no second pin that
+      # could drift out of step with this one.
       run: |
         ruff_spec=$(grep -m1 -E '^ruff([<>=!~,]|$)' requirements.txt | cut -d'#' -f1 | tr -d '[:space:]')
         echo "Installing $ruff_spec"
         pip install "$ruff_spec"
-    - name: Check the pre-commit hook pins the same ruff
-      # requirements.txt and .pre-commit-config.yaml are updated by separate
-      # Dependabot ecosystems, which cannot see each other's pins, so a hook bump
-      # past the requirement's upper cap would leave `pre-commit run` and this job
-      # linting with different rule sets. Comparing the hook against the version
-      # just installed from the requirement turns that into a failure here, rather
-      # than a lint result that only reproduces in one of the two places.
-      run: |
-        hook=$(grep -A2 'astral-sh/ruff-pre-commit' .pre-commit-config.yaml | sed -n 's/^ *rev: *v//p' | head -1)
-        installed=$(ruff --version | awk '{print $2}')
-        if [ "$hook" != "$installed" ]; then
-          echo "::error::pre-commit ruff hook is v$hook, but requirements.txt resolves to $installed. Update .pre-commit-config.yaml and the ruff pin in requirements.txt together."
-          exit 1
-        fi
-        echo "ok: pre-commit hook v$hook matches the ruff $installed installed from requirements.txt"
     - name: Lint
       # Config lives in pyproject.toml ([tool.ruff]). --output-format=github
       # emits inline PR annotations (replaces the old flake8-annotations action).

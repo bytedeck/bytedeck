@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.db import connection
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
+from django_tenants.utils import get_public_schema_name
 from django.utils import timezone
 
 from model_bakery import baker
@@ -11,6 +12,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
+from courses.views import SemesterActivate, SemesterUpdate
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
@@ -367,6 +369,43 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertWarningMessage(response)
 
+    def test_SemesterArchive__no_open_semester_get(self):
+        """With the deck between semesters there is nothing to preview archiving, so staff
+        are sent back to the semester list with a warning."""
+        self.client.force_login(self.test_teacher)
+        Semester.objects.complete_active_semester()
+        self.assertIsNone(SiteConfig.get().active_semester)
+
+        response = self.client.get(reverse('courses:semester_archive'))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+        self.assertIn('nothing to archive', str(self.get_message_list(response)[0]))
+
+    def test_SemesterArchive__no_open_semester_post(self):
+        """The POST is refused the same way, so a resubmitted archive form can't run against
+        a deck that is already between semesters."""
+        self.client.force_login(self.test_teacher)
+        Semester.objects.complete_active_semester()
+
+        response = self.client.post(reverse('courses:semester_archive'))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertWarningMessage(response)
+
+    def test_SemesterArchive__leaves_the_deck_with_no_open_semester(self):
+        """Archiving is how a deck gets to the between-semesters state (issue #1177): the
+        semester is archived and nothing is active, so students can't join a course."""
+        self.client.force_login(self.test_teacher)
+        active_sem = SiteConfig.get().active_semester
+
+        self.client.post(reverse('courses:semester_archive'))
+
+        active_sem.refresh_from_db()
+        self.assertTrue(active_sem.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
     def test_SemesterArchive__announcements_opt_out(self):
         """Archiving without the archive_announcements checkbox leaves announcements alone."""
         from announcements.models import Announcement
@@ -404,6 +443,34 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(SiteConfig.get().active_semester, open_semester)
         open_semester.refresh_from_db()
         self.assertTrue(open_semester.is_open)
+
+    def test_SemesterActivate__starts_the_next_semester_after_a_pause(self):
+        """Activating a semester is the way out of the between-semesters state: the deck has
+        an open semester again and students can join a course."""
+        self.client.force_login(self.test_teacher)
+        Semester.objects.complete_active_semester()
+        next_semester = baker.make('courses.semester', status=Semester.Status.UPCOMING)
+
+        response = self.client.post(reverse('courses:semester_activate', args=[next_semester.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(SiteConfig.get().active_semester, next_semester)
+        self.assertFalse(SiteConfig.get().has_no_open_semester())
+
+    def test_SemesterActivate__archived_semester_is_refused(self):
+        """Archiving is one-way: an archived semester can't be reopened, since its students'
+        final marks have already been recorded."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make('courses.semester', status=Semester.Status.ARCHIVED)
+        original_active = SiteConfig.get().active_semester
+
+        response = self.client.post(reverse('courses:semester_activate', args=[archived.pk]))
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(str(self.get_message_list(response)[0]), SemesterActivate.ARCHIVED_SEMESTER_ERROR)
+        archived.refresh_from_db()
+        self.assertTrue(archived.is_archived)
+        self.assertEqual(SiteConfig.get().active_semester, original_active)
 
     def test_SemesterActivate__get_not_allowed(self):
         """GET must not change the active semester (deck-wide state changes are POST-only,
@@ -1052,6 +1119,102 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertEqual(Semester.objects.get(id=1).first_day.strftime('%Y-%m-%d'), post_data['first_day'])
 
+    def test_SemesterUpdate_view__archived_semester_is_blocked(self):
+        """An archived semester's dates are what its students' final marks were calculated
+        from, so the edit view refuses it (GET and POST alike) rather than rewriting a
+        finished record. The list hides the button, but the URL is still reachable."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        get_response = self.client.get(reverse('courses:semester_update', args=[archived.pk]))
+        self.assertRedirects(get_response, reverse('courses:semester_list'))
+        self.assertErrorMessage(get_response)
+
+        post_response = self.client.post(reverse('courses:semester_update', args=[archived.pk]), data=post_data)
+        self.assertRedirects(post_response, reverse('courses:semester_list'))
+        self.assertIn(SemesterUpdate.ARCHIVED_SEMESTER_ERROR,
+                      [str(message) for message in self.get_message_list(post_response)])
+
+        archived.refresh_from_db()
+        self.assertEqual(archived.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(archived.last_day, datetime.date(2020, 6, 1))
+
+    def test_SemesterUpdate_view__archive_race_does_not_modify_archived_semester(self):
+        """A semester archived while an edit was open can't be written by that edit.
+
+        The form carries the semester as it was when the page loaded, so saving it would write
+        the whole row back, dates and the stale open status alike. The re-read under a row lock
+        catches the archive that committed first; here the view is handed that stale instance
+        to stand in for the race.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = baker.make(
+            Semester, status=Semester.Status.ARCHIVED,
+            first_day=datetime.date(2020, 1, 1), last_day=datetime.date(2020, 6, 1),
+        )
+        # what the view loaded before the archive committed
+        stale = Semester.objects.get(pk=semester.pk)
+        stale.status = Semester.Status.OPEN
+        post_data = {
+            'first_day': '2021-10-16',
+            'last_day': '2021-12-16',
+            **generate_formset_data(ExcludedDateFormset, quantity=0)
+        }
+
+        with patch.object(SemesterUpdate, 'get_object', return_value=stale):
+            response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertErrorMessage(response)
+        semester.refresh_from_db()
+        self.assertTrue(semester.is_archived)
+        self.assertEqual(semester.first_day, datetime.date(2020, 1, 1))
+        self.assertEqual(semester.last_day, datetime.date(2020, 6, 1))
+
+    @patch('tenant.views.connection', schema_name=get_public_schema_name())
+    def test_SemesterUpdate_view__public_schema_is_404(self, mock_connection):
+        """The semester views are tenant-only, so a public-schema request gets the
+        NonPublicOnlyViewMixin's 404. The archived check has to run after that mixin, or it
+        would query a tenant-only table on a schema that doesn't have it."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        self.assert404('courses:semester_update', args=[archived.pk])
+        self.assert404('courses:semester_delete', args=[archived.pk])
+
+    def test_SemesterList_view__status_column_names_each_lifecycle_stage(self):
+        """The status column shows the semester's own lifecycle stage, so a semester being set
+        up reads as Upcoming instead of being lumped in with everything that isn't active."""
+        self.client.force_login(self.test_teacher)
+        baker.make(Semester, status=Semester.Status.UPCOMING)
+        baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Upcoming<')
+        self.assertContains(response, '>Open<')
+        self.assertContains(response, '>Archived<')
+
+    def test_SemesterList_view__open_semester_past_its_last_day_is_flagged(self):
+        """An open semester whose last day has passed reads as Open - ended, the nudge to
+        archive it and free the students' seats."""
+        self.client.force_login(self.test_teacher)
+        open_semester = SiteConfig.get().open_semester
+        open_semester.last_day = datetime.date.today() - datetime.timedelta(days=1)
+        open_semester.save()
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, '>Open - ended<')
+
     def test_SemesterUpdate__add_data__view(self):
         """
              Test for SemesterUpdate with correct/valid post data.
@@ -1191,6 +1354,17 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         self.assertErrorMessage(response)
         self.assertTrue(Semester.objects.filter(pk=active_semester.pk).exists())
+
+    def test_SemesterDelete_view__archived_semester_is_blocked(self):
+        """An archived semester holds its students' final marks, and nothing points at it once
+        the deck moves on, so the view refuses to delete it (GET and POST alike)."""
+        self.client.force_login(self.test_teacher)
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+
+        for response in (self.client.get(reverse('courses:semester_delete', args=[archived.pk])),
+                         self.client.post(reverse('courses:semester_delete', args=[archived.pk]))):
+            self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertTrue(Semester.objects.filter(pk=archived.pk).exists())
 
     def test_SemesterDelete_view__concurrent_activation_still_blocked(self):
         """If the semester becomes active between dispatch's pre-check and the deletion
@@ -1629,6 +1803,34 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         response = self.client.post(reverse('courses:ajax_progress_chart', args=[0]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         self.assertEqual(response.status_code, 200)
 
+    @freeze_time('2024-01-06')  # a Saturday
+    def test_ajax_xp_data__empty_for_a_semester_with_no_class_days_yet(self):
+        """A semester with no dates set has no class days behind it, so there are no points to
+        plot. The weekend adjustment reads the last point, so an empty chart has to short
+        circuit before it rather than raising IndexError."""
+        self.semester.first_day = None
+        self.semester.last_day = None
+        self.semester.save()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
+
+    def test_ajax_xp_data__empty_with_no_open_semester(self):
+        """Between semesters there is no semester to chart progress through, so the chart gets
+        an empty dataset instead of the page failing."""
+        Semester.objects.complete_active_semester()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
+
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
         uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
@@ -1699,6 +1901,31 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
 
             total_xp = json.loads(response.content)['xp_data'][-1]['y']
             self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
+
+    def test_ajax_xp_data__weekend_with_nothing_earned_leaves_the_last_day_alone(self):
+        """A weekend where the student earned nothing leaves the last plotted day's total as it was.
+
+        The weekend branch rolls XP earned on a Saturday or Sunday back onto the last class day,
+        because work done then does not get its own point on the chart. This is the other side of
+        that: with nothing earned there is nothing to roll back, and the Friday total stands.
+        """
+        self.client.force_login(self.student)
+
+        # submissions Monday to Friday, and nothing over the weekend that follows
+        starting_date = datetime.datetime(2024, 1, 1, tzinfo=self.tz)
+        for i in range(5):
+            self.create_quest_and_submissions(self.base_xp, starting_date + datetime.timedelta(days=i))
+        weekday_xp = self.base_xp * 5
+
+        # 2024-1-6 (Saturday)
+        with freeze_time(datetime.datetime(2024, 1, 6, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 5)  # 5 == Saturday
+            response = self.client.post(
+                reverse('courses:ajax_progress_chart', args=[self.student.pk]),
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+
+        self.assertEqual(json.loads(response.content)['xp_data'][-1]['y'], weekday_xp)
 
     def test_ajax_xp_data__equals_xp_cache_on_weekend(self):
         """ test if the xp_data equals xp on weekend """

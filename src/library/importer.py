@@ -1,7 +1,7 @@
 from django_tenants.utils import schema_context
-from quest_manager.admin import QuestResource
 from quest_manager.models import Quest, Category
 
+from .resources import LibraryQuestResource
 from .utils import library_schema_context
 
 
@@ -20,7 +20,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
     with library_schema_context():
         quests = Quest.objects.select_related('campaign').filter(published=True, import_id__in=quest_import_ids)
-        export_data = QuestResource().export(quests)
+        export_data = LibraryQuestResource().export(quests)
 
     dry_run = False
     with schema_context(destination_schema):
@@ -29,7 +29,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
         local_visibility_map = {str(q.import_id): q.published for q in existing_quests}
 
         # Explicitly import the campaign as well
-        result = QuestResource().import_data(export_data, dry_run=dry_run, import_campaign=True, local_visibility_map=local_visibility_map)
+        result = LibraryQuestResource().import_data(export_data, dry_run=dry_run, import_campaign=True, local_visibility_map=local_visibility_map)
 
         category = Category.objects.filter(import_id=campaign_import_id).first()
         if category:
@@ -62,10 +62,10 @@ def import_quest_to(*, destination_schema, quest_import_id):
     with library_schema_context():
         quest = Quest.objects.get(import_id=quest_import_id, published=True)
 
-        export_data = QuestResource().export([quest])
+        export_data = LibraryQuestResource().export([quest])
 
     with schema_context(destination_schema):
-        result = QuestResource().import_data(
+        result = LibraryQuestResource().import_data(
             export_data,
             dry_run=False,
             raise_errors=True,

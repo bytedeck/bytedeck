@@ -56,7 +56,13 @@ class TagHelper:
             tuple[Badge, list[BadgeAssertion]]: tuple of Badge object + list of BadgeAssertion objects
         """
         badge = baker.make(Badge, xp=xp)
-        badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
+        # stamp the active semester, as BadgeAssertion.objects.create_assertion() does: the
+        # field is nullable (an assertion granted with no semester open belongs to none), so
+        # baker would otherwise leave it unset and the assertion wouldn't count this semester
+        badge_assertion = baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            semester=SiteConfig.get().active_semester, _quantity=badge_assertion_quantity,
+        )
 
         return badge, badge_assertion
 

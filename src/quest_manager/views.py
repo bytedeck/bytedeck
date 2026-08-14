@@ -1124,7 +1124,7 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
-    active_semester = SiteConfig.get().active_semester
+    active_semester = SiteConfig.get().open_semester
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset
@@ -1136,8 +1136,8 @@ def quest_user_status(request, quest_id):
         CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
-        CourseStudent.objects.filter(
-            semester=active_semester, block__current_teacher=request.user
+        CourseStudent.objects.get_queryset().get_semester(active_semester).filter(
+            block__current_teacher=request.user
         ).values_list('user_id', flat=True)
     ) & active_ids
 
