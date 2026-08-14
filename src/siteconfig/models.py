@@ -447,6 +447,17 @@ class SiteConfig(models.Model):
         """
         return None if self.has_no_open_semester() else self.active_semester
 
+    @property
+    def open_semester_id(self):
+        """The id of the semester students are currently in, for queries that only need the id.
+
+        Returns:
+            int or None: open_semester's primary key, or None when the deck is between
+            semesters.
+        """
+        semester = self.open_semester
+        return semester.pk if semester else None
+
     @classmethod
     def cache_key(cls):
         return f'{connection.schema_name}-siteconfig'

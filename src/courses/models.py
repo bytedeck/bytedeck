@@ -274,23 +274,30 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
         to close (the deck-suspension auto-close uses this, #1734 redesign B2;
         the staff-driven close keeps the refusal so a teacher can investigate).
         """
-        active_sem = self.get_current()
-
-        # nothing to archive: the deck is already between semesters. get_current() is None
-        # for a pointer at a semester that isn't open, so an archived (or upcoming) one
-        # can't be archived through here either.
-        if active_sem is None:
-            return Semester.NO_OPEN_SEMESTER
-
-        # There are still quests awaiting approval, can't close!
-        if QuestSubmission.objects.all_awaiting_approval():
-            return Semester.QUEST_AWAITING_APPROVAL
-
         # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
         # saves each registration as it iterates and raises on a negative-XP student,
         # so without the transaction the students processed before it would stay finalized.
         try:
             with transaction.atomic():
+                # Lock the config row before reading which semester is open, the same lock
+                # set_active_semester() takes. Without it an activation running alongside this
+                # could open its semester and then have this archive clear the pointer,
+                # leaving a semester open that the deck no longer points at (so students
+                # couldn't use it).
+                SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
+
+                active_sem = self.get_current()
+
+                # nothing to archive: the deck is already between semesters. get_current() is
+                # None for a pointer at a semester that isn't open, so an archived (or
+                # upcoming) one can't be archived through here either.
+                if active_sem is None:
+                    return Semester.NO_OPEN_SEMESTER
+
+                # There are still quests awaiting approval, can't close!
+                if QuestSubmission.objects.all_awaiting_approval():
+                    return Semester.QUEST_AWAITING_APPROVAL
+
                 # need to calculate all user XP and store in their Course
                 CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
 
@@ -697,7 +704,7 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        return self.all_for_user(user).get_semester(SiteConfig.get().active_semester)
+        return self.all_for_user(user).get_semester(SiteConfig.get().open_semester)
 
     def all_users_for_active_semester(self, students_only=False, active_only=False):
         """
@@ -707,7 +714,7 @@ class CourseStudentManager(models.Manager):
         (e.g. suspension-closed) semester contributes no users.
         """
         try:
-            courses = self.all_for_semester(SiteConfig.get().active_semester, students_only=students_only, active_only=active_only)
+            courses = self.all_for_semester(SiteConfig.get().open_semester, students_only=students_only, active_only=active_only)
             user_list = courses.values_list('user', flat=True)
             user_list = set(user_list)  # removes doubles
             return User.objects.filter(id__in=user_list, is_active=True)

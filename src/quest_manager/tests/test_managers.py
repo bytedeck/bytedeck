@@ -704,6 +704,20 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.all()
         self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
 
+    def test_for_teacher_only__ignores_a_pointer_at_a_semester_that_is_not_open(self):
+        """A pointer left on a semester that isn't open means no open semester, so nobody has a
+        current teacher and the block-based half of the filter drops out."""
+        semester = baker.make(Semester)
+        SiteConfig.get().set_active_semester(semester.id)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=semester)
+        block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
+
+        semester.status = Semester.Status.UPCOMING
+        semester.save()
+
+        self.assertNotIn(block_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+
     def test_for_teacher_only__no_open_semester_keeps_only_notify_submissions(self):
         """With no open semester nobody has a current teacher, so a teacher's queue holds only
         the quests they asked to be notified about, not students whose registration has no

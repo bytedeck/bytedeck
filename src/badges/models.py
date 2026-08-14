@@ -361,7 +361,7 @@ class BadgeAssertionManager(models.Manager):
         # badge/badge_type are needed almost everywhere assertions are rendered
         qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
-            return qs.get_semester(SiteConfig.get().active_semester)
+            return qs.get_semester(SiteConfig.get().open_semester)
         else:
             return qs
 
@@ -452,7 +452,7 @@ class BadgeAssertionManager(models.Manager):
         if not active_semester:
             # None when no semester is open: the badge is still granted, it just isn't
             # counted toward any semester's XP
-            active_semester = SiteConfig.get().active_semester_id
+            active_semester = SiteConfig.get().open_semester_id
 
         new_assertion = BadgeAssertion(
             badge=badge,

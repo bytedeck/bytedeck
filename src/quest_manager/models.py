@@ -882,7 +882,7 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
             # block filter must be scoped to the active semester to match. With no open
             # semester nobody has a current teacher, leaving only the quests this teacher
             # asked to be notified about.
-            active_semester_id = SiteConfig.get().active_semester_id
+            active_semester_id = SiteConfig.get().open_semester_id
             teacher_filter = Q(quest__specific_teacher_to_notify=teacher)
             if active_semester_id is not None:
                 teacher_filter |= Q(user__coursestudent__semester=active_semester_id,
@@ -905,7 +905,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(SiteConfig.get().active_semester_id)
+            qs = qs.get_semester(SiteConfig.get().open_semester_id)
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:
@@ -965,7 +965,7 @@ class QuestSubmissionManager(models.Manager):
 
     def all_completed_past(self, user):
         qs = self.get_queryset(exclude_quests_not_published=False).get_user(user).completed()
-        return qs.get_not_semester(SiteConfig.get().active_semester_id).order_by('is_approved', '-time_approved')
+        return qs.get_not_semester(SiteConfig.get().open_semester_id).order_by('is_approved', '-time_approved')
 
     def all_completed(self, user=None, active_semester_only=True):
         qs = self.get_queryset(active_semester_only=active_semester_only,
@@ -1066,7 +1066,7 @@ class QuestSubmissionManager(models.Manager):
         else:
             ordinal = 1
 
-        active_semester_pk = SiteConfig.get().active_semester_id
+        active_semester_pk = SiteConfig.get().open_semester_id
         new_submission = QuestSubmission(
             quest=quest,
             user=user,
@@ -1255,7 +1255,7 @@ class QuestSubmission(models.Model):
         # so it never appeared in the student's current in-progress list and, once re-approved, granted
         # its XP in the closed semester. Returning always happens "now", so the redo belongs to the
         # active semester. When the submission is already in the active semester this is a no-op.
-        self.semester = SiteConfig.get().active_semester
+        self.semester = SiteConfig.get().open_semester
         self.save()
         self.user.profile.xp_invalidate_cache()  # recalculate XP
 

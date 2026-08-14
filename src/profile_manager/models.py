@@ -317,7 +317,7 @@ class Profile(models.Model):
 
     @cached_property
     def has_past_courses(self):
-        semester = SiteConfig.get().active_semester
+        semester = SiteConfig.get().open_semester
         return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
 
     @cached_property

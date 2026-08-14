@@ -1124,7 +1124,7 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
-    active_semester = SiteConfig.get().active_semester
+    active_semester = SiteConfig.get().open_semester
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset

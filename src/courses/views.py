@@ -347,7 +347,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
                 registered for the active semester), False otherwise.
         """
         return not CourseStudent.objects.all_for_user_semester(
-            self.request.user, SiteConfig.get().active_semester
+            self.request.user, SiteConfig.get().open_semester
         ).get_active().exists()
 
     model = CourseStudent
@@ -404,7 +404,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
             # can get active objects directly with first() and siteconfig.active_semester
             obj, created = CourseStudent.objects.get_or_create(
                     user=self.request.user,
-                    semester=SiteConfig.get().active_semester,
+                    semester=SiteConfig.get().open_semester,
                     block=Block.objects.filter(active=True).first(),
                     course=Course.objects.filter(active=True).first()
             )
@@ -436,7 +436,7 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         # setting kwarg field defaults for form instance is necessary for hidden fields (user, semester, course, block)
         # user is always hidden and semester always sets default, so can set both non-conditionally
         kwargs['instance'] = CourseStudent(user=self.request.user,
-                                           semester=SiteConfig.get().active_semester)
+                                           semester=SiteConfig.get().open_semester)
 
         # block and course will not always be hidden or defaulted, only set kwarg defaults where already necessary (only 1 active option)
         block_qs = Block.objects.filter(active=True)
@@ -506,6 +506,8 @@ class SemesterDelete(NonPublicOnlyViewMixin, LoginRequiredMixin, DeleteView):
         if self.get_object().is_archived:
             messages.error(request, self.ARCHIVED_SEMESTER_ERROR)
             return redirect('courses:semester_list')
+        # the raw pointer, not open_semester: PROTECT blocks deleting whatever active_semester
+        # references, whatever its status, so this check has to match the constraint
         if self.get_object() == SiteConfig.get().active_semester:
             messages.error(request, self.ACTIVE_SEMESTER_ERROR)
             return redirect('courses:semester_list')
@@ -747,7 +749,7 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
             refused (pending approvals or negative XP).
         """
         context = super().get_context_data(**kwargs)
-        semester = SiteConfig.get().active_semester
+        semester = SiteConfig.get().open_semester
         registrations = CourseStudent.objects.all_for_semester(semester)
         context['semester'] = semester
         context['num_registrations'] = registrations.count()
@@ -771,8 +773,8 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
 
         Returns:
             HttpResponse: a redirect to the semester list with a success message, or a
-            warning message when archiving was refused (already archived, submissions
-            awaiting approval, or students with negative XP).
+            warning message when archiving was refused (no semester open by the time the
+            POST ran, submissions awaiting approval, or students with negative XP).
         """
         sem = Semester.objects.complete_active_semester()
         semester_warnings = {
@@ -814,7 +816,8 @@ def ajax_progress_chart(request, user_id=0):
     Returns:
         HttpResponse: JSON with `days_in_semester` (the semester's total class days) and
         `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
-        when there is no semester to chart.
+        when there is nothing to chart: no semester is open, or the open one has no class
+        days behind it yet.
 
     Raises:
         Http404: for any method other than POST.
