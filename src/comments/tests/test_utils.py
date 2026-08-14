@@ -59,6 +59,25 @@ class SaveDraftAttachmentsTest(ByteDeckTenantTestCase):
         self.assertEqual(save_draft_attachments(form, self.draft_comment), 0)
         self.assertEqual(self.draft_comment.document_set.count(), 0)
 
+    def test_save_draft_attachments__keeps_the_good_files_of_a_mixed_selection(self):
+        """One oversized file does not cost the student the files chosen alongside it.
+
+        The field validates the whole selection at once, so a single rejected file leaves
+        `attachments` out of cleaned_data entirely; the acceptable files still have to be kept,
+        or a student who attached five files and one too-large one loses all six.
+        """
+        good = SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")
+        too_big = SimpleUploadedFile("huge.png", b"file_content", content_type="image/png")
+        # claim a size over the form field's 16MB limit without allocating 16MB in the test
+        too_big.size = 16777217
+
+        form = self.bound_form([good, too_big])
+
+        self.assertFalse(form.is_valid())
+        self.assertEqual(save_draft_attachments(form, self.draft_comment), 1)
+        kept = self.draft_comment.document_set.get()
+        self.assertIn("notes", kept.docfile.name)
+
     def test_save_draft_attachments__form_without_an_attachments_field(self):
         """A form that has no attachments field (the quick reply form) contributes nothing.
 
