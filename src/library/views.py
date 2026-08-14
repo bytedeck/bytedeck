@@ -301,12 +301,13 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             num_quests = Quest.objects.get_active().count() if search_term else paginator.count
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
-            # one query for the whole list rather than one per row
+            # One query for this page rather than one per row, and only for the quests
+            # actually being rendered.
             origins = ContentOrigin.for_content(
-                import_ids=[quest.import_id for quest in quests],
+                import_ids=[quest.import_id for quest in page_quests],
                 content_type=ContentOrigin.QUEST,
             )
-            for quest in quests:
+            for quest in page_quests:
                 # Attached to the quest so the template can read it beside the quest's own
                 # fields; quests shared before origins were recorded simply have None.
                 quest.origin = origins.get(quest.import_id)
