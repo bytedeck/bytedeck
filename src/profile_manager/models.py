@@ -317,6 +317,14 @@ class Profile(models.Model):
 
     @cached_property
     def has_past_courses(self):
+        """Whether the user was registered in a course in some earlier semester.
+
+        Between semesters there is no open semester, so every course they have is a past
+        one.
+
+        Returns:
+            bool: True when the user has a registration outside the open semester.
+        """
         semester = SiteConfig.get().open_semester
         return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
 
