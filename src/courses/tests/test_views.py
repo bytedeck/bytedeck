@@ -1700,6 +1700,31 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
             total_xp = json.loads(response.content)['xp_data'][-1]['y']
             self.assertEqual(total_xp, initial_xp + saturday_xp + sunday_xp)
 
+    def test_ajax_xp_data__weekend_with_nothing_earned_leaves_the_last_day_alone(self):
+        """A weekend where the student earned nothing leaves the last plotted day's total as it was.
+
+        The weekend branch rolls XP earned on a Saturday or Sunday back onto the last class day,
+        because work done then does not get its own point on the chart. This is the other side of
+        that: with nothing earned there is nothing to roll back, and the Friday total stands.
+        """
+        self.client.force_login(self.student)
+
+        # submissions Monday to Friday, and nothing over the weekend that follows
+        starting_date = datetime.datetime(2024, 1, 1, tzinfo=self.tz)
+        for i in range(5):
+            self.create_quest_and_submissions(self.base_xp, starting_date + datetime.timedelta(days=i))
+        weekday_xp = self.base_xp * 5
+
+        # 2024-1-6 (Saturday)
+        with freeze_time(datetime.datetime(2024, 1, 6, 6, tzinfo=self.tz)):
+            self.assertEqual(datetime.datetime.now().weekday(), 5)  # 5 == Saturday
+            response = self.client.post(
+                reverse('courses:ajax_progress_chart', args=[self.student.pk]),
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+
+        self.assertEqual(json.loads(response.content)['xp_data'][-1]['y'], weekday_xp)
+
     def test_ajax_xp_data__equals_xp_cache_on_weekend(self):
         """ test if the xp_data equals xp on weekend """
         self.client.force_login(self.student)
