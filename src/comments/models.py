@@ -34,7 +34,30 @@ class CommentManager(models.Manager):
         return qs.select_related('user')
 
     def all_with_target_object(self, object):
-        return self.get_queryset().get_object_target(object).get_no_parents()
+        """Return the target's top-level comments, ready for the comments template.
+
+        That template reads each comment's attached documents and its published question answers
+        (with their questions), so both are prefetched here rather than left to each caller.
+        Without it every rendered comment costs two extra queries, and an announcements page
+        showing a hundred comments pays two hundred of them (#2168).
+
+        Args:
+            object: the model instance the comments target, such as a QuestSubmission or an
+                Announcement.
+
+        Returns:
+            QuerySet[Comment]: the comments targeting the object, excluding replies.
+        """
+        # local import: questions.models imports this module, so importing it up top is circular
+        from questions.models import QuestionSubmission
+
+        return self.get_queryset().get_object_target(object).get_no_parents().prefetch_related(
+            "document_set",
+            models.Prefetch(
+                "question_submissions",
+                queryset=QuestionSubmission.objects.select_related("question"),
+            ),
+        )
 
     # def all(self):
     #     return self.get_queryset.get_active().get_no_parents()
