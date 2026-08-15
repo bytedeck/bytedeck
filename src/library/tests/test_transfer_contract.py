@@ -10,12 +10,9 @@ Several assertions below therefore encode known bugs. Each one names the issue t
 it and says what the assertion should become once that issue is fixed. That is the point
 of a characterization test: it fails when behaviour changes, whether the change is a fix
 or a regression, and the failure is where the decision gets recorded.
-
-Why this exists: before these tests, the Library suite asserted that transferred content
-*existed* and had the right published flag, and compared exactly one field value. A
-copier that dropped every field except the name, every prerequisite and every tag passed
-65 of the 67 tests in this package.
 """
+
+import datetime
 
 from django.db import connection
 from django_tenants.utils import schema_context
@@ -65,7 +62,12 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
     """Pin what a full push-and-pull round trip does to every field of a quest."""
 
     def _build_populated_quest(self):
-        """Create a campaign and a quest with every writable field set to a non-default value.
+        """Create a campaign and a quest with every transferred field set to a non-default value.
+
+        `archived` is the one exception, and it is deliberate: an archived quest cannot be
+        pushed at all, so a non-default value here would leave nothing in the Library to
+        compare. That exclusion is pinned by
+        `test_export_campaign_and_copy_quests__never_exports_an_archived_quest`.
 
         Returns:
             tuple[Quest, Category]: The populated quest and the campaign it belongs to.
@@ -91,6 +93,13 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
             max_xp=99,
             repeat_per_semester=True,
             hours_between_repeats=5,
+            # All four differ from their defaults (today, midnight, null, null), so a transfer
+            # that stops carrying one of them fails the round trip instead of matching by
+            # coincidence. The expiry is far enough out that the quest stays unexpired.
+            date_available=datetime.date(2024, 3, 4),
+            time_available=datetime.time(9, 30),
+            date_expired=datetime.date(2099, 12, 31),
+            time_expired=datetime.time(23, 45),
             icon="icons/quest.png",
             verification_required=False,
             hideable=False,
@@ -248,6 +257,34 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
         imported_campaign = Category.objects.get(import_id=campaign.import_id)
         self.assertEqual(imported_campaign.map_order, 0)
 
+    def test_export_campaign_and_copy_quests__never_exports_an_archived_quest(self):
+        """An archived quest is not pushed at all, so `archived` can only ever travel as False.
+
+        Both push paths filter archived quests out before anything is serialised: the
+        campaign push reads `Category.current_quests()` (`published().not_archived()`), and
+        the single-quest push reads `Quest.objects.get()`, whose manager excludes archived
+        rows. So a teacher who archives a quest and then shares its campaign silently sends
+        a campaign without that quest, and nothing reports the omission.
+
+        This is also why `_build_populated_quest` leaves `archived` at its default: a quest
+        carrying the non-default value never reaches the Library to be compared.
+        """
+        quest, campaign = self._build_populated_quest()
+        survivor = Quest.objects.create(name="Still Active", xp=1, campaign=campaign)
+        Quest.objects.filter(pk=survivor.pk).update(published=True)
+        Quest.objects.filter(pk=quest.pk).update(archived=True)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            arrived = set(Quest.objects.all_including_archived().values_list('import_id', flat=True))
+        self.assertIn(survivor.import_id, arrived)
+        self.assertNotIn(quest.import_id, arrived)
+
+        # The single-quest push cannot reach it either: the default manager excludes archived rows.
+        with self.assertRaises(Quest.DoesNotExist):
+            export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
 
 class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
     """Pin which prerequisites survive a transfer and which are silently discarded."""
@@ -266,7 +303,7 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         Quest.objects.filter(pk__in=[quest.pk, inside.pk]).update(published=True)
         return campaign, Quest.objects.get(pk=quest.pk), Quest.objects.get(pk=inside.pk)
 
-    def test_push__keeps_a_prereq_whose_target_is_in_the_same_campaign(self):
+    def test_export_campaign_and_copy_quests__keeps_a_prereq_whose_target_is_in_the_same_campaign(self):
         """A prerequisite pointing at another quest in the pushed campaign survives."""
         campaign, quest, inside = self._campaign_with_two_quests()
         Prereq.add_simple_prereq(quest, inside)
@@ -278,7 +315,7 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             names = [p.get_prereq().name for p in library_quest.prereqs()]
         self.assertEqual(names, ["Prereq Inside Campaign"])
 
-    def test_push__discards_a_prereq_whose_target_is_outside_the_campaign(self):
+    def test_export_campaign_and_copy_quests__discards_a_prereq_whose_target_is_outside_the_campaign(self):
         """A prerequisite pointing outside the pushed campaign is destroyed on the push (#2399).
 
         The Library never receives the target, so the link cannot be rebuilt there, and a
@@ -302,7 +339,7 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 class LibraryTransferTagContractTests(LibraryTenantTestCaseMixin):
     """Pin how tags cross a schema boundary."""
 
-    def test_push__carries_tags_by_primary_key_not_by_name(self):
+    def test_export_quest_to_library__carries_tags_by_primary_key_not_by_name(self):
         """Tags are transported as raw primary keys, so a quest can arrive mistagged (#1792).
 
         Tag rows are per-schema, so the pk that means 'photography' on one deck means
@@ -381,7 +418,7 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         Quest.objects.all_including_archived().filter(import_id__in=import_ids).delete()
         Category.objects.filter(import_id=campaign.import_id).delete()
 
-    def test_import_quest__raises_when_the_name_is_already_taken_locally(self):
+    def test_import_quest_to__raises_when_the_name_is_already_taken_locally(self):
         """Importing a quest whose name a different local quest holds raises (#2364).
 
         Quest.name is unique per deck, and the view guards only on import_id, so this
@@ -404,7 +441,7 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
 
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=import_ids[0]).exists())
 
-    def test_import_campaign__one_colliding_name_discards_the_whole_import(self):
+    def test_import_campaign_to__one_colliding_name_discards_the_whole_import(self):
         """One taken quest name rolls back an entire campaign import, silently (#2397).
 
         The importable quests do not land, the campaign is not created, and the call
