@@ -61,7 +61,10 @@ class CourseStudentForm(forms.ModelForm):
         student_registration = kwargs.pop('student_registration', None)
         super().__init__(*args, **kwargs)
 
-        semester_qs = Semester.objects.get_current(as_queryset=True)
+        # every open semester, so a deck running two cohorts on different calendars lets the
+        # student say which one they are joining (issue #2157 Phase 3, #1781). With one open
+        # this is the single choice it always was, and stays hidden under simple registration
+        semester_qs = Semester.objects.open()
         self.fields['semester'].queryset = semester_qs
         self.fields['semester'].empty_label = None
 

@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import connection, models, transaction
 from django.db.models.signals import post_delete, post_save
@@ -335,11 +336,13 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
                 semester.status = Semester.Status.ARCHIVED
                 semester.save()
 
-                # clear the pointer only when it named this semester, so archiving one of
-                # two open semesters leaves the deck pointed at the one still running
-                # (issue #1177 for the no-semester-left case)
+                # Move the pointer off this semester when it named it, onto another one that
+                # is still running, or to None when this was the last (issue #1177). The
+                # pointer must never go stale while the deck has an open semester: it is the
+                # default a student joins, and simplified registration registers straight
+                # into it without going through the form's list of choices.
                 if siteconfig.active_semester_id == semester.pk:
-                    siteconfig.active_semester = None
+                    siteconfig.active_semester = self.open().first()
                     siteconfig.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
@@ -857,6 +860,36 @@ class CourseStudent(models.Model):
                f'{", " + str(self.semester) if self.semester else ""}' \
                f'{", " + str(self.block.name) if self.block else ""}' \
                f': {self.course}'
+
+    def clean(self):
+        """Refuse a registration that would put this student in two open semesters at once.
+
+        A deck can run several semesters at a time, but a student belongs to one of them
+        (maintainer decision, #1781): they may take as many courses and groups as they like
+        within their semester, and their XP, marks and quests are all read from it. Being in
+        two at once would make "which semester did they earn this in?" ambiguous again, which
+        is the whole thing #2157 Phase 3 set out to fix.
+
+        Raises:
+            ValidationError: when the student already has a registration in a different
+                semester that is open.
+        """
+        super().clean()
+        if self.user_id is None or self.semester_id is None or not self.semester.is_open:
+            return
+
+        others = CourseStudent.objects.filter(
+            user_id=self.user_id, semester__status=Semester.Status.OPEN,
+        ).exclude(semester_id=self.semester_id)
+        if self.pk:
+            others = others.exclude(pk=self.pk)
+
+        clash = others.select_related('semester').first()
+        if clash is not None:
+            raise ValidationError({
+                'semester': f'This student is already in {clash.semester}, which is also open. '
+                            'A student can only be in one semester at a time.',
+            })
 
     # def get_absolute_url(self):
     #     return reverse('courses:list')

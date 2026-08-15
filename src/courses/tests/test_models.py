@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
 
 from django_tenants.utils import get_public_schema_name
@@ -202,6 +203,20 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         self.assertTrue(registration_there.active)  # their seat is not freed
         self.assertTrue(QuestSubmission.objects.filter(pk=in_progress_there.pk).exists())
         self.assertEqual(SiteConfig.get().active_semester, keeping)
+
+    def test_complete_semester__moves_the_pointer_onto_the_semester_still_running(self):
+        """Archiving the semester the deck points at while another is open re-points the deck at
+        that one, so the default a student joins is never an archived semester. Leaving it unset
+        while a semester runs would put simplified registration, which registers straight into
+        the default, into a state with nowhere to register."""
+        config = SiteConfig.get()
+        pointed_at = config.active_semester
+        still_running = baker.make(Semester, status=Semester.Status.OPEN)
+
+        self.assertEqual(Semester.objects.complete_semester(pointed_at), pointed_at)
+
+        self.assertEqual(SiteConfig.get().active_semester, still_running)
+        self.assertEqual(SiteConfig.get().open_semester, still_running)
 
     def test_complete_semester__is_not_blocked_by_another_semesters_approvals(self):
         """Quests awaiting approval in the other open semester are that semester's business,
@@ -665,12 +680,21 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
         self.assertIsNone(CourseStudent.objects.current_semester(self.teacher))
 
     def test_current_semester__archived_registration_is_not_current(self):
-        """Archiving the semester a student was in leaves them with no current registration.
-        They fall back to the deck's pointer, which archiving cleared, rather than staying
-        attached to the archived semester (or being adopted by someone else's open one)."""
-        Semester.objects.complete_semester()
+        """Archiving the semester a student was in leaves them with no current registration, so
+        they stop being attached to the archived semester and fall back to the deck's default
+        like anyone who hasn't joined a course, until they register again."""
+        Semester.objects.complete_semester(self.deck_semester)
         self.other_semester.refresh_from_db()
         self.assertTrue(self.other_semester.is_open)
+
+        self.assertEqual(CourseStudent.objects.current_semester(self.student), self.other_semester)
+
+    def test_current_semester__archived_registration_with_nothing_left_open_is_none(self):
+        """When the archived semester was the last one running, a student whose registration it
+        held has no semester at all rather than one that is over."""
+        Semester.objects.filter(pk=self.other_semester.pk).update(status=Semester.Status.ARCHIVED)
+        Semester.objects.complete_semester(self.deck_semester)
+
         self.assertIsNone(CourseStudent.objects.current_semester(self.student))
 
     def test_xp_totals__count_what_was_earned_in_the_students_own_semester(self):
@@ -941,6 +965,72 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         days_so_far.return_value = 0
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
+
+    def test_clean__refuses_a_student_in_two_open_semesters(self):
+        """A student belongs to one semester at a time (#1781): they can take several courses
+        within it, but being in two open semesters at once would make "which semester did they
+        earn this XP in?" ambiguous again."""
+        student = baker.make(User)
+        first = baker.make(Semester, status=Semester.Status.OPEN)
+        second = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=first)
+
+        clashing = CourseStudent(user=student, course=baker.make(Course), semester=second, block=baker.make(Block))
+
+        with self.assertRaises(ValidationError) as raised:
+            clashing.full_clean()
+        self.assertIn('semester', raised.exception.error_dict)
+        self.assertIn('only be in one semester', str(raised.exception))
+
+    def test_clean__allows_a_second_course_in_the_same_semester(self):
+        """The rule is one semester, not one course: a student takes as many courses and
+        groups within their semester as they like."""
+        student = baker.make(User)
+        semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=student, course=baker.make(Course), semester=semester)
+
+        second_course = CourseStudent(
+            user=student, course=baker.make(Course), semester=semester, block=baker.make(Block),
+        )
+
+        second_course.full_clean()  # does not raise
+
+    def test_clean__allows_a_registration_in_a_semester_that_is_not_open(self):
+        """Last year's registration is history, not a clash: only another *open* semester
+        counts, or nobody could ever join their second term."""
+        student = baker.make(User)
+        baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+
+        this_term = CourseStudent(
+            user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.OPEN), block=baker.make(Block),
+        )
+
+        this_term.full_clean()  # does not raise
+
+    def test_clean__lets_a_student_keep_their_own_registration(self):
+        """Re-saving an existing registration compares against the student's *other* rows, so
+        editing (say) the block on the one they already have doesn't read as a clash with
+        itself."""
+        student = baker.make(User)
+        registration = baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.OPEN), block=baker.make(Block),
+        )
+
+        registration.block = baker.make(Block)
+
+        registration.full_clean()  # does not raise
+
+    def test_clean__ignores_a_registration_that_has_no_semester_yet(self):
+        """A half-built registration (no user or semester chosen) has nothing to compare, so the
+        rule stays quiet and leaves the missing-field errors to the fields themselves."""
+        incomplete = CourseStudent(course=baker.make(Course))
+
+        incomplete.clean()  # does not raise
 
 
 class BlockModelTest(ByteDeckTenantTestCase):

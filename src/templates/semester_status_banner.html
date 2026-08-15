@@ -1,9 +1,12 @@
 {% comment %}
-Semester status banner (#2157, #1177): rendered on every tenant page via base.html,
+Semester status banner (#2157, #1177), rendered on every tenant page via base.html,
 staff only. Nudges the two states the semester workflow can silently sit in:
-- no open semester (the active one is archived or missing), so students can't join a course;
-- the active semester's last day has passed, so it's probably time to archive it
-  (archiving records final marks and frees the students' deck seats).
+- no semester open at all, so students can't join a course;
+- an open semester whose last day has passed, so it's probably time to archive it
+  (archiving records final marks and frees that semester's students' deck seats).
+A deck can run more than one semester at once (#1781), so the second nudge is per
+semester: each one that has ended gets its own line, naming it and linking to its own
+archive page, and a semester still running is left alone.
 `config` comes from the config context processor; it is None on the public schema,
 which hides the banner entirely. Suppressed on a suspended deck (current_deck from the
 deck_status context processor): students can't sign in there anyway, so semester nudges
@@ -17,12 +20,16 @@ are noise next to the suspension banner.
             activate a new semester.
             <a href="{% url 'courses:semester_list' %}" class="alert-link">Manage semesters</a>.
         </div>
-    {% elif config.active_semester.has_ended %}
-        <div class="alert alert-warning" id="semester-status-banner">
-            <i class="fa fa-fw fa-calendar-o"></i>
-            <strong>Semester {{ config.active_semester }} ended on {{ config.active_semester.last_day }}.</strong>
-            <a href="{% url 'courses:semester_archive' config.open_semester_id %}" class="alert-link">Archive it</a>
-            to record final marks and free up your students' seats.
-        </div>
+    {% else %}
+        {% for semester in config.open_semesters %}
+            {% if semester.has_ended %}
+            <div class="alert alert-warning" id="semester-status-banner">
+                <i class="fa fa-fw fa-calendar-o"></i>
+                <strong>Semester {{ semester }} ended on {{ semester.last_day }}.</strong>
+                <a href="{% url 'courses:semester_archive' semester.id %}" class="alert-link">Archive it</a>
+                to record final marks and free up your students' seats.
+            </div>
+            {% endif %}
+        {% endfor %}
     {% endif %}
 {% endif %}

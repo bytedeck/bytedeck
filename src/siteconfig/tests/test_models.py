@@ -146,17 +146,28 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.assertTrue(new_semester.is_open)
         self.assertFalse(self.config.has_no_open_semester())
 
-    def test_set_active_semester__returns_the_previous_open_semester_to_upcoming(self):
-        """A deck runs one semester at a time, so opening another closes the books on none of
-        them: the previously open semester goes back to Upcoming, not Archived."""
-        previously_open = self.config.active_semester
-        self.assertTrue(previously_open.is_open)
+    def test_set_active_semester__leaves_the_other_open_semester_running(self):
+        """Starting a semester opens it alongside the ones already open (issue #1781): a deck
+        can run two course groups on different calendars, and starting the second cohort's
+        term must not stop the first cohort's."""
+        already_open = self.config.active_semester
+        self.assertTrue(already_open.is_open)
 
         self.config.set_active_semester(baker.make('courses.Semester'))
 
-        previously_open.refresh_from_db()
-        self.assertTrue(previously_open.is_upcoming)
-        self.assertEqual(Semester.objects.open().count(), 1)
+        already_open.refresh_from_db()
+        self.assertTrue(already_open.is_open)
+        self.assertEqual(Semester.objects.open().count(), 2)
+
+    def test_set_active_semester__points_at_the_semester_just_started(self):
+        """The pointer follows the most recently started semester, which is the default a
+        student is offered first when several are open."""
+        newly_started = baker.make('courses.Semester')
+
+        self.config.set_active_semester(newly_started)
+
+        self.assertEqual(SiteConfig.get().active_semester, newly_started)
+        self.assertEqual(SiteConfig.get().open_semester, newly_started)
 
     def test_set_active_semester__accepts_a_semester_id(self):
         """A semester id can be passed instead of the object (what the semester views hold)."""
@@ -166,12 +177,22 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(self.config.active_semester, new_semester)
 
-    def test_has_no_open_semester__true_when_there_is_no_active_semester(self):
-        """No active semester at all is the between-semesters state (issue #1177), not an error."""
+    def test_has_no_open_semester__true_when_no_semester_is_open_at_all(self):
+        """No open semester anywhere is the between-semesters state (issue #1177), not an error."""
+        Semester.objects.all().update(status=Semester.Status.ARCHIVED)
         self.config.active_semester = None
         self.config.save()
 
         self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_any_semester_is_open(self):
+        """It asks about the deck, not the pointer: a semester the pointer doesn't name is
+        still one students can join, so the deck isn't between semesters (issue #2157 Phase 3)."""
+        baker.make('courses.Semester', status=Semester.Status.OPEN)
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertFalse(SiteConfig.get().has_no_open_semester())
 
     def test_has_no_open_semester__true_when_the_active_semester_is_archived(self):
         """A config left pointing at an archived semester counts as having none open, so a deck
