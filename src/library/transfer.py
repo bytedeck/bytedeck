@@ -194,9 +194,18 @@ def _snapshot_prereqs(quest):
 def _write_campaign(snapshot):
     """Find or create the destination's copy of a campaign.
 
-    Matched by `import_id` first, then by title, so a deck that already arranged this
-    campaign keeps the one it has rather than gaining a second copy of it. A campaign
-    created here arrives unpublished, like the quests inside it.
+    Matched by `import_id` first, then by title. The title fallback is there because
+    `Category.title` is unique per deck: without it, importing a campaign whose title the
+    destination already uses could not create a second one, it would fail validation and
+    reject the whole import. So the choice is to attach to the campaign of that name, or
+    to block the import until the teacher renames their own campaign.
+
+    The cost is that two unrelated campaigns sharing a title are treated as one, and the
+    imported quests land in the campaign the teacher already had. That is visible and
+    recoverable (the quests are there, and can be moved), where a blocked import is
+    neither, which is why it is the behaviour chosen here.
+
+    A campaign created here arrives unpublished, like the quests inside it.
 
     Must be called from within the destination schema context.
 
@@ -227,6 +236,14 @@ def _write_prereqs(quest, prereqs):
     returned so the caller can tell the teacher what gating did not come with the quest.
     That matters because the loss fails *open*: a quest that arrives with its gate missing
     is more available than its author intended, not less (#2399).
+
+    This only ever adds. It deliberately does not reconcile the destination's prerequisites
+    with the source's, because they are not a copy of each other: once a quest is on a
+    deck, the teacher gates it into their own map with prerequisites that exist only there
+    and appear in no snapshot. Removing whatever is absent from the source would delete
+    exactly those, silently. The cost of adding only is that a prerequisite removed
+    upstream lingers here, which leaves the quest more gated than intended: that fails
+    closed and the teacher can undo it, where deleting their own gating would not.
 
     Must be called from within the destination schema context.
 
