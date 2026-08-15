@@ -267,55 +267,84 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
         else:
             return active_semester
 
-    def complete_active_semester(self, clamp_negative_xp=False):
-        """Archive the open semester and leave the deck with no open semester, or return a
-        Semester error sentinel.
+    def complete_semester(self, semester=None, clamp_negative_xp=False):
+        """Archive one semester: record its students' final XP, free their seats, and make
+        it read-only.
 
-        clamp_negative_xp: record a negative final XP as zero instead of refusing
-        to close (the deck-suspension auto-close uses this, #1734 redesign B2;
-        the staff-driven close keeps the refusal so a teacher can investigate).
+        Everything it touches is scoped to that semester (issue #2157 Phase 3), so a deck
+        running a second one alongside keeps its registrations, its in-progress
+        submissions, and its pending approvals: archiving one cohort's term must not
+        disturb the other's.
+
+        Args:
+            semester: the Semester to archive. None means the deck's open semester, which
+                is what the archive page passes when there is only one.
+            clamp_negative_xp (bool): record a negative final XP as zero instead of
+                refusing to archive (the deck-suspension auto-close uses this, #1734
+                redesign B2; the staff-driven archive keeps the refusal so a teacher can
+                investigate first).
+
+        Returns:
+            Semester: the semester just archived, or one of the Semester.NO_OPEN_SEMESTER
+            / QUEST_AWAITING_APPROVAL / STUDENTS_WITH_NEGATIVE_XP sentinels when it was
+            refused.
         """
         # Atomic so a failure partway leaves nothing half-closed: calc_semester_grades()
         # saves each registration as it iterates and raises on a negative-XP student,
         # so without the transaction the students processed before it would stay finalized.
         try:
             with transaction.atomic():
-                # Lock the config row before reading which semester is open, the same lock
-                # set_active_semester() takes. Without it an activation running alongside this
-                # could open its semester and then have this archive clear the pointer,
-                # leaving a semester open that the deck no longer points at (so students
-                # couldn't use it).
-                SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
+                # Lock the config row for the duration, the same lock set_active_semester()
+                # takes. Without it an activation running alongside this could open its
+                # semester and then have this archive clear the pointer, leaving a semester
+                # open that the deck no longer points at (so students couldn't use it).
+                # The locked row is used for the pointer write below rather than
+                # SiteConfig.get(), whose cached copy can be behind the database.
+                siteconfig = SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
 
-                active_sem = self.get_current()
-
-                # nothing to archive: the deck is already between semesters. get_current() is
-                # None for a pointer at a semester that isn't open, so an archived (or
-                # upcoming) one can't be archived through here either.
-                if active_sem is None:
+                if semester is None:
+                    semester = self.get_current()
+                if semester is None:
                     return Semester.NO_OPEN_SEMESTER
 
-                # There are still quests awaiting approval, can't close!
-                if QuestSubmission.objects.all_awaiting_approval():
+                # Re-read the semester under its own lock rather than trusting the instance
+                # passed in: two requests can both load it while it is open, and the config
+                # lock only makes them queue. The second would otherwise recalculate final
+                # marks from XP the first already reset, recording zeroes.
+                locked = self.get_queryset().select_for_update().filter(pk=semester.pk).first()
+                if locked is None:  # pragma: no cover
+                    # the row would have to be deleted between the caller loading it and
+                    # this lock, and SemesterDelete refuses to delete an open semester
+                    return Semester.NO_OPEN_SEMESTER
+                semester = locked
+
+                # nothing to archive. Only an open semester can be archived, so one that is
+                # already archived (or still upcoming) is refused rather than archived twice.
+                if not semester.is_open:
+                    return Semester.NO_OPEN_SEMESTER
+
+                # its own students' quests are still awaiting approval, can't close!
+                if QuestSubmission.objects.all_awaiting_approval(semester=semester).exists():
                     return Semester.QUEST_AWAITING_APPROVAL
 
                 # need to calculate all user XP and store in their Course
-                CourseStudent.objects.calc_semester_grades(active_sem, clamp_negative_xp=clamp_negative_xp)
+                CourseStudent.objects.calc_semester_grades(semester, clamp_negative_xp=clamp_negative_xp)
 
-                QuestSubmission.objects.remove_in_progress()
+                QuestSubmission.objects.remove_in_progress(semester=semester)
 
-                active_sem.status = Semester.Status.ARCHIVED
-                active_sem.save()
+                semester.status = Semester.Status.ARCHIVED
+                semester.save()
 
-                # the deck now has no open semester (issue #1177): students can't join a
-                # course or earn XP until staff open the next one
-                siteconfig = SiteConfig.get()
-                siteconfig.active_semester = None
-                siteconfig.save()
+                # clear the pointer only when it named this semester, so archiving one of
+                # two open semesters leaves the deck pointed at the one still running
+                # (issue #1177 for the no-semester-left case)
+                if siteconfig.active_semester_id == semester.pk:
+                    siteconfig.active_semester = None
+                    siteconfig.save()
         except ValueError:
             return Semester.STUDENTS_WITH_NEGATIVE_XP
 
-        return active_sem
+        return semester
 
 
 def default_end_date():

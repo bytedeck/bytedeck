@@ -783,6 +783,36 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
 
         self.assertEqual(self.close(), 'semester close already handled this episode')
 
+    def test_close__closes_every_open_semester(self):
+        """Suspension stops the whole deck, so a second open semester closes with the first
+        (issue #2157 Phase 3). Its own pending approvals are returned first: leaving them
+        would make its close report QUEST_AWAITING_APPROVAL and roll the whole suspension
+        enforcement back."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from courses.models import Semester
+        from quest_manager.models import QuestSubmission
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_student = baker.make(User)
+        baker.make('courses.CourseStudent', user=other_student, semester=other_semester)
+        baker.make(
+            QuestSubmission, user=other_student, is_completed=True, is_approved=False,
+            semester=other_semester,
+        )
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
+        summary = self.close()
+
+        self.assertIn('closed semester', summary)
+        other_semester.refresh_from_db()
+        self.assertTrue(other_semester.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertFalse(Semester.objects.open().exists())
+
     def test_close__no_op_paths(self):
         """Unsuspended decks are untouched (no ledger row); a suspended deck whose
         semester is already closed records the episode without changes."""
@@ -832,7 +862,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         from courses.models import Semester
 
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
-        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+        with patch.object(Semester.objects, 'complete_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
             with self.assertRaises(RuntimeError):
                 self.close()
         self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())

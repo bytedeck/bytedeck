@@ -152,33 +152,67 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         """ Gets the current semester object in a queryset  """
         self.assertQuerySetEqual(Semester.objects.get_current(as_queryset=True), [SiteConfig.get().active_semester])
 
-    def test_complete_active_semester__returns_sentinel_when_pointed_at_archived_semester(self):
+    def test_complete_semester__returns_sentinel_when_pointed_at_archived_semester(self):
         """A config left pointing at an archived semester has nothing to archive either."""
         active_sem = Semester.objects.get_current()
         active_sem.status = Semester.Status.ARCHIVED
         active_sem.save()
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
 
-    def test_complete_active_semester__returns_sentinel_when_no_semester_is_open(self):
+    def test_complete_semester__returns_sentinel_when_no_semester_is_open(self):
         """With no active semester (the state archiving leaves behind), there is nothing to
         archive and the sentinel comes back instead of an error."""
         config = SiteConfig.get()
         config.active_semester = None
         config.save()
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
 
-    def test_complete_active_semester__leaves_the_deck_with_no_open_semester(self):
+    def test_complete_semester__leaves_the_deck_with_no_open_semester(self):
         """Archiving clears the active semester, so the deck sits between semesters
         (issue #1177) instead of pointing at an archived one."""
-        archived = Semester.objects.complete_active_semester()
+        archived = Semester.objects.complete_semester()
 
         self.assertTrue(archived.is_archived)
         self.assertIsNone(SiteConfig.get().active_semester)
         self.assertTrue(SiteConfig.get().has_no_open_semester())
 
-    def test_complete_active_semester__returns_awaiting_approval_with_pending_submissions(self):
+    def test_complete_semester__leaves_the_other_open_semester_alone(self):
+        """Archiving one semester is scoped to it (issue #2157 Phase 3): the other cohort's
+        registrations stay active, their in-progress quests survive, and the deck's pointer
+        is left alone because it named the semester still running."""
+        config = SiteConfig.get()
+        archiving = config.active_semester
+        keeping = baker.make(Semester, status=Semester.Status.OPEN)
+        config.active_semester = keeping
+        config.save()
+
+        student_here = baker.make(User)
+        baker.make(CourseStudent, user=student_here, course=baker.make(Course), semester=archiving)
+        student_there = baker.make(User)
+        registration_there = baker.make(CourseStudent, user=student_there, course=baker.make(Course), semester=keeping)
+        in_progress_there = baker.make(QuestSubmission, user=student_there, semester=keeping, is_completed=False)
+
+        self.assertEqual(Semester.objects.complete_semester(archiving), archiving)
+
+        keeping.refresh_from_db()
+        self.assertTrue(keeping.is_open)
+        registration_there.refresh_from_db()
+        self.assertTrue(registration_there.active)  # their seat is not freed
+        self.assertTrue(QuestSubmission.objects.filter(pk=in_progress_there.pk).exists())
+        self.assertEqual(SiteConfig.get().active_semester, keeping)
+
+    def test_complete_semester__is_not_blocked_by_another_semesters_approvals(self):
+        """Quests awaiting approval in the other open semester are that semester's business,
+        so they don't stand in the way of archiving this one."""
+        archiving = SiteConfig.get().active_semester
+        other = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(QuestSubmission, semester=other, is_completed=True, is_approved=False)
+
+        self.assertEqual(Semester.objects.complete_semester(archiving), archiving)
+
+    def test_complete_semester__returns_awaiting_approval_with_pending_submissions(self):
         """A semester can't be closed while quests are still awaiting approval."""
         baker.make(
             QuestSubmission,
@@ -186,9 +220,9 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
             is_approved=False,
             semester=SiteConfig.get().active_semester,
         )
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.QUEST_AWAITING_APPROVAL)
+        self.assertEqual(Semester.objects.complete_semester(), Semester.QUEST_AWAITING_APPROVAL)
 
-    def test_complete_active_semester__clamp_records_negative_xp_as_zero(self):
+    def test_complete_semester__clamp_records_negative_xp_as_zero(self):
         """With clamp_negative_xp on (the deck-suspension auto-close, #1734 B2), a
         student's negative balance is recorded as zero final XP and the semester
         closes; without it the STUDENTS_WITH_NEGATIVE_XP refusal stands."""
@@ -198,8 +232,8 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
         with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
-            self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
-            result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
+            self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+            result = Semester.objects.complete_semester(clamp_negative_xp=True)
 
         self.assertTrue(result.is_archived)
         registration.refresh_from_db()
@@ -224,7 +258,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         self.assertFalse(
             CourseStudent.objects.filter(semester=SiteConfig.get().active_semester, active=False).exists())
 
-    def test_complete_active_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
+    def test_complete_semester__rolls_back_grades_when_a_student_has_negative_xp(self):
         """A negative-XP student aborts the close atomically: registrations finalized before
         the bad student was reached are rolled back and the semester stays open. Regression
         test for the pre-transaction behavior, where those students kept their recorded
@@ -245,7 +279,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
             xp_adjustment=-10,  # makes this student's XP negative
         )
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
+        self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
 
         # the fine student's registration must be untouched, and the semester still open
         fine_registration.refresh_from_db()
@@ -495,7 +529,7 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
             CourseStudent, user=self.student, course=baker.make(Course),
             semester=SiteConfig.get().active_semester,
         )
-        self.archived_semester = Semester.objects.complete_active_semester()
+        self.archived_semester = Semester.objects.complete_semester()
 
     def test_archiving__leaves_no_active_semester(self):
         """The state under test: the semester is archived and nothing is pointed at."""
@@ -519,7 +553,7 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         self.assertIsNone(Semester.objects.get_current())
         self.assertFalse(Semester.objects.get_current(as_queryset=True).exists())
 
-    def test_complete_active_semester__will_not_archive_a_semester_that_is_not_open(self):
+    def test_complete_semester__will_not_archive_a_semester_that_is_not_open(self):
         """An upcoming semester has no final marks to record, so archiving refuses rather
         than skipping it straight to the terminal stage."""
         upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
@@ -527,9 +561,30 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         config.active_semester = upcoming
         config.save()
 
-        self.assertEqual(Semester.objects.complete_active_semester(), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(), Semester.NO_OPEN_SEMESTER)
         upcoming.refresh_from_db()
         self.assertTrue(upcoming.is_upcoming)
+
+    def test_complete_semester__refuses_a_named_semester_that_is_not_open(self):
+        """Naming the semester doesn't get round the rule: an archived one passed straight to
+        the manager is refused rather than having its students' final marks recalculated from
+        the XP the first archive already reset."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+
+        self.assertEqual(Semester.objects.complete_semester(archived), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(upcoming), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_semester__reads_the_semesters_status_from_the_database(self):
+        """The status is re-read under the lock, so a stale in-memory instance saying "open"
+        can't push a second archive through: two requests can both load a semester while it
+        is open, and the config lock only makes them queue."""
+        semester = baker.make(Semester, status=Semester.Status.OPEN)
+        stale = Semester.objects.get(pk=semester.pk)  # loaded while it was still open
+        Semester.objects.complete_semester(semester)
+        self.assertTrue(stale.is_open)  # the caller's copy still says open
+
+        self.assertEqual(Semester.objects.complete_semester(stale), Semester.NO_OPEN_SEMESTER)
 
     def test_current_courses__is_empty(self):
         """Nobody is registered in a current course, so a student has none."""
@@ -606,14 +661,15 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
     def test_current_semester__unregistered_user_between_semesters_is_none(self):
         """With nothing open and no registration to fall back on, there is no semester."""
         Semester.objects.filter(pk=self.other_semester.pk).update(status=Semester.Status.ARCHIVED)
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
         self.assertIsNone(CourseStudent.objects.current_semester(self.teacher))
 
     def test_current_semester__archived_registration_is_not_current(self):
         """Archiving the semester a student was in leaves them with no current registration.
         They fall back to the deck's pointer, which archiving cleared, rather than staying
         attached to the archived semester (or being adopted by someone else's open one)."""
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
+        self.other_semester.refresh_from_db()
         self.assertTrue(self.other_semester.is_open)
         self.assertIsNone(CourseStudent.objects.current_semester(self.student))
 
@@ -811,7 +867,7 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
     def test_all_users_in_open_semesters__leaves_out_archived_semesters(self):
         """Archiving a semester takes its students off the roster: that is what frees seats."""
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
 
         self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 0)
 

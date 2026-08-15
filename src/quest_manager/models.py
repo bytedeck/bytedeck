@@ -1008,12 +1008,26 @@ class QuestSubmissionManager(models.Manager):
 
         return qs
 
-    def all_awaiting_approval(self, user=None, teacher=None):
-        if user is None:
-            qs = self.get_queryset(True).not_approved().completed(SiteConfig.get().approve_oldest_first)\
-                .for_teacher_only(teacher)
-            return qs
-        return self.get_queryset(True, user=user).get_user(user).not_approved().completed()
+    def all_awaiting_approval(self, user=None, teacher=None, semester=None):
+        """Submissions handed in and waiting for a teacher.
+
+        Args:
+            user: limit to this student's submissions, in their own semester.
+            teacher: limit to the students this teacher has blocks for.
+            semester: limit to one Semester's submissions, whichever semester it is.
+                Archiving passes the semester being archived so a second semester's
+                pending work doesn't block it (issue #2157 Phase 3).
+
+        Returns:
+            QuestSubmissionQuerySet: the matching submissions awaiting approval.
+        """
+        if user is not None:
+            return self.get_queryset(True, user=user).get_user(user).not_approved().completed()
+
+        qs = self.get_queryset(semester is None).not_approved().completed(SiteConfig.get().approve_oldest_first)
+        if semester is not None:
+            qs = qs.get_semester(semester)
+        return qs.for_teacher_only(teacher)
 
     def all_returned(self, user=None):
         # completion date indicates the quest was submitted, but since completed
@@ -1168,11 +1182,22 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def remove_in_progress(self):
-        # In Progress Quests
+    def remove_in_progress(self, semester=None):
+        """Delete the submissions students had on the go but never completed.
+
+        Args:
+            semester: delete only the submissions belonging to this Semester. Archiving
+                passes the semester it is archiving, so a deck running a second semester
+                alongside keeps that one's work (issue #2157 Phase 3). None deletes every
+                in-progress submission on the deck, semester or not.
+
+        Returns:
+            tuple: the (count, per-model counts) that QuerySet.delete() returns.
+        """
         qs = self.all_not_completed(active_semester_only=False)
-        num_del = qs.delete()
-        return num_del
+        if semester is not None:
+            qs = qs.get_semester(semester)
+        return qs.delete()
 
 
 class QuestSubmission(models.Model):
