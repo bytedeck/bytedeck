@@ -3060,6 +3060,28 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_approved)
         self.assertSuccessMessage(response)
 
+    def test_skip__keeps_the_students_draft_comment(self):
+        """Skipping leaves the student's unsubmitted draft comment on the submission (#2431).
+
+        Completing a quest publishes the draft comment, which is why marking a submission
+        completed clears it. Skipping publishes nothing, so clearing it would put the row beyond
+        reach and empty the student's comment box, even though a transferred quest can still be
+        commented on.
+        """
+        draft = Comment.objects.create_comment(
+            user=self.transfer_student, path=self.submission.get_absolute_url(),
+            text="half-written, not sent yet", target=None)
+        self.submission.draft_comment = draft
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('quests:skip', args=[self.submission.pk]))
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_approved)
+        self.assertEqual(self.submission.draft_comment, draft)
+        self.assertEqual(self.submission.draft_comment.text, "half-written, not sent yet")
+
     def test_skip__grants_the_student_no_xp(self):
         """The point of skipping: the quest is approved, but its XP is not added to the student's total."""
         self.client.force_login(self.test_teacher)

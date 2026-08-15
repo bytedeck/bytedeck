@@ -2124,9 +2124,19 @@ def skip(request, submission_id):
         with transaction.atomic():
             discard_draft_question_submissions(submission)
 
+            draft_comment = submission.draft_comment
+
             # approve quest automatically, and mark as transfer.
             submission.mark_completed()
             submission.mark_approved(transfer=True)
+
+            # mark_completed() clears the draft comment because completing publishes it first.
+            # Skipping publishes nothing, so hand it back: a transferred quest can still be
+            # commented on, and the student keeps whatever they had typed (with anything attached
+            # to it) ready to post. This is how the staff skip button already leaves it (#2431).
+            if draft_comment:
+                submission.draft_comment = draft_comment
+                submission.save()
 
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
