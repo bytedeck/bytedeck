@@ -24,11 +24,14 @@ from taggit.models import Tag
 
 from library.exporter import export_campaign_and_copy_quests, export_quest_to_library
 from library.importer import import_campaign_to, import_quest_to
+from library.models import IsLibraryContentMixin
 from library.transfer import LibraryTransferError, _describe
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.tests.test_views import LibraryTenantTestCaseMixin
 from library.utils import library_schema_context
 from prerequisites.models import Prereq
-from courses.models import Rank
+from badges.models import Badge
+from courses.models import Block, Course, Grade, Rank
 from quest_manager.models import Category, CommonData, Quest
 
 # The fields a Quest carries into the Library and back, as of today. This is not a wish
@@ -351,7 +354,9 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         prerequisite pointing outside the campaign is (#2399). A quest that its author gated
         on reaching Rank 3 arrives available to everyone, and nothing says so.
 
-        When #2450 is fixed this should assert the gate survives, presumably matched by name.
+        The gate is stripped rather than travelling broken, and the importing deck is told
+        it was, so the loss is visible rather than silent. When #2450 is fixed this should
+        assert the gate survives, presumably matched by name.
         """
         campaign, quest, _ = self._campaign_with_two_quests()
         rank = baker.make(Rank, name="Digital Novice")
@@ -517,3 +522,39 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         self.assertIn("Bad Quest Two", str(caught.exception))
         self.assertEqual(list(Quest.objects.all_including_archived().filter(import_id__in=import_ids)), [])
         self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
+
+class LibraryContentRegistrationTests(ByteDeckTenantTestCase):
+    """Which models the Shared Library is willing to carry between decks.
+
+    The set is declared by inheriting `IsLibraryContentMixin` rather than written down as
+    a list, so adding a shareable model is one edit on that model instead of an edit here
+    and a matching one somewhere in the transfer code that everyone forgets.
+    """
+
+    def test_library_content__registers_exactly_the_shareable_models(self):
+        """Quests, campaigns and badges can travel; nothing else currently can."""
+        registered = set(IsLibraryContentMixin.all_registered_model_classes())
+
+        self.assertEqual(registered, {Quest, Category, Badge})
+
+    def test_library_content__every_registered_model_has_an_import_id(self):
+        """A model claiming to be shareable must carry the identity that makes it so.
+
+        `import_id` is what a reference to this row resolves through on the far side, so a
+        model registered without one would be claiming a portable identity it lacks.
+        """
+        for model in IsLibraryContentMixin.all_registered_model_classes():
+            with self.subTest(model=model.__name__):
+                self.assertIn('import_id', {field.name for field in model._meta.concrete_fields})
+
+    def test_library_content__does_not_register_the_deck_specific_prereq_models(self):
+        """A rank, grade, block or course describes the deck, so it cannot be shared.
+
+        These are all valid prerequisites, which is exactly why the question has to be
+        asked: a quest can be gated on any of them, and none of them means the same thing
+        on another deck.
+        """
+        for model in (Rank, Grade, Block, Course):
+            with self.subTest(model=model.__name__):
+                self.assertFalse(IsLibraryContentMixin.model_is_registered(model))

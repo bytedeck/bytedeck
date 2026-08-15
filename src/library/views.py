@@ -153,6 +153,32 @@ def redirect_failed_import(request, error, redirect_to):
     return redirect(redirect_to)
 
 
+def warn_about_unmet_prereqs(request, unmet_prereqs):
+    """Tell the importer which gating did not come across with the content.
+
+    A prerequisite can only be rebuilt if this deck has the thing it points at. When it
+    does not, the quest arrives *without* that gate, which means more available than its
+    author intended rather than less: a quest meant to unlock after another one is
+    immediately open to anyone who can see it. Saying so here is what stops that being a
+    surprise found later, and it lands beside the "publish it and give it a prerequisite"
+    message the teacher is already acting on.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        unmet_prereqs (list[str]): names of the prerequisites this deck does not have.
+    """
+    if not unmet_prereqs:
+        return
+
+    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+    messages.warning(
+        request,
+        f"Heads up: this content required {names}, which your deck does not have, so "
+        "that requirement was not carried over. Anything gated on it arrives ungated, so "
+        "check its prerequisites before you publish."
+    )
+
+
 def record_push_origin(content_type, import_ids, request, source_deck_url):
     """Record which deck and which user shared this content to the Library (#2377).
 
@@ -499,7 +525,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
             try:
-                import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+                result = import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:quest_list')
 
@@ -518,6 +544,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             f"students can see it: <strong>{publish_link}</strong>, and give it a "
             f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
+        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         return redirect('quests:drafts')
 
@@ -618,7 +645,9 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
             try:
-                import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
+                result = import_campaign_to(
+                    destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
+                )
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:category_list')
 
@@ -640,6 +669,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
+        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')

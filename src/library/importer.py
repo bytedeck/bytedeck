@@ -1,7 +1,7 @@
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 
-from .transfer import snapshot_quest, write_quest, write_quests
+from .transfer import snapshot_quest, write_quests
 from .utils import library_schema_context
 
 
@@ -19,7 +19,8 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
         campaign_import_id (UUID): The import ID of the campaign to deactivate after import.
 
     Returns:
-        list[Quest]: The quests as they now exist on the destination deck.
+        TransferResult: The quests as they now exist on the destination deck, and the
+            names of any prerequisites this deck does not have.
 
     Raises:
         LibraryTransferError: If a quest cannot be written to the destination deck, for
@@ -61,7 +62,8 @@ def import_quest_to(*, destination_schema, quest_import_id):
         quest_import_id (UUID): The import ID of the quest to import.
 
     Returns:
-        Quest: The quest as it now exists on the destination deck.
+        TransferResult: The quest as it now exists on the destination deck, and the names
+            of any prerequisites this deck does not have.
 
     Raises:
         Quest.DoesNotExist: If no *published* quest with the given import_id exists in
@@ -76,4 +78,4 @@ def import_quest_to(*, destination_schema, quest_import_id):
         snapshot = snapshot_quest(quest)
 
     with schema_context(destination_schema):
-        return write_quest(snapshot, published=False, with_campaign=False)
+        return write_quests([(snapshot, False, None)], with_campaign=False)

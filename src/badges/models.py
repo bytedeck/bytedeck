@@ -14,6 +14,7 @@ from django.db.models.signals import post_delete, post_save
 from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
+from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
 from notifications.models import notify_rank_up
@@ -196,7 +197,7 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
+class Badge(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)

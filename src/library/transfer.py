@@ -25,11 +25,28 @@ Two rules hold everywhere below:
   successful one (#2397, #2364).
 """
 
+from typing import NamedTuple
+
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from prerequisites.models import Prereq
 from quest_manager.models import Category, Quest
+
+from .models import IsLibraryContentMixin
+
+
+class TransferResult(NamedTuple):
+    """What a copy produced, and what it could not bring with it.
+
+    `unmet_prereqs` is the reason this is a result rather than a bare list of quests. A
+    prerequisite whose target the destination does not have cannot be rebuilt, and the
+    loss fails open: the quest arrives more available than its author intended. Naming it
+    here is what lets the view warn the teacher instead of leaving them to notice.
+    """
+
+    quests: list
+    unmet_prereqs: list
 
 
 class LibraryTransferError(Exception):
@@ -126,8 +143,8 @@ def snapshot_quest(quest):
 
     Returns:
         dict: with keys `fields` (the quest's own values), `tags` (tag names), `campaign`
-        (a campaign snapshot or None) and `prereq_import_ids` (the import_ids of the
-        quests and badges it requires).
+        (a campaign snapshot or None) and `prereqs` (the shareable things it requires,
+        each as an import_id and a name).
     """
     return {
         'fields': {name: _read_field(quest, name) for name in _copied_field_names(Quest, QUEST_FIELDS_NOT_COPIED)},
@@ -135,16 +152,22 @@ def snapshot_quest(quest):
         # tag (or none) on the far side (#1792).
         'tags': sorted(quest.tags.names()),
         'campaign': snapshot_campaign(quest.campaign),
-        'prereq_import_ids': _snapshot_prereq_import_ids(quest),
+        'prereqs': _snapshot_prereqs(quest),
     }
 
 
-def _snapshot_prereq_import_ids(quest):
-    """The import_ids of the quests and badges this quest requires.
+def _snapshot_prereqs(quest):
+    """The shareable prerequisites of a quest, as portable ids with readable names.
 
-    Only prerequisites pointing at content that carries an `import_id` can travel, since
-    that is the only identifier shared across schemas. A prerequisite whose target is not
-    copied alongside the quest cannot be rebuilt on the far side (#2399).
+    A prerequisite is a generic foreign key, so it can point at any prerequisite model.
+    Only those marked with `IsLibraryContentMixin` (quests, campaigns and badges) have an
+    identity that survives the crossing; the rest describe the deck rather than the
+    content, and a rank or a course on another deck is not the same rank or course. Those
+    are stripped, because there is nothing on the far side for them to point at (#2450).
+
+    Every prerequisite is listed either way, because the name is what lets the destination
+    say which requirement it ended up without: one it cannot express (#2450) and one it
+    simply does not have (#2399) are the same loss from the teacher's side.
 
     Must be called from within the source schema context.
 
@@ -152,16 +175,20 @@ def _snapshot_prereq_import_ids(quest):
         quest (Quest): the quest whose prerequisites to read.
 
     Returns:
-        list[UUID]: the import_ids of the prerequisite objects.
+        list[dict]: one `{'import_id': UUID | None, 'name': str}` per prerequisite. A
+        `None` import_id marks one that can never travel, so the destination reports it
+        as missing rather than looking for something that was never sent.
     """
-    import_ids = []
+    prereqs = []
     for prereq in quest.prereqs():
         target = prereq.get_prereq()
-        target_import_id = getattr(target, 'import_id', None)
-        if target_import_id is not None:
-            import_ids.append(target_import_id)
+        shareable = IsLibraryContentMixin.model_is_registered(type(target))
+        prereqs.append({
+            'import_id': target.import_id if shareable else None,
+            'name': str(target),
+        })
 
-    return import_ids
+    return prereqs
 
 
 def _write_campaign(snapshot):
@@ -192,31 +219,49 @@ def _write_campaign(snapshot):
     return campaign
 
 
-def _write_prereqs(quest, prereq_import_ids):
-    """Rebuild the prerequisites whose targets exist on this deck.
+def _write_prereqs(quest, prereqs):
+    """Rebuild the prerequisites whose targets exist on this deck, and report the rest.
 
-    A prerequisite can only point at a row that is actually here, so one whose target was
-    not copied along with the quest is dropped. That is the loss #2399 describes; it is
-    unchanged by this module, which can only link what the destination holds.
+    A prerequisite can only point at a row that is actually here, so one whose target the
+    deck does not have cannot be rebuilt. Rather than dropping it in silence, the name is
+    returned so the caller can tell the teacher what gating did not come with the quest.
+    That matters because the loss fails *open*: a quest that arrives with its gate missing
+    is more available than its author intended, not less (#2399).
 
     Must be called from within the destination schema context.
 
     Args:
         quest (Quest): the freshly written quest.
-        prereq_import_ids (list[UUID]): import_ids of the required quests and badges.
+        prereqs (list[dict]): `{'import_id', 'name'}` entries from `_snapshot_prereqs`.
+
+    Returns:
+        list[str]: the names of the prerequisites this deck does not have.
     """
     from badges.models import Badge
 
     already_required = {p.get_prereq() for p in quest.prereqs()}
+    unmet = []
 
-    for import_id in prereq_import_ids:
-        target = Quest.objects.all_including_archived().filter(import_id=import_id).first()
+    for prereq in prereqs:
+        if prereq['import_id'] is None:
+            # Stripped on the way out because its target cannot cross at all (a rank, a
+            # course). Still worth naming: the gate is gone either way (#2450).
+            unmet.append(prereq['name'])
+            continue
+
+        target = Quest.objects.all_including_archived().filter(import_id=prereq['import_id']).first()
         if target is None:
-            target = Badge.objects.filter(import_id=import_id).first()
+            target = Category.objects.filter(import_id=prereq['import_id']).first()
+        if target is None:
+            target = Badge.objects.filter(import_id=prereq['import_id']).first()
 
-        if target is not None and target not in already_required:
+        if target is None:
+            unmet.append(prereq['name'])
+        elif target not in already_required:
             Prereq.add_simple_prereq(quest, target)
             already_required.add(target)
+
+    return unmet
 
 
 def write_quests(writes, *, with_campaign):
@@ -236,7 +281,8 @@ def write_quests(writes, *, with_campaign):
             campaign.
 
     Returns:
-        list[Quest]: the written quests, in the order given.
+        TransferResult: the written quests, and the names of any prerequisites the
+        destination does not have.
 
     Raises:
         LibraryTransferError: if any quest cannot be written.
@@ -249,10 +295,13 @@ def write_quests(writes, *, with_campaign):
             for snapshot, published, overrides in writes
         ]
 
+        # Second pass, so a prerequisite between two quests of this batch is linked
+        # whichever order they were written in.
+        unmet = []
         for (snapshot, _, _), quest in zip(writes, written):
-            _write_prereqs(quest, snapshot['prereq_import_ids'])
+            unmet.extend(_write_prereqs(quest, snapshot['prereqs']))
 
-    return written
+    return TransferResult(quests=written, unmet_prereqs=sorted(set(unmet)))
 
 
 def write_quest(snapshot, *, published, with_campaign, field_overrides=None):
@@ -275,7 +324,7 @@ def write_quest(snapshot, *, published, with_campaign, field_overrides=None):
         LibraryTransferError: if the quest cannot be written, most often because its name
             is already taken by a different quest on the destination deck.
     """
-    return write_quests([(snapshot, published, field_overrides)], with_campaign=with_campaign)[0]
+    return write_quests([(snapshot, published, field_overrides)], with_campaign=with_campaign).quests[0]
 
 
 def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None):

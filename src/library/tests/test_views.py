@@ -25,6 +25,8 @@ from library.exporter import (
 )
 from model_bakery import baker
 from notifications.models import Notification
+from courses.models import Rank
+from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
@@ -2098,3 +2100,102 @@ class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
         self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
+
+
+class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
+    """A prerequisite the importing deck does not have is reported, not dropped in silence.
+
+    The loss fails open: a quest meant to unlock after another one arrives with no gate at
+    all, so it is immediately available to anyone who can see it. The teacher is told which
+    requirement did not come across, beside the message telling them to publish it (#2399).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a Library quest gated on another quest that is not being imported."""
+        with library_schema_context():
+            cls.gate = baker.make(Quest, name="Finish The Prologue", published=True)
+            cls.library_quest = baker.make(Quest, name="Chapter Two", published=True)
+            Prereq.add_simple_prereq(cls.library_quest, cls.gate)
+
+        cls.test_teacher = User.objects.create_user('unmet_prereq_teacher', is_staff=True)
+
+    def _message_texts(self, response):
+        """The messages queued for the user by a request.
+
+        Args:
+            response (HttpResponse): the response to read the message storage from.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def test_import_quest__warns_that_a_missing_prerequisite_was_not_carried_over(self):
+        """Importing a gated quest onto a deck without the gate names what is missing."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertTrue(
+            any("Finish The Prologue" in text for text in self._message_texts(response)),
+            f"expected the missing prerequisite to be named, got {self._message_texts(response)}",
+        )
+
+    def test_import_quest__arrives_ungated_when_the_prerequisite_is_missing(self):
+        """The warning is warranted: the quest really does arrive with no prerequisite."""
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual(list(imported.prereqs()), [])
+
+    def test_import_quest__stays_quiet_when_the_deck_already_has_the_prerequisite(self):
+        """A deck holding the gate gets the prerequisite rebuilt and no warning."""
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertFalse(any("did not" in text or "not carried over" in text for text in self._message_texts(response)))
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
+
+    def test_import_quest__re_importing_does_not_duplicate_an_existing_prerequisite(self):
+        """Importing the same quest twice refreshes it without stacking up its gate again.
+
+        Re-importing is how a deck picks up an updated version of Library content, so it
+        happens to quests that already have their prerequisites wired up.
+        """
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
+
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
+
+    def test_import_quest__warns_about_a_prerequisite_that_could_never_travel(self):
+        """A rank gate is stripped on the way out, and the importer is told it is gone.
+
+        From the teacher's side a requirement that cannot cross (#2450) and one this deck
+        happens not to have (#2399) are the same loss, so both are named.
+        """
+        with library_schema_context():
+            gated = baker.make(Quest, name="Rank Gated Quest", published=True)
+            rank = baker.make(Rank, name="Digital Novice")
+            Prereq.add_simple_prereq(gated, rank)
+
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('library:import_quest', args=[gated.import_id]), follow=True)
+
+        self.assertTrue(
+            any("Digital Novice" in text for text in self._message_texts(response)),
+            f"expected the stripped rank to be named, got {self._message_texts(response)}",
+        )
