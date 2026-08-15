@@ -48,6 +48,29 @@ def save_draft_file_answers(question_formset, uploaded_files):
     return saved
 
 
+def discard_draft_question_submissions(quest_submission):
+    """Delete a submission's unpublished draft answer rows, and return how many were deleted.
+
+    Called when a submission is skipped (approved as a transfer): the student never submitted
+    this work and the quest is being waived, so nothing will ever publish those rows. Only
+    answers attached to a comment are rendered anywhere, so left alone the drafts would be
+    invisible and permanent (#2164).
+
+    Published rows are untouched, so a submission that was completed once, or returned and
+    re-drafted, keeps the answers it already published with their comments.
+
+    Args:
+        quest_submission: the QuestSubmission being skipped.
+
+    Returns:
+        int: how many draft rows were deleted.
+    """
+    deleted, _ = QuestionSubmission.objects.filter(
+        quest_submission=quest_submission, comment__isnull=True
+    ).delete()
+    return deleted
+
+
 def sync_draft_question_submissions(quest_submission):
     """Ensure exactly one draft answer row exists per current question of the submission's
     quest, and return the queryset of draft rows to build the answer formset from.
