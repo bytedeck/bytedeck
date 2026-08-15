@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.validators import validate_comma_separated_integer_list
-from django.db import models, transaction
+from django.db import connection, models, transaction
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -11,6 +11,7 @@ from django.utils import timezone
 
 import numpy
 from colorful.fields import RGBColorField
+from django_tenants.utils import get_public_schema_name
 
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
@@ -504,10 +505,24 @@ class Semester(models.Model):
         Profile.objects.bulk_update(profiles, ['xp_cached'])
 
     def get_student_mark_list(self, students_only=False):
+        """The cached mark of every student registered in this semester.
+
+        Read from this semester's own registrations, so a mark distribution describes the
+        semester it is drawn for even when another one is open alongside it.
+
+        Args:
+            students_only (bool): leave out staff and test accounts.
+
+        Returns:
+            list: each registered student's mark_cached, including None for the unmarked.
+        """
         # select_related the profile since we read profile.mark_cached for every
         # student below; without it that is a query per student.
-        students = CourseStudent.objects.all_users_for_active_semester(
-            students_only=students_only
+        students = User.objects.filter(
+            id__in=CourseStudent.objects.all_for_semester(
+                self, students_only=students_only,
+            ).values_list('user', flat=True),
+            is_active=True,
         ).select_related('profile')
         mark_list = []
         for student in students:
@@ -671,15 +686,20 @@ class CourseStudentManager(models.Manager):
                 coursestudent.active = False
                 coursestudent.save()
 
-    def all_for_semester(self, semester, students_only=False, active_only=False):
-        """All registrations for `semester`; optionally students only, and
-        optionally only registrations still active (a closed semester deactivates
-        its registrations, so active_only excludes them: #1734 redesign B2)."""
+    def all_for_semester(self, semester, students_only=False):
+        """The registrations in one particular semester.
+
+        Args:
+            semester: the Semester wanted, or None for no semester at all.
+            students_only (bool): leave out staff and test accounts.
+
+        Returns:
+            CourseStudentQuerySet: that semester's registrations, active or not. The
+            roster of the deck as a whole is all_users_in_open_semesters() instead.
+        """
         qs = self.get_queryset().get_semester(semester)
         if students_only:
             qs = qs.get_students_only()
-        if active_only:
-            qs = qs.filter(active=True)
         return qs
 
     # pick one of the courses...for now
@@ -724,22 +744,36 @@ class CourseStudentManager(models.Manager):
             return registration.semester
         return SiteConfig.get().open_semester
 
-    def all_users_for_active_semester(self, students_only=False, active_only=False):
-        """
-        :return: queryset of all Users who are enrolled in a course during the active semester (doubles removed)
+    def all_users_in_open_semesters(self, students_only=False, active_only=False):
+        """Every user registered in a course in a semester that is open right now.
 
-        active_only limits enrollment to registrations still active, so a closed
-        (e.g. suspension-closed) semester contributes no users.
+        The deck's roster is the union across its open semesters rather than the contents of
+        one of them (issue #2157 Phase 3): with two cohorts running on different calendars,
+        both are equally current, and a student appears once however many courses they hold.
+
+        Args:
+            students_only (bool): leave out staff and test accounts.
+            active_only (bool): leave out registrations that are no longer active, so a
+                semester closed by a suspension contributes no users.
+
+        Returns:
+            QuerySet[User]: the matching active users, without duplicates.
         """
-        try:
-            courses = self.all_for_semester(SiteConfig.get().open_semester, students_only=students_only, active_only=active_only)
-            user_list = courses.values_list('user', flat=True)
-            user_list = set(user_list)  # removes doubles
-            return User.objects.filter(id__in=user_list, is_active=True)
-        except AttributeError:
-            # The code will run on the public tenant when booting up, throwing an exception because
-            # the public tenant doesn't have a SiteConfig object.
+        if connection.schema_name == get_public_schema_name():
+            # the public tenant has no courses tables to read: this runs there while booting
             return User.objects.none()
+
+        courses = self.get_queryset().filter(semester__status=Semester.Status.OPEN)
+        if students_only:
+            courses = courses.get_students_only()
+        if active_only:
+            courses = courses.filter(active=True)
+        # the registrations stay a subquery rather than a set of ids read into python: the
+        # callers that only count the roster then never load it. IN (subquery) yields each
+        # user once, so a student in several courses is still one user
+        return User.objects.filter(
+            id__in=courses.values_list('user_id', flat=True), is_active=True,
+        )
 
     # @cached(60*60*12)
     def get_current_teacher_list(self, user):

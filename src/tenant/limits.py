@@ -19,8 +19,6 @@ current, so they recount LIVE to avoid racing the cache.
 """
 from django.apps import apps
 
-from siteconfig.models import SiteConfig
-
 from tenant.utils import get_current_deck
 
 
@@ -32,8 +30,8 @@ def can_add_current_student(user):
     * the deck's cap is unlimited (-1, admin-set);
     * the user never counts toward the cap -- staff, superusers, and test
       accounts (current-students-only counting, maintainer decision on #2047);
-    * the user is already current (registered this semester, e.g. joining a
-      second course) -- that's not a new seat;
+    * the user is already current (registered in the semester they are taking a
+      course in, e.g. joining a second course) -- that's not a new seat;
     * the live current-student count is below the effective cap.
 
     Refused only when granting a brand-new seat would exceed the cap.
@@ -56,11 +54,9 @@ def can_add_current_student(user):
         return True
 
     CourseStudent = apps.get_model('courses', 'CourseStudent')
-    # all_for_user_semester() is empty when no semester is open, so nobody holds a seat then
-    already_current = CourseStudent.objects.all_for_user_semester(
-        user, SiteConfig.get().open_semester
-    ).get_active().exists()
-    if already_current:
+    # someone already holding a seat keeps it when they add another course. current_courses()
+    # is empty when they are in no open semester, so nobody holds a seat between semesters
+    if CourseStudent.objects.current_courses(user).get_active().exists():
         return True
 
     return deck.get_active_user_count() < cap

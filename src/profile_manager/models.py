@@ -55,9 +55,14 @@ class ProfileManager(models.Manager):
     def all_students(self):
         return self.get_queryset().students_only()
 
-    def all_for_active_semester(self):
-        """:return: a queryset of student profiles with a course this semester"""
-        courses_user_list = CourseStudent.objects.all_users_for_active_semester()
+    def all_in_open_semesters(self):
+        """Student profiles for everyone currently taking a course.
+
+        Returns:
+            QuerySet[Profile]: the profiles of active students registered in any semester
+            that is open right now, across all of them when several are.
+        """
+        courses_user_list = CourseStudent.objects.all_users_in_open_semesters()
         qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
 
@@ -86,7 +91,7 @@ class ProfileManager(models.Manager):
         verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
         students_to_email = (
-            CourseStudent.objects.all_users_for_active_semester()
+            CourseStudent.objects.all_users_in_open_semesters()
                                  .filter(verified_emails)
                                  .exclude(empty_emails)
                                  .filter(email_filter)

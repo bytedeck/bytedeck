@@ -28,7 +28,7 @@ from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
 from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
-from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange
+from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange, semester_for
 
 from django.db import transaction
 from django.db.models import ProtectedError, Q
@@ -1008,14 +1008,25 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, Vie
     def get_datasets(self):
         """query datasets for both histograms ( marks over 100% will be capped at 100% )
 
+        The comparison group is this student's own semester, so a deck running two cohorts
+        on different calendars shows each of them their own classmates' marks rather than
+        both cohorts mixed together.
+
         Returns:
-            tuple[int, list[ints]]: queried user's mark and all students in active semester's mark
+            tuple[int, list[ints]]: queried user's mark, and the marks of the other students
+            in their semester (empty when they are in none).
         """
         # grab dataset
         user_mark = self.user.profile.mark_cached or 0  # can be nonetype
-        student_marks = Semester.get_student_mark_list(Semester, students_only=True)
-        # only remove user's mark from student_marks if user is part of active sem
-        if CourseStudent.objects.all_users_for_active_semester(students_only=True).filter(id=self.user.id).exists():
+        semester = semester_for(self.user)
+        student_marks = semester.get_student_mark_list(students_only=True) if semester else []
+        # a student whose mark has never been calculated has mark_cached None, which has no
+        # place on a distribution and which numpy can't clip against a number
+        student_marks = [mark for mark in student_marks if mark is not None]
+        # the user's own mark is drawn in the other histogram, so take it out of this one.
+        # Only when it is there: theirs may be one of the Nones just dropped, and remove()
+        # raises on a value the list doesn't hold.
+        if user_mark in student_marks:
             student_marks.remove(user_mark)
 
         # limit marks, so marks > 100 can show on histogram

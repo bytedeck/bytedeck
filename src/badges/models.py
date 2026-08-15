@@ -269,7 +269,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
 
         # students_only=True: the grant-check is for students, so exclude staff/test accounts that
         # happen to be enrolled in a course (issue #2061). The grant task filters the same way.
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=True)
+        students = CourseStudent.objects.all_users_in_open_semesters(students_only=True)
         return [user for user in students if self.student_qualifies_ungranted(user)]
 
     def get_icon_url(self):
@@ -381,14 +381,22 @@ class BadgeAssertionManager(models.Manager):
     def all_for_user_badge(self, user, badge, active_semester_only):
         return self.get_queryset(active_semester_only, user=user).get_user(user).get_badge(badge)
 
-    def user_badge_assertion_count(self, badge, active_semester_only=False):
-        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.
-        If active_semester_only is True, only users with active profiles in the active semester will be returned.
-        Otherwise, all users with active profiles will be returned.
+    def user_badge_assertion_count(self, badge, current_students_only=False):
+        """Users with their number of assertions of `badge` annotated as assertion_count.
+
+        Args:
+            badge: the Badge being counted.
+            current_students_only (bool): limit to students taking a course right now, in
+                any semester that is open. Otherwise every student with an active profile
+                is counted, including those from past semesters.
+
+        Returns:
+            QuerySet[User]: the users who hold at least one assertion of the badge, most
+            assertions first, each annotated with assertion_count.
         """
         from profile_manager.models import Profile
-        if active_semester_only:
-            users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
+        if current_students_only:
+            users = User.objects.filter(profile__in=Profile.objects.all_in_open_semesters())
         else:
             users = User.objects.filter(profile__in=Profile.objects.all_students())
 

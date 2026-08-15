@@ -64,7 +64,7 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     if quest.available_outside_course:
         users = User.objects.all()
     else:
-        users = CourseStudent.objects.all_users_for_active_semester()
+        users = CourseStudent.objects.all_users_in_open_semesters()
 
     users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
     user = None
@@ -144,7 +144,7 @@ def grant_badge_assertions_for_badge(self, badge_id, start_from_user_id):
 
     # students_only=True to match the grant-check preview (Badge.students_who_qualify_ungranted):
     # the grant is for students, so staff/test accounts enrolled in a course are excluded (#2061).
-    users = CourseStudent.objects.all_users_for_active_semester(students_only=True)
+    users = CourseStudent.objects.all_users_in_open_semesters(students_only=True)
     users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
 
     user = None
@@ -210,7 +210,7 @@ def update_quest_conditions_all_users(self, start_from_user_id):
     cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
     # only cycle through users currently in a course
-    users = CourseStudent.objects.all_users_for_active_semester()
+    users = CourseStudent.objects.all_users_in_open_semesters()
     users = users.order_by('id').filter(id__gte=start_from_user_id)
 
     users = list(users.values_list('id', flat=True)[:settings.CELERY_TASKS_BUNCH_SIZE])  # noqa
