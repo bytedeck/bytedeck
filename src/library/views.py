@@ -8,6 +8,7 @@ from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
+from django.urls import reverse
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.generic import TemplateView
@@ -101,6 +102,29 @@ def redirect_awaiting_review(request, content_type, redirect_to):
         f"That {content_type} is not available in the Library yet: a Library admin still has to review and publish it."
     )
     return redirect(redirect_to)
+
+
+def viewer_is_library_staff(request):
+    """Whether this viewer is staff *of the Library deck itself*.
+
+    Attribution names the deck content came from, but a link to that deck is only useful
+    to someone who can actually open it. A teacher on their own deck cannot: other decks
+    are closed to them, so the link would be a dead end. The people it helps are the
+    Library's own staff, who review pushed content and may want to see where it came from,
+    and they are staff of the Library deck, which is only true when the page is being
+    served from it.
+
+    The deck is read from the request rather than from the connection, because the views
+    that ask this read the content itself inside `library_schema_context()`: on the
+    connection every viewer would look like they were on the Library deck.
+
+    Args:
+        request (HttpRequest): the current request.
+
+    Returns:
+        bool: True when the request is being served from the Library deck by a staff user.
+    """
+    return request.tenant.schema_name == get_library_schema_name() and request.user.is_staff
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -318,6 +342,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             'library_quests': page_quests,
             'page_obj': page,
             'search_term': search_term,
+            'viewer_is_library_staff': viewer_is_library_staff(self.request),
             'num_matching_quests': paginator.count,
             'num_quests': num_quests,
             'num_campaigns': num_campaigns,
@@ -454,12 +479,15 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         # An imported quest arrives as an unpublished draft with no prerequisite, so it is
         # invisible to students and unreachable on the map. Saying so is the difference
-        # between "imported" and "usable" (#2377).
+        # between "imported" and "usable", and each step links to the page that does it
+        # rather than leaving the reader to find it (#2377).
+        publish_link = f'<a href="{reverse("quests:quest_update", args=[quest.id])}">publish it</a>'
+        prereq_link = f'<a href="{reverse("quests:quest_prereqs_update", args=[quest.id])}">prerequisite</a>'
         messages.success(
             request,
             f"Successfully imported '{link}' to your deck. Two things left to do before "
-            "students can see it: <strong>publish it</strong>, and give it a "
-            "<strong>prerequisite</strong> so it is reachable on the quest map."
+            f"students can see it: <strong>{publish_link}</strong>, and give it a "
+            f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
 
         return redirect('quests:drafts')
@@ -566,12 +594,18 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         category = get_object_or_404(Category, import_id=campaign_import_id)
         link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         # As with a single quest: the campaign and its quests arrive unpublished and
-        # unreachable, so the import is only half the job (#2377).
+        # unreachable, so the import is only half the job (#2377). Publishing is on the
+        # campaign's own edit form; the prerequisite belongs to one of its quests, so that
+        # step links to the campaign, where they are listed.
+        publish_link = (
+            f'<a href="{reverse("quests:category_update", args=[category.id])}">publish the campaign</a>'
+        )
+        prereq_link = f'<a href="{category.get_absolute_url()}">prerequisite</a>'
         messages.success(
             request,
             f"Successfully imported '{link}' to your deck. Two things left to do before "
-            "students can see it: <strong>publish the campaign</strong> (which publishes its "
-            "quests), and give its first quest a <strong>prerequisite</strong> so the campaign "
+            f"students can see it: <strong>{publish_link}</strong> (which publishes its "
+            f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
 
@@ -936,6 +970,7 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
 
             context.update({
                 'origin': origins.get(category.import_id),
+                'viewer_is_library_staff': viewer_is_library_staff(self.request),
                 'category': category,
                 'category_id': category.pk,
                 'category_campaign_name': category.title,
