@@ -6,7 +6,8 @@ staff only. Nudges the two states the semester workflow can silently sit in:
   (archiving records final marks and frees that semester's students' deck seats).
 A deck can run more than one semester at once (#1781), so the second nudge is per
 semester: each one that has ended gets its own line, naming it and linking to its own
-archive page, and a semester still running is left alone.
+archive page, and a semester still running is left alone. Each of those lines carries
+the semester's id in its own id attribute, since several can render at once.
 `config` comes from the config context processor; it is None on the public schema,
 which hides the banner entirely. Suppressed on a suspended deck (current_deck from the
 deck_status context processor): students can't sign in there anyway, so semester nudges
@@ -23,7 +24,7 @@ are noise next to the suspension banner.
     {% else %}
         {% for semester in config.open_semesters %}
             {% if semester.has_ended %}
-            <div class="alert alert-warning" id="semester-status-banner">
+            <div class="alert alert-warning" id="semester-status-banner-{{ semester.id }}">
                 <i class="fa fa-fw fa-calendar-o"></i>
                 <strong>Semester {{ semester }} ended on {{ semester.last_day }}.</strong>
                 <a href="{% url 'courses:semester_archive' semester.id %}" class="alert-link">Archive it</a>

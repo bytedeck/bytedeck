@@ -58,6 +58,17 @@ class CourseStudentForm(forms.ModelForm):
     # filtering the available options in a foreign key choice field
     # http://stackoverflow.com/questions/15608784/django-filter-the-queryset-of-modelchoicefield
     def __init__(self, *args, **kwargs):
+        """Narrow the semester, course and group choices to the ones worth offering.
+
+        Semesters are the open ones, courses and groups the active ones. Under simplified
+        registration a field with only one choice is hidden and takes that choice, so a
+        student joining the usual single-semester, single-course deck is not asked anything.
+
+        Args:
+            student_registration (bool): True when this is a student registering themselves,
+                the only case simplified registration applies to. Staff adding a student see
+                every field, whatever the setting says.
+        """
         student_registration = kwargs.pop('student_registration', None)
         super().__init__(*args, **kwargs)
 
@@ -67,6 +78,11 @@ class CourseStudentForm(forms.ModelForm):
         semester_qs = Semester.objects.open()
         self.fields['semester'].queryset = semester_qs
         self.fields['semester'].empty_label = None
+        # preselect the deck's default rather than whichever semester sorts first: the list is
+        # newest term first, so without this a deck pointed at the older of two open semesters
+        # would offer the newer one. An instance being edited keeps its own semester, since
+        # initial data built from the instance wins over a field's initial.
+        self.fields['semester'].initial = SiteConfig.get().open_semester_id
 
         courses_qs = Course.objects.filter(active=True)
         self.fields['course'].queryset = courses_qs

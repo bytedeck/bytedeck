@@ -1,10 +1,15 @@
+import datetime
+
 from django import forms
+from django.contrib.auth import get_user_model
 from model_bakery import baker
 
 from courses.forms import CourseStudentForm, SemesterForm
-from courses.models import Semester
+from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
+
+User = get_user_model()
 
 
 class CourseStudentFormTest(ByteDeckTenantTestCase):
@@ -20,6 +25,35 @@ class CourseStudentFormTest(ByteDeckTenantTestCase):
         form = CourseStudentForm()
 
         self.assertEqual(list(form.fields['semester'].queryset), [pointed_at, other])
+
+    def test_semester_field__defaults_to_the_decks_own_semester(self):
+        """The choices are listed newest term first, so a deck running an older semester
+        alongside a newer one would otherwise offer the newer one by default and quietly put
+        students in the wrong cohort. The deck's own semester is preselected instead."""
+        older = SiteConfig.get().active_semester
+        baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=older.first_day + datetime.timedelta(days=200),
+            last_day=older.last_day + datetime.timedelta(days=200),
+        )
+
+        form = CourseStudentForm()
+
+        self.assertEqual(form.fields['semester'].initial, older.pk)
+        self.assertEqual(form['semester'].value(), older.pk)
+
+    def test_semester_field__an_existing_registration_keeps_its_own_semester(self):
+        """Editing a registration shows the semester it is actually in, not the deck's default:
+        a staff correction to the group must not silently move the student's term."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        registration = baker.make(
+            CourseStudent, user=baker.make(User), course=baker.make(Course),
+            semester=other_semester, block=baker.make(Block),
+        )
+
+        form = CourseStudentForm(instance=registration)
+
+        self.assertEqual(form['semester'].value(), other_semester.pk)
 
     def test_semester_field__leaves_out_semesters_that_are_not_open(self):
         """Students join a semester that is running: one still being set up or already archived
