@@ -173,6 +173,9 @@ TENANT_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    # The Shared Library's own models live per schema: the deck that is the Library keeps
+    # its content's origins in its schema, beside the content they describe (#2377).
+    'library',
 )
 
 
