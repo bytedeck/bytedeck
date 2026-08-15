@@ -704,35 +704,39 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.all()
         self.assertQuerySetEqual(qs.for_teacher_only(self.teacher), [self.sub, sub2], ordered=False)
 
-    def test_for_teacher_only__ignores_a_pointer_at_a_semester_that_is_not_open(self):
-        """A pointer left on a semester that isn't open means no open semester, so nobody has a
-        current teacher and the block-based half of the filter drops out."""
-        semester = baker.make(Semester)
-        SiteConfig.get().set_active_semester(semester.id)
+    def test_for_teacher_only__spans_every_open_semester(self):
+        """A teacher's group in the deck's other open semester is still their group (#2157 Phase
+        3). A deck can run two cohorts on different calendars, and scoping this to the deck's
+        default semester would empty the approval queue of whichever teacher's group is not in
+        it, while their students still list them as their teacher."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        block = baker.make('courses.Block', current_teacher=self.teacher)
+        baker.make('courses.CourseStudent', user=self.student, block=block, semester=other_semester)
+        their_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=other_semester)
+
+        self.assertIn(their_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+
+    def test_for_teacher_only__leaves_out_a_registration_in_a_semester_that_is_not_open(self):
+        """A registration in a semester still being set up, or already archived, does not make
+        its student one of this teacher's current students, so the block half of the filter
+        drops it."""
+        semester = baker.make(Semester, status=Semester.Status.UPCOMING)
         block = baker.make('courses.Block', current_teacher=self.teacher)
         baker.make('courses.CourseStudent', user=self.student, block=block, semester=semester)
         block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
 
-        semester.status = Semester.Status.UPCOMING
-        semester.save()
-
         self.assertNotIn(block_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
 
-    def test_for_teacher_only__no_open_semester_keeps_only_notify_submissions(self):
-        """With no open semester nobody has a current teacher, so a teacher's queue holds only
-        the quests they asked to be notified about, not students whose registration has no
-        semester left."""
-        semester = baker.make(Semester)
-        SiteConfig.get().set_active_semester(semester.id)
+    def test_for_teacher_only__a_registration_with_no_semester_keeps_only_notify_submissions(self):
+        """A registration left behind by a deleted semester belongs to no semester, so its
+        student is nobody's current student and the teacher's queue holds only the quests they
+        asked to be notified about."""
+        semester = SiteConfig.get().active_semester
         block = baker.make('courses.Block', current_teacher=self.teacher)
         # a registration with no semester, as deleting a semester leaves behind
         baker.make('courses.CourseStudent', user=self.student, block=block, semester=None)
         block_sub = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=semester)
         notify_sub = baker.make(QuestSubmission, semester=semester, quest__specific_teacher_to_notify=self.teacher)
-
-        config = SiteConfig.get()
-        config.active_semester = None
-        config.save()
 
         qs = QuestSubmission.objects.all().for_teacher_only(self.teacher)
 

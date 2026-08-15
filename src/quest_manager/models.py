@@ -874,19 +874,24 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         :param teacher: a User model
         :return: qs filtered for submissions of students in the current teacher's blocks
         """
+        from courses.models import Semester  # locally, since courses imports this module
+
         if teacher is None:
             return self
         else:
-            # The student's "current teachers" are the teachers of the blocks of their
-            # course registrations in the active semester (Profile.teachers()), so the
-            # block filter must be scoped to the active semester to match. With no open
-            # semester nobody has a current teacher, leaving only the quests this teacher
-            # asked to be notified about.
-            active_semester_id = SiteConfig.get().open_semester_id
-            teacher_filter = Q(quest__specific_teacher_to_notify=teacher)
-            if active_semester_id is not None:
-                teacher_filter |= Q(user__coursestudent__semester=active_semester_id,
-                                    user__coursestudent__block__current_teacher=teacher)
+            # A student's "current teachers" are the teachers of the blocks of the course
+            # registrations they hold in the semester they are in (Profile.teachers()), and
+            # a deck can run several semesters at once (issue #2157 Phase 3), so this matches
+            # a registration in any open semester. Scoping it to the deck's default instead
+            # would empty the approval queue of a teacher whose group runs in the other one.
+            # Both conditions sit in one Q so they match the same registration, rather than
+            # any open-semester registration plus any block this teacher happens to teach.
+            # With no semester open nobody has a current teacher, leaving only the quests
+            # this teacher asked to be notified about.
+            teacher_filter = Q(quest__specific_teacher_to_notify=teacher) | Q(
+                user__coursestudent__semester__status=Semester.Status.OPEN,
+                user__coursestudent__block__current_teacher=teacher,
+            )
             return self.filter(teacher_filter).distinct()
 
     def exclude_archived_quests(self):

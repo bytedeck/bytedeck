@@ -953,10 +953,10 @@ def ajax_progress_chart(request, user_id=0):
         user_id (int): the student to chart, or 0 for the logged-in user.
 
     Returns:
-        HttpResponse: JSON with `days_in_semester` (the semester's total class days) and
-        `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
-        when there is nothing to chart: no semester is open, or the open one has no class
-        days behind it yet.
+        HttpResponse: JSON with `days_in_semester` (the student's semester's total class days)
+        and `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
+        when there is nothing to chart: the student is in no open semester, or theirs has no
+        class days behind it yet.
 
     Raises:
         Http404: for any method other than POST.
@@ -967,11 +967,15 @@ def ajax_progress_chart(request, user_id=0):
         user = get_object_or_404(User, pk=user_id)
 
     if request.method == "POST":
-        sem = SiteConfig.get().open_semester
+        # the student's own semester, not the deck's default (issue #2157 Phase 3): two
+        # cohorts running on different calendars have different first days and different
+        # class days, so charting one student against the other's term is the wrong graph
+        # (issue #1781).
+        sem = semester_for(user)
 
         if sem is None or sem.days_so_far() <= 0:
-            # Nothing to plot: either the deck is between semesters, or the open semester has
-            # no class days behind it yet (a semester with no dates set has none at all). Hand
+            # Nothing to plot: either the student is in no open semester, or theirs has no
+            # class days behind it yet (a semester with no dates set has none at all). Hand
             # the chart an empty dataset rather than building one from an empty date list,
             # which the weekend adjustment below would then index into.
             return HttpResponse(json.dumps({"days_in_semester": 0, "xp_data": []}), content_type='application/json')
