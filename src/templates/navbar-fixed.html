@@ -247,7 +247,14 @@
                     </ul>
                 </li>
 
-                <li><a href="{% url 'account_logout' %}">Sign Out</a></li>
+                <li>
+                    <a href="{% url 'account_logout' %}" class="js-signout" role="button">Sign Out</a>
+                    <!-- Sign Out is a POST so it can't be triggered by a GET (prefetch, an <img>, a
+                         cross-site link). The JS handler in custom.js submits this form on click for a
+                         one-click sign out; with JS off the link's href GETs allauth's confirmation page,
+                         whose button POSTs this same view. -->
+                    <form method="post" action="{% url 'account_logout' %}" class="js-signout-form hidden">{% csrf_token %}</form>
+                </li>
                 {% else %}
                 <!-- Unauthenticated -->
                 <li><a href="{% url 'account_signup' %}">Sign Up</a></li>
