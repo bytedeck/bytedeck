@@ -13,7 +13,7 @@ from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.models import ContentOrigin
-from library.views import LibraryQuestListView, shared_library_enabled_view
+from library.views import LibraryQuestListView, shared_library_enabled_view, viewer_is_library_staff
 from library.importer import import_quest_to, import_campaign_to
 from library.exporter import (
     build_library_clone_name,
@@ -1617,6 +1617,10 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
     recording who had shared what (#2377).
     """
 
+    # what the deck the content is shared from is called, so the attribution has
+    # something distinctive to render
+    DECK_NAME = 'sharing-deck'
+
     @classmethod
     def setUpTestData(cls):
         """Create a local quest and campaign to share, and the staff user who shares them."""
@@ -1626,11 +1630,18 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
         cls.test_teacher = User.objects.create_user('sharing_teacher', is_staff=True)
 
     def setUp(self):
-        """Allow staff to export, and log in as one."""
+        """Allow staff to export, log in as one, and give the deck a recognizable name.
+
+        The test tenant is created without a name, and an empty name would make the
+        rendered attribution ("...of {deck}") impossible to assert on.
+        """
         super().setUp()
         config = SiteConfig.get()
         config.allow_staff_export = True
         config.save()
+        # the middleware re-fetches the tenant per request, so this has to reach the row
+        Tenant.objects.filter(schema_name=connection.schema_name).update(name=self.DECK_NAME)
+        self.tenant.name = self.DECK_NAME
         self.client.force_login(self.test_teacher)
 
     def test_export_quest_post__records_who_shared_it_and_from_where(self):
@@ -1643,8 +1654,8 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
             )
 
         self.assertEqual(origin.shared_by, 'sharing_teacher')
-        self.assertEqual(origin.deck_name, self.tenant.name)
-        self.assertIn(self.tenant.name, origin.deck_url)
+        self.assertEqual(origin.deck_name, self.DECK_NAME)
+        self.assertEqual(origin.deck_url, self.tenant.get_root_url())
 
     def test_export_campaign_post__records_the_campaign_and_each_of_its_quests(self):
         """A campaign push attributes the campaign and every quest that travelled with it.
@@ -1666,8 +1677,22 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
         self.assertEqual(quest_origin.shared_by, 'sharing_teacher')
         self.assertEqual(quest_origin.deck_name, self.tenant.name)
 
+    def _attribution_html(self, response):
+        """The response's HTML with runs of whitespace collapsed to single spaces.
+
+        The attribution is laid out over several template lines, so matching it as it
+        appears in the source needs the indentation flattened first.
+
+        Args:
+            response (HttpResponse): the rendered page.
+
+        Returns:
+            str: the page HTML, whitespace-normalized.
+        """
+        return ' '.join(response.content.decode().split())
+
     def test_library_quest_list__attributes_a_shared_quest(self):
-        """The Library's quest list names who shared each quest and links to their deck."""
+        """The Library's quest list names who shared each quest, and their deck."""
         self.client.post(reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE)
         with library_schema_context():
             library_quest = Quest.objects.get(import_id=self.local_quest.import_id)
@@ -1676,11 +1701,17 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
 
         response = self.client.get(reverse('library:quest_list'))
 
-        self.assertContains(response, 'Shared by sharing_teacher of')
-        self.assertContains(response, self.tenant.name)
+        # the deck name follows "of" as plain text, not as a link: this viewer is staff of
+        # their own deck, not of the Library, and other decks are closed to them, so a link
+        # would be a dead end. (The deck's own name and URL appear in the page chrome too,
+        # which is why this looks at the attribution itself rather than the whole page.)
+        self.assertIn(
+            f'Shared by sharing_teacher of {self.DECK_NAME}</small>', self._attribution_html(response)
+        )
+        self.assertFalse(response.context['viewer_is_library_staff'])
 
     def test_library_campaign_detail__attributes_a_shared_campaign(self):
-        """The Library's campaign page carries the same attribution."""
+        """The Library's campaign page carries the same attribution, unlinked."""
         self.client.post(reverse('library:export_category', args=[self.local_campaign.import_id]), data=AGREED_LICENCE)
         with library_schema_context():
             library_campaign = Category.objects.get(import_id=self.local_campaign.import_id)
@@ -1691,7 +1722,10 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
             reverse('library:category_detail_view', args=[self.local_campaign.import_id])
         )
 
-        self.assertContains(response, 'Shared by sharing_teacher of')
+        self.assertIn(
+            f'Shared by sharing_teacher of {self.DECK_NAME} on ', self._attribution_html(response)
+        )
+        self.assertFalse(response.context['viewer_is_library_staff'])
 
     def test_library_quest_list__says_nothing_about_content_with_no_recorded_origin(self):
         """Content shared before origins were recorded is listed without a false attribution."""
@@ -1702,6 +1736,58 @@ class ContentOriginTests(LibraryTenantTestCaseMixin):
 
         self.assertContains(response, 'An older library quest')
         self.assertNotContains(response, 'Shared by')
+
+
+class ViewerIsLibraryStaffTests(LibraryTenantTestCaseMixin):
+    """Who gets the deck name in an attribution rendered as a link (#2377).
+
+    Only the Library's own staff, because every other deck is closed to everyone else and
+    the link would be a dead end for them.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """One staff user and one student, to separate the two conditions the helper checks."""
+        cls.staff = User.objects.create_user('library_admin', is_staff=True)
+        cls.student = User.objects.create_user('a_student')
+
+    def _request_from(self, user, tenant):
+        """Build a bare request from a given user on a given deck.
+
+        Args:
+            user (User): who the request is from.
+            tenant (Tenant): the deck serving the request, as the middleware would set it.
+
+        Returns:
+            HttpRequest: a GET request with `user` and `tenant` attached.
+        """
+        request = RequestFactory().get('/')
+        request.user = user
+        request.tenant = tenant
+        return request
+
+    def test_viewer_is_library_staff__true_for_staff_on_the_library_deck(self):
+        """Staff browsing from the Library deck itself can open the decks they review."""
+        self.assertTrue(viewer_is_library_staff(self._request_from(self.staff, self.library_tenant)))
+
+    def test_viewer_is_library_staff__false_for_a_student_on_the_library_deck(self):
+        """Being on the Library deck is not enough: reviewing content is a staff job."""
+        self.assertFalse(viewer_is_library_staff(self._request_from(self.student, self.library_tenant)))
+
+    def test_viewer_is_library_staff__false_for_staff_on_their_own_deck(self):
+        """A teacher is staff of their own deck, not of the Library, so links stay off."""
+        self.assertFalse(viewer_is_library_staff(self._request_from(self.staff, self.tenant)))
+
+    def test_viewer_is_library_staff__ignores_the_schema_the_content_is_read_from(self):
+        """The answer follows the deck serving the page, not a temporary schema switch.
+
+        Both views ask this while inside `library_schema_context()`, so a connection-based
+        answer would hand every teacher a link to a deck they cannot open.
+        """
+        request = self._request_from(self.staff, self.tenant)
+
+        with library_schema_context():
+            self.assertFalse(viewer_is_library_staff(request))
 
 
 class ImportNextStepsTests(LibraryTenantTestCaseMixin):
@@ -1734,9 +1820,14 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
             reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True
         )
 
+        imported = Quest.objects.get(import_id=self.library_quest.import_id)
         message = str(list(response.context['messages'])[0])
-        self.assertIn('publish it', message)
-        self.assertIn('prerequisite', message)
+        # each step links to the page that performs it, rather than naming it and leaving
+        # the reader to find it
+        self.assertIn(f'href="{reverse("quests:quest_update", args=[imported.id])}">publish it</a>', message)
+        self.assertIn(
+            f'href="{reverse("quests:quest_prereqs_update", args=[imported.id])}">prerequisite</a>', message
+        )
 
     def test_import_campaign_post__tells_the_user_to_publish_and_add_a_prerequisite(self):
         """The campaign import message names both remaining steps."""
@@ -1744,9 +1835,13 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
             reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True
         )
 
+        imported = Category.objects.get(import_id=self.library_campaign.import_id)
         message = str(list(response.context['messages'])[0])
-        self.assertIn('publish the campaign', message)
-        self.assertIn('prerequisite', message)
+        self.assertIn(
+            f'href="{reverse("quests:category_update", args=[imported.id])}">publish the campaign</a>', message
+        )
+        # the prerequisite belongs to one of its quests, so this one points at the campaign
+        self.assertIn(f'href="{imported.get_absolute_url()}">prerequisite</a>', message)
 
 
 class LibraryViewsOnPublicSchemaTests(LibraryTenantTestCaseMixin):

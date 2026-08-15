@@ -75,9 +75,15 @@
           <td class="col-sm-5 col-xs-8">{{q.name}}
             {% if q.editor %}<br><small>Editor: {{ q.editor.username }} - {{ q.editor.profile }}</small>{% endif %}
             {% comment %} Attribution: content travels under CC BY-SA, which asks for it (#2377) {% endcomment %}
+            {% comment %}
+              The deck name only links for the Library's own staff: another deck is closed
+              to everyone else, so for them the link would be a dead end.
+            {% endcomment %}
             {% if q.origin %}
               <br><small class="text-muted">Shared by {{ q.origin.shared_by }} of
-                <a href="{{ q.origin.deck_url }}">{{ q.origin.deck_name }}</a></small>
+                {% if viewer_is_library_staff %}
+                  <a href="{{ q.origin.deck_url }}">{{ q.origin.deck_name }}</a>
+                {% else %}{{ q.origin.deck_name }}{% endif %}</small>
             {% endif %}
           </td>
           <td class="col-sm-1 col-xs-2 text-center">{{q.xp}}{% if q.xp_can_be_entered_by_students %}+{% endif %}</td>
