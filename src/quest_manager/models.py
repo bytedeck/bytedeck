@@ -885,26 +885,38 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(time_approved__lte=date)
 
     def for_teacher_only(self, teacher):
-        """
-        :param teacher: a User model
-        :return: qs filtered for submissions of students in the current teacher's blocks
+        """The submissions one teacher is responsible for, as their approval queues show them.
+
+        A submission is theirs on either of two counts: the student who made it is in a group
+        this teacher currently teaches, or the quest itself names this teacher to notify
+        whoever hands it in.
+
+        "Currently teaches" is read from the student's own registration rather than from the
+        deck's default semester, since a deck can run several semesters at once (issue #2157
+        Phase 3): scoping it to the default would empty the queue of a teacher whose group
+        runs in the other one. The registration has to be the one that produced the submission
+        (its semester matches the submission's), so a teacher only ever sees the work of the
+        term they teach that student in. With no semester open nobody has a current teacher,
+        leaving only the quests this teacher asked to be notified about.
+
+        Args:
+            teacher (User): the teacher whose queue this is. None means a deck-wide view of
+                every teacher's submissions, so the queryset comes back unfiltered.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions belonging to this teacher, without
+            duplicates when a student holds several registrations that match.
         """
         from courses.models import Semester  # locally, since courses imports this module
 
         if teacher is None:
             return self
         else:
-            # A student's "current teachers" are the teachers of the blocks of the course
-            # registrations they hold in the semester they are in (Profile.teachers()), and
-            # a deck can run several semesters at once (issue #2157 Phase 3), so this matches
-            # a registration in any open semester. Scoping it to the deck's default instead
-            # would empty the approval queue of a teacher whose group runs in the other one.
-            # Both conditions sit in one Q so they match the same registration, rather than
-            # any open-semester registration plus any block this teacher happens to teach.
-            # With no semester open nobody has a current teacher, leaving only the quests
-            # this teacher asked to be notified about.
+            # all three conditions sit in one Q so they match a single registration, rather
+            # than pairing any open-semester registration with any block this teacher teaches
             teacher_filter = Q(quest__specific_teacher_to_notify=teacher) | Q(
                 user__coursestudent__semester__status=Semester.Status.OPEN,
+                user__coursestudent__semester=F('semester'),
                 user__coursestudent__block__current_teacher=teacher,
             )
             return self.filter(teacher_filter).distinct()

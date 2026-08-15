@@ -716,6 +716,28 @@ class QuestSubmissionQuerysetTest(ByteDeckTenantTestCase):
 
         self.assertIn(their_sub, QuestSubmission.objects.all().for_teacher_only(self.teacher))
 
+    def test_for_teacher_only__matches_the_registration_the_submission_belongs_to(self):
+        """A teacher sees the work of the term they teach that student in, not every term the
+        student has open. CourseStudent.clean() refuses a second open-semester registration,
+        but one can still reach the database (a hand edit in the admin, or two registrations
+        racing, #2438), and a teacher's queue must not start showing another cohort's work
+        because of it."""
+        their_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_teacher = baker.make(User, username='other_teacher', is_staff=True)
+        baker.make(
+            'courses.CourseStudent', user=self.student, semester=their_semester,
+            block=baker.make('courses.Block', current_teacher=self.teacher),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.student, semester=other_semester,
+            block=baker.make('courses.Block', current_teacher=other_teacher),
+        )
+        submission = baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest), semester=their_semester)
+
+        self.assertIn(submission, QuestSubmission.objects.all().for_teacher_only(self.teacher))
+        self.assertNotIn(submission, QuestSubmission.objects.all().for_teacher_only(other_teacher))
+
     def test_for_teacher_only__leaves_out_a_registration_in_a_semester_that_is_not_open(self):
         """A registration in a semester still being set up, or already archived, does not make
         its student one of this teacher's current students, so the block half of the filter

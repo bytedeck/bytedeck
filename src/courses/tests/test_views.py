@@ -1998,7 +1998,7 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
 
     @freeze_time('2024-02-01')
-    def test_ajax_xp_data__charts_the_students_own_semester(self):
+    def test_ajax_progress_chart__charts_the_students_own_semester(self):
         """A deck can run two cohorts on different calendars (#1781), and the chart is drawn over
         the semester's class days. Charting a student against the deck's default semester would
         give the other cohort someone else's term: the wrong length, and the wrong first day to
