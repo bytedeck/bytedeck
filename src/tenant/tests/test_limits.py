@@ -58,6 +58,18 @@ class CanAddCurrentStudentTest(ByteDeckTenantTestCase):
         self.assertTrue(can_add_current_student(baker.make(User)))
         self.assertTrue(can_add_current_student(occupant))
 
+    def test_can_add_current_student__seat_is_held_in_whichever_semester_they_joined(self):
+        """A student in the open semester the deck's pointer does not name still holds their
+        seat, so adding a second course does not ask for another one (issue #2157 Phase 3).
+        Reading the deck's pointer instead would treat them as a newcomer and refuse them
+        once the deck is full."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        occupant = baker.make(User)
+        baker.make('courses.CourseStudent', user=occupant, active=True, semester=other_semester)
+
+        self.assertTrue(can_add_current_student(occupant))
+        self.assertFalse(can_add_current_student(baker.make(User)))  # the deck is full because of them
+
     def test_can_add_current_student__staff_superusers_and_test_accounts_never_blocked(self):
         """Users who never count toward the cap (students-only counting, #2047) are
         never refused, even at the cap."""

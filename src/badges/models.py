@@ -269,7 +269,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
 
         # students_only=True: the grant-check is for students, so exclude staff/test accounts that
         # happen to be enrolled in a course (issue #2061). The grant task filters the same way.
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=True)
+        students = CourseStudent.objects.all_users_in_open_semesters(students_only=True)
         return [user for user in students if self.student_qualifies_ungranted(user)]
 
     def get_icon_url(self):
@@ -388,7 +388,7 @@ class BadgeAssertionManager(models.Manager):
         """
         from profile_manager.models import Profile
         if active_semester_only:
-            users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
+            users = User.objects.filter(profile__in=Profile.objects.all_in_open_semesters())
         else:
             users = User.objects.filter(profile__in=Profile.objects.all_students())
 

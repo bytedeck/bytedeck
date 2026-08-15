@@ -50,9 +50,9 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
                 semester=cls.active_semester
             )
 
-    def test_all_for_active_semester__returns_active_students(self):
-        """all_for_active_semester() returns only active students registered in the active semester."""
-        qs = Profile.objects.all_for_active_semester().values_list('user__username', flat=True)
+    def test_all_in_open_semesters__returns_active_students(self):
+        """all_in_open_semesters() returns only active students registered in the active semester."""
+        qs = Profile.objects.all_in_open_semesters().values_list('user__username', flat=True)
         expected_qs = self.active_active_semester_students
         expected_qs = [user.username for user in expected_qs]
 

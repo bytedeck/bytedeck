@@ -23,7 +23,7 @@ User = get_user_model()
 def send_notifications(user_id, announcement_id):
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
-    affected_users = CourseStudent.objects.all_users_for_active_semester()
+    affected_users = CourseStudent.objects.all_users_in_open_semesters()
     notify.send(
         sending_user,
         # action=new_announcement,

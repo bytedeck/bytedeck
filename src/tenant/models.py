@@ -672,7 +672,7 @@ class Tenant(TenantMixin):
         """
         CourseStudent = apps.get_model('courses', 'CourseStudent')
         return (
-            CourseStudent.objects.all_users_for_active_semester(students_only=True, active_only=True)
+            CourseStudent.objects.all_users_in_open_semesters(students_only=True, active_only=True)
             .exclude(is_superuser=True)
             .count()
         )

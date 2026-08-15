@@ -1520,16 +1520,16 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         self.create_student_course(50)
         self.create_student_course(60)
         # warm SiteConfig/content-type caches so only the student marks matter
-        Semester.get_student_mark_list(Semester, students_only=True)
+        self.semester.get_student_mark_list(students_only=True)
 
         with CaptureQueriesContext(connection) as few_queries:
-            Semester.get_student_mark_list(Semester, students_only=True)
+            self.semester.get_student_mark_list(students_only=True)
 
         for _ in range(4):
             self.create_student_course(70)
 
         with CaptureQueriesContext(connection) as many_queries:
-            Semester.get_student_mark_list(Semester, students_only=True)
+            self.semester.get_student_mark_list(students_only=True)
 
         # without select_related('profile') each extra student adds a query
         self.assertEqual(len(many_queries.captured_queries), len(few_queries.captured_queries))
@@ -1583,6 +1583,46 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         total_students = sum(json_response['data']['students'])
         self.assertNotEqual(total_students, len(inactive_sem_students))
         self.assertEqual(total_students, len(active_sem_students))
+
+    def test_histogram_values__compare_against_the_students_own_semester(self):
+        """A student is charted against their own classmates rather than every current
+        student on the deck (issue #2157 Phase 3), so two cohorts on different calendars
+        each see their own distribution."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        [self.create_student_course(100) for _ in range(7)]  # the deck's other cohort
+        cohort = [self.create_student_course(100) for _ in range(3)]
+        for course_student in cohort:
+            course_student.semester = other_semester
+            course_student.save()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[cohort[0].user.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        json_response = json.loads(response.content)
+        # their 2 classmates plus their own bar, which is added back into this histogram.
+        # Charting against the whole deck instead would add the other cohort's 7 as well.
+        self.assertEqual(sum(json_response['data']['students']), len(cohort))
+
+    def test_histogram_values__empty_class_between_semesters(self):
+        """Between semesters an unregistered viewer has no semester at all to be charted
+        against, so there are no classmates rather than a crash on the missing semester."""
+        self.create_student_course(100)
+        stranger = baker.make(User)
+        Semester.objects.complete_active_semester()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[stranger.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # only the viewer's own bar, which is always added into this histogram
+        self.assertEqual(sum(json.loads(response.content)['data']['students']), 1)
 
     def test_histogram_values__exclude_test_users(self):
         """ test users should not show up in histogram values """

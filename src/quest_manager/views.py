@@ -1134,7 +1134,7 @@ def quest_user_status(request, quest_id):
     active_profiles = list(Profile.objects.all_active().students_only().select_related('user'))
     active_ids = {profile.user_id for profile in active_profiles}
     current_ids = set(
-        CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
+        CourseStudent.objects.all_users_in_open_semesters(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
         CourseStudent.objects.get_queryset().get_semester(active_semester).filter(

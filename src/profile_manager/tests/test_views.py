@@ -210,12 +210,12 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         rather than looping over every active-semester profile synchronously in the request,
         which had grown a web worker large enough to be OOM-killed (issue #2081).
         """
-        # a student registered in the active semester so all_for_active_semester() is non-empty
+        # a student registered in the active semester so all_in_open_semesters() is non-empty
         baker.make(
             'courses.CourseStudent', user=self.test_student1,
             semester=self.active_sem, course=baker.make('courses.Course'),
         )
-        self.assertTrue(Profile.objects.all_for_active_semester().exists())
+        self.assertTrue(Profile.objects.all_in_open_semesters().exists())
         self.client.force_login(self.test_teacher)
 
         # The view must NOT recompute in-request; it must dispatch the celery task instead.
@@ -609,7 +609,7 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         testblock_queryset = response.context['object_list']
         self.assertEqual(testblock_queryset.count(), 2)
         # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_for_active_semester().filter(user__coursestudent__block=testblock))
+        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_in_open_semesters().filter(user__coursestudent__block=testblock))
 
     def test_profile_update__email_confirmation_flow(self):
         """

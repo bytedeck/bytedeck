@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.db.models import ProtectedError
 
+from django_tenants.utils import get_public_schema_name
 from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
@@ -535,12 +536,12 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         self.assertFalse(CourseStudent.objects.current_courses(self.student).exists())
         self.assertIsNone(CourseStudent.objects.current_course(self.student))
 
-    def test_all_users_for_active_semester__is_empty(self):
+    def test_all_users_in_open_semesters__is_empty(self):
         """No user is in the active semester, so staff lists and task recipients come back
         empty instead of picking up registrations whose semester was deleted."""
         orphaned = baker.make(CourseStudent, user=baker.make(User), semester=None)
 
-        users = CourseStudent.objects.all_users_for_active_semester()
+        users = CourseStudent.objects.all_users_in_open_semesters()
 
         self.assertFalse(users.exists())
         self.assertNotIn(orphaned.user, users)
@@ -770,23 +771,49 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
-    def test_all_users_for_active_semester__returns_empty_on_attribute_error(self):
-        """On the public tenant there is no SiteConfig, so resolving the active semester raises
-        AttributeError; the manager swallows it and returns an empty queryset instead of crashing."""
-        with patch('courses.models.SiteConfig.get', side_effect=AttributeError):
-            result = CourseStudent.objects.all_users_for_active_semester()
+    def test_all_users_in_open_semesters__is_empty_on_the_public_schema(self):
+        """The public tenant has no courses tables, and this runs there while booting, so it
+        returns an empty queryset rather than querying a table that isn't there."""
+        with patch('courses.models.connection') as mock_connection:
+            mock_connection.schema_name = get_public_schema_name()
+            result = CourseStudent.objects.all_users_in_open_semesters()
         self.assertEqual(result.count(), 0)
 
-    def test_all_users_for_active_semester__excludes_inactive(self):
-        """all_users_for_active_semester() counts active-semester students, excluding inactive users."""
-        # There should be 1 student in the active semester
-        self.assertEqual(CourseStudent.objects.all_users_for_active_semester().count(), 1)
+    def test_all_users_in_open_semesters__excludes_inactive(self):
+        """The deck's roster counts students in an open semester, leaving out inactive users."""
+        # There should be 1 student in the open semester
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 1)
 
-        # Makef the student inactiveo
+        # Make the student inactive
         self.student.is_active = False
         self.student.save()
 
-        self.assertEqual(CourseStudent.objects.all_users_for_active_semester(students_only=True).count(), 0)
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters(students_only=True).count(), 0)
+
+    def test_all_users_in_open_semesters__spans_every_open_semester(self):
+        """Two cohorts on different calendars are both current, so the deck's roster is the
+        union of them rather than whichever one the deck's pointer names (issue #2157 Phase 3)."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_student = baker.make(User)
+        baker.make(CourseStudent, user=other_student, course=baker.make(Course), semester=other_semester)
+
+        users = CourseStudent.objects.all_users_in_open_semesters()
+
+        self.assertIn(self.student, users)
+        self.assertIn(other_student, users)
+
+    def test_all_users_in_open_semesters__counts_a_student_in_two_courses_once(self):
+        """A student registered in several courses within their semester is one user, not one
+        per registration."""
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=SiteConfig.get().active_semester)
+
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 1)
+
+    def test_all_users_in_open_semesters__leaves_out_archived_semesters(self):
+        """Archiving a semester takes its students off the roster: that is what frees seats."""
+        Semester.objects.complete_active_semester()
+
+        self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 0)
 
 
 class CourseStudentModelTest(ByteDeckTenantTestCase):
