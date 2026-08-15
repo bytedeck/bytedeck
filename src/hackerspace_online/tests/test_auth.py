@@ -60,6 +60,55 @@ class NonPublicOnlyAuthViewTests(ByteDeckTenantTestCase):
         self.assert200('account_reset_password_from_key_done')  # ok
 
 
+class SignOutNavbarTests(ByteDeckTenantTestCase):
+    """The navbar's Sign Out control logs a user out in a single click by POSTing to
+    the logout view.
+
+    allauth logs a user out only on POST (``ACCOUNT_LOGOUT_ON_GET`` is left at its
+    default ``False``), so the navbar carries a hidden POST form that a small JS
+    handler submits on click. The visible link keeps its ``href`` as a no-JS
+    fallback: with JS off it GETs allauth's confirmation page, whose button POSTs
+    the same view. Because sign-out is a POST, it can't be triggered by a GET
+    (a prefetch, an ``<img>``, or a cross-site link)."""
+
+    def setUp(self):
+        """Log in a student so the authenticated navbar (which holds Sign Out) renders."""
+        self.student = User.objects.create_user(username='test_student', password='password')
+        self.client.force_login(self.student)
+
+    def test_navbar__sign_out_posts_to_logout(self):
+        """The authenticated navbar renders a POST form (carrying a CSRF token) that
+        targets the logout view, plus the visible link as a no-JS GET fallback."""
+        logout_url = reverse('account_logout')
+        response = self.client.get(reverse('quest_manager:quests'))
+        self.assertEqual(response.status_code, 200)
+        # A hidden POST form targets the logout view and carries a CSRF token, so one
+        # click signs out and the request can't be forged by a GET.
+        self.assertContains(response, f'<form method="post" action="{logout_url}" class="js-signout-form hidden">')
+        self.assertContains(response, 'name="csrfmiddlewaretoken"')
+        # The visible link is the no-JS fallback (GET -> allauth's confirmation page).
+        self.assertContains(response, f'<a href="{logout_url}" class="js-signout" role="button">Sign Out</a>')
+
+    def test_logout__post_clears_the_session(self):
+        """POSTing the logout view actually signs the user out: the auth session is
+        cleared and the request redirects to the login page. This is the behavior the
+        navbar's one-click sign-out (and its no-JS confirmation button) relies on."""
+        self.assertIn('_auth_user_id', self.client.session)  # signed in from setUp
+        response = self.client.post(reverse('account_logout'))
+        self.assertRedirects(response, reverse(settings.LOGIN_URL))
+        self.assertNotIn('_auth_user_id', self.client.session)
+
+    def test_logout__get_does_not_sign_out(self):
+        """A GET to the logout view does NOT sign the user out: it renders allauth's
+        confirmation page while the auth session stays intact. This is what keeps
+        sign-out from being triggered by a GET (a prefetch, an <img>, or a cross-site
+        link), and is the no-JS page the navbar link degrades to."""
+        response = self.client.get(reverse('account_logout'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Are you sure you want to sign out?')
+        self.assertIn('_auth_user_id', self.client.session)  # still signed in
+
+
 class SuspendedDeckSignupTests(ByteDeckTenantTestCase):
     """Sign-up is closed on a suspended deck (#1734 redesign): a suspended deck is
     owner-only, so brand-new accounts must not be able to register and land in a
