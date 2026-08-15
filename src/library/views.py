@@ -31,6 +31,7 @@ from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
+from .transfer import LibraryTransferError
 from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
 
 User = get_user_model()
@@ -125,6 +126,31 @@ def viewer_is_library_staff(request):
         bool: True when the request is being served from the Library deck by a staff user.
     """
     return request.tenant.schema_name == get_library_schema_name() and request.user.is_staff
+
+
+def redirect_failed_import(request, error, redirect_to):
+    """Send the user back to the Library, explaining why the import did not happen.
+
+    An import can fail for reasons the Library cannot see in advance, the common one being
+    a quest name this deck already uses for something else. Nothing was written when this
+    runs: the copy is atomic, so a campaign never lands half-imported. Telling the teacher
+    which quest clashed is what lets them rename it and try again, rather than meeting a
+    500 page or a bare 404 (#2364, #2397).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        error (LibraryTransferError): the failure, whose message names the content.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the error message.
+    """
+    messages.error(
+        request,
+        f"That import could not be completed, so nothing was added to your deck. {error} "
+        "Renaming your own copy and importing again should clear it."
+    )
+    return redirect(redirect_to)
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -472,7 +498,10 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             if quest is None:
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
-            import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+            try:
+                import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+            except LibraryTransferError as error:
+                return redirect_failed_import(request, error, 'library:quest_list')
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
@@ -588,7 +617,10 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
-            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
+            try:
+                import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
+            except LibraryTransferError as error:
+                return redirect_failed_import(request, error, 'library:category_list')
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)

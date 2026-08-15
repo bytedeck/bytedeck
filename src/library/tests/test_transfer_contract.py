@@ -14,15 +14,21 @@ or a regression, and the failure is where the decision gets recorded.
 
 import datetime
 
+from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase
+from model_bakery import baker
+
 from django.db import connection
 from django_tenants.utils import schema_context
 from taggit.models import Tag
 
 from library.exporter import export_campaign_and_copy_quests, export_quest_to_library
 from library.importer import import_campaign_to, import_quest_to
+from library.transfer import LibraryTransferError, _describe
 from library.tests.test_views import LibraryTenantTestCaseMixin
 from library.utils import library_schema_context
 from prerequisites.models import Prereq
+from courses.models import Rank
 from quest_manager.models import Category, CommonData, Quest
 
 # The fields a Quest carries into the Library and back, as of today. This is not a wish
@@ -43,7 +49,7 @@ QUEST_FIELDS_NOT_TRANSFERRED = {
     'editor': 'FK to a user on the source deck. A user pk means someone else in another schema.',
     'specific_teacher_to_notify': 'FK to a user on the source deck, same reason as editor.',
     'common_data': 'Dropped. CommonData has no import_id, so there is no cross-schema key for it (#2398).',
-    'campaign': 'Not copied as an FK. Rebuilt on the far side from the campaign_* columns.',
+    'campaign': 'Not copied as an FK: the pk means a different campaign per schema. Copied as an object instead.',
     'published': 'Deliberately forced to draft so imported content is reviewed before students see it.',
     'datetime_created': 'auto_now_add. The destination row stamps its own creation time.',
     'datetime_last_edit': 'auto_now. Always the time of the import.',
@@ -54,7 +60,7 @@ CATEGORY_FIELDS_TRANSFERRED = frozenset({'title', 'icon', 'short_description', '
 CATEGORY_FIELDS_NOT_TRANSFERRED = {
     'id': 'Primary key. The destination assigns its own.',
     'published': 'Deliberately forced to draft, same as quests.',
-    'map_order': 'Dropped. The campaign travels as four flat columns and this is not one of them (#2396).',
+    'map_order': 'Dropped. Quest-map placement is relative to the deck it was arranged on (#2396).',
 }
 
 
@@ -336,27 +342,77 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertEqual(list(library_quest.prereqs()), [])
 
 
+    def test_export_campaign_and_copy_quests__discards_a_prereq_that_is_not_shareable_content(self):
+        """A quest gated on a rank, grade, block or course arrives ungated (#2450).
+
+        Those models are all valid prerequisites, and none of them carries an `import_id`,
+        which is the only identifier that means the same thing in another deck's schema. So
+        a gate of that kind cannot be expressed on the far side and is dropped, exactly as a
+        prerequisite pointing outside the campaign is (#2399). A quest that its author gated
+        on reaching Rank 3 arrives available to everyone, and nothing says so.
+
+        When #2450 is fixed this should assert the gate survives, presumably matched by name.
+        """
+        campaign, quest, _ = self._campaign_with_two_quests()
+        rank = baker.make(Rank, name="Digital Novice")
+        Prereq.add_simple_prereq(quest, rank)
+        self.assertEqual(len(quest.prereqs()), 1)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            self.assertEqual(list(library_quest.prereqs()), [])
+
+
+class LibraryTransferErrorMessageTests(SimpleTestCase):
+    """How a failed copy is described to the caller."""
+
+    def test_describe__renders_a_validation_error_without_a_field(self):
+        """An error not tied to a field still reads as a sentence.
+
+        `full_clean` reports per-field errors, so this covers the other shape a
+        `ValidationError` can take, raised with a bare message and no field mapping.
+        """
+        self.assertEqual(_describe(ValidationError("Something was wrong.")), "Something was wrong.")
+
+    def test_describe__renders_a_field_error_with_its_field_name(self):
+        """A per-field error names the field, which is what makes a clash readable."""
+        self.assertEqual(
+            _describe(ValidationError({'name': ["Quest with this Name already exists."]})),
+            "name: Quest with this Name already exists.",
+        )
+
+
 class LibraryTransferTagContractTests(LibraryTenantTestCaseMixin):
     """Pin how tags cross a schema boundary."""
 
-    def test_export_quest_to_library__carries_tags_by_primary_key_not_by_name(self):
-        """Tags are transported as raw primary keys, so a quest can arrive mistagged (#1792).
+    def test_export_quest_to_library__carries_tags_by_name(self):
+        """Tags arrive meaning what they meant on the deck that shared them (#1792).
 
-        Tag rows are per-schema, so the pk that means 'photography' on one deck means
-        whatever happens to hold that pk in the destination. django-import-export builds a
-        ManyToManyWidget(model=Tag, field='pk') for taggit's manager, and the destination
-        re-resolves the incoming pks against its own tag table.
-
-        When #1792 is fixed this should assert the tags arrive by name.
+        Tag rows are per-schema, so a tag's primary key means a different tag (or none) on
+        the far side. This sets the destination up so that matching by pk would be visibly
+        wrong: the ids that mean 'photography' and 'darkroom' locally are held by unrelated
+        tags in the Library. Transferring by name is what makes the quest arrive tagged the
+        way its author tagged it.
         """
         local_tags = {}
         for name in ("photography", "darkroom"):
             tag = Tag.objects.create(name=name, slug=name)
             local_tags[tag.pk] = tag.name
 
+        library_tags = {pk: f"library-tag-{pk}" for pk in local_tags}
         with library_schema_context():
-            for pk in local_tags:
-                Tag(pk=pk, name=f"library-tag-{pk}", slug=f"library-tag-{pk}").save(force_insert=True)
+            for pk, name in library_tags.items():
+                Tag(pk=pk, name=name, slug=name).save(force_insert=True)
+            # Inserting with an explicit pk leaves the table's sequence behind it, so the
+            # next tag created in this schema would try to reuse an id that is now taken.
+            # Copying the quest creates its tags here by name, so move the sequence past
+            # the ids just claimed.
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "SELECT setval(pg_get_serial_sequence('taggit_tag', 'id'), (SELECT MAX(id) FROM taggit_tag))"
+                )
 
         quest = Quest.objects.create(name="Tagged Quest", xp=10)
         quest.tags.set(list(local_tags.values()))
@@ -367,8 +423,8 @@ class LibraryTransferTagContractTests(LibraryTenantTestCaseMixin):
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             arrived = sorted(tag.name for tag in library_quest.tags.all())
 
-        self.assertEqual(arrived, sorted(f"library-tag-{pk}" for pk in local_tags))
-        self.assertNotEqual(arrived, sorted(local_tags.values()))
+        self.assertEqual(arrived, sorted(local_tags.values()))
+        self.assertNotEqual(arrived, sorted(library_tags.values()))
 
 
 class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
@@ -418,38 +474,32 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         Quest.objects.all_including_archived().filter(import_id__in=import_ids).delete()
         Category.objects.filter(import_id=campaign.import_id).delete()
 
-    def test_import_quest_to__raises_when_the_name_is_already_taken_locally(self):
-        """Importing a quest whose name a different local quest holds raises (#2364).
+    def test_import_quest_to__raises_a_readable_error_when_the_name_is_already_taken_locally(self):
+        """Importing a quest whose name a different local quest holds says so (#2364).
 
-        Quest.name is unique per deck, and the view guards only on import_id, so this
-        reaches the database. The exception is django-import-export's own ImportError,
-        which is neither ValidationError nor IntegrityError, so the exporter's handler
-        does not catch it and the teacher gets a 500 page carrying the raw constraint
-        name. This test pins the exception type, because that type is exactly why the
-        existing error handling misses it.
-
-        When #2364 is fixed this should assert the teacher gets a message naming the clash.
+        Quest.name is unique per deck, and the view guards only on import_id, so the clash
+        reaches the database. The failure is raised as a `LibraryTransferError` naming the
+        quest, which is a type the view can catch and put in front of the teacher, rather
+        than a library-internal exception that escapes as a 500 carrying a constraint name.
         """
-        from import_export.exceptions import ImportError as ImportExportError
-
         campaign, import_ids = self._push_campaign("Collision Campaign", ["Photoshop Basics"])
         self._clear_locally(campaign, import_ids)
         Quest.objects.create(name="Photoshop Basics", xp=999)
 
-        with self.assertRaises(ImportExportError):
+        with self.assertRaises(LibraryTransferError) as caught:
             import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
 
+        self.assertIn("Photoshop Basics", str(caught.exception))
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=import_ids[0]).exists())
 
     def test_import_campaign_to__one_colliding_name_discards_the_whole_import(self):
-        """One taken quest name rolls back an entire campaign import, silently (#2397).
+        """One taken quest name still discards the whole campaign import, but says so (#2397).
 
-        The importable quests do not land, the campaign is not created, and the call
-        returns normally with the failure recorded in a result object that no caller
-        reads, so the view falls through to get_object_or_404 and the teacher gets a
-        bare 404.
-
-        When #2397 is fixed this should assert the teacher is told which quest collided.
+        The import stays all-or-nothing: a campaign that arrived half-imported would leave
+        the deck holding quests whose prerequisites point at the ones that never came. What
+        changes is that the caller is told. The failure is raised as a `LibraryTransferError`
+        naming the quest that clashed, instead of being recorded in a result object that no
+        caller reads and leaving the view to fall through to a bare 404.
         """
         campaign, import_ids = self._push_campaign(
             "Partial Campaign", ["Good Quest One", "Bad Quest Two", "Good Quest Three"],
@@ -457,12 +507,13 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         self._clear_locally(campaign, import_ids)
         Quest.objects.create(name="Bad Quest Two", xp=999)
 
-        result = import_campaign_to(
-            destination_schema=connection.schema_name,
-            quest_import_ids=import_ids,
-            campaign_import_id=campaign.import_id,
-        )
+        with self.assertRaises(LibraryTransferError) as caught:
+            import_campaign_to(
+                destination_schema=connection.schema_name,
+                quest_import_ids=import_ids,
+                campaign_import_id=campaign.import_id,
+            )
 
-        self.assertTrue(result.has_errors())
+        self.assertIn("Bad Quest Two", str(caught.exception))
         self.assertEqual(list(Quest.objects.all_including_archived().filter(import_id__in=import_ids)), [])
         self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())

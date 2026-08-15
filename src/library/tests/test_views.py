@@ -15,6 +15,7 @@ from library.utils import get_library_schema_name, library_schema_context
 from library.models import ContentOrigin
 from library.views import LibraryQuestListView, shared_library_enabled_view, viewer_is_library_staff
 from library.importer import import_quest_to, import_campaign_to
+from library.transfer import LibraryTransferError
 from library.exporter import (
     build_library_clone_name,
     clone_quests_into_library,
@@ -1379,21 +1380,29 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
         with self.assertRaises(Quest.DoesNotExist):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_clone_quests_into_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A database error while copying conflicting quests is re-raised with context."""
-        mock_import_data.side_effect = IntegrityError("duplicate key")
-        quest = baker.make(Quest, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to copy conflicting quests to library schema"):
-            clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
+    def test_export_quest_to_library__name_already_taken_in_the_library_names_the_quest(self):
+        """A quest whose name the Library already holds fails with that name in the message."""
+        with library_schema_context():
+            baker.make(Quest, name="Taken In The Library", published=True)
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
-        mock_import_data.side_effect = IntegrityError("duplicate key")
-        quest = baker.make(Quest, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to import quest to library schema"):
+        quest = baker.make(Quest, name="Taken In The Library", published=True)
+
+        with self.assertRaisesMessage(LibraryTransferError, "Taken In The Library"):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=quest.import_id)
+
+    def test_clone_quests_into_library__database_failure_is_reported_as_a_transfer_error(self):
+        """A constraint that only the database can see still reaches the caller readably.
+
+        `full_clean` catches the failures that can be checked in Python, so this covers the
+        branch below it: a database-level error is reported as a `LibraryTransferError`
+        rather than escaping as a bare `IntegrityError`. The patch is scoped to the copy
+        itself, since the fixture above it has to be able to save normally.
+        """
+        quest = baker.make(Quest, published=True)
+
+        with patch("library.transfer.Quest.save", side_effect=IntegrityError("duplicate key")):
+            with self.assertRaises(LibraryTransferError):
+                clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
 
     def test_export_campaign_to_library__no_published_quests_raises_validation_error(self):
         """Exporting a campaign that has no published quests (and no skip list) is rejected with a ValidationError."""
@@ -1402,13 +1411,15 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
         with self.assertRaisesMessage(ValidationError, "Cannot export a campaign without any published quests."):
             export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_export_campaign_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A validation error while importing a campaign is re-raised as a clearer ValidationError with context."""
-        mock_import_data.side_effect = ValidationError("bad data")
+    def test_export_campaign_to_library__name_already_taken_in_the_library_names_the_quest(self):
+        """A campaign carrying a quest whose name the Library holds fails with that name."""
+        with library_schema_context():
+            baker.make(Quest, name="Clashing Campaign Quest", published=True)
+
         campaign = baker.make(Category)
-        baker.make(Quest, campaign=campaign, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to import campaign to library schema"):
+        baker.make(Quest, name="Clashing Campaign Quest", campaign=campaign, published=True)
+
+        with self.assertRaisesMessage(LibraryTransferError, "Clashing Campaign Quest"):
             export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
 
 
@@ -1984,9 +1995,9 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
             self.assertNotEqual(clone.import_id, quest.import_id)
             self.assertIn("(Exported on", clone.name)
 
-    def test_clone_quests_into_library__returns_none_when_there_is_nothing_to_copy(self):
+    def test_clone_quests_into_library__returns_nothing_when_there_is_nothing_to_copy(self):
         """A campaign with no conflicts skips the copy step entirely."""
-        self.assertIsNone(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]))
+        self.assertEqual(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]), [])
 
     def test_build_library_clone_name__falls_back_to_a_numbered_suffix(self):
         """A taken dated name pushes the next copy on to a numbered suffix."""
@@ -2021,3 +2032,69 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
         with library_schema_context():
             clone = self._library_clone_of(quest)
             self.assertTrue(clone.name.endswith("#1"), f"expected a numbered suffix, got {clone.name!r}")
+
+class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
+    """A name clash on import is reported to the teacher, not raised in their face.
+
+    Quest names are unique per deck, so importing a quest whose name this deck already
+    uses for something else cannot succeed. The teacher is told which name clashed and
+    that nothing was added, rather than meeting a 500 page or a bare 404 (#2364, #2397).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a quest and a campaign in the Library, and a staff user to import them."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, published=True)
+            cls.library_quest = baker.make(
+                Quest, name="Contested Name", campaign=cls.library_campaign, published=True,
+            )
+
+        cls.test_teacher = User.objects.create_user('collision_teacher', is_staff=True)
+
+    def _message_texts(self, response):
+        """The messages queued for the user by a request.
+
+        Args:
+            response (HttpResponse): the response to read the message storage from.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
+    def test_import_quest__tells_the_teacher_which_name_clashed(self):
+        """Importing onto a name this deck already uses redirects with an explanation."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+
+    def test_import_quest__adds_nothing_to_the_deck_when_the_name_clashes(self):
+        """The failed import leaves the deck exactly as it was."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        self.assertFalse(
+            Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists()
+        )
+
+    def test_import_category__tells_the_teacher_and_imports_none_of_the_campaign(self):
+        """One clashing quest stops the whole campaign, and says so rather than 404ing."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+        self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
