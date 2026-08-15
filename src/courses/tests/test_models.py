@@ -648,6 +648,7 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
         They fall back to the deck's pointer, which archiving cleared, rather than staying
         attached to the archived semester (or being adopted by someone else's open one)."""
         Semester.objects.complete_semester()
+        self.other_semester.refresh_from_db()
         self.assertTrue(self.other_semester.is_open)
         self.assertIsNone(CourseStudent.objects.current_semester(self.student))
 

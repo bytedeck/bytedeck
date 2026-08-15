@@ -298,14 +298,23 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
                 # takes. Without it an activation running alongside this could open its
                 # semester and then have this archive clear the pointer, leaving a semester
                 # open that the deck no longer points at (so students couldn't use it).
-                SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
+                # The locked row is used for the pointer write below rather than
+                # SiteConfig.get(), whose cached copy can be behind the database.
+                siteconfig = SiteConfig.objects.select_for_update().get(pk=SiteConfig.get().pk)
 
                 if semester is None:
                     semester = self.get_current()
+                if semester is None:
+                    return Semester.NO_OPEN_SEMESTER
 
-                # nothing to archive: the deck is already between semesters. Only an open
-                # semester can be archived, so an already-archived (or upcoming) one is
-                # refused here too rather than being archived twice.
+                # Re-read the semester under its own lock rather than trusting the instance
+                # passed in: two requests can both load it while it is open, and the config
+                # lock only makes them queue. The second would otherwise recalculate final
+                # marks from XP the first already reset, recording zeroes.
+                semester = self.get_queryset().select_for_update().filter(pk=semester.pk).first()
+
+                # nothing to archive. Only an open semester can be archived, so one that is
+                # already archived (or still upcoming) is refused rather than archived twice.
                 if semester is None or not semester.is_open:
                     return Semester.NO_OPEN_SEMESTER
 
@@ -324,7 +333,6 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
                 # clear the pointer only when it named this semester, so archiving one of
                 # two open semesters leaves the deck pointed at the one still running
                 # (issue #1177 for the no-semester-left case)
-                siteconfig = SiteConfig.get()
                 if siteconfig.active_semester_id == semester.pk:
                     siteconfig.active_semester = None
                     siteconfig.save()

@@ -21,7 +21,7 @@ are noise next to the suspension banner.
         <div class="alert alert-warning" id="semester-status-banner">
             <i class="fa fa-fw fa-calendar-o"></i>
             <strong>Semester {{ config.active_semester }} ended on {{ config.active_semester.last_day }}.</strong>
-            <a href="{% url 'courses:semester_archive' config.active_semester.id %}" class="alert-link">Archive it</a>
+            <a href="{% url 'courses:semester_archive' config.open_semester_id %}" class="alert-link">Archive it</a>
             to record final marks and free up your students' seats.
         </div>
     {% endif %}

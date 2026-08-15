@@ -372,7 +372,7 @@ class CourseViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
     def test_SemesterArchive__semester_not_open_get(self):
         """A semester that isn't open has nothing to preview archiving, so staff are sent
-        back to the semester list with a warning."""
+        back to the semester list with an error."""
         self.client.force_login(self.test_teacher)
         semester_id = SiteConfig.get().active_semester.id
         Semester.objects.complete_semester()
