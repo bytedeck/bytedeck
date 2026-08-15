@@ -852,6 +852,21 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
             return self.none()
         return self.filter(semester=semester)
 
+    def in_open_semesters(self):
+        """Submissions made in any semester that is open right now.
+
+        What a deck-wide staff view of "current" work should filter on: a deck can run
+        several semesters at once (issue #2157 Phase 3, #1781), and scoping to the deck's
+        default would hide everything the other cohort hands in.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions whose semester is open, empty between
+            semesters.
+        """
+        from courses.models import Semester  # locally, since courses imports this module
+
+        return self.filter(semester__status=Semester.Status.OPEN)
+
     def get_not_semester(self, semester):
         """Submissions made outside `semester`.
 
@@ -870,23 +885,40 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
         return self.filter(time_approved__lte=date)
 
     def for_teacher_only(self, teacher):
+        """The submissions one teacher is responsible for, as their approval queues show them.
+
+        A submission is theirs on either of two counts: the student who made it is in a group
+        this teacher currently teaches, or the quest itself names this teacher to notify
+        whoever hands it in.
+
+        "Currently teaches" is read from the student's own registration rather than from the
+        deck's default semester, since a deck can run several semesters at once (issue #2157
+        Phase 3): scoping it to the default would empty the queue of a teacher whose group
+        runs in the other one. The registration has to be the one that produced the submission
+        (its semester matches the submission's), so a teacher only ever sees the work of the
+        term they teach that student in. With no semester open nobody has a current teacher,
+        leaving only the quests this teacher asked to be notified about.
+
+        Args:
+            teacher (User): the teacher whose queue this is. None means a deck-wide view of
+                every teacher's submissions, so the queryset comes back unfiltered.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions belonging to this teacher, without
+            duplicates when a student holds several registrations that match.
         """
-        :param teacher: a User model
-        :return: qs filtered for submissions of students in the current teacher's blocks
-        """
+        from courses.models import Semester  # locally, since courses imports this module
+
         if teacher is None:
             return self
         else:
-            # The student's "current teachers" are the teachers of the blocks of their
-            # course registrations in the active semester (Profile.teachers()), so the
-            # block filter must be scoped to the active semester to match. With no open
-            # semester nobody has a current teacher, leaving only the quests this teacher
-            # asked to be notified about.
-            active_semester_id = SiteConfig.get().open_semester_id
-            teacher_filter = Q(quest__specific_teacher_to_notify=teacher)
-            if active_semester_id is not None:
-                teacher_filter |= Q(user__coursestudent__semester=active_semester_id,
-                                    user__coursestudent__block__current_teacher=teacher)
+            # all three conditions sit in one Q so they match a single registration, rather
+            # than pairing any open-semester registration with any block this teacher teaches
+            teacher_filter = Q(quest__specific_teacher_to_notify=teacher) | Q(
+                user__coursestudent__semester__status=Semester.Status.OPEN,
+                user__coursestudent__semester=F('semester'),
+                user__coursestudent__block__current_teacher=teacher,
+            )
             return self.filter(teacher_filter).distinct()
 
     def exclude_archived_quests(self):
@@ -911,8 +943,9 @@ class QuestSubmissionManager(models.Manager):
             exclude_quests_not_published (bool): drop submissions of draft quests.
             include_related (bool): join the related objects the templates almost always need.
             user (User): whose semester to limit to. Their registration names it (issue #2157
-                Phase 3). Without a user this is a deck-wide staff view, which uses the deck's
-                open semester.
+                Phase 3). Without a user this is a deck-wide staff view, which covers every
+                open semester: a deck can run two cohorts on different calendars, and a
+                teacher's queues have to hold both cohorts' work, not one semester's.
 
         Returns:
             QuestSubmissionQuerySet: the matching submissions.
@@ -921,7 +954,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(semester_for(user))
+            qs = qs.get_semester(semester_for(user)) if user is not None else qs.in_open_semesters()
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:

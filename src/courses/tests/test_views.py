@@ -1997,6 +1997,32 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
 
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__charts_the_students_own_semester(self):
+        """A deck can run two cohorts on different calendars (#1781), and the chart is drawn over
+        the semester's class days. Charting a student against the deck's default semester would
+        give the other cohort someone else's term: the wrong length, and the wrong first day to
+        count their XP from."""
+        their_semester = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date(2024, 1, 15), last_day=datetime.date(2024, 3, 15),
+        )
+        their_student = baker.make(User)
+        baker.make(
+            CourseStudent, user=their_student, semester=their_semester,
+            course=baker.make(Course), block=baker.make(Block),
+        )
+        self.client.force_login(their_student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[their_student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        data = json.loads(response.content)
+        self.assertEqual(data['days_in_semester'], their_semester.num_days())
+        self.assertNotEqual(their_semester.num_days(), self.semester.num_days())
+        # their term started Jan 15, so only its class days are plotted, not the deck semester's
+        self.assertEqual(len(data['xp_data']), their_semester.days_so_far())
+
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
         uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
