@@ -423,7 +423,7 @@ class SiteConfig(models.Model):
 
     @property
     def open_semesters(self):
-        """Every semester open right now, in first-day order.
+        """Every semester open right now, newest term first.
 
         A deck can run more than one at a time, for course groups on different calendars
         (issue #2157 Phase 3, #1781), so this and not the single pointer is what answers

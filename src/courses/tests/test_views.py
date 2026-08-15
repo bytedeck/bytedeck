@@ -1258,14 +1258,19 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         at once (#1781), so the heading lists them all rather than naming only the one the deck
         happens to point at."""
         self.client.force_login(self.test_teacher)
-        first = SiteConfig.get().open_semester
-        second = baker.make(Semester, status=Semester.Status.OPEN)
+        running = SiteConfig.get().open_semester
+        next_term = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=running.first_day + datetime.timedelta(days=200),
+            last_day=running.last_day + datetime.timedelta(days=200),
+        )
 
         response = self.client.get(reverse('courses:semester_list'))
 
-        self.assertEqual(list(response.context['open_semesters']), [first, second])
+        # newest term first, the order the list itself is in
+        self.assertEqual(list(response.context['open_semesters']), [next_term, running])
         self.assertContains(response, 'Open semesters:')
-        self.assertContains(response, str(second))
+        self.assertContains(response, str(next_term))
 
     def test_SemesterList_view__says_so_when_nothing_is_open(self):
         """Between semesters the heading says nobody can join or earn XP, instead of leaving a
