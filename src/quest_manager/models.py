@@ -852,6 +852,21 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
             return self.none()
         return self.filter(semester=semester)
 
+    def in_open_semesters(self):
+        """Submissions made in any semester that is open right now.
+
+        What a deck-wide staff view of "current" work should filter on: a deck can run
+        several semesters at once (issue #2157 Phase 3, #1781), and scoping to the deck's
+        default would hide everything the other cohort hands in.
+
+        Returns:
+            QuestSubmissionQuerySet: the submissions whose semester is open, empty between
+            semesters.
+        """
+        from courses.models import Semester  # locally, since courses imports this module
+
+        return self.filter(semester__status=Semester.Status.OPEN)
+
     def get_not_semester(self, semester):
         """Submissions made outside `semester`.
 
@@ -916,8 +931,9 @@ class QuestSubmissionManager(models.Manager):
             exclude_quests_not_published (bool): drop submissions of draft quests.
             include_related (bool): join the related objects the templates almost always need.
             user (User): whose semester to limit to. Their registration names it (issue #2157
-                Phase 3). Without a user this is a deck-wide staff view, which uses the deck's
-                open semester.
+                Phase 3). Without a user this is a deck-wide staff view, which covers every
+                open semester: a deck can run two cohorts on different calendars, and a
+                teacher's queues have to hold both cohorts' work, not one semester's.
 
         Returns:
             QuestSubmissionQuerySet: the matching submissions.
@@ -926,7 +942,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(semester_for(user))
+            qs = qs.get_semester(semester_for(user)) if user is not None else qs.in_open_semesters()
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:

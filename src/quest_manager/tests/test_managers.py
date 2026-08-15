@@ -791,6 +791,7 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         """Between semesters nothing was earned "this semester", so the semester-scoped
         queryset is empty instead of matching submissions whose semester was deleted."""
         orphaned = baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=False, semester=None)
+        Semester.objects.update(status=Semester.Status.ARCHIVED)
         config = SiteConfig.get()
         config.active_semester = None
         config.save()
@@ -799,6 +800,20 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
 
         self.assertFalse(qs.exists())
         self.assertNotIn(orphaned, qs)
+
+    def test_get_queryset__active_semester_only_spans_every_open_semester(self):
+        """A deck-wide staff view covers both cohorts when a deck runs two semesters at once
+        (#2157 Phase 3). Scoping it to the deck's default would hide everything the other
+        cohort hands in, so their work would never reach a teacher's approval queue."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        their_submission = baker.make(
+            QuestSubmission, user=self.student, quest__published=True, quest__archived=False,
+            semester=other_semester,
+        )
+
+        qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
+
+        self.assertIn(their_submission, qs)
 
     def test_create_submission__is_not_stamped_when_no_semester_is_open(self):
         """A quest started between semesters belongs to no semester, so its XP counts toward
