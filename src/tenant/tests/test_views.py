@@ -1218,19 +1218,23 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         self.set_deck(stripe_customer_id='cus_9')
 
+        # Match the manage-subscription form by its action, so the shared navbar's own
+        # sign-out POST form (present on every authenticated page) is never miscounted.
+        manage_form = f'<form method="post" action="{reverse("decks:subscription")}">'
+
         # setUp's staff user is NOT the owner: disabled buttons, owner named in the popup
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
         self.assertContains(
             response, f'Only the deck owner, {owner.get_username()}, can manage the subscription.', count=2
         )
-        self.assertNotContains(response, '<form method="post"')
+        self.assertNotContains(response, manage_form)
 
         # the owner: two live forms, the help text riding on the buttons' title popups
         self.client.force_login(owner)
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
-        self.assertContains(response, '<form method="post"', count=2)
+        self.assertContains(response, manage_form, count=2)
         self.assertNotContains(response, 'disabled')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
