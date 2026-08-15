@@ -1351,9 +1351,12 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             # Matches the skip view: waiving the quest drops the answers the student drafted but
             # never submitted, so they don't linger as rows nothing will ever show (#2164). The
-            # answers of any cycle they did submit stay published with their own comment.
-            discard_draft_question_submissions(self.submission)
-            self.submission.mark_approved(transfer=True)
+            # answers of any cycle they did submit stay published with their own comment. Both
+            # steps share a transaction so a failure in the approval (which also grants badges
+            # and recalculates XP) takes the deletion back with it.
+            with transaction.atomic():
+                discard_draft_question_submissions(self.submission)
+                self.submission.mark_approved(transfer=True)
 
         notification_kwargs.update({
             'verb': note_verb,
@@ -2115,11 +2118,15 @@ def skip(request, submission_id):
 
         # The quest is being waived, so any answers the student drafted will never be submitted
         # and nothing renders them; drop them rather than leave invisible rows behind (#2164).
-        discard_draft_question_submissions(submission)
+        # In one transaction with the approval that justifies it, so a failure part way through
+        # (marking approved also grants badges and recalculates XP) cannot leave the answers
+        # deleted on a submission that was never transferred.
+        with transaction.atomic():
+            discard_draft_question_submissions(submission)
 
-        # approve quest automatically, and mark as transfer.
-        submission.mark_completed()
-        submission.mark_approved(transfer=True)
+            # approve quest automatically, and mark as transfer.
+            submission.mark_completed()
+            submission.mark_approved(transfer=True)
 
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")

@@ -619,7 +619,11 @@ class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
     """Skipping a submission clears the answers the student drafted but never submitted (#2164)."""
 
     def draft_some_answers(self):
-        """Put content in the submission's draft answer rows, as autosaving a draft would."""
+        """Put content in the submission's draft answer rows, as autosaving a draft would.
+
+        Returns:
+            list: the draft rows, each now carrying answer text.
+        """
         rows = list(sync_draft_question_submissions(self.submission))
         for row in rows:
             row.response_text = "drafted but never submitted"
@@ -627,7 +631,12 @@ class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
         return rows
 
     def draft_rows(self):
-        """The submission's unpublished draft answer rows."""
+        """The submission's unpublished draft answers.
+
+        Returns:
+            QuerySet: the submission's answer rows that have no comment, so the ones a skip
+            should discard.
+        """
         return QuestionSubmission.objects.filter(quest_submission=self.submission, comment__isnull=True)
 
     def test_skip__discards_the_students_draft_answers(self):
@@ -669,7 +678,7 @@ class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
         self.assertTrue(self.submission.do_not_grant_xp)
         self.assertEqual(published.count(), 2)
 
-    def test_approve_skip_button__discards_the_students_draft_answers(self):
+    def test_ApproveView__skip_button_discards_the_students_draft_answers(self):
         """A teacher skipping from the submission page discards the drafts too, so both skip
         paths leave the same state behind."""
         self.draft_some_answers()
