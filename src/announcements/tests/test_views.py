@@ -476,7 +476,7 @@ class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 
         self.client.force_login(self.test_teacher)
-        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
@@ -487,7 +487,7 @@ class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
         announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
 
         self.client.force_login(self.test_teacher)
-        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
         for announcement in announcements:
             announcement.refresh_from_db()

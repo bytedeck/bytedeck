@@ -815,49 +815,61 @@ class BlockDelete(NonPublicOnlyViewMixin, DeleteView):
 
 
 @method_decorator(staff_member_required, name='dispatch')
-class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
-    """Staff-only two-step archive (close) of the active semester.
+class SemesterArchive(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
+    """Staff-only two-step archive (close) of one semester.
+
+    The semester is named in the URL rather than taken from the deck, so a deck running
+    two of them can archive either one (issue #2157 Phase 3). Every count and blocker
+    below belongs to that semester alone.
 
     GET renders a preview of everything archiving will do: how many course registrations
     get their final XP recorded (freeing those students' deck seats), how many in-progress
     quest submissions are deleted, and whether announcements will be archived, along with
     any blockers (submissions still awaiting approval, students with negative XP). POST
-    performs the archive via Semester.objects.complete_active_semester().
+    performs the archive via Semester.objects.complete_semester().
     """
     template_name = 'courses/semester_archive.html'
 
-    NO_OPEN_SEMESTER_ERROR = 'No semester is open, so there is nothing to archive.'
+    NOT_OPEN_ERROR = "That semester isn't open, so there is nothing to archive."
 
-    def dispatch(self, request, *args, **kwargs):
-        """Refuse to serve the view at all (GET or POST) when the deck is between semesters:
-        there is no semester to preview or archive.
+    def get_semester(self):
+        """The semester this page is archiving.
 
         Returns:
-            HttpResponse: a redirect to the semester list with a warning when no semester is
-            open; otherwise the normal response.
+            Semester: the one named by the URL's pk.
         """
-        if SiteConfig.get().has_no_open_semester():
-            messages.warning(request, self.NO_OPEN_SEMESTER_ERROR)
-            return redirect('courses:semester_list')
-        return super().dispatch(request, *args, **kwargs)
+        return get_object_or_404(Semester, pk=self.kwargs['pk'])
+
+    def refusal_message(self):
+        """Whether this semester can be archived at all.
+
+        Returns:
+            str or None: the error message when the target is not open (an upcoming
+            semester has no marks to record, an archived one is already done), otherwise
+            None.
+        """
+        return None if self.get_semester().is_open else self.NOT_OPEN_ERROR
 
     def get_context_data(self, **kwargs):
-        """Assemble the preview counts and blockers for archiving the active semester.
+        """Assemble the preview counts and blockers for archiving this semester.
 
         Returns:
-            dict: template context with the active semester, the counts previewed above,
-            the negative-XP users queryset, and a `blocked` flag when archiving would be
+            dict: template context with the semester, the counts previewed above, the
+            negative-XP users queryset, and a `blocked` flag when archiving would be
             refused (pending approvals or negative XP).
         """
         context = super().get_context_data(**kwargs)
-        semester = SiteConfig.get().open_semester
+        semester = self.get_semester()
         registrations = CourseStudent.objects.all_for_semester(semester)
         context['semester'] = semester
         context['num_registrations'] = registrations.count()
         context['num_seats_freed'] = registrations.get_students_only().count()
-        # matches what QuestSubmission.objects.remove_in_progress() will delete
-        context['num_in_progress'] = QuestSubmission.objects.all_not_completed(active_semester_only=False).count()
-        context['num_awaiting_approval'] = QuestSubmission.objects.all_awaiting_approval().count()
+        # both match what archiving this semester will actually touch: another open
+        # semester's in-progress work and pending approvals are left alone
+        context['num_in_progress'] = QuestSubmission.objects.all_not_completed(
+            active_semester_only=False,
+        ).get_semester(semester).count()
+        context['num_awaiting_approval'] = QuestSubmission.objects.all_awaiting_approval(semester=semester).count()
         # negative final XP comes from a negative xp_cached (final_xp = xp_cached / course count);
         # select_related the profile since the blockers list renders user.profile per row
         context['negative_xp_users'] = User.objects.filter(
@@ -868,20 +880,33 @@ class SemesterArchive(NonPublicOnlyViewMixin, LoginRequiredMixin, TemplateView):
         return context
 
     def post(self, request, *args, **kwargs):
-        """Archive the active semester: record final XP, deactivate registrations, delete
+        """Archive this semester: record final XP, deactivate its registrations, delete its
         in-progress submissions, and (unless opted out via the archive_announcements
         checkbox) archive announcements.
 
+        Args:
+            request: the POST request, whose archive_announcements field opts in to
+                archiving announcements alongside the semester.
+            *args: positional URL arguments.
+            **kwargs: keyword URL arguments, including the semester's pk.
+
         Returns:
-            HttpResponse: a redirect to the semester list with a success message, or a
-            warning message when archiving was refused (no semester open by the time the
-            POST ran, submissions awaiting approval, or students with negative XP).
+            HttpResponse: a redirect to the semester list with a success message, or with
+            a message saying why archiving was refused (the semester is not open, its
+            submissions await approval, or its students have negative XP).
         """
-        sem = Semester.objects.complete_active_semester()
+        # RefuseSemesterMixin.post() is shadowed by this method, so the guard is called
+        # here instead: a POST to a semester that isn't open must be refused the same way
+        # the GET is, rather than falling through to the sentinel below.
+        refused = self._refuse(request)
+        if refused:
+            return refused
+
+        sem = Semester.objects.complete_semester(self.get_semester())
         semester_warnings = {
-            # dispatch() already redirects when nothing is open, so this only comes up when
-            # another request archived the semester between that check and this one
-            Semester.NO_OPEN_SEMESTER: 'No semester is open, so there is nothing to archive.',
+            # refusal_message() already redirects when the target isn't open, so this only
+            # comes up when another request archived it between that check and this one
+            Semester.NO_OPEN_SEMESTER: self.NOT_OPEN_ERROR,
             Semester.QUEST_AWAITING_APPROVAL: "There are still quests awaiting approval. "
                                               "Can't archive the semester until they are approved or returned.",
             Semester.STUDENTS_WITH_NEGATIVE_XP: "There are some students with negative XP. Can't archive the semester until it is fixed.",

@@ -832,7 +832,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         from courses.models import Semester
 
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
-        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+        with patch.object(Semester.objects, 'complete_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
             with self.assertRaises(RuntimeError):
                 self.close()
         self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())

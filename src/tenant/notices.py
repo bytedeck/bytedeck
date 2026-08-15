@@ -83,16 +83,24 @@ def close_semester_on_new_suspension(deck):
             submission.mark_returned()
             returned += 1
 
-        result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
-        if result == Semester.NO_OPEN_SEMESTER:
+        # every open semester, not just the one the deck points at: suspension stops the
+        # whole deck, so a second cohort's semester has to close with the first
+        open_semesters = list(Semester.objects.open())
+        if not open_semesters:
             # nothing was open; the episode is recorded so this isn't re-checked
             return 'no open semester to close'
-        if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
-            # can't happen (submissions were just returned; negative XP is clamped),
-            # but if it ever does, roll everything back and retry next run instead
-            # of recording a close that didn't happen
-            raise RuntimeError(f'semester close failed with sentinel {result}')
-    return f'closed semester "{result}" (returned {returned} awaiting-approval submission(s))'
+
+        closed = []
+        for semester in open_semesters:
+            result = Semester.objects.complete_semester(semester, clamp_negative_xp=True)
+            if result in (Semester.NO_OPEN_SEMESTER, Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
+                # can't happen (submissions were just returned; negative XP is clamped),
+                # but if it ever does, roll everything back and retry next run instead
+                # of recording a close that didn't happen
+                raise RuntimeError(f'semester close failed with sentinel {result}')
+            closed.append(str(result))
+    names = ', '.join(f'"{name}"' for name in closed)
+    return f'closed semester {names} (returned {returned} awaiting-approval submission(s))'
 
 
 def evaluate_deck_notices(deck):

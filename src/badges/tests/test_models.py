@@ -410,7 +410,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
     def test_create_assertion__no_open_semester_grants_an_unstamped_assertion(self):
         """Staff can still grant a badge between semesters (issue #1177). The assertion isn't
         stamped with a semester, so it doesn't count toward the next one's XP."""
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
 
         new_assertion = BadgeAssertion.objects.create_assertion(
             self.student, baker.make(Badge), issued_by=self.teacher
@@ -421,7 +421,7 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
     def test_get_queryset__active_semester_only_is_empty_with_no_open_semester(self):
         """With no semester open, nothing was earned this semester: the semester-scoped
         queryset is empty rather than matching the unstamped assertions."""
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
         BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
 
         self.assertFalse(BadgeAssertion.objects.get_queryset(active_semester_only=True).exists())

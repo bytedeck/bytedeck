@@ -53,7 +53,7 @@ class CanAddCurrentStudentTest(ByteDeckTenantTestCase):
         occupant = self.fill_the_single_seat()
         self.assertFalse(can_add_current_student(baker.make(User)))
 
-        Semester.objects.complete_active_semester()
+        Semester.objects.complete_semester()
 
         self.assertTrue(can_add_current_student(baker.make(User)))
         self.assertTrue(can_add_current_student(occupant))
