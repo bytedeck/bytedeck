@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 class ContentOrigin(models.Model):
@@ -51,8 +52,9 @@ class ContentOrigin(models.Model):
                   "there is no row here to point at."
     )
     shared_on = models.DateTimeField(
-        auto_now_add=True,
-        help_text="When the content was shared to the Library."
+        default=timezone.now,
+        help_text="When the content was most recently shared to the Library. Re-sharing "
+                  "refreshes it, so the date always belongs to the sharer named beside it."
     )
 
     class Meta:
@@ -65,7 +67,11 @@ class ContentOrigin(models.Model):
         verbose_name = 'content origin'
 
     def __str__(self):
-        """Describe the origin the way it reads as attribution."""
+        """Describe the origin the way it reads as attribution.
+
+        Returns:
+            str: the content type, its import_id, and who shared it from where.
+        """
         return f'{self.get_content_type_display()} {self.import_id} shared by {self.shared_by} of {self.deck_name}'
 
     @classmethod
@@ -74,7 +80,7 @@ class ContentOrigin(models.Model):
 
         Must be called from within the library schema context, since that is where the row
         belongs. Re-sharing the same content updates the existing row rather than adding a
-        second one, so the attribution always names the most recent push.
+        second one, so the attribution (including its date) always names the most recent push.
 
         Args:
             import_id (UUID): the import_id of the content in the Library.
@@ -93,6 +99,9 @@ class ContentOrigin(models.Model):
                 'deck_name': deck_name,
                 'deck_url': deck_url,
                 'shared_by': shared_by,
+                # Refreshed rather than left at the first push: the attribution names the
+                # most recent sharer, so the date shown next to it has to be theirs too.
+                'shared_on': timezone.now(),
             },
         )
         return origin
