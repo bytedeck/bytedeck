@@ -2056,23 +2056,27 @@ class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
 
         cls.test_teacher = User.objects.create_user('listing_window_teacher', is_staff=True)
 
-    def test_library_overview__lists_a_quest_whose_availability_date_has_not_arrived(self):
-        """A quest the sharing deck scheduled for a future date is still in the catalogue."""
+    def test_LibraryQuestListView__lists_a_quest_whose_availability_date_has_not_arrived(self):
+        """A quest the sharing deck scheduled for a future date is still in the catalogue.
+
+        Searched for by name rather than read off the first page: the list is paginated and
+        unordered, so which page a quest lands on is not something the test should assume.
+        """
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('library:quest_list'))
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Not Yet Available'})
 
         self.assertIn(self.not_yet, response.context['library_quests'])
 
-    def test_library_overview__lists_a_quest_whose_expiry_date_has_passed(self):
+    def test_LibraryQuestListView__lists_a_quest_whose_expiry_date_has_passed(self):
         """A quest that expired on the sharing deck is still in the catalogue."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('library:quest_list'))
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Already Expired'})
 
         self.assertIn(self.expired, response.context['library_quests'])
 
-    def test_library_overview__quest_badge_counts_every_quest_the_list_shows(self):
+    def test_LibraryQuestListView__quest_badge_counts_every_quest_the_list_shows(self):
         """The Quests badge agrees with the list beneath it, all three new quests included."""
         self.client.force_login(self.test_teacher)
 
@@ -2080,7 +2084,7 @@ class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
 
         self.assertEqual(response.context['num_quests'], self.quests_already_in_library + 3)
 
-    def test_library_campaign_list__quest_badge_agrees_with_the_quests_tab(self):
+    def test_LibraryCampaignListView__quest_badge_agrees_with_the_quests_tab(self):
         """The Quests badge shows the same total whichever tab the user is on."""
         self.client.force_login(self.test_teacher)
 
@@ -2088,7 +2092,7 @@ class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
 
         self.assertEqual(response.context['num_quests'], self.quests_already_in_library + 3)
 
-    def test_library_overview__search_finds_a_quest_outside_the_sharing_deck_window(self):
+    def test_LibraryQuestListView__search_finds_a_quest_outside_the_sharing_deck_window(self):
         """Search reaches an expired quest, so it can be found rather than only imported by link."""
         self.client.force_login(self.test_teacher)
 

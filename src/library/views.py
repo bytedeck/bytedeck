@@ -207,8 +207,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     """
     View for displaying a list of the quests the shared library holds.
 
-    Only quests that are both published and not archived
-    will be shown. Access is restricted to logged-in staff users.
+    A quest is listed when it is published, not archived, and not sitting behind an
+    unpublished campaign (see `library_listable_quests`). Access is restricted to logged-in
+    staff users.
     """
     # Shared template, tab context determines which section is shown
     template_name = 'library/library_overview.html'
@@ -245,7 +246,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             return requested
 
     def get_library_quests(self, search_term):
-        """The active Library quests to list, narrowed by the search term.
+        """The listable Library quests, narrowed by the search term.
 
         Must be called from within the library schema context, and the queryset must be
         evaluated there too: the caller paginates it, which is what runs the queries.
@@ -379,8 +380,10 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
                         - published=True
                         - archived=False (not archived)
                 - num_campaigns (int): Number of campaigns in the displayed list, used for the UI badge.
-                - num_quests (int): Total number of visible (published and not archived) quests,
-                    used for the UI badge in the quest tab.
+                - num_quests (int): Total number of listable quests (published, not archived,
+                    and not behind an unpublished campaign), used for the UI badge in the
+                    quest tab. Read through the same helper the Quests tab lists with, so
+                    the badge agrees whichever tab the user is on.
                 - is_library_view (bool): True, so the campaign table shared with the deck's own
                     campaign list shows the Library's import action instead of the local ones.
         """
