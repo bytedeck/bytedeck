@@ -614,20 +614,6 @@ class CourseStudentQuerySet(models.query.QuerySet):
             return self.none()
         return self.filter(semester=semester)
 
-    def get_not_semester(self, semester):
-        """Registrations outside `semester`.
-
-        Args:
-            semester: a Semester, or None when no semester is open.
-
-        Returns:
-            CourseStudentQuerySet: the registrations in any other semester, or all of them when
-            there is no semester (with none open, every registration is in a past semester).
-        """
-        if semester is None:
-            return self
-        return self.exclude(semester=semester)
-
     def get_active(self):
         return self.filter(active=True)
 
@@ -644,9 +630,6 @@ class CourseStudentManager(models.Manager):
 
     def all_for_user_semester(self, user, semester):
         return self.get_queryset().get_user(user).get_semester(semester)
-
-    def all_for_user_not_semester(self, user, semester):
-        return self.get_queryset().get_user(user).get_not_semester(semester)
 
     def all_for_user(self, user):
         return self.get_queryset().get_user(user)
@@ -704,7 +687,42 @@ class CourseStudentManager(models.Manager):
         return self.current_courses(user).first()
 
     def current_courses(self, user):
-        return self.all_for_user(user).get_semester(SiteConfig.get().open_semester)
+        """This user's registrations in the semester they are earning XP in right now.
+
+        Read from the registrations themselves rather than from the deck's pointer
+        (issue #2157 Phase 3): a student is registered in at most one open semester, so
+        every open-semester registration they hold is in that one semester, however many
+        courses and groups it covers.
+
+        Args:
+            user: the User whose registrations are wanted.
+
+        Returns:
+            CourseStudentQuerySet: their registrations in an open semester, empty when they
+            are not in one.
+        """
+        return self.all_for_user(user).filter(semester__status=Semester.Status.OPEN)
+
+    def current_semester(self, user):
+        """The semester this user earns XP in right now.
+
+        A student's semester is the one their own registration names, not the one the deck
+        points at: once several semesters can be open at a time (#1781), the deck-wide
+        pointer can no longer say which of them a given student is in, but their
+        registration always can.
+
+        Args:
+            user: the User whose semester is wanted.
+
+        Returns:
+            Semester or None: the open semester this user is registered in. Someone with no
+            such registration (a teacher trying out a quest, a student who hasn't joined a
+            course yet) gets the deck's open semester, which is None between semesters.
+        """
+        registration = self.current_courses(user).select_related('semester').first()
+        if registration is not None:
+            return registration.semester
+        return SiteConfig.get().open_semester
 
     def all_users_for_active_semester(self, students_only=False, active_only=False):
         """
@@ -726,6 +744,25 @@ class CourseStudentManager(models.Manager):
     # @cached(60*60*12)
     def get_current_teacher_list(self, user):
         return self.current_courses(user).values_list('block__current_teacher', flat=True)
+
+
+def semester_for(user=None):
+    """The semester that counts as "this semester" when reading or stamping XP.
+
+    The single place that answers it, so a submission is never stamped with one semester
+    and then filtered out by a query using another (issue #2157 Phase 3).
+
+    Args:
+        user (User): the student whose XP is in view, or None for a deck-wide view
+            covering every student at once (a staff approval queue, for instance).
+
+    Returns:
+        Semester or None: that student's own semester, or the deck's open semester when no
+        particular student is in view. None when neither exists, between semesters.
+    """
+    if user is None:
+        return SiteConfig.get().open_semester
+    return CourseStudent.objects.current_semester(user)
 
 
 class CourseStudent(models.Model):

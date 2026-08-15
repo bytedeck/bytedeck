@@ -11,7 +11,7 @@ from model_bakery import baker
 
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from quest_manager.models import QuestSubmission
+from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -545,11 +545,8 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         self.assertFalse(users.exists())
         self.assertNotIn(orphaned.user, users)
 
-    def test_all_for_user_not_semester__returns_every_registration(self):
+    def test_has_past_courses__counts_every_registration(self):
         """With none open, every registration the student has is in a past semester."""
-        past = CourseStudent.objects.all_for_user_not_semester(self.student, None)
-
-        self.assertQuerySetEqual(past, [self.registration])
         self.assertTrue(self.student.profile.has_past_courses)
 
     def test_reset_students_xp_cached__still_zeroes_the_archived_semesters_students(self):
@@ -562,6 +559,103 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
 
         self.student.profile.refresh_from_db()
         self.assertEqual(self.student.profile.xp_cached, 0)
+
+
+class StudentOwnSemesterTest(ByteDeckTenantTestCase):
+    """A student's semester comes from their own registration, not from the deck's pointer
+    (issue #2157 Phase 3, the inversion #1781 needs).
+
+    The deck can only name one semester, so once several are open it can't say which one a
+    given student earns XP in. Their registration can, and these tests pin that: the
+    second open semester here is built directly, since starting a semester the normal way
+    still leaves only one open until concurrent semesters land.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A student registered in the deck's open semester, plus a second open semester
+        with its own student, and a teacher registered in neither."""
+        cls.deck_semester = SiteConfig.get().active_semester
+        cls.other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+
+        cls.student = baker.make(User, username='deck_semester_student')
+        baker.make(CourseStudent, user=cls.student, course=baker.make(Course), semester=cls.deck_semester)
+
+        cls.other_student = baker.make(User, username='other_semester_student')
+        baker.make(CourseStudent, user=cls.other_student, course=baker.make(Course), semester=cls.other_semester)
+
+        cls.teacher = baker.make(User, username='unregistered_teacher', is_staff=True)
+
+    def test_current_semester__is_the_students_own_registration(self):
+        """A student in the semester the deck points at gets that semester."""
+        self.assertEqual(CourseStudent.objects.current_semester(self.student), self.deck_semester)
+
+    def test_current_semester__ignores_the_deck_pointer(self):
+        """A student registered in a different open semester gets theirs, not the deck's.
+        This is the whole point of reading the registration: the deck still points at
+        deck_semester, and for this student that answer is wrong."""
+        self.assertEqual(SiteConfig.get().open_semester, self.deck_semester)
+        self.assertEqual(CourseStudent.objects.current_semester(self.other_student), self.other_semester)
+
+    def test_current_semester__unregistered_user_falls_back_to_the_deck(self):
+        """Someone with no registration (a teacher trying a quest, a student who hasn't
+        joined a course) keeps earning XP in the deck's open semester, as before."""
+        self.assertEqual(CourseStudent.objects.current_semester(self.teacher), self.deck_semester)
+
+    def test_current_semester__unregistered_user_between_semesters_is_none(self):
+        """With nothing open and no registration to fall back on, there is no semester."""
+        Semester.objects.filter(pk=self.other_semester.pk).update(status=Semester.Status.ARCHIVED)
+        Semester.objects.complete_active_semester()
+        self.assertIsNone(CourseStudent.objects.current_semester(self.teacher))
+
+    def test_current_semester__archived_registration_is_not_current(self):
+        """Archiving the semester a student was in leaves them with no current registration.
+        They fall back to the deck's pointer, which archiving cleared, rather than staying
+        attached to the archived semester (or being adopted by someone else's open one)."""
+        Semester.objects.complete_active_semester()
+        self.assertTrue(self.other_semester.is_open)
+        self.assertIsNone(CourseStudent.objects.current_semester(self.student))
+
+    def test_xp_totals__count_what_was_earned_in_the_students_own_semester(self):
+        """The end-to-end pairing of stamping and reading. A quest approved and a badge
+        granted for a student in the semester the deck does not point at are stamped with
+        their semester, and their XP total then counts both. Reading through the deck's
+        semester instead would leave the student looking at zero XP they can't explain."""
+        from badges.models import Badge, BadgeAssertion
+
+        quest = baker.make(Quest, xp=25, published=True)
+        submission = QuestSubmission.objects.create_submission(self.other_student, quest)
+        submission.mark_completed()
+        submission.mark_approved()
+        BadgeAssertion.objects.create_assertion(self.other_student, baker.make(Badge, xp=10))
+
+        self.assertEqual(submission.semester, self.other_semester)
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 35)
+
+    def test_xp_totals__ignore_xp_earned_in_a_different_semester(self):
+        """XP stays scoped: a submission stamped with someone else's open semester is not
+        added to this student's total just because both semesters are open."""
+        from badges.models import Badge, BadgeAssertion
+
+        baker.make(
+            QuestSubmission, user=self.other_student, quest__xp=100, semester=self.deck_semester,
+            is_completed=True, is_approved=True,
+        )
+        BadgeAssertion.objects.create_assertion(
+            self.other_student, baker.make(Badge, xp=50), active_semester=self.deck_semester.pk,
+        )
+
+        self.assertEqual(self.other_student.profile.xp_invalidate_cache(), 0)
+
+    def test_current_courses__covers_every_course_in_that_semester(self):
+        """A student holds registrations in several courses and groups within their one
+        semester, and all of them are current; registrations in another semester are not."""
+        second_course = baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=self.deck_semester)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=baker.make(Semester))
+
+        current = CourseStudent.objects.current_courses(self.student)
+        self.assertEqual(current.count(), 2)
+        self.assertIn(second_course, current)
 
 
 class CourseModelTest(ByteDeckTenantTestCase):

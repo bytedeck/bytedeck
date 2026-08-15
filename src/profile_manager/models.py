@@ -20,7 +20,7 @@ from django_resized import ResizedImageField
 from django_tenants.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Rank
+from courses.models import CourseStudent, Rank, Semester
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -319,14 +319,16 @@ class Profile(models.Model):
     def has_past_courses(self):
         """Whether the user was registered in a course in some earlier semester.
 
-        Between semesters there is no open semester, so every course they have is a past
+        Between semesters they are in no open semester, so every course they have is a past
         one.
 
         Returns:
-            bool: True when the user has a registration outside the open semester.
+            bool: True when the user has a registration outside the semester they are in
+            now. A registration whose semester was deleted counts as a past one.
         """
-        semester = SiteConfig.get().open_semester
-        return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
+        return CourseStudent.objects.all_for_user(self.user).exclude(
+            semester__status=Semester.Status.OPEN,
+        ).exists()
 
     @cached_property
     def has_current_course(self):
