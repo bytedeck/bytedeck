@@ -13,11 +13,18 @@
 {% block content %}
 <p>This page is visible to staff only.</p>
 
-{% if config.open_semester %}
-<h3>Open semester: {{ config.open_semester }}</h3>
+{% if open_semesters|length == 1 %}
+<h3>Open semester: {{ open_semesters.0 }}</h3>
 
 <p>Students join a course in the open semester and earn XP in it.
   When it is over, archive it to record final marks and free up your students' seats.</p>
+{% elif open_semesters %}
+<h3>Open semesters: {% for semester in open_semesters %}{{ semester }}{% if not forloop.last %}, {% endif %}{% endfor %}</h3>
+
+<p>You are running more than one semester at once, for course groups on different calendars.
+  A student joins one of them and earns XP in it; they can take several courses within it,
+  but not be in two semesters at the same time. Archive each one when it is over: archiving
+  one leaves the others running.</p>
 {% else %}
 <h3>No semester is open</h3>
 

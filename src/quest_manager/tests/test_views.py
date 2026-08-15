@@ -28,7 +28,7 @@ from django.utils import timezone
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
-from courses.models import Block, Rank
+from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -1900,6 +1900,26 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['scope'], 'my_blocks')
         self.assertTrue(response.context['has_my_blocks'])
+        usernames = [entry['user'].username for entry in response.context['user_status_list']]
+        self.assertEqual(usernames, [self.student1.username])
+
+    def test_quest_user_status__scope_my_blocks_spans_every_open_semester(self):
+        """A teacher's group in the deck's other open semester is still their group (#2157 Phase 3).
+        The current-students count already spans every open semester, so scoping my_blocks to the
+        deck's default alone would count a student as current and then leave them out of the group
+        their own teacher teaches."""
+        other_semester = baker.make('courses.Semester', status=Semester.Status.OPEN)
+        block = baker.make('courses.Block', current_teacher=self.staff_user)
+        self.student1.coursestudent_set.all().delete()
+        baker.make(
+            'courses.CourseStudent', user=self.student1, semester=other_semester,
+            block=block, course=baker.make('courses.Course'),
+        )
+
+        url = reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=my_blocks'
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
         usernames = [entry['user'].username for entry in response.context['user_status_list']]
         self.assertEqual(usernames, [self.student1.username])
 

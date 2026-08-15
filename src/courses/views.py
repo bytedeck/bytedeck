@@ -472,6 +472,19 @@ class CourseStudentDelete(NonPublicOnlyViewMixin, DeleteView):
 class SemesterList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
     model = Semester
 
+    def get_context_data(self, **kwargs):
+        """Add the open semesters, so the heading can name them all.
+
+        The deck's pointer names only one of them, and with two cohorts running that would
+        describe half the deck (issue #2157 Phase 3).
+
+        Returns:
+            dict: the standard ListView context plus `open_semesters`.
+        """
+        context = super().get_context_data(**kwargs)
+        context['open_semesters'] = Semester.objects.open()
+        return context
+
 
 @method_decorator(staff_member_required, name='dispatch')
 class SemesterDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):

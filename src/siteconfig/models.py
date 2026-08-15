@@ -334,13 +334,16 @@ class SiteConfig(models.Model):
             return static('img/banner.png')
 
     def set_active_semester(self, semester):
-        """Make `semester` the one students join and earn XP in: open it and point
-        active_semester at it.
+        """Start `semester`: open it, so students can join a course in it and earn XP.
 
-        A deck runs one semester at a time, so any other open semester is returned to Upcoming.
-        That semester was never archived, so no final marks were recorded and nothing is lost;
-        it can be opened again later. Callers are responsible for not passing an archived
-        semester (archiving is one-way).
+        Any other open semester stays open (issue #2157 Phase 3, closing #1781): a deck can
+        run two cohorts on different calendars, and starting the second one must not stop
+        the first. Each student's own semester comes from their registration, so the deck no
+        longer needs the semesters to be mutually exclusive.
+
+        active_semester is pointed at the semester just started. With several open it is only
+        the default offered first when a student joins a course, not the one everybody is in.
+        Callers are responsible for not passing an archived semester (archiving is one-way).
 
         Args:
             semester: a Semester, or the id of one (404 when no semester has that id).
@@ -352,11 +355,9 @@ class SiteConfig(models.Model):
             semester = get_object_or_404(Semester, id=semester)
 
         with transaction.atomic():
-            # Lock the singleton config row for the duration: two activations racing each
-            # other would otherwise each demote the other's target and leave both semesters
-            # open, with only the pointer picking a winner.
+            # Lock the singleton config row for the duration, the same lock archiving takes,
+            # so an activation and an archive can't interleave over the pointer.
             SiteConfig.objects.select_for_update().get(pk=self.pk)
-            Semester.objects.open().exclude(pk=semester.pk).update(status=Semester.Status.UPCOMING)
             if not semester.is_open:
                 semester.status = Semester.Status.OPEN
                 semester.save()
@@ -420,32 +421,50 @@ class SiteConfig(models.Model):
 
         return self.allow_staff_export and user.is_staff
 
+    @property
+    def open_semesters(self):
+        """Every semester open right now, newest term first.
+
+        A deck can run more than one at a time, for course groups on different calendars
+        (issue #2157 Phase 3, #1781), so this and not the single pointer is what answers
+        "is this deck running?".
+
+        Returns:
+            SemesterQuerySet: the open semesters, empty between semesters.
+        """
+        from courses.models import Semester  # imported here to prevent circular imports
+
+        return Semester.objects.open()
+
     def has_no_open_semester(self):
         """Whether there is no semester open for students to join a course into (issue #2060).
 
-        This is a first-class state, not an error: archiving a semester clears active_semester,
-        so a deck sits here between semesters until staff open the next one (issue #1177). Used
-        to block student registration and to warn staff. A semester that is set but not open is
-        also treated as no open semester, so data edited by hand can't leave the deck stuck.
+        This is a first-class state, not an error: archiving the last open semester leaves a
+        deck sitting here until staff open the next one (issue #1177). Used to block student
+        registration and to warn staff.
 
         Returns:
-            bool: True when there is no open semester for students to join.
+            bool: True when the deck has no open semester at all, whichever one its pointer
+            happens to name.
         """
-        return self.active_semester is None or not self.active_semester.is_open
+        return not self.open_semesters.exists()
 
     @property
     def open_semester(self):
-        """The semester students are currently in, as the rest of the deck should see it.
+        """The semester a student joins by default, as the rest of the deck should see it.
 
-        active_semester is the raw pointer; this is the pointer filtered through
-        has_no_open_semester(), so a semester that is set but not open never reads as the
-        deck's current semester. Everything user-facing (the semester list, archiving, the
-        progress chart) goes through here rather than the pointer.
+        active_semester is the raw pointer, set to whichever semester was started most
+        recently; this is that pointer filtered through the semester's own status, so one
+        that is set but not open never reads as current. With several semesters open this is
+        merely the default offered first: a particular student's semester comes from their
+        registration (courses.models.semester_for).
 
         Returns:
-            Semester or None: the open semester, or None when the deck is between semesters.
+            Semester or None: the default open semester, or None when the pointer names none.
         """
-        return None if self.has_no_open_semester() else self.active_semester
+        if self.active_semester is None or not self.active_semester.is_open:
+            return None
+        return self.active_semester
 
     @property
     def open_semester_id(self):

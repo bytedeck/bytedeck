@@ -916,7 +916,19 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
     (semester_status_banner.html): nudges archiving an ended active semester (#2157)
     and warns when no semester is open for students to join (#1177)."""
 
+    # the no-open-semester warning, of which there is only ever one
     BANNER_ID = 'semester-status-banner'
+
+    @staticmethod
+    def ended_banner_id(semester):
+        """The id of the archive nudge for one semester.
+
+        Several can render at once, one per ended semester, so each carries its semester's id.
+
+        Returns:
+            str: the id attribute that semester's nudge is rendered with.
+        """
+        return f'semester-status-banner-{semester.id}'
 
     @classmethod
     def setUpTestData(cls):
@@ -941,9 +953,55 @@ class SemesterStatusBannerTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('courses:semester_list'))
 
-        self.assertContains(response, self.BANNER_ID)
+        self.assertContains(response, self.ended_banner_id(active_sem))
         self.assertContains(response, 'ended on')
         self.assertContains(response, reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]))
+
+    def test_semester_status_banner__nudges_each_ended_semester_on_its_own(self):
+        """With two semesters running (#1781), the nudge is per semester: the one that has
+        ended is named and linked to its own archive page, and the one still running is left
+        alone rather than being swept up with it."""
+        ended = SiteConfig.get().active_semester
+        ended.first_day = datetime.date.today() - datetime.timedelta(days=100)
+        ended.last_day = datetime.date.today() - datetime.timedelta(days=10)
+        ended.save()
+        still_running = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date.today() - datetime.timedelta(days=10),
+            last_day=datetime.date.today() + datetime.timedelta(days=10),
+        )
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.ended_banner_id(ended))
+        self.assertContains(response, f'Semester {ended} ended on')
+        # the banner's own link, not the archive button every open row in the table already has
+        archive_url = reverse('courses:semester_archive', args=[ended.id])
+        self.assertContains(response, f'<a href="{archive_url}" class="alert-link">Archive it</a>')
+        self.assertNotContains(response, self.ended_banner_id(still_running))
+        self.assertNotContains(response, f'Semester {still_running} ended on')
+
+    def test_semester_status_banner__gives_each_ended_semester_its_own_id(self):
+        """Two ended semesters render two nudges, and each gets its own id: a page with the same
+        id twice makes anything selecting it (a script, a screen reader landmark) see only the
+        first, so one of the two nudges would effectively go missing."""
+        first = SiteConfig.get().active_semester
+        first.first_day = datetime.date.today() - datetime.timedelta(days=200)
+        first.last_day = datetime.date.today() - datetime.timedelta(days=100)
+        first.save()
+        second = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=datetime.date.today() - datetime.timedelta(days=90),
+            last_day=datetime.date.today() - datetime.timedelta(days=10),
+        )
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertContains(response, self.ended_banner_id(first))
+        self.assertContains(response, self.ended_banner_id(second))
+        self.assertNotEqual(self.ended_banner_id(first), self.ended_banner_id(second))
 
     def test_semester_status_banner__no_open_semester(self):
         """When the active semester is archived (the no-open-semester state, #1177),
@@ -1218,6 +1276,49 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('courses:semester_list'))
 
         self.assertContains(response, '>Open - ended<')
+
+    def test_SemesterList_view__names_the_single_open_semester(self):
+        """With one semester running, the heading names it, so staff can see at a glance which
+        one their students are in."""
+        self.client.force_login(self.test_teacher)
+        open_semester = SiteConfig.get().open_semester
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(list(response.context['open_semesters']), [open_semester])
+        self.assertContains(response, f'Open semester: {open_semester}')
+
+    def test_SemesterList_view__names_every_open_semester(self):
+        """A deck running course groups on different calendars has more than one semester open
+        at once (#1781), so the heading lists them all rather than naming only the one the deck
+        happens to point at."""
+        self.client.force_login(self.test_teacher)
+        running = SiteConfig.get().open_semester
+        next_term = baker.make(
+            Semester, status=Semester.Status.OPEN,
+            first_day=running.first_day + datetime.timedelta(days=200),
+            last_day=running.last_day + datetime.timedelta(days=200),
+        )
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        # newest term first, the order the list itself is in
+        self.assertEqual(list(response.context['open_semesters']), [next_term, running])
+        self.assertContains(response, 'Open semesters:')
+        self.assertContains(response, str(next_term))
+
+    def test_SemesterList_view__says_so_when_nothing_is_open(self):
+        """Between semesters the heading says nobody can join or earn XP, instead of leaving a
+        blank where the open semester's name would be."""
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        semester.status = Semester.Status.ARCHIVED
+        semester.save()
+
+        response = self.client.get(reverse('courses:semester_list'))
+
+        self.assertEqual(list(response.context['open_semesters']), [])
+        self.assertContains(response, 'No semester is open')
 
     def test_SemesterUpdate__add_data__view(self):
         """
