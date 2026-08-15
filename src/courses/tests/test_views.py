@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import connection, transaction
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 from django_tenants.utils import get_public_schema_name
@@ -650,6 +650,22 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
+
+    def test_lock_student__selects_the_student_row_for_update(self):
+        """The refusal above only helps if the two requests actually queue up, and what makes
+        them queue is this lock. The row locked has to be the student's own: locking their
+        registrations would lock nothing for a student registering for the first time, which is
+        exactly when two requests can race.
+        """
+        view = SerializedRegistrationMixin()
+
+        with transaction.atomic(), CaptureQueriesContext(connection) as queries:
+            view.lock_student(self.test_student1.id)
+
+        locking = [q['sql'] for q in queries.captured_queries if 'FOR UPDATE' in q['sql']]
+        self.assertEqual(len(locking), 1)
+        self.assertIn('auth_user', locking[0])
+        self.assertIn(str(self.test_student1.id), locking[0])
 
     def test_CourseAddStudent_view__refuses_a_registration_that_lost_the_race(self):
         """Two registrations for one student submitted at the same instant both validate clean,
