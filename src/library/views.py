@@ -179,6 +179,36 @@ def warn_about_unmet_prereqs(request, unmet_prereqs):
     )
 
 
+def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
+    """Tell the sharer which gating did not travel with the content they just shared.
+
+    A prerequisite only crosses if the thing it points at is in the Library too. A rank or
+    a course can never be, and a quest outside what is being pushed is simply not there
+    yet, so those gates are dropped at this end and the copy in the Library is ungated.
+
+    Nobody downstream can tell, because the Library row simply has no prerequisite: the
+    teacher who imports it later has nothing to be warned about.
+
+    That makes this the only place the loss is visible, and the sharer is also the one who
+    can act on it, by widening what they share or by re-gating it (#2399, #2450).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        unmet_prereqs (list[str]): names of the prerequisites that did not travel.
+    """
+    if not unmet_prereqs:
+        return
+
+    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+    messages.warning(
+        request,
+        f"One thing did not travel: this content was gated on {names}, which is not in the "
+        "Library, so the copy there is not gated on it and anyone importing it will get it "
+        "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
+        "grade, block or course cannot be shared at all."
+    )
+
+
 def record_push_origin(content_type, import_ids, request, source_deck_url):
     """Record which deck and which user shared this content to the Library (#2377).
 
@@ -772,7 +802,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
 
         # Perform export
-        export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
         with library_schema_context():
             # Get the newly exported quest
@@ -806,6 +836,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         return redirect('quests:quests')
 
 
@@ -915,7 +946,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 )
 
         # Export campaign and quests
-        exported_campaign = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+        shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
 
         with library_schema_context():
             exported_campaign = Category.objects.get(import_id=campaign.import_id)
@@ -953,6 +984,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         return redirect('quests:categories')
 
 

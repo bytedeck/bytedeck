@@ -29,10 +29,16 @@ class IsLibraryContentMixin:
     Both halves are required: the mixin without an `import_id` would claim a portable
     identity the model does not have, which `test_library_content__every_registered_model_has_an_import_id`
     guards against.
+
+    The methods below are named for what they answer rather than reusing
+    `IsAPrereqMixin`'s `*_is_registered` wording. The models that carry this mixin carry
+    that one too, so identical names would resolve by method resolution order and silently
+    answer the wrong question: `Quest.model_is_registered(Rank)` would say True, because
+    `Rank` is a registered *prerequisite*, which is not what the caller asked.
     """
 
     @staticmethod
-    def model_is_registered(model_class):
+    def is_shareable_model(model_class):
         """Whether rows of this model can be shared to the Library.
 
         Args:
@@ -44,7 +50,7 @@ class IsLibraryContentMixin:
         return bool(model_class) and issubclass(model_class, IsLibraryContentMixin)
 
     @staticmethod
-    def content_type_is_registered(content_type):
+    def is_shareable_content_type(content_type):
         """Whether the model behind a ContentType can be shared to the Library.
 
         Args:
@@ -53,10 +59,10 @@ class IsLibraryContentMixin:
         Returns:
             bool: True if its model inherits this mixin.
         """
-        return IsLibraryContentMixin.model_is_registered(content_type.model_class())
+        return IsLibraryContentMixin.is_shareable_model(content_type.model_class())
 
     @staticmethod
-    def all_registered_model_classes():
+    def all_shareable_model_classes():
         """Every model that can be shared to the Library.
 
         Returns:
@@ -65,7 +71,7 @@ class IsLibraryContentMixin:
         return [
             content_type.model_class()
             for content_type in ContentType.objects.all()
-            if IsLibraryContentMixin.content_type_is_registered(content_type)
+            if IsLibraryContentMixin.is_shareable_content_type(content_type)
         ]
 
 

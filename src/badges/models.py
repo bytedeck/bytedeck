@@ -198,6 +198,14 @@ class BadgeManager(models.Manager):
 
 
 class Badge(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
+    """An award a student earns, granted by staff or by meeting its prerequisites.
+
+    Badges can gate other content (`IsAPrereqMixin`) and can themselves be shared between
+    decks through the Shared Library (`IsLibraryContentMixin`), which is why `import_id`
+    below is stable: it is how a badge referenced as a prerequisite is recognised as the
+    same badge in another deck's schema.
+    """
+
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)

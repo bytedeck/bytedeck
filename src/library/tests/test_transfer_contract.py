@@ -29,7 +29,7 @@ from library.transfer import LibraryTransferError, _describe
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.tests.test_views import LibraryTenantTestCaseMixin
 from library.utils import library_schema_context
-from prerequisites.models import Prereq
+from prerequisites.models import IsAPrereqMixin, Prereq
 from badges.models import Badge
 from courses.models import Block, Course, Grade, Rank
 from quest_manager.models import Category, CommonData, Quest
@@ -534,7 +534,7 @@ class LibraryContentRegistrationTests(ByteDeckTenantTestCase):
 
     def test_library_content__registers_exactly_the_shareable_models(self):
         """Quests, campaigns and badges can travel; nothing else currently can."""
-        registered = set(IsLibraryContentMixin.all_registered_model_classes())
+        registered = set(IsLibraryContentMixin.all_shareable_model_classes())
 
         self.assertEqual(registered, {Quest, Category, Badge})
 
@@ -544,9 +544,25 @@ class LibraryContentRegistrationTests(ByteDeckTenantTestCase):
         `import_id` is what a reference to this row resolves through on the far side, so a
         model registered without one would be claiming a portable identity it lacks.
         """
-        for model in IsLibraryContentMixin.all_registered_model_classes():
+        for model in IsLibraryContentMixin.all_shareable_model_classes():
             with self.subTest(model=model.__name__):
                 self.assertIn('import_id', {field.name for field in model._meta.concrete_fields})
+
+    def test_library_content__helper_names_do_not_collide_with_the_prereq_mixin(self):
+        """The two mixins' helpers stay distinguishable on a model that carries both.
+
+        `Quest`, `Category` and `Badge` inherit `IsAPrereqMixin` as well, so a helper named
+        the same on both would be resolved by method resolution order and quietly answer
+        the other mixin's question: asking a Quest whether `Rank` was registered would say
+        True, because `Rank` is a registered prerequisite, which is not what was asked.
+        """
+        shared = set(vars(IsLibraryContentMixin)) & set(vars(IsAPrereqMixin))
+
+        self.assertEqual(
+            shared - {'__dict__', '__weakref__', '__doc__', '__module__'},
+            set(),
+            "these names exist on both mixins, so a model inheriting both resolves one of them by MRO",
+        )
 
     def test_library_content__does_not_register_the_deck_specific_prereq_models(self):
         """A rank, grade, block or course describes the deck, so it cannot be shared.
@@ -557,4 +573,4 @@ class LibraryContentRegistrationTests(ByteDeckTenantTestCase):
         """
         for model in (Rank, Grade, Block, Course):
             with self.subTest(model=model.__name__):
-                self.assertFalse(IsLibraryContentMixin.model_is_registered(model))
+                self.assertFalse(IsLibraryContentMixin.is_shareable_model(model))

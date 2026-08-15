@@ -1,3 +1,4 @@
+from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 
@@ -31,22 +32,28 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
         snapshots = [snapshot_quest(quest) for quest in quests]
 
     with schema_context(destination_schema):
-        existing_quests = Quest.objects.filter(import_id__in=quest_import_ids)
-        local_visibility = {quest.import_id: quest.published for quest in existing_quests}
+        # One transaction for the whole arrival: `write_quests` is atomic on its own, but
+        # the campaign is put back into draft afterwards, and a failure there would
+        # otherwise leave the quests imported under a published campaign. The view tells
+        # the teacher nothing was added when an import fails, so that has to be true of
+        # every write here, not just the quests.
+        with transaction.atomic():
+            existing_quests = Quest.objects.filter(import_id__in=quest_import_ids)
+            local_visibility = {quest.import_id: quest.published for quest in existing_quests}
 
-        imported = write_quests(
-            [
-                (snapshot, local_visibility.get(snapshot['fields']['import_id'], False), None)
-                for snapshot in snapshots
-            ],
-            with_campaign=True,
-        )
+            imported = write_quests(
+                [
+                    (snapshot, local_visibility.get(snapshot['fields']['import_id'], False), None)
+                    for snapshot in snapshots
+                ],
+                with_campaign=True,
+            )
 
-        category = Category.objects.filter(import_id=campaign_import_id).first()
-        if category:
-            category.published = False
-            category.full_clean()
-            category.save()
+            category = Category.objects.filter(import_id=campaign_import_id).first()
+            if category:
+                category.published = False
+                category.full_clean()
+                category.save()
 
     return imported
 

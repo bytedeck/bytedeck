@@ -279,3 +279,121 @@ class QuestResourceAfterImportTest(ByteDeckTenantTestCase):
 
         # the dry-run guard skips the body that would overwrite the visibility map
         self.assertEqual(resource.local_visibility_map, 'SENTINEL')
+
+
+class QuestResourceCampaignImportTest(ByteDeckTenantTestCase):
+    """The campaign and prerequisite handling on `QuestResource`'s import path.
+
+    `QuestResource` is what the admin's CSV import uses, and its `after_import` hook is
+    what rebuilds a quest's campaign and its simple prerequisites from the exported
+    columns. These exercise that round trip: export a quest, remove it, and import the
+    rows back.
+    """
+
+    def _round_trip(self, quests, **import_kwargs):
+        """Export quests, delete them locally, then import the rows back.
+
+        Args:
+            quests (list[Quest]): the quests to export.
+            **import_kwargs: passed through to `import_data` (e.g. `import_campaign`).
+
+        Returns:
+            Result: django-import-export's result for the import.
+        """
+        dataset = QuestResource().export(quests)
+        import_ids = [quest.import_id for quest in quests]
+        Quest.objects.all_including_archived().filter(import_id__in=import_ids).delete()
+
+        return QuestResource().import_data(dataset, dry_run=False, raise_errors=True, **import_kwargs)
+
+    def test_dehydrate_campaign_columns__carry_the_campaign_of_a_quest_that_has_one(self):
+        """A quest in a campaign exports that campaign's title, icon, description and import_id."""
+        campaign = baker.make(Category, title='Photography', icon='icons/c.png', short_description='say cheese')
+        quest = baker.make(Quest, campaign=campaign)
+
+        row = QuestResource().export([quest]).dict[0]
+
+        self.assertEqual(row['campaign_title'], 'Photography')
+        self.assertEqual(row['campaign_icon'], 'icons/c.png')
+        self.assertEqual(row['campaign_short_description'], 'say cheese')
+        self.assertEqual(row['campaign_import_id'], str(campaign.import_id))
+
+    def test_after_import__creates_the_campaign_when_the_deck_does_not_have_it(self):
+        """Importing a quest with import_campaign rebuilds a campaign the deck is missing."""
+        campaign = baker.make(Category, title='Rebuilt Campaign')
+        quest = baker.make(Quest, campaign=campaign)
+        campaign_import_id = campaign.import_id
+        Quest.objects.all_including_archived().filter(campaign=campaign).exclude(pk=quest.pk).delete()
+
+        dataset = QuestResource().export([quest])
+        Quest.objects.all_including_archived().filter(pk=quest.pk).delete()
+        Category.objects.filter(pk=campaign.pk).delete()
+        QuestResource().import_data(dataset, dry_run=False, raise_errors=True, import_campaign=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual(imported.campaign.import_id, campaign_import_id)
+        self.assertEqual(imported.campaign.title, 'Rebuilt Campaign')
+
+    def test_after_import__reuses_a_campaign_the_deck_already_has(self):
+        """A campaign matching by import_id is reused rather than duplicated."""
+        campaign = baker.make(Category, title='Existing Campaign')
+        quest = baker.make(Quest, campaign=campaign)
+
+        self._round_trip([quest], import_campaign=True)
+
+        self.assertEqual(Category.objects.filter(import_id=campaign.import_id).count(), 1)
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual(imported.campaign.pk, campaign.pk)
+
+    def test_after_import__leaves_a_standalone_quest_without_a_campaign(self):
+        """A quest exported with no campaign does not gain one on import."""
+        quest = baker.make(Quest, campaign=None)
+
+        self._round_trip([quest], import_campaign=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertIsNone(imported.campaign)
+
+    def test_after_import__rebuilds_a_simple_prerequisite(self):
+        """A prerequisite pointing at a quest the deck has is recreated on import."""
+        gate = baker.make(Quest, name='The Gate')
+        quest = baker.make(Quest, name='Behind The Gate')
+        Prereq.add_simple_prereq(quest, gate)
+
+        self._round_trip([quest], import_campaign=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ['The Gate'])
+
+    def test_after_import__skips_a_prerequisite_the_deck_does_not_have(self):
+        """A prerequisite whose target is missing is dropped rather than raising."""
+        gate = baker.make(Quest, name='Absent Gate')
+        quest = baker.make(Quest, name='Quest Missing Its Gate')
+        Prereq.add_simple_prereq(quest, gate)
+        dataset = QuestResource().export([quest])
+        Quest.objects.all_including_archived().filter(pk__in=[quest.pk, gate.pk]).delete()
+
+        QuestResource().import_data(dataset, dry_run=False, raise_errors=True, import_campaign=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual(list(imported.prereqs()), [])
+
+    def test_after_import__keeps_the_published_state_a_caller_asks_to_preserve(self):
+        """`local_visibility_map` lets a caller keep a quest's existing published state.
+
+        Imported quests default to unpublished so nothing appears to students unreviewed.
+        A caller that already knows the deck's own choice for a quest can pass it through
+        this map instead, which is how a re-import avoids silently unpublishing a quest the
+        deck had already published.
+        """
+        campaign = baker.make(Category, title='Visibility Campaign')
+        quest = baker.make(Quest, campaign=campaign, published=True)
+
+        dataset = QuestResource().export([quest])
+        QuestResource().import_data(
+            dataset, dry_run=False, raise_errors=True, import_campaign=True,
+            local_visibility_map={str(quest.import_id): True},
+        )
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertTrue(imported.published)

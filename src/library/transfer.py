@@ -182,7 +182,7 @@ def _snapshot_prereqs(quest):
     prereqs = []
     for prereq in quest.prereqs():
         target = prereq.get_prereq()
-        shareable = IsLibraryContentMixin.model_is_registered(type(target))
+        shareable = IsLibraryContentMixin.is_shareable_model(type(target))
         prereqs.append({
             'import_id': target.import_id if shareable else None,
             'name': str(target),
@@ -276,7 +276,9 @@ def write_quests(writes, *, with_campaign):
 
     Args:
         writes (list[tuple[dict, bool, dict | None]]): one `(snapshot, published,
-            field_overrides)` triple per quest. See `write_quest` for what each means.
+            field_overrides)` triple per quest: the snapshot to write, the published
+            state to give it, and any field values to replace on the way in (used by the
+            conflict-copy path to give a copy its own `import_id` and name).
         with_campaign (bool): whether to attach (and if needed create) each quest's
             campaign.
 
@@ -302,29 +304,6 @@ def write_quests(writes, *, with_campaign):
             unmet.extend(_write_prereqs(quest, snapshot['prereqs']))
 
     return TransferResult(quests=written, unmet_prereqs=sorted(set(unmet)))
-
-
-def write_quest(snapshot, *, published, with_campaign, field_overrides=None):
-    """Write one snapshotted quest into the current schema.
-
-    Must be called from within the destination schema context.
-
-    Args:
-        snapshot (dict): a quest snapshot from `snapshot_quest`.
-        published (bool): the published state to give the written quest.
-        with_campaign (bool): whether to attach (and if needed create) the campaign. A
-            quest imported on its own does not drag a campaign onto the deck with it.
-        field_overrides (dict | None): field values to replace on the way in, used by the
-            conflict-copy path to give a copy its own `import_id` and name.
-
-    Returns:
-        Quest: the written quest.
-
-    Raises:
-        LibraryTransferError: if the quest cannot be written, most often because its name
-            is already taken by a different quest on the destination deck.
-    """
-    return write_quests([(snapshot, published, field_overrides)], with_campaign=with_campaign).quests[0]
 
 
 def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None):

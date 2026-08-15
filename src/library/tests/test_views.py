@@ -59,6 +59,17 @@ class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
 
         super().setUpClass()
 
+    def _message_texts(self, response):
+        """The messages queued for the user by a request.
+
+        Args:
+            response (HttpResponse): the response to read the message storage from.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in get_messages(response.wsgi_request)]
+
     def setUp(self):
         """Turn the Shared Library on for the deck under test.
 
@@ -1999,7 +2010,10 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
 
     def test_clone_quests_into_library__returns_nothing_when_there_is_nothing_to_copy(self):
         """A campaign with no conflicts skips the copy step entirely."""
-        self.assertEqual(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]), [])
+        result = clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[])
+
+        self.assertEqual(result.quests, [])
+        self.assertEqual(result.unmet_prereqs, [])
 
     def test_build_library_clone_name__falls_back_to_a_numbered_suffix(self):
         """A taken dated name pushes the next copy on to a numbered suffix."""
@@ -2053,17 +2067,6 @@ class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
             )
 
         cls.test_teacher = User.objects.create_user('collision_teacher', is_staff=True)
-
-    def _message_texts(self, response):
-        """The messages queued for the user by a request.
-
-        Args:
-            response (HttpResponse): the response to read the message storage from.
-
-        Returns:
-            list[str]: the message bodies.
-        """
-        return [str(message) for message in get_messages(response.wsgi_request)]
 
     def test_import_quest__tells_the_teacher_which_name_clashed(self):
         """Importing onto a name this deck already uses redirects with an explanation."""
@@ -2119,17 +2122,6 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
             Prereq.add_simple_prereq(cls.library_quest, cls.gate)
 
         cls.test_teacher = User.objects.create_user('unmet_prereq_teacher', is_staff=True)
-
-    def _message_texts(self, response):
-        """The messages queued for the user by a request.
-
-        Args:
-            response (HttpResponse): the response to read the message storage from.
-
-        Returns:
-            list[str]: the message bodies.
-        """
-        return [str(message) for message in get_messages(response.wsgi_request)]
 
     def test_import_quest__warns_that_a_missing_prerequisite_was_not_carried_over(self):
         """Importing a gated quest onto a deck without the gate names what is missing."""
@@ -2198,4 +2190,54 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
         self.assertTrue(
             any("Digital Novice" in text for text in self._message_texts(response)),
             f"expected the stripped rank to be named, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_a_gate_could_not_travel(self):
+        """Sharing a rank-gated quest tells the sharer the Library copy is ungated.
+
+        This is the only place the loss is visible. The Library row simply has no
+        prerequisite, so a teacher importing it later has nothing to be warned about
+        (#2399, #2450).
+        """
+        rank = baker.make(Rank, name="Digital Novice")
+        local = baker.make(Quest, name="Locally Gated Quest", published=True)
+        Prereq.add_simple_prereq(local, rank)
+
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertTrue(
+            any("Digital Novice" in text for text in self._message_texts(response)),
+            f"expected the sharer to be told, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__stays_quiet_when_the_gate_is_already_in_the_library(self):
+        """No warning when the Library already holds the quest this one is gated on.
+
+        A single-quest share carries only that quest, so its gate resolves in the Library
+        only if it is already there. Sharing the gate first is what makes that true.
+        """
+        gate = baker.make(Quest, name="Shareable Gate", published=True)
+        local = baker.make(Quest, name="Quest With A Shareable Gate", published=True)
+        Prereq.add_simple_prereq(local, gate)
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertFalse(
+            any("did not travel" in text for text in self._message_texts(response)),
+            f"expected no warning, got {self._message_texts(response)}",
         )
