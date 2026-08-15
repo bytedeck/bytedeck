@@ -661,6 +661,20 @@ class CourseStudentQuerySet(models.query.QuerySet):
             return self.none()
         return self.filter(semester=semester)
 
+    def in_open_semesters(self):
+        """Registrations in any semester that is open right now.
+
+        What a deck-wide list of "current" registrations should filter on: a deck can run
+        several semesters at once (issue #2157 Phase 3, #1781), and scoping to the deck's
+        default instead would leave out the students in the other one, who are just as
+        current as the rest.
+
+        Returns:
+            CourseStudentQuerySet: the registrations whose semester is open, empty between
+            semesters.
+        """
+        return self.filter(semester__status=Semester.Status.OPEN)
+
     def get_active(self):
         return self.filter(active=True)
 

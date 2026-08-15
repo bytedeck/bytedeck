@@ -70,9 +70,11 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         profiles_qs = profiles_qs.prefetch_related(
             Prefetch(
                 'user__coursestudent_set',
-                # nothing to prefetch when no semester is open: nobody has a current course
-                queryset=CourseStudent.objects.get_queryset().get_semester(
-                    SiteConfig.get().open_semester).select_related('course', 'block'),
+                # every open semester, not just the deck's default: a student in the other
+                # cohort's semester is listed as current, so their course and group must show
+                # too rather than leaving their row blank. Empty between semesters, when
+                # nobody has a current course.
+                queryset=CourseStudent.objects.get_queryset().in_open_semesters().select_related('course', 'block'),
             )
         )
 

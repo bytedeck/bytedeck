@@ -1125,19 +1125,21 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
-    active_semester = SiteConfig.get().open_semester
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset
-    #   current   — students registered in a course this active semester (the "current" students)
-    #   my_blocks — students in a course block the current teacher teaches this semester
+    #   current   — students registered in a course in a semester that is open
+    #   my_blocks — students in a course block the current teacher teaches in one of those
+    # The last two span every open semester, since a deck can run more than one at a time
+    # (issue #2157 Phase 3): scoping them to the deck's default would count a student as
+    # current and then leave them out of their own teacher's group.
     active_profiles = list(Profile.objects.all_active().students_only().select_related('user'))
     active_ids = {profile.user_id for profile in active_profiles}
     current_ids = set(
         CourseStudent.objects.all_users_in_open_semesters(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
-        CourseStudent.objects.get_queryset().get_semester(active_semester).filter(
+        CourseStudent.objects.get_queryset().in_open_semesters().filter(
             block__current_teacher=request.user
         ).values_list('user_id', flat=True)
     ) & active_ids

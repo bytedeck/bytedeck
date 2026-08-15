@@ -205,6 +205,24 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertIsNotNone(notification)
         self.assertIn('banned you from making public comments', notification.verb)
 
+    def test_profile_list__shows_a_course_from_any_open_semester(self):
+        """The student list shows each student's course and group whichever open semester holds
+        their registration (#2157 Phase 3). A deck can run more than one at a time, and the list
+        already counts those students as current, so prefetching only the deck's default semester
+        left the other cohort's rows blank where their course and group should be."""
+        other_semester = baker.make('courses.Semester', status=Semester.Status.OPEN)
+        baker.make(
+            'courses.CourseStudent', user=self.test_student2, semester=other_semester,
+            course=baker.make('courses.Course', title='Robotics 12'),
+            block=baker.make('courses.Block', name='Block Z'),
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'))
+
+        self.assertContains(response, 'Robotics 12')
+        self.assertContains(response, 'Block Z')
+
     def test_recalculate_current_xp__dispatches_background_task(self):
         """recalculate_current_xp hands the all-student XP recompute to a background task
         rather than looping over every active-semester profile synchronously in the request,
