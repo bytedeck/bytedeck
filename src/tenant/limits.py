@@ -30,8 +30,8 @@ def can_add_current_student(user):
     * the deck's cap is unlimited (-1, admin-set);
     * the user never counts toward the cap -- staff, superusers, and test
       accounts (current-students-only counting, maintainer decision on #2047);
-    * the user is already current (registered this semester, e.g. joining a
-      second course) -- that's not a new seat;
+    * the user is already current (registered in the semester they are taking a
+      course in, e.g. joining a second course) -- that's not a new seat;
     * the live current-student count is below the effective cap.
 
     Refused only when granting a brand-new seat would exceed the cap.

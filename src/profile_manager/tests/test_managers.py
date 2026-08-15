@@ -6,7 +6,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from profile_manager.models import Profile
 from siteconfig.models import SiteConfig
-from courses.models import CourseStudent, Course
+from courses.models import CourseStudent, Course, Semester
 
 User = get_user_model()
 
@@ -51,12 +51,25 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
             )
 
     def test_all_in_open_semesters__returns_active_students(self):
-        """all_in_open_semesters() returns only active students registered in the active semester."""
+        """all_in_open_semesters() returns only active students registered in an open semester."""
         qs = Profile.objects.all_in_open_semesters().values_list('user__username', flat=True)
         expected_qs = self.active_active_semester_students
         expected_qs = [user.username for user in expected_qs]
 
         self.assertEqual(set(qs), set(expected_qs))
+
+    def test_all_in_open_semesters__includes_a_second_open_semester(self):
+        """A student in another open semester is taking a course too, so they belong in the
+        current-students list rather than only the cohort the deck's pointer names."""
+        other_student = baker.make(User, username='second_cohort')
+        baker.make(
+            CourseStudent, user=other_student, course=self.course,
+            semester=baker.make(Semester, status=Semester.Status.OPEN),
+        )
+
+        usernames = Profile.objects.all_in_open_semesters().values_list('user__username', flat=True)
+
+        self.assertIn('second_cohort', usernames)
 
     def test_all_active__returns_active_users(self):
         """all_active() returns every active user, including staff, regardless of semester."""

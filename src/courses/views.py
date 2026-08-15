@@ -1019,13 +1019,13 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, Vie
         # grab dataset
         user_mark = self.user.profile.mark_cached or 0  # can be nonetype
         semester = semester_for(self.user)
-        if semester is None:
-            return min(user_mark, 100), numpy.clip([], 0, 100)
-
-        student_marks = semester.get_student_mark_list(students_only=True)
+        student_marks = semester.get_student_mark_list(students_only=True) if semester else []
+        # a student whose mark has never been calculated has mark_cached None, which has no
+        # place on a distribution and which numpy can't clip against a number
+        student_marks = [mark for mark in student_marks if mark is not None]
         # the user's own mark is drawn in the other histogram, so take it out of this one.
-        # Only when it is actually there: an unmarked student's mark_cached is None while
-        # user_mark reads 0, and remove() raises on a value the list doesn't hold.
+        # Only when it is there: theirs may be one of the Nones just dropped, and remove()
+        # raises on a value the list doesn't hold.
         if user_mark in student_marks:
             student_marks.remove(user_mark)
 

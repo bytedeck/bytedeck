@@ -381,13 +381,21 @@ class BadgeAssertionManager(models.Manager):
     def all_for_user_badge(self, user, badge, active_semester_only):
         return self.get_queryset(active_semester_only, user=user).get_user(user).get_badge(badge)
 
-    def user_badge_assertion_count(self, badge, active_semester_only=False):
-        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.
-        If active_semester_only is True, only users with active profiles in the active semester will be returned.
-        Otherwise, all users with active profiles will be returned.
+    def user_badge_assertion_count(self, badge, current_students_only=False):
+        """Users with their number of assertions of `badge` annotated as assertion_count.
+
+        Args:
+            badge: the Badge being counted.
+            current_students_only (bool): limit to students taking a course right now, in
+                any semester that is open. Otherwise every student with an active profile
+                is counted, including those from past semesters.
+
+        Returns:
+            QuerySet[User]: the users who hold at least one assertion of the badge, most
+            assertions first, each annotated with assertion_count.
         """
         from profile_manager.models import Profile
-        if active_semester_only:
+        if current_students_only:
             users = User.objects.filter(profile__in=Profile.objects.all_in_open_semesters())
         else:
             users = User.objects.filter(profile__in=Profile.objects.all_students())

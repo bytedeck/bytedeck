@@ -669,6 +669,12 @@ class Tenant(TenantMixin):
         active_only=True further excludes registrations deactivated by a semester
         close (e.g. the suspension auto-close, #1734 redesign B2), so a closed
         semester contributes zero current students.
+
+        The count spans every semester that is open, so a deck running two cohorts on
+        different calendars pays for both (issue #2157 Phase 3).
+
+        Returns:
+            int: how many distinct current students the deck has.
         """
         CourseStudent = apps.get_model('courses', 'CourseStudent')
         return (

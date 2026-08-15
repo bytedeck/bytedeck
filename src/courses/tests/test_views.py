@@ -1607,6 +1607,27 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         # Charting against the whole deck instead would add the other cohort's 7 as well.
         self.assertEqual(sum(json_response['data']['students']), len(cohort))
 
+    def test_histogram_values__unmarked_classmate_does_not_break_the_chart(self):
+        """A classmate who has never had a mark calculated has mark_cached None, and numpy
+        can't clip None against a number, so leaving it in returned a 500 to everyone in
+        that semester. Unmarked classmates are left out of the distribution instead."""
+        marked = self.create_student_course(100)
+        marked.user.profile.mark_cached = 60
+        marked.user.profile.save()
+        unmarked = self.create_student_course(50)
+        unmarked.user.profile.mark_cached = None
+        unmarked.user.profile.save()
+
+        self.client.force_login(self.teacher)
+        response = self.client.get(
+            reverse('courses:mark_distribution_chart', args=[marked.user.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest'
+        )
+
+        self.assertEqual(response.status_code, 200)
+        # the marked student's own bar; the unmarked classmate contributes nothing
+        self.assertEqual(sum(json.loads(response.content)['data']['students']), 1)
+
     def test_histogram_values__empty_class_between_semesters(self):
         """Between semesters an unregistered viewer has no semester at all to be charted
         against, so there are no classmates rather than a crash on the missing semester."""

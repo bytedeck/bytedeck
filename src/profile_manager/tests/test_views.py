@@ -11,7 +11,7 @@ from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
-from courses.models import Block, CourseStudent
+from courses.models import Block, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 from siteconfig.models import SiteConfig
@@ -608,8 +608,42 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
         testblock_queryset = response.context['object_list']
         self.assertEqual(testblock_queryset.count(), 2)
-        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        self.assertQuerySetEqual(testblock_queryset, Profile.objects.all_in_open_semesters().filter(user__coursestudent__block=testblock))
+        # queryset specifications: profile objects that are: in an open semester, and a part of a coursestudent object that's in the desired block
+        self.assertQuerySetEqual(
+            testblock_queryset,
+            Profile.objects.filter(user__in=[cs.user for cs in CourseStudent.objects.filter(block=testblock, semester=self.active_sem)]),
+            ordered=False,
+        )
+
+    def test_profile_list_block__block_and_semester_match_the_same_registration(self):
+        """A student currently taking a course, whose registration in *this* block was in a
+        semester that has since been archived, is not in this block now. Matching the block
+        and the open semester on separate registrations would list them anyway."""
+        self.client.force_login(self.test_teacher)
+        testblock = baker.make(Block)
+        student = baker.make(get_user_model())
+        # in this block last year...
+        baker.make(CourseStudent, user=student, block=testblock, semester=baker.make(Semester, status=Semester.Status.ARCHIVED))
+        # ...and taking a course now, in a different block
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+
+        self.assertNotIn(student.profile, response.context['object_list'])
+
+    def test_profile_list_block__spans_every_open_semester(self):
+        """A block can hold students from more than one open semester once a deck runs two
+        cohorts, and the list shows all of them."""
+        self.client.force_login(self.test_teacher)
+        testblock = baker.make(Block)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        here_now = baker.make(CourseStudent, user=baker.make(get_user_model()), block=testblock, semester=self.active_sem)
+        other_cohort = baker.make(CourseStudent, user=baker.make(get_user_model()), block=testblock, semester=other_semester)
+
+        response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
+
+        self.assertIn(here_now.user.profile, response.context['object_list'])
+        self.assertIn(other_cohort.user.profile, response.context['object_list'])
 
     def test_profile_update__email_confirmation_flow(self):
         """

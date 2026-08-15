@@ -21,7 +21,7 @@ from .models import Profile
 from .forms import ProfileForm, UserForm
 from .tasks import invalidate_profile_xp_cache_on_schema
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Block
+from courses.models import CourseStudent, Block, Semester
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tags.models import get_user_tags_and_xp
@@ -119,11 +119,22 @@ class ProfileListBlock(ProfileList):
     block_object = None
 
     def get_queryset(self):
-        """block object is queried via pk kwarg in request from block list view, then a queryset of profiles is generated via relatedmanager"""
+        """The profiles of the students currently in this block.
+
+        The block and the semester have to be matched on the same registration: filtering
+        profiles by block separately would also list a student who is in an open semester
+        for one course and in this block only through an archived one.
+
+        Returns:
+            QuerySet[Profile]: the student profiles registered in this block in a semester
+            that is open right now, each appearing once.
+        """
         block_pk = self.kwargs['pk']
         self.block_object = get_object_or_404(Block, pk=block_pk)
-        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        profiles_qs = Profile.objects.all_in_open_semesters().filter(user__coursestudent__block=self.block_object)
+        registered_in_block = CourseStudent.objects.filter(
+            block=self.block_object, semester__status=Semester.Status.OPEN,
+        ).values_list('user_id', flat=True)
+        profiles_qs = Profile.objects.all_in_open_semesters().filter(user_id__in=registered_in_block)
         return self.queryset_append(profiles_qs)
 
     def get_context_data(self, **kwargs):

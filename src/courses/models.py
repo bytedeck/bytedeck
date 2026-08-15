@@ -686,15 +686,20 @@ class CourseStudentManager(models.Manager):
                 coursestudent.active = False
                 coursestudent.save()
 
-    def all_for_semester(self, semester, students_only=False, active_only=False):
-        """All registrations for `semester`; optionally students only, and
-        optionally only registrations still active (a closed semester deactivates
-        its registrations, so active_only excludes them: #1734 redesign B2)."""
+    def all_for_semester(self, semester, students_only=False):
+        """The registrations in one particular semester.
+
+        Args:
+            semester: the Semester wanted, or None for no semester at all.
+            students_only (bool): leave out staff and test accounts.
+
+        Returns:
+            CourseStudentQuerySet: that semester's registrations, active or not. The
+            roster of the deck as a whole is all_users_in_open_semesters() instead.
+        """
         qs = self.get_queryset().get_semester(semester)
         if students_only:
             qs = qs.get_students_only()
-        if active_only:
-            qs = qs.filter(active=True)
         return qs
 
     # pick one of the courses...for now
@@ -763,8 +768,12 @@ class CourseStudentManager(models.Manager):
             courses = courses.get_students_only()
         if active_only:
             courses = courses.filter(active=True)
-        user_list = set(courses.values_list('user', flat=True))  # a set removes doubles
-        return User.objects.filter(id__in=user_list, is_active=True)
+        # the registrations stay a subquery rather than a set of ids read into python: the
+        # callers that only count the roster then never load it. IN (subquery) yields each
+        # user once, so a student in several courses is still one user
+        return User.objects.filter(
+            id__in=courses.values_list('user_id', flat=True), is_active=True,
+        )
 
     # @cached(60*60*12)
     def get_current_teacher_list(self, user):
