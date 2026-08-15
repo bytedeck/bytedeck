@@ -1,17 +1,21 @@
+{% comment %}
+  Page links keep the rest of the query string (a search term, a filter) so paging through
+  results doesn't silently drop what the user asked for.
+{% endcomment %}
 {% if items.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">
     {% if items.has_previous %}
-        <li><a href="{{request.path}}?page=1"><<</a></li>
-        <li><a href="{{request.path}}?page={{ items.previous_page_number }}"><</a></li>
+        <li><a href="{% querystring page=1 %}"><<</a></li>
+        <li><a href="{% querystring page=items.previous_page_number %}"><</a></li>
     {% endif %}
 
     {% for i in items.paginator.page_range %}
-        <li {% if items.number == i %} class="active" {% endif %}><a href="{{request.path}}?page={{i}}">{{i}}</a></li>
+        <li {% if items.number == i %} class="active" {% endif %}><a href="{% querystring page=i %}">{{i}}</a></li>
     {% endfor %}
 
     {% if items.has_next %}
-        <li><a href="{{request.path}}?page={{ items.next_page_number }}">></a></li>
-        <li><a href="{{request.path}}?page={{ items.paginator.num_pages }}">>></a></li>
+        <li><a href="{% querystring page=items.next_page_number %}">></a></li>
+        <li><a href="{% querystring page=items.paginator.num_pages %}">>></a></li>
     {% endif %}
 </ul>
 {% endif %}

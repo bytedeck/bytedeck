@@ -1,6 +1,7 @@
 import json
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from model_bakery import baker
@@ -57,6 +58,13 @@ class QuestionSubmissionFlowTestBase(ByteDeckTenantTestCase):
             data[f"question_submissions-{i}-id"] = str(row.id)
             data[f"question_submissions-{i}-response_text"] = texts.get(row.question_id, "")
         return data
+
+    def file_field_name(self, question):
+        """The formset field name of the given question's file input, found by the question's
+        position among the submission's draft rows (the order the formset is built in)."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == question.id)
+        return f"question_submissions-{index}-response_file"
 
 
 class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
@@ -143,6 +151,87 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(self.submission.is_completed)
         self.assertFalse(QuestionSubmission.objects.filter(
             quest_submission=self.submission, comment__isnull=False).exists())
+
+    def test_complete__uploaded_file_survives_a_failed_submit(self):
+        """A file attached alongside a blank required answer is kept, not silently dropped (#2165).
+
+        Browsers never repopulate a file input, so without saving the upload the student's file
+        would vanish on the re-render with no notice: the required file error would reappear
+        even though they did attach one, or an optional answer would publish as empty.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach your work.</p>", allowed_file_type="image",
+        )
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        # short answer left blank, so the formset is invalid and the page re-renders
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        data[self.file_field_name(file_question)] = upload
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertTrue(file_row.response_file, "the attached file was dropped on re-render")
+        self.assertIn("my-work", file_row.response_file.name)
+        # and the re-rendered page shows it, so the student can see it was kept
+        self.assertContains(response, "my-work")
+
+    def test_complete__rejected_file_is_not_saved(self):
+        """A file rejected for its type is not kept, so its error still applies on the retry (#2165).
+
+        Only uploads that pass the question's own file-type check are worth keeping; storing a
+        rejected one would let the student submit again without fixing it.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach an image.</p>", allowed_file_type="image",
+        )
+        not_an_image = SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")
+
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()}
+        data[self.file_field_name(file_question)] = not_an_image
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertFalse(file_row.response_file)
+
+    def test_complete__file_field_left_alone_keeps_the_saved_file(self):
+        """Re-submitting without re-choosing a file keeps the one already saved (#2165).
+
+        The student's second attempt only fixes the text answer, leaving the file input empty
+        as browsers force them to; that must not wipe the file kept from the first attempt.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="<p>Attach your work.</p>", allowed_file_type="image",
+        )
+
+        # first attempt: file attached, required text answer blank, so it bounces back
+        first = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        first[self.file_field_name(file_question)] = SimpleUploadedFile(
+            "my-work.png", b"file_content", content_type="image/png")
+        self.client.post(self.complete_url(), data=first)
+
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        kept_name = file_row.response_file.name
+        self.assertTrue(kept_name)
+
+        # second attempt: text answer fixed, file input left empty
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()})
+        self.assertRedirects(response, reverse("quests:quests"))
+
+        file_row.refresh_from_db()
+        self.assertEqual(file_row.response_file.name, kept_name)
+        # and it published with the completion, rather than as an empty answer
+        self.assertIsNotNone(file_row.comment_id)
 
     def test_complete__quest_without_questions_unchanged(self):
         """A quest with no questions completes exactly as before when a comment is left."""
