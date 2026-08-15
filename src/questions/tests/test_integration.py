@@ -613,3 +613,83 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertRedirects(response, self.submission.get_absolute_url())
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
+
+
+class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
+    """Skipping a submission clears the answers the student drafted but never submitted (#2164)."""
+
+    def draft_some_answers(self):
+        """Put content in the submission's draft answer rows, as autosaving a draft would.
+
+        Returns:
+            list: the draft rows, each now carrying answer text.
+        """
+        rows = list(sync_draft_question_submissions(self.submission))
+        for row in rows:
+            row.response_text = "drafted but never submitted"
+            row.save()
+        return rows
+
+    def draft_rows(self):
+        """The submission's unpublished draft answers.
+
+        Returns:
+            QuerySet: the submission's answer rows that have no comment, so the ones a skip
+            should discard.
+        """
+        return QuestionSubmission.objects.filter(quest_submission=self.submission, comment__isnull=True)
+
+    def test_skip__discards_the_students_draft_answers(self):
+        """A student who is not earning XP skips their own in-progress submission, and their
+        drafted answers go with it.
+
+        Nothing renders unpublished answers, and a skipped submission is approved for good, so
+        rows left behind here would be permanently invisible data.
+        """
+        self.draft_some_answers()
+        self.assertEqual(self.draft_rows().count(), 2)
+        profile = self.test_student.profile
+        profile.not_earning_xp = True
+        profile.save()
+
+        response = self.client.post(reverse("quests:skip", args=[self.submission.id]))
+
+        self.assertRedirects(response, reverse("quests:quests"), fetch_redirect_response=False)
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_approved)
+        self.assertFalse(self.draft_rows().exists())
+
+    def test_skip__leaves_already_published_answers_alone(self):
+        """A teacher skipping a submission the student did complete keeps the published answers.
+
+        Those answers are part of the record of what was handed in, and they still display with
+        their comment; only unpublished drafts are discarded.
+        """
+        self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **self.formset_data()})
+        published = QuestionSubmission.objects.filter(quest_submission=self.submission, comment__isnull=False)
+        self.assertEqual(published.count(), 2)
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse("quests:skip", args=[self.submission.id]))
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.do_not_grant_xp)
+        self.assertEqual(published.count(), 2)
+
+    def test_ApproveView__skip_button_discards_the_students_draft_answers(self):
+        """A teacher skipping from the submission page discards the drafts too, so both skip
+        paths leave the same state behind."""
+        self.draft_some_answers()
+        self.assertEqual(self.draft_rows().count(), 2)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse("quests:approve", args=[self.submission.id]),
+            data={"skip_button": True, "comment_text": ""})
+
+        self.assertRedirects(response, reverse("quests:approvals"), fetch_redirect_response=False)
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.do_not_grant_xp)
+        self.assertFalse(self.draft_rows().exists())

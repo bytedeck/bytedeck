@@ -32,7 +32,7 @@ from comments.sanitize import sanitize_comment_html
 from comments.utils import save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import save_draft_file_answers, sync_draft_question_submissions
+from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
@@ -1351,7 +1351,14 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             blank_comment_text = (
                 "<p>(Skipped - You were not granted XP for this quest)</p>"
             )
-            self.submission.mark_approved(transfer=True)
+            # Matches the skip view: waiving the quest drops the answers the student drafted but
+            # never submitted, so they don't linger as rows nothing will ever show (#2164). The
+            # answers of any cycle they did submit stay published with their own comment. Both
+            # steps share a transaction so a failure in the approval (which also grants badges
+            # and recalculates XP) takes the deletion back with it.
+            with transaction.atomic():
+                discard_draft_question_submissions(self.submission)
+                self.submission.mark_approved(transfer=True)
 
         notification_kwargs.update({
             'verb': note_verb,
@@ -2111,9 +2118,27 @@ def skip(request, submission_id):
         #     target=submission,
         # )
 
-        # approve quest automatically, and mark as transfer.
-        submission.mark_completed()
-        submission.mark_approved(transfer=True)
+        # The quest is being waived, so any answers the student drafted will never be submitted
+        # and nothing renders them; drop them rather than leave invisible rows behind (#2164).
+        # In one transaction with the approval that justifies it, so a failure part way through
+        # (marking approved also grants badges and recalculates XP) cannot leave the answers
+        # deleted on a submission that was never transferred.
+        with transaction.atomic():
+            discard_draft_question_submissions(submission)
+
+            draft_comment = submission.draft_comment
+
+            # approve quest automatically, and mark as transfer.
+            submission.mark_completed()
+            submission.mark_approved(transfer=True)
+
+            # mark_completed() clears the draft comment because completing publishes it first.
+            # Skipping publishes nothing, so hand it back: a transferred quest can still be
+            # commented on, and the student keeps whatever they had typed (with anything attached
+            # to it) ready to post. This is how the staff skip button already leaves it (#2431).
+            if draft_comment:
+                submission.draft_comment = draft_comment
+                submission.save()
 
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
