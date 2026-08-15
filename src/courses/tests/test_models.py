@@ -565,6 +565,27 @@ class NoOpenSemesterTest(ByteDeckTenantTestCase):
         upcoming.refresh_from_db()
         self.assertTrue(upcoming.is_upcoming)
 
+    def test_complete_semester__refuses_a_named_semester_that_is_not_open(self):
+        """Naming the semester doesn't get round the rule: an archived one passed straight to
+        the manager is refused rather than having its students' final marks recalculated from
+        the XP the first archive already reset."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+
+        self.assertEqual(Semester.objects.complete_semester(archived), Semester.NO_OPEN_SEMESTER)
+        self.assertEqual(Semester.objects.complete_semester(upcoming), Semester.NO_OPEN_SEMESTER)
+
+    def test_complete_semester__reads_the_semesters_status_from_the_database(self):
+        """The status is re-read under the lock, so a stale in-memory instance saying "open"
+        can't push a second archive through: two requests can both load a semester while it
+        is open, and the config lock only makes them queue."""
+        semester = baker.make(Semester, status=Semester.Status.OPEN)
+        stale = Semester.objects.get(pk=semester.pk)  # loaded while it was still open
+        Semester.objects.complete_semester(semester)
+        self.assertTrue(stale.is_open)  # the caller's copy still says open
+
+        self.assertEqual(Semester.objects.complete_semester(stale), Semester.NO_OPEN_SEMESTER)
+
     def test_current_courses__is_empty(self):
         """Nobody is registered in a current course, so a student has none."""
         self.assertFalse(CourseStudent.objects.current_courses(self.student).exists())

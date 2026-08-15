@@ -311,11 +311,16 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
                 # passed in: two requests can both load it while it is open, and the config
                 # lock only makes them queue. The second would otherwise recalculate final
                 # marks from XP the first already reset, recording zeroes.
-                semester = self.get_queryset().select_for_update().filter(pk=semester.pk).first()
+                locked = self.get_queryset().select_for_update().filter(pk=semester.pk).first()
+                if locked is None:  # pragma: no cover
+                    # the row would have to be deleted between the caller loading it and
+                    # this lock, and SemesterDelete refuses to delete an open semester
+                    return Semester.NO_OPEN_SEMESTER
+                semester = locked
 
                 # nothing to archive. Only an open semester can be archived, so one that is
                 # already archived (or still upcoming) is refused rather than archived twice.
-                if semester is None or not semester.is_open:
+                if not semester.is_open:
                     return Semester.NO_OPEN_SEMESTER
 
                 # its own students' quests are still awaiting approval, can't close!
