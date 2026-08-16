@@ -352,11 +352,16 @@ def _write_questions(quest, questions):
             setattr(question, name, value)
 
         try:
-            question.full_clean()
-            question.save()
+            with transaction.atomic():
+                question.full_clean()
+                question.save()
         except ValidationError as error:
             raise LibraryTransferError(
                 f"'{quest.name}' could not be copied: question {fields['ordinal']}: {_describe(error)}"
+            ) from error
+        except IntegrityError as error:
+            raise LibraryTransferError(
+                f"'{quest.name}' could not be copied: question {fields['ordinal']}: {error}"
             ) from error
 
     Question.objects.filter(pk__in=[question.pk for question in superseded.values()]).delete()

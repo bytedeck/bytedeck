@@ -13,12 +13,13 @@ or a regression, and the failure is where the decision gets recorded.
 """
 
 import datetime
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 from model_bakery import baker
 
-from django.db import connection
+from django.db import IntegrityError, connection
 from django_tenants.utils import schema_context
 from taggit.models import Tag
 
@@ -586,6 +587,26 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
         self.assertIn("question 2", str(caught.exception))
         with library_schema_context():
             self.assertFalse(Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists())
+
+    def test_export_quest_to_library__reports_a_question_the_database_rejects(self):
+        """A question the database refuses reaches the sharer as a readable failure too.
+
+        `full_clean` catches what it can see, so this is the narrow case it cannot: the row
+        is valid when validated and rejected when written. The quest's own write path
+        already reports that as a transfer error rather than letting a database exception
+        escape into a 500, and a question's write path answers the same way.
+        """
+        quest = Quest.objects.create(name="Quest The Database Refuses", xp=10)
+        Quest.objects.filter(pk=quest.pk).update(published=True)
+        Question.objects.create(quest=quest, ordinal=1, instructions="<p>Fine on the way out.</p>")
+
+        with patch.object(Question, 'save', side_effect=IntegrityError("duplicate key value")):
+            with self.assertRaises(LibraryTransferError) as caught:
+                export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        self.assertIn("Quest The Database Refuses", str(caught.exception))
+        self.assertIn("question 1", str(caught.exception))
+        self.assertIn("duplicate key value", str(caught.exception))
 
 
 class LibraryTransferErrorMessageTests(SimpleTestCase):
