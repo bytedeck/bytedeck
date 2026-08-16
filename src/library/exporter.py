@@ -141,8 +141,13 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
     """
     with schema_context(source_schema):
         category = Category.objects.get(import_id=campaign_import_id)
-        # select_related: snapshot_quest reads quest.campaign for every row.
-        quests = Quest.objects.select_related('campaign').filter(published=True, campaign=category)
+        # select_related: snapshot_quest reads quest.campaign for every row, and its
+        # questions, which are a query each without the prefetch.
+        quests = (
+            Quest.objects.select_related('campaign')
+            .prefetch_related('question_set')
+            .filter(published=True, campaign=category)
+        )
 
         # filter out conflicts (they'll be cloned and exported later)
         if skip_import_ids:
