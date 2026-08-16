@@ -28,7 +28,13 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
             instance because one of its names is already taken there.
     """
     with library_schema_context():
-        quests = Quest.objects.select_related('campaign').filter(published=True, import_id__in=quest_import_ids)
+        # select_related/prefetch_related: snapshot_quest reads each quest's campaign and
+        # its questions, which are a query each otherwise.
+        quests = (
+            Quest.objects.select_related('campaign')
+            .prefetch_related('question_set')
+            .filter(published=True, import_id__in=quest_import_ids)
+        )
         snapshots = [snapshot_quest(quest) for quest in quests]
 
     with schema_context(destination_schema):
