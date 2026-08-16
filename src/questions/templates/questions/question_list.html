@@ -30,13 +30,3 @@
   </div>
   {% include 'questions/snippets/question_table.html' %}
 {% endblock %}
-
-{% block js %}
-<script>
-    // initialize the popovers and tooltips used by the question table
-    $(document).ready(function(){
-        $('[data-toggle="popover"]').popover();
-        $('[data-toggle="tooltip"]').tooltip();
-    });
-</script>
-{% endblock %}

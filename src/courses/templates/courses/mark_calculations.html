@@ -193,12 +193,6 @@ for {{user}}
 {% endblock %}
 
 {% block js %}
-  <script>
-      $(document).ready(function () {
-          $('[data-toggle="popover"]').popover(
-          )
-      });
-  </script>
   <script src="{% static 'js/Chart-2.9.4.min.js' %}"></script>
   {% include 'courses/chart_xp_progress.html' %}
   {% include 'courses/chart_mark_distribution.html' %}

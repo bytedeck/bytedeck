@@ -789,6 +789,13 @@ h3.comment-heading {
     margin-top: 25px;
 }
 
+/* A popover's title is an h3, and bootstrap appends the popover beside its trigger, so a popover
+   opened inside a panel picks up the panel's h3 spacing above and opens with a band of empty
+   space over its title. Popovers set their own spacing. */
+.panel-body .popover-title {
+    margin-top: 0;
+}
+
 .comment-content {
     /* prevent long urls from breaking out of container or forcing a scrollbar */
     overflow-wrap: anywhere;
