@@ -313,9 +313,6 @@ class Profile(models.Model):
     #
     #################################
 
-    def num_courses(self):
-        return self.current_courses().count()
-
     def current_courses(self):
         return CourseStudent.objects.current_courses(self.user)
 
