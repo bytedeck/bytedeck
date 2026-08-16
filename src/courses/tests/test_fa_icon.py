@@ -1,6 +1,9 @@
 """Tests for the Rank Font Awesome icon: the bare-name + modifiers storage, the
 ``fa_icon_class`` render helper, the legacy-value splitter behind the data
-migration, the icon-picker widget/form, and the rank-up notification icon."""
+migration, field validation, the icon-picker widget/form, and the rank-up
+notification icon."""
+from importlib import import_module
+
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
 from django.test import SimpleTestCase
@@ -8,11 +11,16 @@ from django.test import SimpleTestCase
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from courses.fa_icon_utils import split_fa_icon_value
 from courses.forms import RankForm
 from courses.models import Rank
 from siteconfig.models import SiteConfig
 from utilities.fa_icon_widget import FontAwesomeIconPickerWidget
+
+# The legacy-value splitter lives inside the data migration (kept self-contained
+# there), so import it from that module to test it directly.
+split_fa_icon_value = import_module(
+    "courses.migrations.0030_rank_fa_icon_modifiers_alter_rank_fa_icon"
+).split_fa_icon_value
 
 User = get_user_model()
 
@@ -22,12 +30,15 @@ class SplitFaIconValueTest(SimpleTestCase):
     ``(bare_name, modifiers)`` pair. Pure function, so no database is needed."""
 
     def test_split_fa_icon_value__handles_every_historical_shape(self):
-        """Full class lists, prefix-only, already-bare, whitespace, buried-in-HTML,
-        and unparseable values all split as documented."""
+        """Full class lists, modifier-before-icon, prefix-only, already-bare,
+        whitespace, buried-in-HTML, and unparseable values all split as documented."""
         cases = [
             ("fa fa-star", ("star", "")),
             ("fa fa-forward fa-rotate-270", ("forward", "fa-rotate-270")),
             ("fa fa-pause fa-rotate-90", ("pause", "fa-rotate-90")),
+            # a sizing/modifier class before the icon must not be taken for the icon
+            ("fa fa-fw fa-star", ("star", "fa-fw")),
+            ("fa fa-lg fa-rotate-90 fa-th", ("th", "fa-lg fa-rotate-90")),
             ("fa-diamond", ("diamond", "")),
             ("star-o", ("star-o", "")),
             ("  fa fa-th-large  ", ("th-large", "")),
@@ -97,6 +108,37 @@ class RankFormTest(ByteDeckTenantTestCase):
         self.assertIn("js/fa_icon_picker.js", media)
 
 
+class RankFormValidationTest(ByteDeckTenantTestCase):
+    """The rank icon fields are validated down to safe Font Awesome tokens, so
+    they can't hold a class list, an ``fa-`` prefix, or markup (which would flow
+    unescaped into the rank-up notification HTML)."""
+
+    def test_fa_icon__rejects_class_lists_prefixes_and_markup(self):
+        """A whitespace class list, an ``fa-`` prefix, uppercase, or any markup in
+        fa_icon fails validation."""
+        for bad in ("fa fa-star", "fa-star", "Star", "star'></i><script>alert(1)</script>"):
+            with self.subTest(bad=bad):
+                form = RankForm(data={"name": "R", "xp": 1, "fa_icon": bad, "fa_icon_modifiers": ""})
+                self.assertFalse(form.is_valid())
+                self.assertIn("fa_icon", form.errors)
+
+    def test_fa_icon_modifiers__rejects_markup(self):
+        """Quotes/angle brackets in the modifiers field (an injection vector) fail."""
+        form = RankForm(data={
+            "name": "R", "xp": 1, "fa_icon": "star",
+            "fa_icon_modifiers": "'></i><script>alert(1)</script>",
+        })
+        self.assertFalse(form.is_valid())
+        self.assertIn("fa_icon_modifiers", form.errors)
+
+    def test_fa_icon__accepts_bare_name_and_fa_modifiers(self):
+        """A bare name plus space-separated ``fa-`` modifier classes validates."""
+        form = RankForm(data={
+            "name": "R", "xp": 1, "fa_icon": "star-o", "fa_icon_modifiers": "fa-rotate-270 fa-lg",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+
+
 class FontAwesomeIconPickerWidgetTest(SimpleTestCase):
     """The reusable picker widget renders its chrome and merges its marker class.
     Pure rendering, so no database is needed."""
@@ -156,8 +198,9 @@ class NotifyRankUpIconTest(ByteDeckTenantTestCase):
     with no doubled 'fa' (the wrapper adds only colour/sizing)."""
 
     def test_notify_rank_up__icon_has_no_doubled_fa(self):
-        """A promotion notification's icon HTML contains the rank's full class list
-        exactly once, not the old 'fa fa-lg fa-fw fa fa-...' doubling."""
+        """A promotion notification's icon HTML carries the rank's full class list
+        exactly once: the wrapper adds only colour and sizing, so ``fa fa-`` must
+        appear a single time (no ``fa fa-lg fa-fw fa fa-...``)."""
         from notifications.models import Notification, notify_rank_up
 
         Rank.objects.all().delete()

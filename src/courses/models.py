@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_comma_separated_integer_list
+from django.core.validators import RegexValidator, validate_comma_separated_integer_list
 from django.db import connection, models, transaction
 from django.db.models import Count, Sum
 from django.db.models.signals import post_delete, post_save
@@ -171,10 +171,22 @@ class Rank(IsAPrereqMixin, models.Model):
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
                              help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
-    fa_icon = models.TextField(null=True, blank=True,
-                               help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
+    # Both fields are staff-editable and flow, unescaped, into the rank-up
+    # notification's icon HTML (rendered |safe), so they are validated down to safe
+    # Font Awesome class tokens: a single bare name here (no "fa-" prefix, no spaces),
+    # and space-separated modifier classes below. This keeps markup/quotes out and
+    # keeps fa_icon a bare name (typing "fa fa-star" or "fa-star" would render wrong).
+    fa_icon = models.TextField(
+        null=True, blank=True,
+        validators=[RegexValidator(
+            r'^(?!fa-)[a-z0-9-]*$',
+            'Enter a single Font Awesome icon name in lowercase, e.g. "star" (no "fa-" prefix, no spaces).')],
+        help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
     fa_icon_modifiers = models.CharField(
         max_length=100, blank=True, default='',
+        validators=[RegexValidator(
+            r'^[a-z0-9\s-]*$',
+            'Enter Font Awesome modifier classes in lowercase, e.g. "fa-rotate-270".')],
         help_text='Optional extra Font Awesome classes applied to the icon, e.g. "fa-rotate-270" to rotate it.')
 
     objects = RankManager()
