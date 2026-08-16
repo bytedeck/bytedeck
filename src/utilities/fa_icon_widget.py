@@ -24,11 +24,23 @@ class FontAwesomeIconPickerWidget(forms.TextInput):
     #: through crispy (crispy adds ``form-control`` too; a duplicate is harmless).
     input_css_class = "form-control fa-icon-picker-input"
 
-    def __init__(self, attrs=None):
-        """Merge the picker's marker classes into any caller-supplied ``class``."""
+    def __init__(self, attrs=None, modifiers_field_name=None):
+        """Merge the picker's marker classes into any caller-supplied ``class``.
+
+        :param modifiers_field_name: the form-field name of a companion field
+            holding extra Font Awesome classes (rotations, flips, ...). When given,
+            the live preview includes that field's value and updates as it changes.
+        """
+        self.modifiers_field_name = modifiers_field_name
         attrs = dict(attrs or {})
         attrs["class"] = (attrs.get("class", "") + " " + self.input_css_class).strip()
         super().__init__(attrs)
+
+    def get_context(self, name, value, attrs):
+        """Expose the companion modifiers field name to the widget template."""
+        context = super().get_context(name, value, attrs)
+        context["widget"]["modifiers_field_name"] = self.modifiers_field_name
+        return context
 
     class Media:
         # Vanilla JS (no jQuery), so include order relative to jQuery does not

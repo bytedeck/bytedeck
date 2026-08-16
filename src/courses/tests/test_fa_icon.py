@@ -107,6 +107,14 @@ class RankFormTest(ByteDeckTenantTestCase):
         self.assertIn("js/fa_icons_4.7.0.js", media)
         self.assertIn("js/fa_icon_picker.js", media)
 
+    def test_rank_form__uses_plain_language_labels(self):
+        """The icon field reads "Icon" (not "Fa icon"); the ImageField backup is
+        relabelled so the two icon fields don't both read "Icon"."""
+        form = RankForm()
+        self.assertEqual(form.fields["fa_icon"].label, "Icon")
+        self.assertEqual(form.fields["fa_icon_modifiers"].label, "Modifiers")
+        self.assertEqual(form.fields["icon"].label, "Backup image")
+
 
 class RankFormValidationTest(ByteDeckTenantTestCase):
     """The rank icon fields are validated down to safe Font Awesome tokens, so
@@ -164,6 +172,13 @@ class FontAwesomeIconPickerWidgetTest(SimpleTestCase):
         html = FontAwesomeIconPickerWidget().render("rank-icon", "")
         self.assertIn("fa-icon-picker-preview", html)
         self.assertNotIn("fa-fw fa-\"", html)
+
+    def test_widget__links_companion_modifiers_field(self):
+        """Given a modifiers field name the widget exposes it (so the preview JS can
+        reflect those classes); without one, no stray attribute is rendered."""
+        linked = FontAwesomeIconPickerWidget(modifiers_field_name="fa_icon_modifiers").render("rank-icon", "star")
+        self.assertIn('data-modifiers-field="fa_icon_modifiers"', linked)
+        self.assertNotIn("data-modifiers-field", FontAwesomeIconPickerWidget().render("rank-icon", "star"))
 
 
 class RankCreateViewIconPickerTest(ByteDeckTenantTestCase):

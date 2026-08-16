@@ -31,10 +31,26 @@
                 return;
             }
 
-            // Reflect the current value in the preview addon.
+            // A companion field (e.g. rank modifiers) whose classes the preview
+            // should also reflect, so a rotation/flip shows up live.
+            var modifiersField = null;
+            var modifiersName = root.getAttribute('data-modifiers-field');
+            if (modifiersName && input.form) {
+                modifiersField = input.form.querySelector('[name="' + modifiersName + '"]');
+            }
+
+            // Reflect the current icon (and any modifier classes) in the preview addon.
             function updatePreview() {
                 var name = (input.value || '').trim();
-                previewIcon.className = name ? ('fa fa-fw fa-' + name) : 'fa fa-fw';
+                var modifiers = modifiersField ? (modifiersField.value || '').trim() : '';
+                var className = 'fa fa-fw';
+                if (name) {
+                    className += ' fa-' + name;
+                }
+                if (modifiers) {
+                    className += ' ' + modifiers;
+                }
+                previewIcon.className = className;
             }
 
             // Build the icon grid lazily, the first time the panel opens.
@@ -87,6 +103,9 @@
             });
 
             input.addEventListener('input', updatePreview);
+            if (modifiersField) {
+                modifiersField.addEventListener('input', updatePreview);
+            }
 
             grid.addEventListener('click', function (event) {
                 var btn = event.target.closest('.fa-icon-picker-option');

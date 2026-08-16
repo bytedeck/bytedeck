@@ -91,7 +91,24 @@ class RankForm(forms.ModelForm):
     class Meta:
         model = Rank
         fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
-        widgets = {'fa_icon': FontAwesomeIconPickerWidget()}
+        widgets = {
+            # Tell the picker which field holds the modifiers so its live preview
+            # can reflect rotations/flips/etc. as they are typed.
+            'fa_icon': FontAwesomeIconPickerWidget(modifiers_field_name='fa_icon_modifiers'),
+        }
+        labels = {
+            # "Fa icon" is jargon; call it "Icon". The ImageField (a fallback used
+            # where the font icon can't be, e.g. quest maps) then can't also be
+            # "Icon", so it becomes "Backup image".
+            'fa_icon': 'Icon',
+            'fa_icon_modifiers': 'Modifiers',
+            'icon': 'Backup image',
+        }
+        help_texts = {
+            'fa_icon_modifiers': 'Optional. Type any modifiers you want, separated by spaces, '
+                                 'e.g. fa-rotate-90, fa-rotate-180, fa-flip-horizontal, fa-flip-vertical, fa-spin, fa-pulse.',
+            'icon': 'A fallback image, used where the icon above can\'t be (e.g. in the quest maps).',
+        }
 
 
 class MarkRangeForm(forms.ModelForm):
