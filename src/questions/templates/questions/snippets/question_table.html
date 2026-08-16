@@ -10,7 +10,13 @@
       <th class="col-sm-1 col-xs-2 col-icon">Required</th>
       <th class="col-sm-2 col-xs-4">Solution</th>
       <th class="col-sm-1 col-xs-2 col-icon">Marker Notes</th>
-      <th class="col-sm-1 col-xs-2 col-icon">Action</th>
+      {% comment %}
+        The action buttons address a question by its quest's id and its own, which only means
+        this question on the deck the table is being rendered for. A Library preview shows a
+        quest from another schema, so the same ids there point at unrelated local rows: the
+        column is dropped rather than offering to edit or delete them (#2163).
+      {% endcomment %}
+      {% if not dont_edit_questions %}<th class="col-sm-1 col-xs-2 col-icon">Action</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -57,6 +63,7 @@
           -
         {% endif %}
       </td>
+      {% if not dont_edit_questions %}
       <td class="text-nowrap">
         <form method="post" action="{% url 'questions:move' quest.id question.id 'up' %}" class="preview-action-form">
           {% csrf_token %}
@@ -77,6 +84,7 @@
           <i class="fa fa-trash-o"></i>
         </a>
       </td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>

@@ -28,6 +28,7 @@ from notifications.models import Notification
 from courses.models import Rank
 from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
+from questions.models import Question
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.models import TenantDomain
@@ -2384,3 +2385,101 @@ class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
 
         self.assertIn(self.expired, response.context['library_quests'])
         self.assertEqual(response.context['num_matching_quests'], 1)
+
+
+class LibraryImportPreviewQuestionTests(LibraryTenantTestCaseMixin):
+    """What the import preview shows for a Library quest's submission questions (#2163).
+
+    The page is rendered on the importing deck, so anything it reads lazily is read in that
+    deck's schema. A quest's questions are exactly that, and a Library quest's id means a
+    different quest here: the preview has to read them where they live, and must not offer
+    to manage them from a page describing another schema's quest.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a Library quest that asks a question, and a teacher to preview it with."""
+        with library_schema_context():
+            cls.library_quest = baker.make(Quest, name="Library Quest With A Question", published=True)
+            baker.make(
+                Question, quest=cls.library_quest, ordinal=1,
+                instructions="<p>What did the Library ask?</p>",
+            )
+
+        cls.test_teacher = User.objects.create_user('preview_teacher', is_staff=True)
+
+    def preview(self):
+        """Fetch the import preview page for the Library quest, as a teacher.
+
+        Returns:
+            HttpResponse: the rendered confirmation page.
+        """
+        self.client.force_login(self.test_teacher)
+        return self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+    def _local_quest_sharing_the_library_quests_id(self):
+        """Create a local quest holding the same primary key as the Library quest.
+
+        That collision is what makes the bug visible rather than theoretical: primary keys
+        are per schema, so the two ids mean different quests, and a preview reading the
+        local table with the Library quest's id lands on this one.
+
+        Returns:
+            Quest: the local quest, with a question of its own.
+        """
+        local_quest = Quest(id=self.library_quest.id, name="A Totally Unrelated Local Quest", xp=5)
+        local_quest.save(force_insert=True)
+        # An explicit id leaves the table's sequence behind it, so the next quest created in
+        # this schema would try to reuse an id that is now taken.
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT setval(pg_get_serial_sequence('quest_manager_quest', 'id'), (SELECT MAX(id) FROM quest_manager_quest))"
+            )
+        baker.make(Question, quest=local_quest, ordinal=1, instructions="<p>What does this deck ask?</p>")
+
+        return local_quest
+
+    def test_import_quest_get__shows_the_questions_the_library_quest_asks(self):
+        """The preview lists the questions of the quest being imported."""
+        response = self.preview()
+
+        self.assertContains(response, "What did the Library ask?")
+
+    def test_import_quest_get__does_not_show_another_decks_questions(self):
+        """A local quest holding the same id does not get its questions shown instead (#2163).
+
+        Whoever is deciding whether to import would otherwise be reading their own deck's
+        questions, presented as the shared quest's.
+        """
+        self._local_quest_sharing_the_library_quests_id()
+
+        response = self.preview()
+
+        self.assertContains(response, "What did the Library ask?")
+        self.assertNotContains(response, "What does this deck ask?")
+
+    def test_import_quest_get__offers_no_way_to_edit_questions(self):
+        """The preview drops the management buttons, which would address local rows.
+
+        "Manage Questions", the reorder buttons and the edit and delete links are all keyed
+        on the previewed quest's id, which belongs to another schema: followed from here
+        they would act on whichever quest of this deck holds that id.
+        """
+        local_quest = self._local_quest_sharing_the_library_quests_id()
+        local_question = Question.objects.get(quest=local_quest)
+
+        response = self.preview()
+
+        self.assertNotContains(response, reverse('questions:list', args=[self.library_quest.id]))
+        self.assertNotContains(response, reverse('questions:move', args=[local_quest.id, local_question.id, 'up']))
+        self.assertNotContains(response, reverse('questions:delete', args=[local_quest.id, local_question.id]))
+
+    def test_quest_detail__still_offers_question_management_on_the_deck_that_owns_the_quest(self):
+        """The deck's own quest page keeps its buttons: there the ids mean what they say."""
+        local_quest = baker.make(Quest, name="A Local Quest")
+        baker.make(Question, quest=local_quest, ordinal=1, instructions="<p>Local question</p>")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_detail', args=[local_quest.id]))
+
+        self.assertContains(response, reverse('questions:list', args=[local_quest.id]))
