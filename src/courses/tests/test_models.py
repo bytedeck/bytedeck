@@ -1142,6 +1142,22 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(first.xp(), 10)
         self.assertEqual(second.xp(), 10)
 
+    def test_xp__answers_with_the_whole_total_for_a_registration_that_is_not_current(self):
+        """The split divides a student's XP between the courses they are in now, so a
+        registration from a semester that is over is not part of it and answers with their
+        total, the same as a student with one course."""
+        student = baker.make(User)
+        old = baker.make(
+            CourseStudent, user=student, course=baker.make(Course), block=baker.make(Block),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self._register(student, baker.make(Course))
+        self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(old.xp(), student.profile.xp_cached)
+
     def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
         """Deleting a registration must not make its XP vanish. Work assigned to a course the
         student no longer holds has nowhere to count, so it goes back into the shared pool and
