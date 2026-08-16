@@ -308,6 +308,36 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
 
+    def test_course_ranks__is_empty_without_a_second_course(self):
+        """One course holds all of a student's XP, so its rank is the rank they already have.
+        There is nothing to list, and the navbar keeps its single icon (issue #2453)."""
+        self.assertEqual(self.profile.course_ranks(), [])
+
+        self.create_active_course_registration()
+
+        self.assertEqual(self.profile.course_ranks(), [])
+
+    def test_course_ranks__gives_each_course_its_own_rank_highest_first(self):
+        """A student in two courses has different XP in each, so they are at a different rank
+        in each. The list leads with the highest, which is the one the navbar shows closed."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.user, course=course,
+                       block=baker.make('courses.Block'), semester=self.active_sem)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=60),
+            course=maths, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        course_ranks = self.profile.course_ranks()
+
+        # 60 XP all against Maths reaches the deck's second rank there, while Art, holding
+        # none of it, is still at the starting rank
+        self.assertEqual([course for course, rank in course_ranks], [maths, art])
+        self.assertEqual([rank.name for course, rank in course_ranks], ['Digital Novice', 'Digital Noob'])
+
     def test_mark__no_courses(self):
         """A student not in any current courses should return None"""
         # the test profile shouldn't be in any courses yet, but sanity check here

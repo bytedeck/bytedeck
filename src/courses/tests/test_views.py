@@ -28,6 +28,60 @@ import json
 User = get_user_model()
 
 
+class NavbarRankTests(ByteDeckTenantTestCase):
+    """The navbar's rank control, which is a dropdown for a student in more than one course.
+
+    Their XP is attributed per course (issue #2440), so they hold a rank in each and the navbar
+    shows all of them rather than a single number that belongs to none of their courses (#2453).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher (needed before students exist) and a student to log in as."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def _register(self, course):
+        """Put the student in a course in the deck's semester."""
+        return baker.make(
+            CourseStudent, user=self.student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def test_navbar__lists_a_rank_per_course_for_a_multicourse_student(self):
+        """Every course the student holds appears in the dropdown, named, and the icon shown
+        while it is closed is their highest rank."""
+        maths = self._register(baker.make(Course, title='Maths')).course
+        art = self._register(baker.make(Course, title='Art')).course
+        quest = baker.make(Quest, xp=60, max_xp=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest, course=maths,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertContains(response, 'id="ranks-menu"')
+        self.assertContains(response, str(maths))
+        self.assertContains(response, str(art))
+        # 60 XP against Maths reaches the deck's second rank there, and that is the one the
+        # closed navbar shows, not the starting rank they are still at in Art
+        self.assertContains(response, 'title="Rank: Digital Novice in Maths"')
+
+    def test_navbar__keeps_a_single_rank_for_a_student_in_one_course(self):
+        """With one course there is nothing to choose between, so the navbar stays the plain
+        link it has always been rather than growing a dropdown with one row in it."""
+        self._register(baker.make(Course, title='Maths'))
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertNotContains(response, 'id="ranks-menu"')
+        self.assertContains(response, 'title="Rank: Digital Noob"')
+
+
 class RankViewTests(ByteDeckTenantTestCase):
 
     @classmethod
