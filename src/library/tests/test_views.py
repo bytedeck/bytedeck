@@ -2021,3 +2021,82 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
         with library_schema_context():
             clone = self._library_clone_of(quest)
             self.assertTrue(clone.name.endswith("#1"), f"expected a numbered suffix, got {clone.name!r}")
+
+
+class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
+    """The Library lists what it holds, not what the sharing deck's timetable allows.
+
+    `date_available` and `date_expired` cross the schema boundary with the quest, so they
+    describe the term of the deck that shared it. A catalogue that honoured those dates
+    would drop a quest the day its original term ended, while leaving it importable
+    through its campaign and by direct link, so the same quest would be missing from one
+    tab and offered in the other.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Add three published quests to the Library: ordinary, not yet available, expired.
+
+        The Library tenant is seeded with quests of its own, so the counts below are
+        measured against a baseline taken before these three are added.
+        """
+        with library_schema_context():
+            cls.quests_already_in_library = Quest.objects.get_queryset().published().active_or_no_campaign().count()
+
+            cls.library_campaign = baker.make(Category, published=True)
+            cls.ordinary = baker.make(Quest, name="Ordinary Quest", campaign=cls.library_campaign, published=True)
+            cls.not_yet = baker.make(
+                Quest, name="Not Yet Available", campaign=cls.library_campaign, published=True,
+                date_available=date(2099, 1, 1),
+            )
+            cls.expired = baker.make(
+                Quest, name="Already Expired", campaign=cls.library_campaign, published=True,
+                date_expired=date(2020, 1, 1),
+            )
+
+        cls.test_teacher = User.objects.create_user('listing_window_teacher', is_staff=True)
+
+    def test_LibraryQuestListView__lists_a_quest_whose_availability_date_has_not_arrived(self):
+        """A quest the sharing deck scheduled for a future date is still in the catalogue.
+
+        Searched for by name rather than read off the first page: the list is paginated and
+        unordered, so which page a quest lands on is not something the test should assume.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Not Yet Available'})
+
+        self.assertIn(self.not_yet, response.context['library_quests'])
+
+    def test_LibraryQuestListView__lists_a_quest_whose_expiry_date_has_passed(self):
+        """A quest that expired on the sharing deck is still in the catalogue."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Already Expired'})
+
+        self.assertIn(self.expired, response.context['library_quests'])
+
+    def test_LibraryQuestListView__quest_badge_counts_every_quest_the_list_shows(self):
+        """The Quests badge agrees with the list beneath it, all three new quests included."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'))
+
+        self.assertEqual(response.context['num_quests'], self.quests_already_in_library + 3)
+
+    def test_LibraryCampaignListView__quest_badge_agrees_with_the_quests_tab(self):
+        """The Quests badge shows the same total whichever tab the user is on."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:category_list'))
+
+        self.assertEqual(response.context['num_quests'], self.quests_already_in_library + 3)
+
+    def test_LibraryQuestListView__search_finds_a_quest_outside_the_sharing_deck_window(self):
+        """Search reaches an expired quest, so it can be found rather than only imported by link."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Already Expired'})
+
+        self.assertIn(self.expired, response.context['library_quests'])
+        self.assertEqual(response.context['num_matching_quests'], 1)

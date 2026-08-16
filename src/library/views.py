@@ -31,7 +31,7 @@ from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
-from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests
+from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests, library_listable_quests
 
 User = get_user_model()
 
@@ -205,10 +205,11 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
 @method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
 class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     """
-    View for displaying a list of active quests from the shared library.
+    View for displaying a list of the quests the shared library holds.
 
-    Only quests that are both published and not archived
-    will be shown. Access is restricted to logged-in staff users.
+    A quest is listed when it is published, not archived, and not sitting behind an
+    unpublished campaign (see `library_listable_quests`). Access is restricted to logged-in
+    staff users.
     """
     # Shared template, tab context determines which section is shown
     template_name = 'library/library_overview.html'
@@ -245,7 +246,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             return requested
 
     def get_library_quests(self, search_term):
-        """The active Library quests to list, narrowed by the search term.
+        """The listable Library quests, narrowed by the search term.
 
         Must be called from within the library schema context, and the queryset must be
         evaluated there too: the caller paginates it, which is what runs the queries.
@@ -264,7 +265,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         Returns:
             QuerySet[Quest]: the matching quests, campaign and tags pre-fetched.
         """
-        quests = Quest.objects.get_active().select_related('campaign').prefetch_related('tags')
+        quests = library_listable_quests().select_related('campaign').prefetch_related('tags')
 
         for word in search_term.split():
             quests = quests.filter(
@@ -281,7 +282,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         """
-        Populate context with a page of active quests from the shared library.
+        Populate context with a page of the shared library's listable quests.
 
         The Library is read one page at a time: the whole thing used to be loaded into
         memory and rendered on every request, which does not survive a Library worth
@@ -295,13 +296,13 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             dict: Template context including:
                 - heading (str): Page title.
                 - tab (str): Active tab identifier.
-                - library_quests (list[Quest]): The current page of active quests, with
+                - library_quests (list[Quest]): The current page of listable quests, with
                     related Campaign and tags prefetched.
                 - page_obj (Page): The current page, for the pagination controls.
                 - search_term (str): What the user searched for, to keep the box filled in.
                 - num_matching_quests (int): How many quests the search matched, across
                     every page.
-                - num_quests (int): Number of active quests in the Library, used for the UI
+                - num_quests (int): Number of listable quests in the Library, used for the UI
                     badge. This is the whole Library, not the search results, so the badge
                     doesn't change as the user types.
                 - num_campaigns (int): Number of active Campaigns with importable quests,
@@ -322,7 +323,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             # Force evaluation inside the library context: the template renders this after
             # the schema has switched back to the caller's own deck.
             page_quests = list(page.object_list)
-            num_quests = Quest.objects.get_active().count() if search_term else paginator.count
+            num_quests = library_listable_quests().count() if search_term else paginator.count
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
             # One query for this page rather than one per row, and only for the quests
@@ -379,8 +380,10 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
                         - published=True
                         - archived=False (not archived)
                 - num_campaigns (int): Number of campaigns in the displayed list, used for the UI badge.
-                - num_quests (int): Total number of visible (published and not archived) quests,
-                    used for the UI badge in the quest tab.
+                - num_quests (int): Total number of listable quests (published, not archived,
+                    and not behind an unpublished campaign), used for the UI badge in the
+                    quest tab. Read through the same helper the Quests tab lists with, so
+                    the badge agrees whichever tab the user is on.
                 - is_library_view (bool): True, so the campaign table shared with the deck's own
                     campaign list shows the Library's import action instead of the local ones.
         """
@@ -389,7 +392,7 @@ class LibraryCampaignListView(NonPublicOnlyViewMixin, TemplateView):
         with library_schema_context():
             # Explicitly call len() to force evaluation inside the library context
             # this forces all Campaigns to load.
-            quests_count = Quest.objects.get_active().count()
+            quests_count = library_listable_quests().count()
             campaigns = Category.objects.all_published_with_importable_quests()
             num_campaigns = len(campaigns)
 
