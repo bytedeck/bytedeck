@@ -121,6 +121,33 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertNotIn("response_text", form.fields)
         self.assertEqual(form.fields["response_file"].content_types, self.file_question.allowed_mime_types())
 
+    def test_init__file_upload_help_text_carries_the_mime_type_popover(self):
+        """The info icon listing exact MIME types sits inside the help text (#2169).
+
+        Rendered as a field of its own it landed on a line below the types it explains, wasting
+        a line of the form; inside the help text it shares that line.
+        """
+        form = QuestionSubmissionForm(instance=self.file_answer)
+        help_text = form.fields["response_file"].help_text
+
+        self.assertIn("Allowed file types: Video", help_text)
+        self.assertIn('data-toggle="popover"', help_text)
+        for mime_type in self.file_question.allowed_mime_types():
+            self.assertIn(mime_type, help_text)
+
+    def test_init__file_upload_help_text_has_no_popover_when_all_types_are_allowed(self):
+        """A question accepting anything says so plainly: there is no MIME list worth showing."""
+        any_file_question = baker.make(
+            Question, quest=self.quest, ordinal=5, type="file_upload", allowed_file_type="all",
+        )
+        answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=any_file_question,
+        )
+
+        help_text = QuestionSubmissionForm(instance=answer).fields["response_file"].help_text
+
+        self.assertEqual(help_text, "Allowed file types: All")
+
     def test_init__optional_question_not_required(self):
         """Answers to non-required questions aren't required fields."""
         optional_question = baker.make(
