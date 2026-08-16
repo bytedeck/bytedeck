@@ -178,12 +178,12 @@ def warn_sharer_about_dropped_common_data(request, dropped_common_data):
     messages.warning(
         request,
         f"The shared General Info {names} does not travel to the Library, so the copy "
-        "there arrives without that panel. Paste the text into the instructions of the "
-        "quests that need it and share again."
+        "there arrives without that panel. Paste the text into the quest instructions "
+        "and share it again if this info is required in the quest."
         if len(dropped_common_data) == 1 else
         f"Shared General Info does not travel to the Library, so the copies there arrive "
-        f"without those panels: {names}. Paste the text into the instructions of the "
-        "quests that need it and share again."
+        f"without those panels: {names}. Paste the text into the quest instructions and "
+        "share them again if this info is required in the quests."
     )
 
 
