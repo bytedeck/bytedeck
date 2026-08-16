@@ -939,22 +939,29 @@ class CourseStudent(models.Model):
     # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property
-    def xp(self):
+    def xp(self, profile=None):
         """The XP that counts toward this one registration.
 
         A student in several courses splits their XP between them (issue #2440). Work they
-        assigned to a course counts wholly toward it; everything else is shared evenly, which
-        is what every submission did before they could assign one, and is still what happens
-        to badge XP, to work handed in while the deck had the setting off, and to anything
-        from before the choice existed.
+        assigned to one of their current courses counts wholly toward it; everything else is
+        shared evenly, which is what every submission did before they could assign one, and is
+        still what happens to badge XP, to work handed in while the deck had the setting off,
+        and to anything from before the choice existed.
+
+        Args:
+            profile (Profile): the student's profile, for a caller holding one whose xp_cached
+                is newer than the database. Profile.xp_invalidate_cache() works out the new
+                total and asks for the mark, so without this the mark would be a percentage of
+                the previous total. Defaults to reading the profile.
 
         Returns:
             float: this registration's share of the student's XP, including its own
             xp_adjustment. Their whole total when this is their only course.
         """
-        profile = self.user.profile
-        course_count = profile.num_courses()
-        if course_count <= 1:
+        profile = profile if profile is not None else self.user.profile
+        registrations = CourseStudent.objects.current_courses(self.user)
+        current_course_ids = set(registrations.values_list('course_id', flat=True))
+        if len(current_course_ids) <= 1:
             return profile.xp_cached
 
         # xp_cached is the student's deck-wide total: quest XP, badge XP, and every one of
@@ -964,24 +971,31 @@ class CourseStudent(models.Model):
         for course_id, xp in BadgeAssertion.objects.xp_by_course(self.user).items():
             xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
 
+        # only courses the student still holds can claim XP: work assigned to a course whose
+        # registration has since been deleted has nowhere to count, so it goes back into the
+        # shared pool rather than being subtracted from it and lost
         assigned_here = xp_by_course.get(self.course_id, 0) if self.course_id else 0
-        assigned_anywhere = sum(xp for course_id, xp in xp_by_course.items() if course_id is not None)
+        assigned_anywhere = sum(xp for course_id, xp in xp_by_course.items() if course_id in current_course_ids)
         adjustments = CourseStudent.objects.calculate_xp(self.user)
         shared = profile.xp_cached - assigned_anywhere - adjustments
 
-        return assigned_here + self.xp_adjustment + shared / course_count
+        return assigned_here + self.xp_adjustment + shared / len(current_course_ids)
 
-    def mark(self):
+    def mark(self, profile=None):
         """This registration's mark, worked out from its own XP.
 
         A student in two courses has a different amount of XP in each (issue #2440), so each
         registration has its own mark. Capping is a deck setting, applied here so every place
         that shows a mark agrees about it.
 
+        Args:
+            profile (Profile): passed through to xp(), for a caller holding a profile whose
+                xp_cached is newer than the database.
+
         Returns:
             float: the percentage for this course, capped at 100 when the deck asks for that.
         """
-        mark = self.calc_mark(self.xp())
+        mark = self.calc_mark(self.xp(profile))
         if SiteConfig.get().cap_marks_at_100_percent:
             return min(mark, 100)
         return mark

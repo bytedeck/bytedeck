@@ -396,7 +396,9 @@ class Profile(models.Model):
             float or None: the first current registration's mark, None with no course.
         """
         registration = self.current_courses().first()
-        return registration.mark() if registration else None
+        # hand over this profile: xp_invalidate_cache() asks for the mark with a new xp_cached
+        # it has not saved yet, and the registration would otherwise read the old one back
+        return registration.mark(profile=self) if registration else None
 
     #################################
     #

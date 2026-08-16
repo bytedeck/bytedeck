@@ -314,19 +314,52 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
 
-    def test_mark__single_course(self):
-        """mark() gives back the student's one registration's mark."""
-        registration = self.create_active_course_registration()
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__single_course(self, fraction_complete):
+        """mark() works the student's XP into a percentage of what their course is out of."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
 
-        self.assertEqual(self.profile.mark(), registration.mark())
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertEqual(self.profile.mark(), 10)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_xp_invalidate_cache__stores_a_mark_worked_out_from_the_new_total(self, fraction_complete):
+        """mark_cached has to be the mark for the XP just counted, not the one before it.
+
+        The mark now comes from the student's registration, which reads xp_cached back out of
+        the database, so the new total has to be saved before the mark is asked for."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+
+        self.profile.xp_invalidate_cache()
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.xp_cached, 50)
+        self.assertEqual(self.profile.mark_cached, 10)
 
     @patch('courses.models.Semester.fraction_complete', return_value=0.5)
     def test_mark__multiple_courses(self, fraction_complete):
         """A student in several courses has a mark in each, so this one number is the first
         registration's, whole. Each registration's XP is already only its own share, so nothing
         is divided a second time here (issue #2440 moved the split from the mark into the XP)."""
-        first_registration = self.create_active_course_registration()
-        self.create_active_course_registration()
+        # distinct blocks: registrations are ordered by block name, and two rows with the same
+        # ordering key can come back in either order, which would make this test flaky
+        first_registration = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='A block'),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='B block'),
+        )
         baker.make(
             'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
             course=first_registration.course, semester=self.active_sem, is_completed=True, is_approved=True,
@@ -334,6 +367,7 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.profile.xp_invalidate_cache()
         registrations = list(self.profile.current_courses())
 
+        self.assertEqual(registrations[0], first_registration)
         self.assertEqual(self.profile.mark(), registrations[0].mark())
         # the courses really do differ, so returning the first one's mark is a choice and not a
         # coincidence of both being the same number

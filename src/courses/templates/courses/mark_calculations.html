@@ -51,8 +51,9 @@ for {{user}}
               about <strong>{{ obj.course }}</strong>. Of your <strong>{{ user.profile.xp_cached }}</strong> total XP,
               <a tabindex="0" data-toggle="popover" data-trigger="hover"
                  data-placement="top" data-html="true" href="#"
-                 data-content="Quests you said should count toward {{ obj.course }} count toward it in full.
-            Everything else, including your badges, is shared evenly between your {{ num_courses }} courses.
+                 data-content="Quests you said should count toward {{ obj.course }} count toward it in full,
+            and so do badges given to you for that course. Everything else is shared evenly between your
+            {{ num_courses }} courses.
             ">
                 <strong>{{ xp_per_course|floatformat }}</strong> XP</a> counts toward it.
             {% else %}

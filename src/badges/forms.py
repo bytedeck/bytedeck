@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
 from courses.forms import XPCourseChoiceMixin
+from courses.models import CourseStudent
 from profile_manager.models import Profile
 from tags.forms import BootstrapTaggitSelect2Widget
 from .models import Badge, BadgeAssertion
@@ -51,6 +52,23 @@ class BadgeAssertionForm(XPCourseChoiceMixin, forms.ModelForm):
         self.fields['user'].label_from_instance = lambda obj: "{} | {}".format(
             obj.profile if hasattr(obj, 'profile') else "", obj.username
         )
+
+    def clean(self):
+        """Refuse a course that is not one of the student being granted the badge.
+
+        The course choices are built for the student named in the URL, while the student who
+        actually receives the badge comes from this form's own user field, so a posted pair
+        that does not match would attach a course the recipient is not registered in.
+
+        Returns:
+            dict: the cleaned data, with a 'course' error when the two do not match.
+        """
+        cleaned_data = super().clean()
+        course = cleaned_data.get('course')
+        user = cleaned_data.get('user')
+        if course and user and not CourseStudent.objects.current_courses(user).filter(course=course).exists():
+            self.add_error('course', f'{user} is not registered in {course}.')
+        return cleaned_data
 
 
 class ProfileMultiSelectWidget(ModelSelect2MultipleWidget):

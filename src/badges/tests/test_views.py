@@ -307,6 +307,28 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('badges:list'))
         self.assertEqual(BadgeAssertion.objects.latest('timestamp').course, maths)
 
+    def test_assertion_create__refuses_a_course_the_recipient_is_not_in(self):
+        """The courses offered belong to the student named in the URL, but the badge goes to the
+        student picked on the form, so a posted pair that does not match is rejected. Attaching
+        someone else's course would count that XP toward a course this student cannot see."""
+        self.client.force_login(self.test_teacher)
+        # the URL student holds two courses, so the form does offer the question
+        offered_course = baker.make('courses.Course', title='Theirs')
+        for course in (offered_course, baker.make('courses.Course')):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+        baker.make('courses.CourseStudent', user=self.test_student2, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student2.id, 'course': offered_course.id},
+        )
+
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error, not saved
+        self.assertIn('course', response.context['form'].errors)
+        self.assertFalse(BadgeAssertion.objects.filter(user=self.test_student2, badge=self.test_badge).exists())
+
     def test_assertion_create__does_not_ask_for_a_student_with_one_course(self):
         """One course means no question to ask, so the field is not there at all."""
         self.client.force_login(self.test_teacher)

@@ -273,7 +273,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         negative = students[1].coursestudent_set.get().pk
 
         with patch('courses.models.CourseStudent.xp', autospec=True,
-                   side_effect=lambda registration: -50 if registration.pk == negative else 10):
+                   side_effect=lambda registration, profile=None: -50 if registration.pk == negative else 10):
             with self.assertRaises(ValueError):
                 CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
 
@@ -1107,6 +1107,10 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
             )
         student.profile.xp_invalidate_cache()
 
+        # the cap is applied to the quest first, then shared out in proportion to what each
+        # course was assigned: two equal submissions, so half the capped 40 each
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 20)
         self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
         self.assertEqual(student.profile.xp_cached, 40)
 
@@ -1137,6 +1141,41 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(first.xp(), 10)
         self.assertEqual(second.xp(), 10)
+
+    def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
+        """Deleting a registration must not make its XP vanish. Work assigned to a course the
+        student no longer holds has nowhere to count, so it goes back into the shared pool and
+        is split like any other unassigned work, rather than being taken off the total and
+        credited nowhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        dropped = baker.make(Course, title='Dropped')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        dropped_registration = self._register(student, dropped)
+        self._approved(student, xp=30, course=dropped)
+        student.profile.xp_invalidate_cache()
+
+        dropped_registration.delete()
+
+        self.assertEqual(maths_registration.xp(), 15)
+        self.assertEqual(art_registration.xp(), 15)
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+
+    def test_xp__shares_out_work_assigned_to_a_course_the_student_never_had(self):
+        """Same for a course that was never theirs: whatever put it there, the XP is the
+        student's and has to keep counting somewhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=20, course=baker.make(Course, title='Someone else’s course'))
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 10)
+        self.assertEqual(art_registration.xp(), 10)
 
     @patch('courses.models.Semester.fraction_complete')
     def test_mark__is_worked_out_from_the_registrations_own_xp(self, fraction_complete):

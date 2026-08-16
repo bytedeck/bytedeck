@@ -982,6 +982,45 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.course, maths)
 
+    def test_complete__lets_a_redo_go_back_to_splitting_evenly(self):
+        """A submission a teacher returned keeps the course it was handed in against, so redoing
+        it with "split evenly" selected has to be able to clear that course again rather than
+        leaving the old choice in place (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester,
+                                course=maths)
+
+        # the empty value is what the "Split evenly between my courses" choice posts
+        self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'redone', 'course': ''},
+        )
+
+        submission.refresh_from_db()
+        self.assertIsNone(submission.course)
+
+    def test_submission__shows_the_course_the_submission_already_counts_toward(self):
+        """The picker starts on the submission's own course, so a student coming back to the page
+        sees what they chose rather than a form offering to reset it."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester,
+                                course=maths)
+
+        response = self.client.get(reverse('quests:submission', args=[submission.id]))
+
+        # a bound field's value is the raw pk the widget renders as selected
+        self.assertEqual(response.context['submission_form']['course'].value(), maths.pk)
+
     def test_complete__leaves_the_course_unset_when_the_student_was_not_asked(self):
         """A student in a single course is never asked, so their submission stays unassigned and
         its XP is shared, which for one course is the whole of it."""

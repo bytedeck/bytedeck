@@ -1956,11 +1956,13 @@ def complete(request, submission_id):
         ):
             affected_users.extend(request.user.profile.current_teachers())
 
-        # record which course the student said this counts toward, before the XP is granted
-        # so an auto-approved quest lands in the right course straight away (issue #2440)
-        chosen_course = form.cleaned_data.get('course')
-        if chosen_course:
-            submission.course = chosen_course
+        # Record which course the student said this counts toward, before the XP is granted so
+        # an auto-approved quest lands in the right course straight away (issue #2440).
+        # Assigned whatever they picked, "split evenly" (None) included: a submission a teacher
+        # returned carries its earlier choice, and redoing it has to be able to change that
+        # choice back. The form is seeded with the current course, so this writes back what the
+        # student was actually shown.
+        submission.course = form.cleaned_data.get('course')
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
@@ -2337,7 +2339,9 @@ def submission(request, submission_id=None, quest_id=None):
             sub.draft_comment = draft_comment
             sub.save()
 
-        initial = {"comment_text": sub.draft_comment.text}
+        # show the course this already counts toward, so a student returning to the page sees
+        # their earlier choice rather than the form offering to reset it (issue #2440)
+        initial = {"comment_text": sub.draft_comment.text, "course": sub.course}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
