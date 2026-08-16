@@ -902,6 +902,38 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
         self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 0)
 
+    def test_has_multicourse_students__false_when_everyone_takes_one_course(self):
+        """A second student in their own single course is not the same as one student in two,
+        so a deck of single-course students still answers no."""
+        baker.make(CourseStudent, user=baker.make(User), course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__true_once_one_student_holds_two_courses(self):
+        """One student in two courses is enough: they are the person the per-course XP split
+        applies to (issue #2440)."""
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertTrue(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__ignores_staff_and_archived_semesters(self):
+        """A teacher registered in two courses is not a student with two marks, and a student
+        whose semester is over is no longer on the deck."""
+        teacher = baker.make(User, is_staff=True)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=teacher, course=course, block=baker.make(Block),
+                       semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+        old = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=baker.make(User), course=course, block=baker.make(Block), semester=old)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
 
 class CourseStudentModelTest(ByteDeckTenantTestCase):
 

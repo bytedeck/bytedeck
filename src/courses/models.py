@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import connection, models, transaction
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -798,6 +798,26 @@ class CourseStudentManager(models.Manager):
         if registration is not None:
             return registration.semester
         return SiteConfig.get().open_semester
+
+    def has_multicourse_students(self):
+        """Whether anyone on the deck is currently registered in more than one course.
+
+        Nothing about per-course XP (issue #2440) applies to a deck where every student takes
+        one course, so the pages that would explain it stay quiet unless somebody is actually
+        affected.
+
+        Returns:
+            bool: True when at least one student holds two or more registrations in an open
+            semester. False on the public tenant, which has no courses to read.
+        """
+        if connection.schema_name == get_public_schema_name():  # pragma: no cover
+            # unreachable from the tenant-only pages that ask this; guarded because the public
+            # schema has no courses tables, the same way all_users_in_open_semesters() is
+            return False
+
+        return self.get_queryset().in_open_semesters().get_students_only().values('user').annotate(
+            registrations=Count('id'),
+        ).filter(registrations__gt=1).exists()
 
     def all_users_in_open_semesters(self, students_only=False, active_only=False):
         """Every user registered in a course in a semester that is open right now.

@@ -18,6 +18,7 @@ from django.db.models import Count, Prefetch
 
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
+from courses.models import CourseStudent
 from notifications.signals import notify
 from prerequisites.views import ObjectPrereqsFormView
 from siteconfig.models import SiteConfig
@@ -327,8 +328,12 @@ def bulk_assertion_create(request, badge_id=None):
         "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
         "form": form,
         "submit_btn_value": "Grant",
-        # every student here has their own courses, so there is no one course to grant toward
-        "bulk_course_note": SiteConfig.get().students_choose_xp_course,
+        # every student here has their own courses, so there is no one course to grant toward.
+        # Only worth saying on a deck that has a student in more than one course: nobody else
+        # is affected by the split, and the notice would just be a puzzle for them.
+        "bulk_course_note": (
+            SiteConfig.get().students_choose_xp_course and CourseStudent.objects.has_multicourse_students()
+        ),
     }
 
     return render(request, "badges/assertion_form.html", context)

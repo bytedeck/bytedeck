@@ -311,10 +311,9 @@ class TAQuestForm(QuestForm):
 class SubmissionForm(XPCourseChoiceMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
-    course = forms.ModelChoiceField(
-        queryset=Course.objects.none(), required=False, label='Counts toward',
-        help_text="Which of your courses this quest's XP should count toward.",
-    )
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
     attachments = RestrictedMultiFileFormField(
         required=False,
@@ -392,10 +391,9 @@ class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
 class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
 
-    course = forms.ModelChoiceField(
-        queryset=Course.objects.none(), required=False, label='Counts toward',
-        help_text="Which of your courses this quest's XP should count toward.",
-    )
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):

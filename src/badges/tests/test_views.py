@@ -322,11 +322,25 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         """Bulk granting cannot ask about courses, because every student picked has their own.
         Say so on the page rather than leaving a teacher to assume it landed somewhere."""
         self.client.force_login(self.test_teacher)
+        for course in (baker.make('courses.Course'), baker.make('courses.Course')):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
 
         response = self.client.get(reverse('badges:bulk_grant'))
 
         self.assertContains(response, 'split evenly between their courses')
         self.assertNotIn('course', response.context['form'].fields)
+
+    def test_bulk_assertion_create__stays_quiet_on_a_deck_of_single_course_students(self):
+        """Nothing is split on a deck where every student takes one course, so the notice would
+        only puzzle the teacher reading it."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(reverse('badges:bulk_grant'))
+
+        self.assertNotContains(response, 'split evenly between their courses')
 
     def test_bulk_assertion_create__grants_to_all_selected(self):
         """Bulk granting a badge to multiple students creates one assertion per student."""
