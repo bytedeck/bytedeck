@@ -114,6 +114,12 @@ def mark_calculations(request, user_id=None):
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
         'markranges': markranges,
+        # One progress chart per course, for anyone holding more than one (issue #2453). Not
+        # gated on students_choose_xp_course: that setting decides whether students are asked
+        # where new XP goes, while XP already assigned keeps counting where it was put. A deck
+        # that turns it off still has courses holding different amounts, which is what the marks
+        # table above shows too, and a single unlabelled chart could only be one of them.
+        'chart_per_course': num_courses > 1,
     }
     return render(request, template_name, context)
 
@@ -1013,6 +1019,29 @@ class SemesterArchive(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequired
         return redirect('courses:semester_list')
 
 
+def _registration_to_chart(user, course_id):
+    """Which of a student's registrations the progress chart is being asked for.
+
+    Args:
+        user: the student being charted.
+        course_id: the course the request named, as a string from the POST, or None for
+            whichever course comes first.
+
+    Returns:
+        CourseStudent or None: their registration in that course, falling back to their first
+        one when the request named no course or named one they are not in. None when they are
+        in no course at all, which the caller charts as a flat zero.
+    """
+    registrations = CourseStudent.objects.current_courses(user)
+    try:
+        # whatever the page posted: the chart asks for no course at all when the student has
+        # only one, and nothing stops a request naming something that is not an id
+        chosen = registrations.filter(course_id=int(course_id)).first()
+    except (TypeError, ValueError):
+        chosen = None
+    return chosen if chosen is not None else registrations.first()
+
+
 @xml_http_request_required
 @non_public_only_view
 @login_required
@@ -1063,11 +1092,14 @@ def ajax_progress_chart(request, user_id=0):
         #   x: day into course
         #   y: XP earned so far
 
-        xp = 0
-        num_courses = user.profile.num_courses()
+        # A course's own line, not an even share of the student's whole total: since #2440 the
+        # two are different numbers for a student who assigned their work (issue #2453). The
+        # course to chart comes from the request, defaulting to the first of their courses.
+        registration = _registration_to_chart(user, request.POST.get('course'))
+
         # days_so_far == len(datelist)
         for day in range(0, sem.days_so_far()):
-            xp = user.profile.xp_to_date(datelist[day]) / num_courses
+            xp = registration.xp_to_date(datelist[day]) if registration else 0
             xp_data.append(
                 # day 0-indexed
                 {'x': day + 1, 'y': xp}
@@ -1085,7 +1117,8 @@ def ajax_progress_chart(request, user_id=0):
             # ie. if today is sunday: friday's total xp <= sunday's total xp
             # (if a submission is removed then will subtract from both friday and sunday xp)
             total_xp = xp_data[-1]['y']
-            difference = user.profile.xp_to_date(today) - total_xp
+            today_xp = registration.xp_to_date(today) if registration else 0
+            difference = today_xp - total_xp
 
             # if true: user has earned xp during the weekend.
             # add that xp to the last valid date
@@ -1095,6 +1128,9 @@ def ajax_progress_chart(request, user_id=0):
         progress_chart = {
             "days_in_semester": sem.num_days(),
             "xp_data": xp_data,
+            # the charted course's own scale: courses can be out of different amounts, so the
+            # axis and the mark lines have to be redrawn when a student switches (issue #2453)
+            "xp_for_100_percent": registration.course.xp_for_100_percent if registration and registration.course else 0,
         }
         json_data = json.dumps(progress_chart)
 

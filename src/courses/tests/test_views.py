@@ -2121,6 +2121,60 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         # their term started Jan 15, so only its class days are plotted, not the deck semester's
         self.assertEqual(len(data['xp_data']), their_semester.days_so_far())
 
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__charts_the_named_courses_own_xp(self):
+        """A student in two courses has a different amount of XP in each (#2440), so each course
+        gets its own line: the course named in the request, not an even share of everything."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=500)
+        baker.make(CourseStudent, user=self.student, semester=self.semester, course=art, block=baker.make(Block))
+        quest = baker.make(Quest, xp=40, max_xp=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest, course=self.course, semester=self.semester,
+            is_completed=True, is_approved=True, time_approved=datetime.datetime(2024, 1, 3, tzinfo=self.tz),
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        assigned = self.client.post(url, {'course': self.course.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        other = self.client.post(url, {'course': art.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # all 40 XP went to the first course, so its line ends at 40 and the other's at 0
+        self.assertEqual(json.loads(assigned.content)['xp_data'][-1]['y'], 40)
+        self.assertEqual(json.loads(other.content)['xp_data'][-1]['y'], 0)
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__scales_to_the_charted_courses_own_total(self):
+        """Courses can be out of different amounts of XP, so the chart is told which total to
+        draw its axis and mark lines against."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=500)
+        baker.make(CourseStudent, user=self.student, semester=self.semester, course=art, block=baker.make(Block))
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        response = self.client.post(url, {'course': art.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(json.loads(response.content)['xp_for_100_percent'], 500)
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__falls_back_to_a_course_the_student_is_in(self):
+        """A request naming no course, or one the student is not registered in, charts one of
+        their own courses rather than failing or charting somebody else's."""
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+        someone_elses = baker.make(Course, xp_for_100_percent=999)
+
+        unnamed = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        not_theirs = self.client.post(url, {'course': someone_elses.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        # the page asks for no course when the student has one, which posts an empty value,
+        # and nothing stops a request naming something that is not an id at all
+        empty = self.client.post(url, {'course': ''}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        nonsense = self.client.post(url, {'course': 'undefined'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        for response in (unnamed, not_theirs, empty, nonsense):
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(json.loads(response.content)['xp_for_100_percent'], self.course.xp_for_100_percent)
+
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
         uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
@@ -2355,6 +2409,70 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         # 50 XP halfway through the semester projects to 100, out of the course's 1000
         self.assertContains(response, '<strong>10%</strong>', html=True)
         self.assertContains(response, '<strong>0%</strong>', html=True)
+
+    def test_mark_calculations__offers_a_chart_per_course_to_a_multicourse_student(self):
+        """Each course holds its own XP, so each gets its own progress chart, chosen with a
+        button per course (issue #2453)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertTrue(response.context['chart_per_course'])
+        self.assertContains(response, f'data-course="{self.course.id}"')
+        self.assertContains(response, f'data-course="{art.id}"')
+
+    def test_mark_calculations__still_charts_per_course_with_the_setting_off(self):
+        """Turning the per-course setting off stops students being asked where new XP goes; it
+        does not un-assign the XP already put against a course. Those courses still hold
+        different amounts, which the marks table on this page shows, so the charts stay per
+        course rather than collapsing into one line that could only be one of them."""
+        siteconfig = SiteConfig.get()
+        siteconfig.students_choose_xp_course = False
+        siteconfig.save()
+        self.addCleanup(self._restore_course_choice)
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertTrue(response.context['chart_per_course'])
+        self.assertContains(response, f'data-course="{self.course.id}"')
+        self.assertContains(response, f'data-course="{art.id}"')
+        # the courses really do still differ, which is why one chart would not do
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_mark_calculations__offers_one_chart_to_a_student_in_one_course(self):
+        """One course means one chart, with no button bar to choose between."""
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertFalse(response.context['chart_per_course'])
+        # the chart's JS names the selector on every page, so the buttons' own attribute is
+        # what says whether any were rendered
+        self.assertNotContains(response, 'data-course=')
+
+    def _restore_course_choice(self):
+        """Put the shared deck's per-course XP setting back on, for the test that turns it off."""
+        siteconfig = SiteConfig.get()
+        siteconfig.students_choose_xp_course = True
+        siteconfig.save()
 
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page

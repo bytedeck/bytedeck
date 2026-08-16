@@ -716,7 +716,7 @@ class CourseStudentManager(models.Manager):
         """
         return self.current_courses(user).aggregate(total=Sum('xp_adjustment'))['total'] or 0
 
-    def xp_for_registrations(self, user, profile=None):
+    def xp_for_registrations(self, user, profile=None, up_to_date=None):
         """Every current registration this student holds, with the XP counting toward it.
 
         The assigned-versus-shared split (issue #2440) is the same question for every course a
@@ -728,21 +728,24 @@ class CourseStudentManager(models.Manager):
             user: the student whose XP is being divided.
             profile (Profile): their profile, for a caller holding one whose xp_cached is
                 newer than the database. Defaults to reading it.
+            up_to_date (date): divide what they had earned by then rather than their total,
+                which is how each course's progress chart is plotted (issue #2453).
 
         Returns:
             list[tuple]: (CourseStudent, xp) in registration order, empty when the student is
             in no course. A student in one course has their whole total against it.
         """
         profile = profile if profile is not None else user.profile
+        total = profile.xp_cached if up_to_date is None else profile.xp_to_date(up_to_date)
         registrations = list(self.current_courses(user))
         if len(registrations) <= 1:
-            return [(registration, profile.xp_cached) for registration in registrations]
+            return [(registration, total) for registration in registrations]
 
-        # xp_cached is the student's deck-wide total: quest XP, badge XP, and every one of
+        # the total is the student's deck-wide figure: quest XP, badge XP, and every one of
         # their registrations' adjustments. Take out the parts that belong to a particular
         # course, share what is left, and hand each registration back its own pieces.
-        xp_by_course = QuestSubmission.objects.xp_by_course(user)
-        for course_id, xp in BadgeAssertion.objects.xp_by_course(user).items():
+        xp_by_course = QuestSubmission.objects.xp_by_course(user, up_to_date=up_to_date)
+        for course_id, xp in BadgeAssertion.objects.xp_by_course(user, up_to_date=up_to_date).items():
             xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
 
         # Only courses the student still holds can claim XP: work assigned to a course whose
@@ -756,7 +759,7 @@ class CourseStudentManager(models.Manager):
         }
         assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
         adjustments = sum(registration.xp_adjustment for registration in registrations)
-        shared = (profile.xp_cached - assigned - adjustments) / len(registrations)
+        shared = (total - assigned - adjustments) / len(registrations)
 
         return [
             (
@@ -1017,6 +1020,23 @@ class CourseStudent(models.Model):
             if registration.pk == self.pk:
                 return xp
         return profile.xp_cached
+
+    def xp_to_date(self, date):
+        """The XP that counted toward this registration as of a date.
+
+        The same division as xp(), taken at a point in the past, which is what plots a course's
+        progress through the semester rather than the student's whole-deck line (issue #2453).
+
+        Args:
+            date: the day to count up to, inclusive.
+
+        Returns:
+            float: this registration's share of what the student had earned by then.
+        """
+        for registration, xp in CourseStudent.objects.xp_for_registrations(self.user, up_to_date=date):
+            if registration.pk == self.pk:
+                return xp
+        return self.user.profile.xp_to_date(date)
 
     def mark(self, profile=None):
         """This registration's mark, worked out from its own XP.
