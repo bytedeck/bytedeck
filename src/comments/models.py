@@ -48,7 +48,6 @@ class CommentManager(models.Manager):
         Returns:
             QuerySet[Comment]: the comments targeting the object, excluding replies.
         """
-        # local import: questions.models imports this module, so importing it up top is circular
         from questions.models import QuestionSubmission
 
         return self.get_queryset().get_object_target(object).get_no_parents().prefetch_related(
