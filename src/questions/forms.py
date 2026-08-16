@@ -15,6 +15,29 @@ from .models import Question, QuestionSubmission, QuestionType
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
 
 
+class AnswerSummernoteWidget(ByteDeckSummernoteSafeInplaceWidget):
+    """A long-answer editor sized for one answer among several on the submission page.
+
+    The site-wide editor height suits a page with one editor on it. A quest can ask several long
+    answers, and each one arrives above the submission's own comment editor, so at that height a
+    three-question quest is metres of scrolling before the student reaches the submit button
+    (#2169). The editor still grows as the student types past the bottom.
+    """
+
+    # ~5 lines of typing before the editor scrolls, against the site-wide 480
+    ANSWER_EDITOR_HEIGHT = "180"
+
+    def summernote_settings(self):
+        """Return the site-wide summernote settings with the shorter answer height.
+
+        Returns:
+            dict: the settings the widget's template hands to summernote.
+        """
+        settings = super().summernote_settings()
+        settings["height"] = self.ANSWER_EDITOR_HEIGHT
+        return settings
+
+
 class QuestionForm(forms.ModelForm):
     """Displayed to the teacher when they are creating or editing a Question.
 
@@ -136,6 +159,10 @@ class QuestionSubmissionForm(forms.ModelForm):
         # the formset machinery adds a hidden 'id' (pk) field to each form; it must be
         # rendered so a POST can match each answer back to its row
         self.helper.render_hidden_fields = True
+        # A long answer's editor would otherwise emit the whole summernote asset set again,
+        # mid-page, on top of the copy the submission page's own comment editor already loads
+        # in the head (#2169).
+        self.helper.include_media = False
 
         if self.question is None:
             # Degraded stub (question deleted or instance missing): no response fields,
@@ -165,7 +192,7 @@ class QuestionSubmissionForm(forms.ModelForm):
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
             self.fields["response_text"] = forms.CharField(
-                label="", required=self.question.required, widget=ByteDeckSummernoteSafeInplaceWidget()
+                label="", required=self.question.required, widget=AnswerSummernoteWidget()
             )
         elif self.question.type == QuestionType.FILE_UPLOAD:
             del self.fields["response_text"]

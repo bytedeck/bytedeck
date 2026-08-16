@@ -5,8 +5,8 @@
 {% load comment_tags %}
 
 {% block head %}
+    {# the comment box is a summernote editor too, so its media covers the answer editors #}
     {{ submission_form.media }}
-    {% if question_formset %}{{ question_formset.media }}{% endif %}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
@@ -130,7 +130,7 @@
               {% if form.instance.response_file %}
                 <p class="help-block">
                   <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename|safe }}</a>
+                  <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
                   <small>(already saved: only choose a file above if you want to replace it)</small>
                 </p>
               {% endif %}
@@ -157,7 +157,7 @@
                 <p class="help-block">
                   <i class="fa fa-paperclip fa-fw"></i> Attached:
                   {% for document in draft_documents %}<a href="{{ document.docfile.url }}"
-                     target="_blank">{{ document.docfile|filename|safe }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+                     target="_blank">{{ document.docfile|filename }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
                   <small>(already saved: only choose files above if you want to attach more)</small>
                 </p>
               {% endif %}
@@ -237,7 +237,8 @@
                 // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
                 var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
                 var msg = '<p>' + escaped + '<br></p>';
-                var text_area = $('div.note-editable');
+                // scoped to the main comment form: question answers add their own editors
+                var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)
                 else
@@ -270,12 +271,9 @@
                 if (/-id$/.test(name)) {
                     answers[name] = $(this).val();
                 } else if (/-response_text$/.test(name)) {
-                    // summernote-backed textareas need the API to get current content
-                    if ($(this).next('.note-editor').length) {
-                        answers[name] = $(this).summernote('code');
-                    } else {
-                        answers[name] = $(this).val();
-                    }
+                    // summernote keeps the textarea in sync as the student types, so its
+                    // value is current for long answers as well as short ones
+                    answers[name] = $(this).val();
                 }
             });
 

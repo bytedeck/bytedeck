@@ -79,6 +79,16 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, "What is your website URL?")
         self.assertContains(response, "Describe your process.")
 
+    def test_submission_page__summernote_assets_load_once(self):
+        """The answer editors ride on the assets the comment box already loads (#2169).
+
+        Crispy renders a form's media alongside the form, so a long-answer question repeats the
+        whole summernote asset set in the middle of the page on top of the copy in the head.
+        """
+        content = self.assert200("quests:submission", args=[self.submission.id]).content.decode()
+
+        self.assertEqual(content.count("summernote.min.js"), 1)
+
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
         plain_quest = baker.make(Quest)
@@ -480,6 +490,22 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         which embeds the same quest detail content and renders for the owning student)."""
         response = self.assert200("quests:submission", args=[self.submission.id])
         self.assertNotContains(response, "Manage Questions")
+
+    def test_quest_detail__tooltip_shows_the_characters_the_teacher_typed(self):
+        """An ampersand in a question's instructions reads as one in the table and its tooltip.
+
+        Summernote stores it as an entity; stripping tags alone leaves that entity in place, and
+        escaping it again on the way out would show the reader "Tom &amp;amp; Jerry" (#2169).
+        """
+        self.short_question.instructions = "<p>Compare <b>Tom &amp; Jerry</b></p>"
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        # the page source escapes it once, so the reader sees "Tom & Jerry"
+        self.assertContains(response, "Tom &amp; Jerry")
+        self.assertNotContains(response, "&amp;amp;")
 
     def test_quest_detail__marker_notes_popover_is_initialized(self):
         """The marker-notes popover in the question table is activated on this page (#2166).

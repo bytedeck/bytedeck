@@ -102,6 +102,17 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertNotIn("response_file", form.fields)
         self.assertIsNone(form.fields["response_text"].max_length)
 
+    def test_init__long_answer_editor_is_shorter_than_the_site_default(self):
+        """The answer editor is sized for a page that stacks several of them (#2169).
+
+        A quest can ask several long answers, each rendered above the submission's own comment
+        editor; at the site-wide height that is metres of scrolling to reach the submit button.
+        """
+        form = QuestionSubmissionForm(instance=self.long_answer)
+        widget = form.fields["response_text"].widget
+
+        self.assertEqual(widget.summernote_settings()["height"], "180")
+
     def test_init__file_upload_field(self):
         """File upload forms get a restricted file field with the question's MIME types,
         and no text field."""

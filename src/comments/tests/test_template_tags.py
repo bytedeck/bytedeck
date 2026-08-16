@@ -34,3 +34,27 @@ class FilenameFilterTests(TestCase):
 
         expected_output = '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]'
         self.assertEqual(filename(file_field_mock), expected_output)
+
+    def test_filename__escapes_a_name_containing_markup(self):
+        """A file name is escaped by the template, so it cannot inject markup.
+
+        The filter is rendered without ``|safe`` precisely so this stays true of a name that
+        reaches storage with markup characters in it.
+        """
+        file_field_mock = MagicMock()
+        file_field_mock.file = MagicMock(spec=File)
+        file_field_mock.file.name = 'uploads/<script>bad.png'
+
+        rendered = Template('{% load comment_tags %}{{ value|filename }}').render(Context({'value': file_field_mock}))
+
+        self.assertNotIn('<script>', rendered)
+        self.assertEqual(rendered, '&lt;script&gt;bad.png')
+
+    def test_filename__missing_file_marker_keeps_its_icon(self):
+        """The "file missing" marker is the one part that renders as markup, for its warning icon."""
+        file_field_mock = MagicMock()
+        type(file_field_mock).file = PropertyMock(side_effect=FileNotFoundError)
+
+        rendered = Template('{% load comment_tags %}{{ value|filename }}').render(Context({'value': file_field_mock}))
+
+        self.assertEqual(rendered, '<i class="fa fa-exclamation-triangle text-warning"></i> [File Missing]')
