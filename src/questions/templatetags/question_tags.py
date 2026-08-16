@@ -34,6 +34,12 @@ def plain_text(value):
     ``Tom &amp;amp; Jerry`` (#2169). Decoding after stripping gives back the characters
     themselves. The result is deliberately left unsafe, so the template escapes it once, which
     is what keeps it from breaking out of a title attribute.
+
+    Args:
+        value: summernote-authored HTML, or None for a field that was never filled in.
+
+    Returns:
+        str: the decoded text, unmarked, for the template to escape once where it lands.
     """
     return html.unescape(strip_tags(value or ""))
 

@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import ValidationError
+from django.utils.safestring import mark_safe
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Div, HTML
@@ -148,7 +149,19 @@ class QuestionSubmissionForm(forms.ModelForm):
         )
 
     def __init__(self, *args, **kwargs):
-        """Build the response field appropriate to the instance's question type."""
+        """Build the answer field and crispy layout for the instance's question type.
+
+        A short answer gets a length-capped text input, a long answer a rich-text editor sized
+        for a page that stacks several of them, and a file upload a type-restricted file field.
+        A row whose question has been deleted gets no answer field at all, and clean() reports
+        that instead of raising. The layout skips its own media, since the submission page
+        already loads the editor assets for its comment box.
+
+        Args:
+            *args: positional arguments for the ModelForm (data, files, ...).
+            **kwargs: keyword arguments for the ModelForm; ``instance`` carries the answer row
+                whose question decides the field.
+        """
         super().__init__(*args, **kwargs)
 
         self.question = self.instance.question if self.instance.question_id else None
@@ -198,20 +211,13 @@ class QuestionSubmissionForm(forms.ModelForm):
             del self.fields["response_text"]
             mime_types = self.question.allowed_mime_types()
 
-            self.fields["response_file"] = RestrictedFileFormField(
-                required=self.question.required,
-                content_types=mime_types,
-                max_upload_size=MAX_RESPONSE_FILE_SIZE,
-                widget=forms.ClearableFileInput(attrs={"multiple": False}),
-                label="Attach files",
-                help_text=f"Allowed file types: {self.question.get_allowed_file_type_display()}",
-            )
-
-            form_fields = Div("response_file")
+            help_text = f"Allowed file types: {self.question.get_allowed_file_type_display()}"
             if isinstance(mime_types, list):
                 # 'all' has no meaningful MIME list to show ("All" sentinel), so the
-                # popover enumerating exact MIME types only appears for restricted choices
-                file_types_popover = f"""
+                # popover enumerating exact MIME types only appears for restricted choices.
+                # It rides inside the help text so the icon sits on the same line as the types
+                # it explains, rather than on a line of its own below them.
+                help_text = mark_safe(help_text + f"""
                 <a data-toggle="popover"
                    data-trigger="hover"
                    data-placement="auto"
@@ -219,8 +225,18 @@ class QuestionSubmissionForm(forms.ModelForm):
                    data-content="{', '.join(mime_types)}">
                     <i class="fa fa-fw fa-lg fa-info-circle"></i>
                 </a>
-                """
-                form_fields = Div("response_file", HTML(file_types_popover))
+                """)
+
+            self.fields["response_file"] = RestrictedFileFormField(
+                required=self.question.required,
+                content_types=mime_types,
+                max_upload_size=MAX_RESPONSE_FILE_SIZE,
+                widget=forms.ClearableFileInput(attrs={"multiple": False}),
+                label="Attach files",
+                help_text=help_text,
+            )
+
+            form_fields = Div("response_file")
         else:
             raise NotImplementedError(
                 f"Question of type {self.question.type} not supported yet."
