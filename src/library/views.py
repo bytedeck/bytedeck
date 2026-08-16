@@ -165,6 +165,12 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
     Args:
         request (HttpRequest): the current request, for the message framework.
         skipped_quests (list[str]): names of the campaign's quests that were not shared.
+            Only published ones: an archived draft would not travel after unarchiving
+            either, so naming it would attach advice that does not work.
+
+    Returns:
+        None. Queues a warning message when anything was left behind, and does nothing
+        when the whole campaign travelled.
     """
     if not skipped_quests:
         return

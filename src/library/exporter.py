@@ -199,10 +199,14 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         # `current_quests()` is published and not archived, so archiving a quest quietly
         # takes it out of the share. Name them, so the sharer finds out now rather than
         # from whoever imports the campaign and wonders where the quest went (#2442).
+        #
+        # Published, because that is what makes "unarchive it and share again" true. An
+        # archived *draft* fails both halves of the filter, so unarchiving alone would not
+        # send it, and a draft staying behind is what a sharer expects anyway.
         shared_ids = {quest.id for quest in local_quests}
         skipped_quests = sorted(
             Quest.objects.all_including_archived()
-            .filter(campaign=local_campaign, archived=True)
+            .filter(campaign=local_campaign, published=True, archived=True)
             .exclude(id__in=shared_ids)
             .values_list('name', flat=True)
         )

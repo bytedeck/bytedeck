@@ -2266,6 +2266,29 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertIn(active.import_id, shared)
         self.assertNotIn(archived.import_id, shared)
 
+    def test_export_category__does_not_name_an_archived_quest_that_is_also_a_draft(self):
+        """A draft is not reported as left behind, because unarchiving would not send it.
+
+        The share carries `current_quests()`, which is published *and* not archived, so an
+        archived draft fails both tests. Naming it would attach advice that does not work:
+        unarchive it and share again, and it still would not travel. A draft not travelling
+        is what a sharer expects anyway; an archived quest disappearing is not.
+        """
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, name="Ordinary Shared Quest", campaign=campaign, published=True)
+        baker.make(Quest, name="Archived Draft", campaign=campaign, published=False, archived=True)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertFalse(
+            any("Archived Draft" in text for text in self._message_texts(response)),
+            f"an archived draft should not be reported, got {self._message_texts(response)}",
+        )
+
     def test_export_category__stays_quiet_when_every_quest_travels(self):
         """A campaign with nothing archived shares without a left-behind warning."""
         campaign = baker.make(Category, published=True)
