@@ -745,10 +745,15 @@ class CourseStudentManager(models.Manager):
         for course_id, xp in BadgeAssertion.objects.xp_by_course(user).items():
             xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
 
-        # only courses the student still holds can claim XP: work assigned to a course whose
+        # Only courses the student still holds can claim XP: work assigned to a course whose
         # registration has since been deleted has nowhere to count, so it stays in the shared
-        # pool rather than being subtracted from it and lost
-        course_ids = {registration.course_id for registration in registrations}
+        # pool rather than being subtracted from it and lost. A registration with no course at
+        # all is not one of those claims: unassigned XP is filed under no course too, and
+        # counting it as claimed would take the student's shared work out of the pool as well.
+        course_ids = {
+            registration.course_id for registration in registrations
+            if registration.course_id is not None
+        }
         assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
         adjustments = sum(registration.xp_adjustment for registration in registrations)
         shared = (profile.xp_cached - assigned - adjustments) / len(registrations)

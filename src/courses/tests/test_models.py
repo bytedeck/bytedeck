@@ -1142,6 +1142,21 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(first.xp(), 10)
         self.assertEqual(second.xp(), 10)
 
+    def test_xp__still_shares_unassigned_work_when_a_registration_has_no_course(self):
+        """A registration with no course holds no course id, and unassigned XP is filed under no
+        course either. The two must not be confused: work the student never assigned is still
+        theirs to share out, not something already counted toward a course of theirs."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        maths_registration = self._register(student, maths)
+        courseless = self._register(student, None)
+        self._approved(student, xp=40)  # unassigned, so shared between the two
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(courseless.course)
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(courseless.xp(), 20)
+
     def test_xp__answers_with_the_whole_total_for_a_registration_that_is_not_current(self):
         """The split divides a student's XP between the courses they are in now, so a
         registration from a semester that is over is not part of it and answers with their
