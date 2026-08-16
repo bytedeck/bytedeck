@@ -47,3 +47,28 @@ class FontAwesomeIconPickerWidget(forms.TextInput):
         # matter; the icon list only has to load before the picker that reads it,
         # which this ordering guarantees.
         js = ("js/fa_icons_4.7.0.js", "js/fa_icon_picker.js")
+
+
+class FontAwesomeModifierPickerWidget(forms.TextInput):
+    """A text input for Font Awesome modifier classes, with toggle buttons for the
+    common transforms (rotate, flip, spin, pulse).
+
+    The value stays a space-separated class string (e.g. ``fa-rotate-90 fa-spin``),
+    so it still pairs with :class:`FontAwesomeIconPickerWidget` and its live
+    preview. The toggle buttons just write those classes for the user; the text
+    input stays editable as an advanced escape hatch, and any class the buttons
+    don't manage (a stack class, say) is preserved.
+    """
+
+    template_name = "utilities/widgets/fa_modifier_picker.html"
+
+    input_css_class = "form-control fa-modifier-picker-input"
+
+    def __init__(self, attrs=None):
+        """Merge the picker's marker class into any caller-supplied ``class``."""
+        attrs = dict(attrs or {})
+        attrs["class"] = (attrs.get("class", "") + " " + self.input_css_class).strip()
+        super().__init__(attrs)
+
+    class Media:
+        js = ("js/fa_modifier_picker.js",)

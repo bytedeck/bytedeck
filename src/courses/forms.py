@@ -8,7 +8,7 @@ from django_select2.forms import Select2Widget
 
 from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
-from utilities.fa_icon_widget import FontAwesomeIconPickerWidget
+from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
 
 
 class XPCourseChoiceMixin:
@@ -93,19 +93,20 @@ class RankForm(forms.ModelForm):
         fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
         widgets = {
             # Tell the picker which field holds the modifiers so its live preview
-            # can reflect rotations/flips/etc. as they are typed.
+            # can reflect rotations/flips/etc. as they are toggled or typed.
             'fa_icon': FontAwesomeIconPickerWidget(modifiers_field_name='fa_icon_modifiers'),
+            'fa_icon_modifiers': FontAwesomeModifierPickerWidget(),
         }
         labels = {
             # "Fa icon" is jargon; call it "Icon". The ImageField (a fallback used
             # where the font icon can't be, e.g. quest maps) then can't also be
             # "Icon", so it becomes "Backup image".
             'fa_icon': 'Icon',
-            'fa_icon_modifiers': 'Modifiers',
+            'fa_icon_modifiers': 'Icon modifiers',
             'icon': 'Backup image',
         }
         help_texts = {
-            'fa_icon_modifiers': 'Optional. Type any modifiers you want, separated by spaces, '
+            'fa_icon_modifiers': 'Optional. Use the buttons, or type any modifiers separated by spaces, '
                                  'e.g. fa-rotate-90, fa-rotate-180, fa-flip-horizontal, fa-flip-vertical, fa-spin, fa-pulse.',
             'icon': 'A fallback image, used where the icon above can\'t be (e.g. in the quest maps).',
         }

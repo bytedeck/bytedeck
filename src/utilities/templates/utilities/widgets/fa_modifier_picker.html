@@ -1,0 +1,26 @@
+{% comment %}
+Font Awesome modifier picker (utilities.fa_icon_widget.FontAwesomeModifierPickerWidget).
+Toggle buttons for the common transforms write space-separated "fa-" classes into
+the text input below, which stays editable for anything advanced. Behaviour lives
+in static/js/fa_modifier_picker.js; the classes flow into the icon field's live
+preview through the input's own change event.
+{% endcomment %}
+<div class="fa-modifier-picker">
+  <div class="fa-modifier-picker-controls">
+    <div class="btn-group btn-group-sm" role="group" aria-label="Rotate" data-modifier-group data-select="radio">
+      <button type="button" class="btn btn-default" data-modifier="">No rotation</button>
+      <button type="button" class="btn btn-default" data-modifier="fa-rotate-90">90&deg;</button>
+      <button type="button" class="btn btn-default" data-modifier="fa-rotate-180">180&deg;</button>
+      <button type="button" class="btn btn-default" data-modifier="fa-rotate-270">270&deg;</button>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Flip" data-modifier-group data-select="multi">
+      <button type="button" class="btn btn-default" data-modifier="fa-flip-horizontal">Flip H</button>
+      <button type="button" class="btn btn-default" data-modifier="fa-flip-vertical">Flip V</button>
+    </div>
+    <div class="btn-group btn-group-sm" role="group" aria-label="Animate" data-modifier-group data-select="toggle-radio">
+      <button type="button" class="btn btn-default" data-modifier="fa-spin">Spin</button>
+      <button type="button" class="btn btn-default" data-modifier="fa-pulse">Pulse</button>
+    </div>
+  </div>
+  {% include "django/forms/widgets/input.html" %}
+</div>

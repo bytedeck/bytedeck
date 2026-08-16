@@ -1343,3 +1343,15 @@ table[data-toggle="table"].bt-reveal {
     padding: 6px 0;
     text-align: center;
 }
+
+
+/* Font Awesome modifier picker (utilities.fa_icon_widget.FontAwesomeModifierPickerWidget,
+   static/js/fa_modifier_picker.js): a row of Bootstrap button groups above the
+   advanced text input. Theme-agnostic spacing only; the buttons are themed .btn. */
+.fa-modifier-picker-controls {
+    margin-bottom: 8px;
+}
+.fa-modifier-picker-controls .btn-group {
+    margin-right: 8px;
+    margin-bottom: 4px;
+}

@@ -14,7 +14,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from courses.forms import RankForm
 from courses.models import Rank
 from siteconfig.models import SiteConfig
-from utilities.fa_icon_widget import FontAwesomeIconPickerWidget
+from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
 
 # The legacy-value splitter lives inside the data migration (kept self-contained
 # there), so import it from that module to test it directly.
@@ -94,25 +94,26 @@ class CreateZeroRankTest(ByteDeckTenantTestCase):
 class RankFormTest(ByteDeckTenantTestCase):
     """RankForm wires the icon picker onto ``fa_icon`` and keeps the modifier field."""
 
-    def test_rank_form__uses_icon_picker_widget(self):
-        """The fa_icon field renders through the picker widget, and the modifier
-        field is present for rotations/stacks."""
+    def test_rank_form__uses_icon_and_modifier_picker_widgets(self):
+        """The icon field renders through the icon picker and the modifiers field
+        through the modifier (toggle) picker."""
         form = RankForm()
         self.assertIsInstance(form.fields["fa_icon"].widget, FontAwesomeIconPickerWidget)
-        self.assertIn("fa_icon_modifiers", form.fields)
+        self.assertIsInstance(form.fields["fa_icon_modifiers"].widget, FontAwesomeModifierPickerWidget)
 
     def test_rank_form__media_pulls_in_the_picker_assets(self):
-        """The form advertises the shared icon list and the picker JS via its media."""
+        """The form advertises the shared icon list and both picker scripts via media."""
         media = str(RankForm().media)
         self.assertIn("js/fa_icons_4.7.0.js", media)
         self.assertIn("js/fa_icon_picker.js", media)
+        self.assertIn("js/fa_modifier_picker.js", media)
 
     def test_rank_form__uses_plain_language_labels(self):
         """The icon field reads "Icon" (not "Fa icon"); the ImageField backup is
         relabelled so the two icon fields don't both read "Icon"."""
         form = RankForm()
         self.assertEqual(form.fields["fa_icon"].label, "Icon")
-        self.assertEqual(form.fields["fa_icon_modifiers"].label, "Modifiers")
+        self.assertEqual(form.fields["fa_icon_modifiers"].label, "Icon modifiers")
         self.assertEqual(form.fields["icon"].label, "Backup image")
 
 
@@ -179,6 +180,21 @@ class FontAwesomeIconPickerWidgetTest(SimpleTestCase):
         linked = FontAwesomeIconPickerWidget(modifiers_field_name="fa_icon_modifiers").render("rank-icon", "star")
         self.assertIn('data-modifiers-field="fa_icon_modifiers"', linked)
         self.assertNotIn("data-modifiers-field", FontAwesomeIconPickerWidget().render("rank-icon", "star"))
+
+
+class FontAwesomeModifierPickerWidgetTest(SimpleTestCase):
+    """The modifier widget renders the toggle buttons around the text input."""
+
+    def test_widget__renders_toggle_groups_and_input(self):
+        """The rotate/flip/animate toggle groups and the (editable) text input all
+        render, so the buttons and the advanced field are both available."""
+        html = FontAwesomeModifierPickerWidget().render("rank-mods", "fa-rotate-90 fa-spin")
+        self.assertIn("fa-modifier-picker", html)
+        self.assertIn('name="rank-mods"', html)
+        # a button for each managed modifier class
+        for cls in ("fa-rotate-90", "fa-rotate-180", "fa-rotate-270",
+                    "fa-flip-horizontal", "fa-flip-vertical", "fa-spin", "fa-pulse"):
+            self.assertIn('data-modifier="%s"' % cls, html)
 
 
 class RankCreateViewIconPickerTest(ByteDeckTenantTestCase):
