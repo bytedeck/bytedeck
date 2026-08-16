@@ -43,6 +43,26 @@ import math
 @non_public_only_view
 @login_required
 def mark_calculations(request, user_id=None):
+    """Show a student how their mark was worked out, course by course.
+
+    Explains the arithmetic behind the number: how much XP counts toward the course this page
+    is about (a student in several courses has a different amount in each, issue #2440), how
+    far through the semester they are, what that projects to by the end, and the mark ranges
+    they are heading for. The deck can turn the whole page off.
+
+    Args:
+        request: the HttpRequest. Its user is whose marks are shown, unless they are staff
+            naming someone else.
+        user_id (int): the student to show, for staff looking at somebody's marks. Students
+            only ever see their own, whatever they put in the URL.
+
+    Returns:
+        HttpResponse: the rendered page, or the "turned off" notice for staff on a deck with
+        mark calculations disabled.
+
+    Raises:
+        Http404: a student reached this URL on a deck with mark calculations turned off.
+    """
     template_name = 'courses/mark_calculations.html'
 
     # Mark calculation not activated on this deck
@@ -63,10 +83,9 @@ def mark_calculations(request, user_id=None):
     course_student = CourseStudent.objects.current_course(user)
     courses = CourseStudent.objects.current_courses(user)
     num_courses = courses.count()
-    if courses:
-        xp_per_course = user.profile.xp_cached / num_courses
-    else:
-        xp_per_course = None
+    # each registration answers for its own XP, so a student who assigned work to one course
+    # sees that course's real total rather than an even share of everything (issue #2440)
+    xp_per_course = course_student.xp() if course_student else None
 
     # only show mark ranges where student is enrolled in and is also active
     user_courses = user.profile.current_courses().values_list('course', flat=True)

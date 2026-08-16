@@ -474,7 +474,7 @@ class BadgeAssertionManager(models.Manager):
     def get_assertion_ordinal(self, user, badge):
         return self.num_assertions(user, badge) + 1
 
-    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None):
+    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None, course=None):
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
@@ -495,7 +495,8 @@ class BadgeAssertionManager(models.Manager):
             ordinal=ordinal,
             issued_by=issued_by,
             do_not_grant_xp=transfer,
-            semester_id=active_semester
+            semester_id=active_semester,
+            course=course,
         )
         new_assertion.full_clean()
         new_assertion.save()
@@ -523,6 +524,24 @@ class BadgeAssertionManager(models.Manager):
             } for t in types
         ]
         return by_type
+
+    def xp_by_course(self, user):
+        """How much of this student's badge XP counts toward each of their courses.
+
+        A badge granted alongside a quest carries that quest's course; one granted on its own
+        carries whichever course the teacher chose, or none. Badges with no course are shared
+        evenly between the student's courses, the same as unassigned quest XP (issue #2440).
+
+        Args:
+            user: the student whose badge XP is being divided.
+
+        Returns:
+            dict: course id to XP, with None collecting everything left unassigned.
+        """
+        rows = self.get_queryset(True, user=user).grant_xp().get_user(user).values('course').annotate(
+            xp_sum=Sum('badge__xp'),
+        )
+        return {row['course']: row['xp_sum'] or 0 for row in rows}
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
@@ -554,6 +573,13 @@ class BadgeAssertion(models.Model):
                                   on_delete=models.SET_NULL)
     do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
     semester = models.ForeignKey('courses.Semester', null=True, blank=True, on_delete=models.SET_NULL)
+    # Which of the student's courses this badge's XP counts toward (issue #2440). Null means it
+    # was never assigned, and unassigned XP is shared evenly between their courses. A badge
+    # granted alongside a quest inherits that submission's course, so the two land together.
+    course = models.ForeignKey(
+        'courses.Course', null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="The course this badge's XP counts toward.",
+    )
 
     objects = BadgeAssertionManager()
 

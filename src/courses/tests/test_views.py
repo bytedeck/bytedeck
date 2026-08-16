@@ -1449,13 +1449,13 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_SemesterArchive__student_with_negative_xp__view(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_SemesterArchive__student_with_negative_xp__view(self, registration_xp):
         """
             Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
-        xp_per_course.return_value = -10
+        registration_xp.return_value = -10
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -2248,6 +2248,59 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
         siteconfig.save()
+
+    def test_mark_calculations__reports_the_shown_courses_own_xp(self):
+        """A student in two courses is told which course the page is about and how much of their
+        XP counts toward it. Before #2440 the two courses always held the same even share, so
+        the page could talk about "per course" without naming one; now they differ, and the
+        number shown has to be the named course's own."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        shown = response.context['obj']
+        self.assertContains(response, 'registered in 2 courses')
+        self.assertContains(response, str(shown.course))
+        self.assertEqual(response.context['xp_per_course'], shown.xp())
+        # the whole point: the two courses no longer hold the same number
+        self.assertNotEqual(self.stu_course.xp(), art_registration.xp())
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__table_lists_each_course_its_own_mark(self, fraction_complete):
+        """The table of the student's courses shows a mark per row. A student who put their work
+        against one of their two courses is at 10% there and 0% in the other, rather than the
+        same number repeated down the table (issue #2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertContains(response, '<strong>10%</strong>', html=True)
+        self.assertContains(response, '<strong>0%</strong>', html=True)
 
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page

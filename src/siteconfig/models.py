@@ -202,6 +202,15 @@ class SiteConfig(models.Model):
             having to submit a form."
     )
 
+    students_choose_xp_course = models.BooleanField(
+        verbose_name="Students choose which course their XP counts toward",
+        default=True,
+        help_text="When a student in more than one course hands in a quest, they say which course it counts toward. "
+                  "Turn this off to share every student's XP evenly between their courses instead. Students in a "
+                  "single course are never asked either way, and work handed in before this was turned on stays "
+                  "evenly shared."
+    )
+
     enable_shared_library = models.BooleanField(
         verbose_name="Enable Shared Library", default=False,
         help_text="If enabled, you can import quests and campaigns from the Shared Library."

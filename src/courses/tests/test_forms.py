@@ -2,11 +2,14 @@ import datetime
 
 from django import forms
 from django.contrib.auth import get_user_model
+from django_select2.forms import Select2Widget
 from model_bakery import baker
 
+from badges.forms import BadgeAssertionForm
 from courses.forms import CourseStudentForm, SemesterForm
 from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from quest_manager.forms import SubmissionQuickReplyFormStudent
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -108,3 +111,43 @@ class SemesterFormTest(ByteDeckTenantTestCase):
 
         form = SemesterForm(data={'name': '', 'first_day': '2024-01-01', 'last_day': '2024-01-01'})
         self.assertTrue(form.is_valid())
+
+
+class XPCourseChoiceMixinTest(ByteDeckTenantTestCase):
+    """The shared "which course does this XP count toward?" question (issue #2440).
+
+    The forms that carry the mixin are tested where they live; what belongs here is that both
+    of them ask it the same way, since the whole point of the mixin is one wording and one
+    control wherever the question comes up.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Register a student in two courses, so the question has something to ask about."""
+        cls.student = baker.make(User)
+        cls.maths = baker.make(Course, title='Maths')
+        cls.art = baker.make(Course, title='Art')
+        for course in (cls.maths, cls.art):
+            baker.make(
+                CourseStudent, user=cls.student, course=course, block=baker.make(Block),
+                semester=SiteConfig.get().active_semester,
+            )
+
+    def test_course_field__is_asked_the_same_way_on_every_form_that_carries_it(self):
+        """A student handing in a quest and a teacher granting a badge see the same question."""
+        for form in (SubmissionQuickReplyFormStudent(student=self.student), BadgeAssertionForm(student=self.student)):
+            with self.subTest(form=type(form).__name__):
+                self.assertEqual(form.fields['course'].label, 'Which course should this XP be awarded to?')
+                # the label asks the whole question, so nothing repeats it underneath
+                self.assertEqual(form.fields['course'].help_text, '')
+                self.assertIsInstance(form.fields['course'].widget, Select2Widget)
+
+    def test_course_field__hands_its_choices_to_the_dropdown(self):
+        """The widget is swapped in after the field is built, so the courses and the "split
+        evenly" choice have to reach it: a select2 with no choices would render empty."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertCountEqual(
+            [str(label) for value, label in form.fields['course'].widget.choices],
+            ['Split evenly between my courses', str(self.maths), str(self.art)],
+        )

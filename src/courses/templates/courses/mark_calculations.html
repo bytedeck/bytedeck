@@ -34,7 +34,8 @@ for {{user}}
           <tr>
             <td>{{ course.block }} Block</td>
             <td>{{ course.course }}</td>
-            <td><strong>{{ course.user.profile.mark|floatformat }}%</strong></td>
+            {# each registration's own mark: with XP attributed per course they differ (#2440) #}
+            <td><strong>{{ course.mark|floatformat }}%</strong></td>
           </tr>
         {% endfor %}
       </table>
@@ -46,15 +47,15 @@ for {{user}}
         <ul>
           <li>
             {% if num_courses > 1 %}
-              You are a multicourse student currently registered in {{ num_courses }} courses.
-              Your <strong>{{user.profile.xp_cached}}</strong> total XP must be divided among each of your courses.  This gives you
+              You are a multicourse student currently registered in {{ num_courses }} courses, and this page is
+              about <strong>{{ obj.course }}</strong>. Of your <strong>{{ user.profile.xp_cached }}</strong> total XP,
               <a tabindex="0" data-toggle="popover" data-trigger="hover"
                  data-placement="top" data-html="true" href="#"
-                 data-content="You have a total of {{ user.profile.xp_cached }} XP
-            to be divided among {{ num_courses }} courses: <br/><br/>
-              <pre>{{ user.profile.xp_cached }}/{{ num_courses }} = {{ xp_per_course|floatformat }} XP</pre>
+                 data-content="Quests you said should count toward {{ obj.course }} count toward it in full,
+            and so do badges given to you for that course. Everything else is shared evenly between your
+            {{ num_courses }} courses.
             ">
-                <strong>{{ xp_per_course|floatformat }}</strong> XP</a> per course.
+                <strong>{{ xp_per_course|floatformat }}</strong> XP</a> counts toward it.
             {% else %}
               So far, you have earned <strong>{{ user.profile.xp_cached }}</strong> XP in your course.
             {% endif %}
@@ -87,8 +88,8 @@ for {{user}}
                data-placement="top" data-html="true"
                data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester,
                and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
-              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.user.profile.mark|floatformat }} % </pre>
-            ">{{ obj.user.profile.mark|floatformat }}%</a>
+              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.mark|floatformat }} % </pre>
+            ">{{ obj.mark|floatformat }}%</a>
           </li>
         </ul>
       </div>

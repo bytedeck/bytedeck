@@ -5,9 +5,16 @@ from crispy_forms.utils import render_crispy_form
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
+from model_bakery import baker
+
+from courses.models import Block, Course, CourseStudent
+from siteconfig.models import SiteConfig
 from quest_manager.forms import (
     TA_RESTRICTED_QUEST_FIELDS,
     QuestForm,
+    SubmissionForm,
+    SubmissionFormCustomXP,
+    SubmissionFormStaff,
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     SubmissionReplyForm,
@@ -239,3 +246,90 @@ class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):
                 self.assertIn('<b>bold</b>', cleaned)
                 self.assertIn('<a href="http://example.com">link</a>', cleaned)
                 self.assertIn('<p>', cleaned)
+
+
+class XPCourseChoiceTest(ByteDeckTenantTestCase):
+    """Whether a student is asked which course a submission's XP counts toward (issue #2440)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A student in two courses, which is the only situation where the question arises."""
+        cls.student = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+        cls.maths = baker.make(Course, title='Maths')
+        cls.art = baker.make(Course, title='Art')
+        for course in (cls.maths, cls.art):
+            baker.make(CourseStudent, user=cls.student, course=course, block=baker.make(Block), semester=cls.semester)
+
+    def test_course_field__offers_the_students_own_courses(self):
+        """The choices are the courses this student is actually taking, not every course the
+        deck runs: assigning XP to a course they are not in would be meaningless."""
+        someone_elses_course = baker.make(Course, title='Woodwork')
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertNotIn(someone_elses_course, form.fields['course'].queryset)
+
+    def test_course_field__offers_splitting_evenly_and_defaults_to_it(self):
+        """A student can decline to pick, and that is the default: someone who ignores the
+        question gets the even split every submission used to get, rather than having their
+        work silently land in whichever course happened to sort first."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+        self.assertIsNone(form['course'].value())
+        self.assertFalse(form.fields['course'].required)
+
+    def test_course_field__is_dropped_for_a_student_with_one_course(self):
+        """With a single course there is nothing to ask, so the student is not asked. Their
+        submission stays unassigned, which for one course amounts to the same thing."""
+        one_course_student = baker.make(User)
+        baker.make(
+            CourseStudent, user=one_course_student, course=self.maths,
+            block=baker.make(Block), semester=self.semester,
+        )
+
+        form = SubmissionQuickReplyFormStudent(student=one_course_student)
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_dropped_when_the_deck_turns_the_setting_off(self):
+        """Staff can switch the question off, and then every student's XP goes back to being
+        shared evenly, so there is nothing to ask even in two courses."""
+        config = SiteConfig.get()
+        config.students_choose_xp_course = False
+        config.save()
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_dropped_when_no_student_is_filling_the_form_in(self):
+        """A staff member commenting on someone's submission is not choosing where that
+        student's XP goes."""
+        form = SubmissionQuickReplyFormStudent()
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_offered_on_the_full_submission_form_too(self):
+        """The submission page renders SubmissionForm, so the picker has to be there and filled
+        in on that one as well: it is the form most students actually see."""
+        form = SubmissionForm(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+
+    def test_course_field__is_dropped_on_the_staff_form(self):
+        """SubmissionFormStaff extends the same base, and a teacher commenting is not choosing
+        where this student's XP goes, so the field must not follow it up the inheritance chain."""
+        form = SubmissionFormStaff()
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_offered_on_the_custom_xp_form_too(self):
+        """A quest where the student enters their own XP asks the same question: which form
+        they get depends on the quest and whether they attached a file, not on the choice."""
+        form = SubmissionFormCustomXP(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])

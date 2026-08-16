@@ -13,6 +13,9 @@ from comments.sanitize import sanitize_comment_html
 from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
+from courses.forms import XPCourseChoiceMixin
+from courses.models import Course
+
 from .models import Category, Quest, CommonData
 
 
@@ -305,8 +308,12 @@ class TAQuestForm(QuestForm):
         remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
-class SubmissionForm(forms.Form):
+class SubmissionForm(XPCourseChoiceMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
+
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
     attachments = RestrictedMultiFileFormField(
         required=False,
@@ -381,8 +388,12 @@ class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
-class SubmissionQuickReplyFormStudent(SanitizeCommentTextMixin, forms.Form):
+class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):
