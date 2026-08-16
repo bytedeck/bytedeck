@@ -43,21 +43,26 @@ class FontAwesomeIconPickerWidget(forms.TextInput):
         return context
 
     class Media:
-        # Vanilla JS (no jQuery), so include order relative to jQuery does not
-        # matter; the icon list only has to load before the picker that reads it,
-        # which this ordering guarantees.
+        """The shared icon list then the picker that reads it.
+
+        Vanilla JS (no jQuery), so include order relative to jQuery does not matter;
+        the icon list only has to load before the picker, which this ordering
+        guarantees.
+        """
+
         js = ("js/fa_icons_4.7.0.js", "js/fa_icon_picker.js")
 
 
 class FontAwesomeModifierPickerWidget(forms.TextInput):
-    """A text input for Font Awesome modifier classes, with toggle buttons for the
-    common transforms (rotate, flip, spin, pulse).
+    """Toggle buttons for the common Font Awesome transforms (rotate, flip, spin,
+    pulse), driving a hidden field.
 
     The value stays a space-separated class string (e.g. ``fa-rotate-90 fa-spin``),
-    so it still pairs with :class:`FontAwesomeIconPickerWidget` and its live
-    preview. The toggle buttons just write those classes for the user; the text
-    input stays editable as an advanced escape hatch, and any class the buttons
-    don't manage (a stack class, say) is preserved.
+    so it still pairs with :class:`FontAwesomeIconPickerWidget` and its live preview.
+    The buttons are the whole UI; the field itself is hidden (its raw class string
+    means nothing to a user, see ``static/css/custom_common.css``) and just carries
+    the value the form submits. Any class the buttons don't manage (a stack class in
+    stored data, say) is preserved.
     """
 
     template_name = "utilities/widgets/fa_modifier_picker.html"
@@ -71,4 +76,6 @@ class FontAwesomeModifierPickerWidget(forms.TextInput):
         super().__init__(attrs)
 
     class Media:
+        """The vanilla-JS behaviour that turns the toggle buttons into the class string."""
+
         js = ("js/fa_modifier_picker.js",)

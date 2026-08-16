@@ -3,13 +3,12 @@
  * (utilities.fa_icon_widget.FontAwesomeModifierPickerWidget).
  *
  * Vanilla JS. Turns the toggle buttons into a space-separated "fa-" class string
- * in the text input, and reflects the input's current value back onto the buttons
- * on load. The text input stays the source of truth (and editable), so any class
- * the buttons don't manage is preserved; dispatching its "input" event lets the
- * paired icon picker update its live preview.
+ * in a hidden field, and reflects that field's current value back onto the buttons
+ * on load. The hidden field carries the value the form submits; dispatching its
+ * "input" event lets the paired icon picker update its live preview. Any class the
+ * buttons don't manage (an advanced/stack class from stored data) is preserved.
  *
  * Button groups carry data-select:
- *   radio        - exactly one active (includes a "no rotation" option, value "")
  *   toggle-radio - at most one active (click the active one to clear it)
  *   multi        - each toggles independently
  */
@@ -31,7 +30,7 @@
             }
 
             // Every class the buttons manage, so tokens outside this set can be
-            // kept as-is (an advanced/stack class the user typed).
+            // kept as-is (an advanced/stack class in stored data).
             var managed = {};
             Array.prototype.forEach.call(root.querySelectorAll('.btn[data-modifier]'), function (btn) {
                 var cls = btn.getAttribute('data-modifier');
@@ -60,28 +59,13 @@
                 field.dispatchEvent(new Event('input', { bubbles: true }));
             }
 
-            // Set the buttons from the field's current value.
+            // Set the buttons from the field's current value (on load).
             function syncButtonsFromField() {
                 var tokens = tokensOf(field.value);
                 passthrough = tokens.filter(function (token) { return !managed[token]; });
-                Array.prototype.forEach.call(groups, function (group) {
-                    var anyActive = false;
-                    Array.prototype.forEach.call(group.querySelectorAll('.btn[data-modifier]'), function (btn) {
-                        var cls = btn.getAttribute('data-modifier');
-                        var on = !!cls && tokens.indexOf(cls) !== -1;
-                        btn.classList.toggle('active', on);
-                        if (on) {
-                            anyActive = true;
-                        }
-                    });
-                    // A radio group with none of its classes present falls back to
-                    // its empty-value option (e.g. "no rotation").
-                    if (group.getAttribute('data-select') === 'radio' && !anyActive) {
-                        var none = group.querySelector('.btn[data-modifier=""]');
-                        if (none) {
-                            none.classList.add('active');
-                        }
-                    }
+                Array.prototype.forEach.call(root.querySelectorAll('.btn[data-modifier]'), function (btn) {
+                    var cls = btn.getAttribute('data-modifier');
+                    btn.classList.toggle('active', !!cls && tokens.indexOf(cls) !== -1);
                 });
             }
 
@@ -91,13 +75,9 @@
                     if (!btn) {
                         return;
                     }
-                    var mode = group.getAttribute('data-select');
-                    if (mode === 'multi') {
+                    if (group.getAttribute('data-select') === 'multi') {
                         btn.classList.toggle('active');
-                    } else if (mode === 'radio') {
-                        Array.prototype.forEach.call(group.querySelectorAll('.btn'), function (b) { b.classList.remove('active'); });
-                        btn.classList.add('active');
-                    } else {  // toggle-radio: 0 or 1 active
+                    } else {  // toggle-radio: 0 or 1 active (click the active one to clear it)
                         var wasActive = btn.classList.contains('active');
                         Array.prototype.forEach.call(group.querySelectorAll('.btn'), function (b) { b.classList.remove('active'); });
                         if (!wasActive) {
@@ -106,14 +86,6 @@
                     }
                     recompute();
                 });
-            });
-
-            // Keep the buttons honest if the text field is edited by hand.
-            field.addEventListener('input', function () {
-                if (field !== document.activeElement) {
-                    return;  // our own recompute() dispatches input; don't loop
-                }
-                syncButtonsFromField();
             });
 
             syncButtonsFromField();

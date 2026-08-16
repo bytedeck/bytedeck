@@ -84,11 +84,15 @@ class RankForm(forms.ModelForm):
 
     The Font Awesome icon field uses the searchable icon picker
     (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), which writes the
-    bare icon name. The modifier-classes field sits right below it for the rare
-    rank that needs a rotation or stack (e.g. ``fa-rotate-270``).
+    bare icon name. The modifier field sits right below it with toggle buttons for the
+    common transforms (rotate, flip, spin, pulse) that a rank might want.
     """
 
     class Meta:
+        """Binds the icon/modifier picker widgets and plain-language labels onto Rank's
+        two icon fields (the Font Awesome ``fa_icon``/``fa_icon_modifiers`` and the
+        ``icon`` image fallback)."""
+
         model = Rank
         fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
         widgets = {
@@ -106,8 +110,7 @@ class RankForm(forms.ModelForm):
             'icon': 'Backup image',
         }
         help_texts = {
-            'fa_icon_modifiers': 'Optional. Use the buttons, or type any modifiers separated by spaces, '
-                                 'e.g. fa-rotate-90, fa-rotate-180, fa-flip-horizontal, fa-flip-vertical, fa-spin, fa-pulse.',
+            'fa_icon_modifiers': 'Optional. Rotate, flip, or animate the icon above.',
             'icon': 'A fallback image, used where the icon above can\'t be (e.g. in the quest maps).',
         }
 

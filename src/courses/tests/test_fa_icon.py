@@ -186,15 +186,18 @@ class FontAwesomeModifierPickerWidgetTest(SimpleTestCase):
     """The modifier widget renders the toggle buttons around the text input."""
 
     def test_widget__renders_toggle_groups_and_input(self):
-        """The rotate/flip/animate toggle groups and the (editable) text input all
-        render, so the buttons and the advanced field are both available."""
+        """The rotate/flip/animate toggle groups and the hidden value field all render,
+        so the buttons drive a field the form can submit."""
         html = FontAwesomeModifierPickerWidget().render("rank-mods", "fa-rotate-90 fa-spin")
         self.assertIn("fa-modifier-picker", html)
         self.assertIn('name="rank-mods"', html)
-        # a button for each managed modifier class
+        # a button for each managed modifier class (no separate "none" button: the
+        # rotate/animate groups clear by clicking the active button again)
         for cls in ("fa-rotate-90", "fa-rotate-180", "fa-rotate-270",
                     "fa-flip-horizontal", "fa-flip-vertical", "fa-spin", "fa-pulse"):
             self.assertIn('data-modifier="%s"' % cls, html)
+        # the old explicit "No rotation" button (empty data-modifier) is gone
+        self.assertNotIn('data-modifier=""', html)
 
 
 class RankCreateViewIconPickerTest(ByteDeckTenantTestCase):

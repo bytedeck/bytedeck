@@ -1346,12 +1346,18 @@ table[data-toggle="table"].bt-reveal {
 
 
 /* Font Awesome modifier picker (utilities.fa_icon_widget.FontAwesomeModifierPickerWidget,
-   static/js/fa_modifier_picker.js): a row of Bootstrap button groups above the
-   advanced text input. Theme-agnostic spacing only; the buttons are themed .btn. */
+   static/js/fa_modifier_picker.js): a row of Bootstrap button groups. Theme-agnostic
+   spacing only; the buttons are themed .btn. */
 .fa-modifier-picker-controls {
     margin-bottom: 8px;
 }
 .fa-modifier-picker-controls .btn-group {
     margin-right: 8px;
     margin-bottom: 4px;
+}
+/* The composed "fa-" class string is meaningless to most users, so the field the
+   toggle buttons drive is hidden: the buttons are the whole UI and the field just
+   carries the value the form submits. */
+.fa-modifier-picker-input {
+    display: none;
 }
