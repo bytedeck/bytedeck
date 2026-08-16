@@ -13,8 +13,8 @@ from comments.sanitize import sanitize_comment_html
 from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
+from courses.forms import XPCourseChoiceMixin
 from courses.models import Course
-from siteconfig.models import SiteConfig
 
 from .models import Category, Quest, CommonData
 
@@ -306,41 +306,6 @@ class TAQuestForm(QuestForm):
         super().__init__(*args, **kwargs)
         # QuestForm's layout names fields this form doesn't have, so take them back out
         remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
-
-
-class XPCourseChoiceMixin:
-    """Asks the student which of their courses this submission's XP counts toward (issue #2440).
-
-    They can also decline to choose: "split evenly between my courses" is the first option and
-    the one selected by default, so a student who ignores the question gets the even split that
-    every submission used to get.
-
-    The field is only worth showing when there is a choice to make, so it is dropped when the
-    deck has the setting off, when the student is in a single course, and when no student is in
-    view at all (a staff form). Dropping it leaves the submission unassigned, which is the same
-    thing as splitting it.
-    """
-
-    def __init__(self, *args, student=None, **kwargs):
-        """
-        Args:
-            student (User): whose courses to offer. None for a form no student fills in.
-        """
-        super().__init__(*args, **kwargs)
-        from courses.models import CourseStudent  # locally: courses imports this app's models
-
-        registrations = CourseStudent.objects.current_courses(student) if student else None
-        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
-
-        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
-            del self.fields['course']
-            return
-
-        # "split evenly" is the empty choice, and it is what a submission with no course does
-        # anyway, so it needs no separate value and is the safe thing to leave selected: a
-        # student who does not think about the question gets the old behaviour.
-        self.fields['course'].queryset = courses
-        self.fields['course'].empty_label = 'Split evenly between my courses'
 
 
 class SubmissionForm(forms.Form):

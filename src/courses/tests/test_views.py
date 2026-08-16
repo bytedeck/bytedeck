@@ -1449,13 +1449,13 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_SemesterArchive__student_with_negative_xp__view(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_SemesterArchive__student_with_negative_xp__view(self, registration_xp):
         """
             Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
-        xp_per_course.return_value = -10
+        registration_xp.return_value = -10
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -2249,12 +2249,13 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         siteconfig.display_marks_calculation = True
         siteconfig.save()
 
-    def test_mark_calculations__explains_the_split_for_a_multicourse_student(self):
+    def test_mark_calculations__reports_the_shown_courses_own_xp(self):
         """A student in two courses is told which course the page is about and how much of their
-        XP counts toward it, rather than the old flat "total divided by number of courses",
-        which stopped being true once they could assign work to a course (issue #2440)."""
+        XP counts toward it. Before #2440 the two courses always held the same even share, so
+        the page could talk about "per course" without naming one; now they differ, and the
+        number shown has to be the named course's own."""
         art = baker.make(Course, title='Art', xp_for_100_percent=1000)
-        baker.make(
+        art_registration = baker.make(
             CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
             block=baker.make(Block), course=art,
         )
@@ -2268,10 +2269,14 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:my_marks'))
 
+        shown = response.context['obj']
         self.assertContains(response, 'registered in 2 courses')
-        self.assertContains(response, 'counts toward it')
-        # all 50 XP was assigned to their first course, so none of it leaks into Art
-        self.assertEqual(response.context['xp_per_course'], 50)
+        self.assertContains(response, str(shown.course))
+        self.assertEqual(response.context['xp_per_course'], shown.xp())
+        # the whole point: the two courses no longer hold the same number
+        self.assertNotEqual(self.stu_course.xp(), art_registration.xp())
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
 
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page

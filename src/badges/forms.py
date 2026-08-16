@@ -2,6 +2,7 @@ from django import forms
 from django.contrib.auth.models import User
 from django_select2.forms import Select2Widget, ModelSelect2Widget, ModelSelect2MultipleWidget
 
+from courses.forms import XPCourseChoiceMixin
 from profile_manager.models import Profile
 from tags.forms import BootstrapTaggitSelect2Widget
 from .models import Badge, BadgeAssertion
@@ -21,7 +22,18 @@ class BadgeForm(forms.ModelForm):
         }
 
 
-class BadgeAssertionForm(forms.ModelForm):
+class BadgeAssertionForm(XPCourseChoiceMixin, forms.ModelForm):
+    """Grant one badge to one student, saying which of their courses its XP counts toward.
+
+    The course question only appears when this student has more than one course and the deck
+    asks about it at all, matching what students see when they hand in a quest (issue #2440).
+    It also needs the student to be known already, which they are when granting from someone's
+    profile; on the open grant page the student is picked on this same form, so there is nobody
+    to look courses up for and the badge is shared between their courses.
+    """
+
+    split_evenly_label = "Split evenly between the student's courses"
+
     class Meta:
         model = BadgeAssertion
         # fields = '__all__'

@@ -327,6 +327,8 @@ def bulk_assertion_create(request, badge_id=None):
         "heading": f"Grant {SiteConfig.get().custom_name_for_badge} in Bulk",
         "form": form,
         "submit_btn_value": "Grant",
+        # every student here has their own courses, so there is no one course to grant toward
+        "bulk_course_note": SiteConfig.get().students_choose_xp_course,
     }
 
     return render(request, "badges/assertion_form.html", context)
@@ -336,18 +338,24 @@ def bulk_assertion_create(request, badge_id=None):
 @staff_member_required
 def assertion_create(request, user_id, badge_id):
     initial = {}
+    student = None
     if int(user_id) > 0:
-        user = get_object_or_404(User, pk=user_id)
-        initial['user'] = user
+        student = get_object_or_404(User, pk=user_id)
+        initial['user'] = student
     if int(badge_id) > 0:
         badge = get_object_or_404(Badge, pk=badge_id)
         initial['badge'] = badge
 
-    form = BadgeAssertionForm(request.POST or None, initial=initial)
+    # granting from a student's profile names them in the URL, so their courses can be offered;
+    # on the open grant page they are picked on the form itself and there is nobody to ask about
+    form = BadgeAssertionForm(request.POST or None, initial=initial, student=student)
 
     if form.is_valid():
         new_ass = form.save(commit=False)
-        BadgeAssertion.objects.create_assertion(new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp)
+        BadgeAssertion.objects.create_assertion(
+            new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp,
+            course=form.cleaned_data.get('course'),
+        )
         messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
         return redirect('badges:list')
 

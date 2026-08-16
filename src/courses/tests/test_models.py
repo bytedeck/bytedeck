@@ -247,7 +247,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         student = baker.make(User)
         registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
-        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+        with patch('courses.models.CourseStudent.xp', return_value=-50):
             self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
             result = Semester.objects.complete_semester(clamp_negative_xp=True)
 
@@ -267,7 +267,13 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         for student in students:
             baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
 
-        with patch('profile_manager.models.Profile.xp_per_course', side_effect=[10, -50, 10, -50]):
+        # keyed on the registration rather than a list of return values: saving a registration
+        # recalculates the student's mark, which asks for its XP again, so how many times xp()
+        # is called is an implementation detail this test should not depend on
+        negative = students[1].coursestudent_set.get().pk
+
+        with patch('courses.models.CourseStudent.xp', autospec=True,
+                   side_effect=lambda registration: -50 if registration.pk == negative else 10):
             with self.assertRaises(ValueError):
                 CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
 
@@ -817,8 +823,8 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_students.count(), 2)
         self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_xp):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
 
         # second student in same course as setup
@@ -830,7 +836,7 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         course2 = baker.make(Course)
         course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
 
-        xp_per_course.return_value = 500
+        registration_xp.return_value = 500
         CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
 
         self.course_student.refresh_from_db()
@@ -845,10 +851,10 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_student2.final_xp, 500)
         self.assertEqual(course_student3.final_xp, 500)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades__student_with_negative_xp(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_calc_semester_grades__student_with_negative_xp(self, registration_xp):
         """Test that an assertion error is raised when there is a student with negative xp"""
-        xp_per_course.return_value = -10
+        registration_xp.return_value = -10
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 

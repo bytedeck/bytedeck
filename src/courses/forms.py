@@ -9,6 +9,44 @@ from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedD
 from siteconfig.models import SiteConfig
 
 
+class XPCourseChoiceMixin:
+    """Asks the student which of their courses this submission's XP counts toward (issue #2440).
+
+    They can also decline to choose: "split evenly between my courses" is the first option and
+    the one selected by default, so a student who ignores the question gets the even split that
+    every submission used to get.
+
+    The field is only worth showing when there is a choice to make, so it is dropped when the
+    deck has the setting off, when the student is in a single course, and when no student is in
+    view at all (a staff form). Dropping it leaves the submission unassigned, which is the same
+    thing as splitting it.
+    """
+
+    #: Wording of the "do not assign this to a course" choice, which teacher-facing forms
+    #: override, since they are choosing on someone else's behalf.
+    split_evenly_label = 'Split evenly between my courses'
+
+    def __init__(self, *args, student=None, **kwargs):
+        """
+        Args:
+            student (User): whose courses to offer. None for a form no student fills in,
+                or one where the student is picked on the form itself and so is not yet known.
+        """
+        super().__init__(*args, **kwargs)
+        registrations = CourseStudent.objects.current_courses(student) if student else None
+        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
+
+        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
+            del self.fields['course']
+            return
+
+        # "split evenly" is the empty choice, and it is what a submission with no course does
+        # anyway, so it needs no separate value and is the safe thing to leave selected: a
+        # student who does not think about the question gets the old behaviour.
+        self.fields['course'].queryset = courses
+        self.fields['course'].empty_label = self.split_evenly_label
+
+
 class NoScriptTagDatePickerInput(DatePickerInput):
     """ Widget to override build_attrs.
     As of bootstrap_datepicker_plus 5.0.0 the widget when rendered comes with script tags if debug=True.
