@@ -14,6 +14,7 @@ import numpy
 from colorful.fields import RGBColorField
 from django_tenants.utils import get_public_schema_name
 
+from badges.models import BadgeAssertion
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
@@ -935,6 +936,9 @@ class CourseStudent(models.Model):
         # their registrations' adjustments. Take out the parts that belong to a particular
         # course, share what is left, and hand this registration back its own pieces.
         xp_by_course = QuestSubmission.objects.xp_by_course(self.user)
+        for course_id, xp in BadgeAssertion.objects.xp_by_course(self.user).items():
+            xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
+
         assigned_here = xp_by_course.get(self.course_id, 0) if self.course_id else 0
         assigned_anywhere = sum(xp for course_id, xp in xp_by_course.items() if course_id is not None)
         adjustments = CourseStudent.objects.calculate_xp(self.user)

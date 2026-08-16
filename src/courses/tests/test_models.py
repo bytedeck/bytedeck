@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
 
+from badges.models import Badge, BadgeAssertion
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
@@ -1064,6 +1065,34 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
         self.assertEqual(student.profile.xp_cached, 40)
+
+    def test_xp__counts_a_badge_toward_the_course_it_was_granted_for(self):
+        """A badge granted alongside a quest carries that quest's course, so the badge and the
+        work it recognises count toward the same course (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        BadgeAssertion.objects.create_assertion(
+            student, baker.make(Badge, xp=20), course=maths,
+        )
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__shares_a_badge_that_belongs_to_no_course(self):
+        """A badge granted on its own, with no course behind it, is shared like any other
+        unassigned XP rather than landing arbitrarily in one course."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20))
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 10)
+        self.assertEqual(second.xp(), 10)
 
     def test_calc_semester_grades__records_each_course_its_own_final_xp(self):
         """Archiving writes each registration's own XP into its final_xp. A student who put all

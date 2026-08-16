@@ -269,6 +269,16 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
         self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
         self.assertNotIn(someone_elses_course, form.fields['course'].queryset)
 
+    def test_course_field__offers_splitting_evenly_and_defaults_to_it(self):
+        """A student can decline to pick, and that is the default: someone who ignores the
+        question gets the even split every submission used to get, rather than having their
+        work silently land in whichever course happened to sort first."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+        self.assertIsNone(form['course'].value())
+        self.assertFalse(form.fields['course'].required)
+
     def test_course_field__is_dropped_for_a_student_with_one_course(self):
         """With a single course there is nothing to ask, so the student is not asked. Their
         submission stays unassigned, which for one course amounts to the same thing."""

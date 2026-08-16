@@ -311,11 +311,14 @@ class TAQuestForm(QuestForm):
 class XPCourseChoiceMixin:
     """Asks the student which of their courses this submission's XP counts toward (issue #2440).
 
+    They can also decline to choose: "split evenly between my courses" is the first option and
+    the one selected by default, so a student who ignores the question gets the even split that
+    every submission used to get.
+
     The field is only worth showing when there is a choice to make, so it is dropped when the
     deck has the setting off, when the student is in a single course, and when no student is in
-    view at all (a staff form). Dropping it rather than hiding it means the submission is left
-    unassigned, and unassigned XP is shared evenly across their courses, exactly as it was
-    before any of this existed.
+    view at all (a staff form). Dropping it leaves the submission unassigned, which is the same
+    thing as splitting it.
     """
 
     def __init__(self, *args, student=None, **kwargs):
@@ -333,9 +336,11 @@ class XPCourseChoiceMixin:
             del self.fields['course']
             return
 
+        # "split evenly" is the empty choice, and it is what a submission with no course does
+        # anyway, so it needs no separate value and is the safe thing to leave selected: a
+        # student who does not think about the question gets the old behaviour.
         self.fields['course'].queryset = courses
-        self.fields['course'].empty_label = None
-        self.fields['course'].initial = courses.first().pk
+        self.fields['course'].empty_label = 'Split evenly between my courses'
 
 
 class SubmissionForm(forms.Form):

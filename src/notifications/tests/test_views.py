@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from django.db.models import Max
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.shortcuts import reverse
@@ -73,9 +74,14 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.assert200('notifications:list')
         self.assert200('notifications:list_unread')
 
-        # Bad id notification read request should redirect to list view
+        # Bad id notification read request should redirect to list view.
+        # The id is computed rather than hard-coded: the suite shares one schema across test
+        # classes without resetting sequences, so a fixed number stops being "missing" once
+        # enough notifications have been made and this asserts the wrong branch (404, not the
+        # redirect).
+        missing_id = (Notification.objects.aggregate(Max('id'))['id__max'] or 0) + 1
         self.assertRedirects(
-            response=self.client.get(reverse('notifications:read', args=[999])),
+            response=self.client.get(reverse('notifications:read', args=[missing_id])),
             expected_url=reverse('notifications:list'),
         )
 

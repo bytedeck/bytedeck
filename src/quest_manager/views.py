@@ -1432,8 +1432,10 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         badges = [badge] if badge else self.form.cleaned_data.get("awards", [])
 
         for badge in badges:
+            # a badge granted alongside a quest counts toward whichever course the student put
+            # that quest against, so the badge and the work it recognises land together (#2440)
             new_assertion = BadgeAssertion.objects.create_assertion(
-                self.submission.user, badge, self.request.user
+                self.submission.user, badge, self.request.user, course=self.submission.course
             )
             messages.success(
                 self.request,

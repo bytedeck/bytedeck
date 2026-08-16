@@ -28,6 +28,7 @@ from django.utils import timezone
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
+from badges.models import BadgeAssertion
 from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
@@ -939,6 +940,27 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         """Set up a tenant-aware test client and log in the student for all tests."""
         # log in the student for all tests here
         self.client.force_login(self.test_student)
+
+    def test_approve__grants_an_award_toward_the_submissions_course(self):
+        """A badge a teacher grants while approving a quest counts toward whichever course the
+        student put that quest against, so the badge and the work it recognises land together
+        rather than the badge being shared across their courses (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        baker.make('courses.CourseStudent', user=self.test_student, course=maths,
+                   block=baker.make('courses.Block'), semester=self.semester)
+        badge = baker.make('badges.Badge', xp=15, badge_type=baker.make('badges.BadgeType'))
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, course=maths, is_completed=True)
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(
+            reverse('quests:approve', args=[submission.id]),
+            data={'approve_button': True, 'comment_text': 'nice work', 'awards': [badge.pk]},
+        )
+
+        assertion = BadgeAssertion.objects.filter(user=self.test_student, badge=badge).first()
+        self.assertIsNotNone(assertion, 'the badge was not granted')
+        self.assertEqual(assertion.course, maths)
 
     def test_complete__records_the_course_the_student_chose(self):
         """Handing in a quest with a course selected stamps that course on the submission, so the
