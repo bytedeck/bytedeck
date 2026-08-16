@@ -29,7 +29,7 @@
   </form>
   <hr>
   <h3>{{ quest.name }}</h3>
-  {% with dont_edit_prereqs=True %}
+  {% with dont_edit_prereqs=True dont_edit_questions=True %}
     {% include "quest_manager/quest_detail_content.html" %}
   {% endwith %}
 {% endblock %}

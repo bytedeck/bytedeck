@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import Q
+from django.db.models import Q, prefetch_related_objects
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -529,6 +529,14 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         # Fetch the quest from the shared library
         with library_schema_context():
             quest = get_published_library_object(Quest, quest_import_id)
+
+            if quest is not None:
+                # The page renders outside this context, and a quest's questions are a lazy
+                # queryset: evaluated at render time it would read *this* deck's questions
+                # table with the Library quest's pk, and show whichever local quest happens
+                # to hold that id (#2163). Reading them here, in the schema they live in,
+                # fills the prefetch cache the template then renders from.
+                prefetch_related_objects([quest], 'question_set')
 
         if quest is None:
             return redirect_awaiting_review(request, 'quest', 'library:quest_list')
