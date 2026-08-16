@@ -143,7 +143,7 @@ class RankViewTests(ByteDeckTenantTestCase):
         data = {
             'name': 'My Sample rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_create'), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -157,7 +157,7 @@ class RankViewTests(ByteDeckTenantTestCase):
         data = {
             'name': 'My updated rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -185,7 +185,7 @@ class RankViewTests(ByteDeckTenantTestCase):
 
         # test messages for quest_update
         response = self.client.post(reverse('courses:rank_update', args=[rank.id]), data={
-            'name': 'rank', 'xp': 0, 'fa_icon': 'fa fa-circle-o'
+            'name': 'rank', 'xp': 0, 'fa_icon': 'circle-o'
         })
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)

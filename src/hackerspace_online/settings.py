@@ -986,6 +986,7 @@ SUMMERNOTE_CONFIG = {
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js_for_inplace': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
@@ -1018,6 +1019,7 @@ SUMMERNOTE_CONFIG = {
     # To use external plugins,
     # Include them within `css` and `js`.
     'js': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),

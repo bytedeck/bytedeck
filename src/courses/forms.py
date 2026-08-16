@@ -6,8 +6,9 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from django_select2.forms import Select2Widget
 
-from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
+from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+from utilities.fa_icon_widget import FontAwesomeIconPickerWidget
 
 
 class XPCourseChoiceMixin:
@@ -76,6 +77,21 @@ class NoScriptTagDatePickerInput(DatePickerInput):
         attrs = super().build_attrs(*args, **kwargs)
         attrs.pop('data-dbdp-debug', None)
         return attrs
+
+
+class RankForm(forms.ModelForm):
+    """Rank add/edit form.
+
+    The Font Awesome icon field uses the searchable icon picker
+    (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), which writes the
+    bare icon name. The modifier-classes field sits right below it for the rare
+    rank that needs a rotation or stack (e.g. ``fa-rotate-270``).
+    """
+
+    class Meta:
+        model = Rank
+        fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
+        widgets = {'fa_icon': FontAwesomeIconPickerWidget()}
 
 
 class MarkRangeForm(forms.ModelForm):

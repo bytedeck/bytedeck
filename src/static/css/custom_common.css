@@ -1322,3 +1322,24 @@ table[data-toggle="table"].bt-reveal {
         min-width: 0;
     }
 }
+
+
+/* Font Awesome icon picker widget (utilities.widgets.FontAwesomeIconPickerWidget,
+   static/js/fa_icon_picker.js). Theme-agnostic layout only: the panel uses
+   Bootstrap's .well for its themed background/border, so no colours are set here. */
+.fa-icon-picker-panel {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+.fa-icon-picker-grid {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+.fa-icon-picker-option {
+    width: 40px;
+    height: 34px;
+    margin: 2px;
+    padding: 6px 0;
+    text-align: center;
+}

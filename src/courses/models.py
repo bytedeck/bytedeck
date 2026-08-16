@@ -158,7 +158,10 @@ class RankManager(models.Manager):
         return None
 
     def create_zero_rank(self):
-        zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
+        # `icon` is an ImageField; the Font Awesome icon belongs in `fa_icon`
+        # (stored as a bare name), so the zero rank shows a circle-o like the
+        # seeded first rank.
+        zero_rank = Rank(xp=0, name="None", fa_icon="circle-o")
         zero_rank.save()
         return zero_rank
 
@@ -169,7 +172,10 @@ class Rank(IsAPrereqMixin, models.Model):
     icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
                              help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
     fa_icon = models.TextField(null=True, blank=True,
-                               help_text='html to render a font-awesome icon or icon stack etc.')
+                               help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
+    fa_icon_modifiers = models.CharField(
+        max_length=100, blank=True, default='',
+        help_text='Optional extra Font Awesome classes applied to the icon, e.g. "fa-rotate-270" to rotate it.')
 
     objects = RankManager()
 
@@ -187,6 +193,18 @@ class Rank(IsAPrereqMixin, models.Model):
             return self.icon.url
         else:
             return SiteConfig.get().get_default_icon_url()
+
+    @property
+    def fa_icon_class(self):
+        """The Font Awesome class list to drop into ``<i class="...">``:
+        ``fa fa-<name>`` plus any ``fa_icon_modifiers``. Returns '' when no icon
+        is set, so a template renders a bare ``<i>`` instead of a stray "fa fa-"."""
+        name = (self.fa_icon or '').strip()
+        if not name:
+            return ''
+        classes = 'fa fa-' + name
+        modifiers = (self.fa_icon_modifiers or '').strip()
+        return classes + ' ' + modifiers if modifiers else classes
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
