@@ -368,6 +368,12 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
+        # the registration is what makes the deck's semester theirs, so sub4 below reads as
+        # their current work rather than as another term's
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student1, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
 
         cls.quest1 = baker.make(Quest)
         cls.quest2 = baker.make(Quest)
@@ -931,6 +937,12 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         cls.test_student = User.objects.create_user('test_student')
 
         cls.semester = SiteConfig.get().active_semester
+        # the registration is what puts the student in this semester, so the submissions
+        # stamped with it count toward the XP that completing them earns
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=cls.semester,
+        )
         cls.quest = baker.make(Quest, xp=5)
         cls.draft_comment = baker.make(Comment, text="test draft comment")
         cls.sub = baker.make(QuestSubmission, user=cls.test_student, quest=cls.quest,
@@ -3313,7 +3325,12 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student)
 
         # a returned submission (completed once, then sent back by a teacher):
-        # is_completed is False but time_completed is set, so is_returned() is True
+        # is_completed is False but time_completed is set, so is_returned() is True.
+        # Registered in the semester it names, or their in-progress tab is not scoped to it
+        baker.make(
+            'courses.CourseStudent', user=self.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
         returned_sub = baker.make(
             QuestSubmission,
             user=self.test_student,
@@ -4224,8 +4241,15 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a student, a quest, and one of the student's submissions shared across the tests."""
+        """Create a student registered in the deck's semester, a quest, and one of the
+        student's submissions shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
+        # the registration is what makes the deck's semester theirs, so a submission stamped
+        # with it reads as current work and one from another semester reads as past
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
         cls.quest = baker.make(Quest)
         cls.submission = baker.make(QuestSubmission, user=cls.test_student)
         # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
@@ -4315,12 +4339,15 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
         url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past')
         """
         self.submission.mark_completed()
+        # a term the student has behind them, which is what "past" means: their current
+        # semester comes from their registration, and this is not it
+        self.submission.semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        self.submission.save()
         response = self.client.post(
             reverse('quests:ajax_info_past', args=[self.submission.id]),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        # Submission is NOT in current semester (cus setUp doesn't put it there)
         self.assertEqual(response.status_code, 200)
 
         # Check context variables
@@ -4964,6 +4991,12 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         # baker.make('courses.CourseStudent', block=other_teacher_block, user=cls.test_student, semester=SiteConfig.get().active_semester)
 
         cls.semester = SiteConfig.get().active_semester
+        # the registration is what puts the student in this semester, so the submissions
+        # stamped with it below count toward the XP the approvals here grant
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=cls.semester,
+        )
         cls.quest = baker.make(Quest, name="Test Quest")
         cls.sub = baker.make(QuestSubmission, quest=cls.quest)
 

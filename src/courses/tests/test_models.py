@@ -675,26 +675,25 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
         self.assertEqual(SiteConfig.get().open_semester, self.deck_semester)
         self.assertEqual(CourseStudent.objects.current_semester(self.other_student), self.other_semester)
 
-    def test_current_semester__unregistered_user_falls_back_to_the_deck(self):
+    def test_current_semester__unregistered_user_is_in_no_semester(self):
         """Someone with no registration (a teacher trying a quest, a student who hasn't
-        joined a course) keeps earning XP in the deck's open semester, as before."""
-        self.assertEqual(CourseStudent.objects.current_semester(self.teacher), self.deck_semester)
-
-    def test_current_semester__unregistered_user_between_semesters_is_none(self):
-        """With nothing open and no registration to fall back on, there is no semester."""
-        Semester.objects.filter(pk=self.other_semester.pk).update(status=Semester.Status.ARCHIVED)
-        Semester.objects.complete_semester()
+        joined a course) is in no semester, even while the deck has one open: the deck's
+        default names a term they were never in (issue #2441)."""
+        self.assertEqual(SiteConfig.get().open_semester, self.deck_semester)
         self.assertIsNone(CourseStudent.objects.current_semester(self.teacher))
 
     def test_current_semester__archived_registration_is_not_current(self):
-        """Archiving the semester a student was in leaves them with no current registration, so
-        they stop being attached to the archived semester and fall back to the deck's default
-        like anyone who hasn't joined a course, until they register again."""
+        """Archiving the semester a student was in leaves them with no current registration,
+        and so with no semester: they are not moved into the cohort still running, whose
+        roster they are absent from and whose teachers are not theirs (issue #2441). This is
+        the case the deck-wide fallback used to get wrong, and the one that costs a student
+        their work: XP earned into that cohort's semester is dropped when it is archived,
+        because archiving records final XP from the registrations and they hold none."""
         Semester.objects.complete_semester(self.deck_semester)
         self.other_semester.refresh_from_db()
         self.assertTrue(self.other_semester.is_open)
 
-        self.assertEqual(CourseStudent.objects.current_semester(self.student), self.other_semester)
+        self.assertIsNone(CourseStudent.objects.current_semester(self.student))
 
     def test_current_semester__archived_registration_with_nothing_left_open_is_none(self):
         """When the archived semester was the last one running, a student whose registration it

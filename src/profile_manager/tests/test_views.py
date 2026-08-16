@@ -331,7 +331,12 @@ class ProfileViewTests(ByteDeckTenantTestCase):
             # add unique tag for each quest
             [quest.tags.add(f'TAG-{count}') for count, quest in enumerate(quest_set)]
 
-            # have a submission for one of the quests
+            # have a submission for one of the quests. The student is registered in the
+            # semester it names, or it is not work they earned XP in this term (issue #2441)
+            baker.make(
+                'courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                semester=SiteConfig.get().active_semester,
+            )
             baker.make(
                 'quest_manager.questsubmission',
                 quest=quest_set[0],
