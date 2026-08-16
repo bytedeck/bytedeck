@@ -32,6 +32,7 @@ from django.db import IntegrityError, transaction
 
 from prerequisites.models import Prereq
 from quest_manager.models import Category, Quest
+from questions.models import Question
 
 from .models import IsLibraryContentMixin
 
@@ -82,6 +83,14 @@ CAMPAIGN_FIELDS_NOT_COPIED = {
     'id': 'Primary key. The destination assigns its own.',
     'published': 'Set by the caller: content arrives as a draft for review.',
     'map_order': 'Quest-map placement, which is relative to the deck it was arranged on (#2396).',
+}
+
+# Submission-question fields that do not cross, same idea.
+QUESTION_FIELDS_NOT_COPIED = {
+    'id': 'Primary key. The destination assigns its own.',
+    'quest': 'Set to the quest being written, whose pk differs per schema.',
+    'datetime_created': 'auto_now_add. The destination stamps its own creation time.',
+    'datetime_last_edit': 'auto_now. Always the time of the copy.',
 }
 
 
@@ -148,8 +157,8 @@ def snapshot_quest(quest):
 
     Returns:
         dict: with keys `fields` (the quest's own values), `tags` (tag names), `campaign`
-        (a campaign snapshot or None) and `prereqs` (the shareable things it requires,
-        each as an import_id and a name).
+        (a campaign snapshot or None), `prereqs` (the shareable things it requires, each as
+        an import_id and a name) and `questions` (its submission questions).
     """
     return {
         'fields': {name: _read_field(quest, name) for name in _copied_field_names(Quest, QUEST_FIELDS_NOT_COPIED)},
@@ -158,7 +167,29 @@ def snapshot_quest(quest):
         'tags': sorted(quest.tags.names()),
         'campaign': snapshot_campaign(quest.campaign),
         'prereqs': _snapshot_prereqs(quest),
+        'questions': _snapshot_questions(quest),
     }
+
+
+def _snapshot_questions(quest):
+    """The submission questions a quest asks, in the order the student answers them.
+
+    A question is part of the quest's content, not of the deck it was written on: a quest
+    whose instructions say "answer the questions below" is a different quest without them,
+    so they travel with it (#2162). They have no identity of their own to travel under, so
+    they ride inside the quest's snapshot and are matched on the far side by ordinal.
+
+    Must be called from within the source schema context.
+
+    Args:
+        quest (Quest): the quest whose questions to read.
+
+    Returns:
+        list[dict]: one dict of copied field values per question, ordered by ordinal.
+    """
+    copied = _copied_field_names(Question, QUESTION_FIELDS_NOT_COPIED)
+
+    return [{name: _read_field(question, name) for name in copied} for question in quest.question_set.all()]
 
 
 def _snapshot_prereqs(quest):
@@ -286,6 +317,51 @@ def _write_prereqs(quest, prereqs):
     return unmet
 
 
+def _write_questions(quest, questions):
+    """Make this deck's copy of a quest ask exactly the questions it travelled with.
+
+    Matched by ordinal, which is the only identity a question has across schemas: it
+    carries no import_id, and the model already holds one question per ordinal per quest.
+    A question at an ordinal the quest already uses is updated in place rather than
+    replaced, so answers students gave stay attached to the question they answered.
+
+    Ordinals the arriving quest does not use are deleted, which is what makes re-sharing a
+    quest whose author removed a question actually remove it here. Answers to a deleted
+    question survive it (`QuestionSubmission.question` is SET_NULL) and show in the marking
+    view as answers to a question that is gone.
+
+    Replacing rather than merging is the same bargain the rest of the quest is written
+    under: a re-import overwrites the quest's own instructions and title with the shared
+    version, so a question the destination added to an imported quest goes the same way as
+    an edit it made to that quest's text.
+
+    Must be called from within the destination schema context.
+
+    Args:
+        quest (Quest): the freshly written quest.
+        questions (list[dict]): copied field values, from `_snapshot_questions`.
+
+    Raises:
+        LibraryTransferError: if a question cannot be written.
+    """
+    superseded = {question.ordinal: question for question in Question.objects.filter(quest=quest)}
+
+    for fields in questions:
+        question = superseded.pop(fields['ordinal'], None) or Question(quest=quest)
+        for name, value in fields.items():
+            setattr(question, name, value)
+
+        try:
+            question.full_clean()
+            question.save()
+        except ValidationError as error:
+            raise LibraryTransferError(
+                f"'{quest.name}' could not be copied: question {fields['ordinal']}: {_describe(error)}"
+            ) from error
+
+    Question.objects.filter(pk__in=[question.pk for question in superseded.values()]).delete()
+
+
 def write_quests(writes, *, with_campaign):
     """Write several snapshotted quests into the current schema, then link them up.
 
@@ -329,7 +405,7 @@ def write_quests(writes, *, with_campaign):
 
 
 def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None):
-    """Write a quest's own fields, campaign and tags, leaving prerequisites to the caller.
+    """Write a quest's own fields, campaign, tags and questions, leaving prerequisites to the caller.
 
     An existing row with the same `import_id` is updated rather than duplicated, which is
     what makes re-sharing a quest refresh the Library's copy instead of adding a second.
@@ -369,6 +445,7 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
         raise LibraryTransferError(f"'{fields['name']}' could not be copied: {error}") from error
 
     quest.tags.set(snapshot['tags'])
+    _write_questions(quest, snapshot['questions'])
 
     return quest
 
