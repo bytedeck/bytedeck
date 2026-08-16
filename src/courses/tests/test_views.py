@@ -2278,6 +2278,30 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         self.assertEqual(self.stu_course.xp(), 50)
         self.assertEqual(art_registration.xp(), 0)
 
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__table_lists_each_course_its_own_mark(self, fraction_complete):
+        """The table of the student's courses shows a mark per row. A student who put their work
+        against one of their two courses is at 10% there and 0% in the other, rather than the
+        same number repeated down the table (issue #2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertContains(response, '<strong>10%</strong>', html=True)
+        self.assertContains(response, '<strong>0%</strong>', html=True)
+
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page
         (students get a 404 instead, since they shouldn't reach this URL)."""

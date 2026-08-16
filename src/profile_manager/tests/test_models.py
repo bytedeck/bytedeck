@@ -314,50 +314,30 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__single_course(self, mock_current_courses):
-        """mark() returns the single course's calculated mark."""
-        mock_coursestudent = Mock()
-        mock_coursestudent.calc_mark.return_value = 125
-        mock_current_courses.return_value = [mock_coursestudent]
-        self.assertEqual(self.profile.mark(), 125)
+    def test_mark__single_course(self):
+        """mark() gives back the student's one registration's mark."""
+        registration = self.create_active_course_registration()
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__multiple_courses(self, mock_current_courses):
-        """With several courses the mark is still the first one's, undivided: the registration's
-        own XP already carries only its share, so dividing here as well would halve it twice
-        (issue #2440 moved the split from the mark into the XP)."""
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 87
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 87)
-        mock_coursestudent1.calc_mark.assert_called_with(mock_coursestudent1.xp.return_value)
+        self.assertEqual(self.profile.mark(), registration.mark())
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__cap_100(self, mock_current_courses):
-        """Test that mark() caps at 100 if that SiteConfig option is set"""
-        config = SiteConfig.get()
-        config.cap_marks_at_100_percent = True
-        config.save()
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__multiple_courses(self, fraction_complete):
+        """A student in several courses has a mark in each, so this one number is the first
+        registration's, whole. Each registration's XP is already only its own share, so nothing
+        is divided a second time here (issue #2440 moved the split from the mark into the XP)."""
+        first_registration = self.create_active_course_registration()
+        self.create_active_course_registration()
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            course=first_registration.course, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+        registrations = list(self.profile.current_courses())
 
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 125
-
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1]
-        self.assertEqual(self.profile.mark(), 100)
-
-        # a second course does not change the cap: the mark is per course either way
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 100)
-
-        mock_coursestudent1.calc_mark.return_value = 225
-        self.assertEqual(self.profile.mark(), 100)
-
-        # NEED TO RETURN SiteConfig object back to original state for other tests!
-        config.cap_marks_at_100_percent = False
-        config.save()
+        self.assertEqual(self.profile.mark(), registrations[0].mark())
+        # the courses really do differ, so returning the first one's mark is a choice and not a
+        # coincidence of both being the same number
+        self.assertNotEqual(registrations[0].mark(), registrations[1].mark())
 
 
 class SmartListTests(SimpleTestCase):

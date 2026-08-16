@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import connection, models, transaction
+from django.db.models import Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -704,12 +705,16 @@ class CourseStudentManager(models.Manager):
 
     # for current active semester
     def calculate_xp(self, user):
-        xp = 0
-        studentcourses = self.current_courses(user)
-        if studentcourses:
-            for studentcourse in studentcourses:
-                xp += studentcourse.xp_adjustment
-        return xp
+        """The total of this student's manual XP adjustments across their current courses.
+
+        Aggregated in the database rather than summed in Python: CourseStudent.xp() asks for
+        this, and that runs once per registration for every student on the deck when a semester
+        is archived.
+
+        Returns:
+            int: the sum of their registrations' xp_adjustment, 0 when they have no course.
+        """
+        return self.current_courses(user).aggregate(total=Sum('xp_adjustment'))['total'] or 0
 
     def calc_semester_grades(self, semester, clamp_negative_xp=False):
         """Record every registration's final XP and deactivate it.
@@ -945,6 +950,21 @@ class CourseStudent(models.Model):
         shared = profile.xp_cached - assigned_anywhere - adjustments
 
         return assigned_here + self.xp_adjustment + shared / course_count
+
+    def mark(self):
+        """This registration's mark, worked out from its own XP.
+
+        A student in two courses has a different amount of XP in each (issue #2440), so each
+        registration has its own mark. Capping is a deck setting, applied here so every place
+        that shows a mark agrees about it.
+
+        Returns:
+            float: the percentage for this course, capped at 100 when the deck asks for that.
+        """
+        mark = self.calc_mark(self.xp())
+        if SiteConfig.get().cap_marks_at_100_percent:
+            return min(mark, 100)
+        return mark
 
     def calc_mark(self, xp):
         if not self.course:  # course may be null if it was deleted.

@@ -308,7 +308,7 @@ class TAQuestForm(QuestForm):
         remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
-class SubmissionForm(forms.Form):
+class SubmissionForm(XPCourseChoiceMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
     course = forms.ModelChoiceField(
@@ -324,7 +324,7 @@ class SubmissionForm(forms.Form):
     )
 
 
-class SubmissionFormCustomXP(XPCourseChoiceMixin, SubmissionForm):
+class SubmissionFormCustomXP(SubmissionForm):
     xp_requested = forms.IntegerField(
         label="Requested XP",
         required=True,

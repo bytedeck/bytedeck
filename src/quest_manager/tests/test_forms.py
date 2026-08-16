@@ -12,7 +12,9 @@ from siteconfig.models import SiteConfig
 from quest_manager.forms import (
     TA_RESTRICTED_QUEST_FIELDS,
     QuestForm,
+    SubmissionForm,
     SubmissionFormCustomXP,
+    SubmissionFormStaff,
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     SubmissionReplyForm,
@@ -307,6 +309,21 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
         """A staff member commenting on someone's submission is not choosing where that
         student's XP goes."""
         form = SubmissionQuickReplyFormStudent()
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_offered_on_the_full_submission_form_too(self):
+        """The submission page renders SubmissionForm, so the picker has to be there and filled
+        in on that one as well: it is the form most students actually see."""
+        form = SubmissionForm(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+
+    def test_course_field__is_dropped_on_the_staff_form(self):
+        """SubmissionFormStaff extends the same base, and a teacher commenting is not choosing
+        where this student's XP goes, so the field must not follow it up the inheritance chain."""
+        form = SubmissionFormStaff()
 
         self.assertNotIn('course', form.fields)
 

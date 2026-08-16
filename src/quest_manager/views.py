@@ -1780,7 +1780,7 @@ def complete(request, submission_id):
     if student_can_enter_xp:
         form = SubmissionFormCustomXP(request.POST, request.FILES, student=submission.user)
     elif request.FILES:  # if there are files, we need to use the full form
-        form = SubmissionForm(request.POST, request.FILES)
+        form = SubmissionForm(request.POST, request.FILES, student=submission.user)
     else:
         form = SubmissionQuickReplyFormStudent(request.POST, student=submission.user)
 
@@ -2342,9 +2342,10 @@ def submission(request, submission_id=None, quest_id=None):
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
             main_comment_form = SubmissionFormCustomXP(initial=initial,
-                                                       minimum_xp=sub.quest.xp)
+                                                       minimum_xp=sub.quest.xp,
+                                                       student=request.user)
         else:
-            main_comment_form = SubmissionForm(initial=initial)
+            main_comment_form = SubmissionForm(initial=initial, student=request.user)
 
         # The quest's questions, as an answer formset over this submission's draft rows.
         # Only while the submission can still be worked on; answers on completed/approved

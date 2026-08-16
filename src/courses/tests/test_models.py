@@ -988,6 +988,12 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
             semester=SiteConfig.get().active_semester,
         )
 
+    def _uncap_marks(self):
+        """Put the shared deck's mark cap back off, for the tests that turn it on."""
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = False
+        config.save()
+
     def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
         """Nothing to divide, so their one course carries everything they earned."""
         student = baker.make(User)
@@ -1099,6 +1105,42 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(first.xp(), 10)
         self.assertEqual(second.xp(), 10)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__is_worked_out_from_the_registrations_own_xp(self, fraction_complete):
+        """Each course has its own mark, because each has its own XP (issue #2440). A student
+        who put all their work against one course is at 0% in the other, not at the same mark
+        in both."""
+        fraction_complete.return_value = 0.5
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths', xp_for_100_percent=100)
+        art = baker.make(Course, title='Art', xp_for_100_percent=100)
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        # 40 XP halfway through a semester projects to 80, out of the course's 100
+        self.assertEqual(maths_registration.mark(), 80)
+        self.assertEqual(art_registration.mark(), 0)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__caps_at_100_when_the_deck_asks_for_that(self, fraction_complete):
+        """cap_marks_at_100_percent applies per registration, so a course a student is running
+        away with reads 100% rather than a projected 160%."""
+        fraction_complete.return_value = 0.5
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = True
+        config.save()
+        # save(), not update(): the setting is cached, and only save() invalidates that cache
+        self.addCleanup(self._uncap_marks)
+
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course, xp_for_100_percent=100))
+        self._approved(student, xp=80)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.mark(), 100)
 
     def test_calc_semester_grades__records_each_course_its_own_final_xp(self):
         """Archiving writes each registration's own XP into its final_xp. A student who put all

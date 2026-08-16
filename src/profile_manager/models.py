@@ -23,7 +23,6 @@ from badges.models import BadgeAssertion
 from courses.models import CourseStudent, Rank, Semester
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
-from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
 
 from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
@@ -388,17 +387,16 @@ class Profile(models.Model):
         return xp
 
     def mark(self):
-        courses = self.current_courses()
-        cap_at_100 = SiteConfig.get().cap_marks_at_100_percent
-        if courses:
-            # the registration's own XP already carries its share, so no dividing here (#2440)
-            mark = courses[0].calc_mark(courses[0].xp())
-            if cap_at_100:
-                return min(mark, 100)
-            else:
-                return mark
-        else:
-            return None
+        """This student's mark in the first of their courses, for the places that want one number.
+
+        Each registration has its own mark now that XP is attributed per course (issue #2440);
+        CourseStudent.mark() is where that lives, and this delegates to it.
+
+        Returns:
+            float or None: the first current registration's mark, None with no course.
+        """
+        registration = self.current_courses().first()
+        return registration.mark() if registration else None
 
     #################################
     #
