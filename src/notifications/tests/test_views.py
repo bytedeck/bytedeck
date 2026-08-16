@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.db.models import Max
 from django.shortcuts import reverse
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
@@ -27,6 +28,19 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
+
+    def unused_notification_id(self):
+        """An id that belongs to no notification, for the "deleted or never existed" path.
+
+        A literal id is not safe here: ids come from a sequence shared by every test in the run,
+        so a long run reaches any number eventually, and the view then finds someone else's
+        notification and 404s instead of redirecting.
+
+        Returns:
+            int: one past the highest notification id in the database.
+        """
+        highest = Notification.objects.all().aggregate(Max('id'))['id__max'] or 0
+        return highest + 1
 
     def test_notification_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
@@ -75,7 +89,7 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         # Bad id notification read request should redirect to list view
         self.assertRedirects(
-            response=self.client.get(reverse('notifications:read', args=[999])),
+            response=self.client.get(reverse('notifications:read', args=[self.unused_notification_id()])),
             expected_url=reverse('notifications:list'),
         )
 
@@ -144,7 +158,7 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         response = self.client.post(
             reverse('notifications:ajax_mark_read'),
-            data={'id': 999999},
+            data={'id': self.unused_notification_id()},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
