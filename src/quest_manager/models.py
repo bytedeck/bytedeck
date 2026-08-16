@@ -1362,26 +1362,16 @@ class QuestSubmission(models.Model):
         return self.time_completed is not None and not self.is_completed
 
     def get_comments(self):
-        """Return this submission's comments, each with its published question answers prefetched.
+        """Return this submission's comments, ready to render.
 
-        The answers (and their questions) are prefetched so the comments template can render
-        every comment's answer table without running a query per comment.
+        The manager prefetches what the comments template reads off each comment (its attached
+        documents and its published question answers), so a submission with a long comment
+        thread does not cost a query per comment.
 
         Returns:
             QuerySet[Comment]: the comments targeting this submission.
         """
-        # local import: questions.models FKs onto this app's models (by string reference),
-        # so importing it at module level here would be circular
-        from questions.models import QuestionSubmission
-
-        # prefetch each comment's published question answers (and their questions) so the
-        # comments template doesn't run a query per comment to render them
-        return Comment.objects.all_with_target_object(self).prefetch_related(
-            models.Prefetch(
-                "question_submissions",
-                queryset=QuestionSubmission.objects.select_related("question"),
-            )
-        )
+        return Comment.objects.all_with_target_object(self)
 
     def _fix_ordinal(self):
         # NOTE: There is a rare bug that we are unable to reproduce as of the moment where a QuestSubmission has the same ordinal.
