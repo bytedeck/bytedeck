@@ -268,7 +268,7 @@
       options: options,
   });
 
-  function ajax_update_plot() {
+  function ajax_update_plot(course_id) {
 
     // user in this view is the request.user, if a student,
     // or the user matching the id in the url
@@ -278,16 +278,24 @@
       url: "{% url 'courses:ajax_progress_chart' user.id %}",
       data: {
         csrfmiddlewaretoken: "{{ csrf_token }}",
+        // which course to plot: a student in several has a different amount of XP in each,
+        // so each course is its own line out of its own total (#2453)
+        course: course_id,
       },
       success: function(data){
-        // console.log(data.xp_data);
         XPData.data = data.xp_data;
-        console.log(data.xp_data);
+
+        // courses can be out of different amounts, so the axis and the mark lines are
+        // rescaled to whichever course is being shown
+        if (data.xp_for_100_percent) {
+          max_xp = data.xp_for_100_percent;
+          myChart.options.scales.yAxes[0].ticks.max = max_xp;
+          myChart.options.scales.yAxes[0].ticks.stepSize = max_xp / 20;
+        }
+
         generate_trend(data.days_in_semester);
         generate_mark_lines(data.days_in_semester);
         myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
-
-        //console.log(myChart);
 
         $('div.loading').remove();
         $('#myChart').show("slow");
@@ -317,7 +325,17 @@
   });
 
   $(document).ready(function() {
-    ajax_update_plot();
+    var $courseButtons = $('.xp-chart-courses button');
+
+    // no buttons means a single course (or a deck that shares XP evenly), and the one chart
+    // is the student's whole progress
+    ajax_update_plot($courseButtons.filter('.active').data('course'));
+
+    $courseButtons.on('click', function() {
+      $courseButtons.removeClass('active');
+      $(this).addClass('active');
+      ajax_update_plot($(this).data('course'));
+    });
   });
 
 

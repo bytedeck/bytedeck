@@ -957,6 +957,16 @@ div.btn-group.action-btn-group {
 
 /*Make the container act like container-fluid at small and medium sizes*/
 
+/************ XP PROGRESS CHART **********************/
+
+/* The course picker above a multicourse student's progress chart (#2453): one button per
+   course, sitting between the chart's tab strip and the chart's own panel, so it needs a
+   little air on both sides to read as belonging to neither. */
+.xp-chart-courses {
+    margin: 8px 0;
+}
+
+
 /*LESS to mimic Bootstrap without importing the less files.*/
 /*@screen-xs-max: 767px;
 @screen-sm-min: 768px;

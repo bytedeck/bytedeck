@@ -313,9 +313,6 @@ class Profile(models.Model):
     #
     #################################
 
-    def num_courses(self):
-        return self.current_courses().count()
-
     def current_courses(self):
         return CourseStudent.objects.current_courses(self.user)
 
@@ -408,6 +405,27 @@ class Profile(models.Model):
 
     def rank(self):
         return Rank.objects.get_rank(self.xp_cached)
+
+    def course_ranks(self):
+        """This student's rank in each of their current courses, highest rank first.
+
+        A student in several courses has a different amount of XP in each (issue #2440), so
+        they hold a different rank in each, and the navbar shows all of them. Their XP is
+        divided once for the whole student rather than per course, since this is asked on
+        every page.
+
+        Returns:
+            list[tuple]: (Course, Rank) pairs ordered by rank XP descending, so the first is
+            the rank to show when only one fits. Empty when they are in no course.
+        """
+        registrations = CourseStudent.objects.xp_for_registrations(self.user, profile=self)
+        if len(registrations) < 2:
+            # one course is the whole of their XP, which is the rank they already have: no
+            # per-course list to show, and the navbar keeps its single icon
+            return []
+
+        ranks = [(registration.course, Rank.objects.get_rank(xp)) for registration, xp in registrations]
+        return sorted(ranks, key=lambda course_rank: course_rank[1].xp, reverse=True)
 
     def next_rank(self):
         return Rank.objects.get_next_rank(self.xp_cached)

@@ -1,6 +1,8 @@
+import html
 import re
 
 from django import template
+from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
 
 from questions.models import QuestionType
@@ -21,6 +23,25 @@ _TYPE_ICONS = {
 def question_type_icon(question_type):
     """Return the Font Awesome icon class for a question's ``type`` (empty string if unknown)."""
     return _TYPE_ICONS.get(question_type, "")
+
+
+@register.filter
+def plain_text(value):
+    """Reduce summernote-authored HTML to the text a teacher actually typed.
+
+    Stripping tags on its own leaves the entities behind, so a question about "Tom & Jerry"
+    becomes ``Tom &amp; Jerry``, and autoescaping where it lands turns that into a visible
+    ``Tom &amp;amp; Jerry`` (#2169). Decoding after stripping gives back the characters
+    themselves. The result is deliberately left unsafe, so the template escapes it once, which
+    is what keeps it from breaking out of a title attribute.
+
+    Args:
+        value: summernote-authored HTML, or None for a field that was never filled in.
+
+    Returns:
+        str: the decoded text, unmarked, for the template to escape once where it lands.
+    """
+    return html.unescape(strip_tags(value or ""))
 
 # Matches content that is a single wrapping <p>...</p> (optionally with attributes and
 # surrounding whitespace). The inner group is only unwrapped when it contains no further
