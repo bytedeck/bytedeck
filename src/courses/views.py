@@ -114,10 +114,12 @@ def mark_calculations(request, user_id=None):
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
         'markranges': markranges,
-        # One progress chart per course, for a student whose courses actually hold different
-        # amounts (issue #2453). With the setting off every course holds an even share, so the
-        # charts would be one line at different scales, which says less than a single chart.
-        'chart_per_course': num_courses > 1 and SiteConfig.get().students_choose_xp_course,
+        # One progress chart per course, for anyone holding more than one (issue #2453). Not
+        # gated on students_choose_xp_course: that setting decides whether students are asked
+        # where new XP goes, while XP already assigned keeps counting where it was put. A deck
+        # that turns it off still has courses holding different amounts, which is what the marks
+        # table above shows too, and a single unlabelled chart could only be one of them.
+        'chart_per_course': num_courses > 1,
     }
     return render(request, template_name, context)
 
@@ -1031,11 +1033,13 @@ def _registration_to_chart(user, course_id):
         in no course at all, which the caller charts as a flat zero.
     """
     registrations = CourseStudent.objects.current_courses(user)
-    if course_id:
-        chosen = registrations.filter(course_id=course_id).first()
-        if chosen is not None:
-            return chosen
-    return registrations.first()
+    try:
+        # whatever the page posted: the chart asks for no course at all when the student has
+        # only one, and nothing stops a request naming something that is not an id
+        chosen = registrations.filter(course_id=int(course_id)).first()
+    except (TypeError, ValueError):
+        chosen = None
+    return chosen if chosen is not None else registrations.first()
 
 
 @xml_http_request_required

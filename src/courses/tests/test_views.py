@@ -2166,8 +2166,13 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
 
         unnamed = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
         not_theirs = self.client.post(url, {'course': someone_elses.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        # the page asks for no course when the student has one, which posts an empty value,
+        # and nothing stops a request naming something that is not an id at all
+        empty = self.client.post(url, {'course': ''}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        nonsense = self.client.post(url, {'course': 'undefined'}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
-        for response in (unnamed, not_theirs):
+        for response in (unnamed, not_theirs, empty, nonsense):
+            self.assertEqual(response.status_code, 200)
             self.assertEqual(json.loads(response.content)['xp_for_100_percent'], self.course.xp_for_100_percent)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
@@ -2421,25 +2426,36 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, f'data-course="{self.course.id}"')
         self.assertContains(response, f'data-course="{art.id}"')
 
-    def test_mark_calculations__offers_one_chart_when_xp_is_shared_evenly(self):
-        """With the per-course setting off every course holds an even share, so a chart each
-        would be the same line at different scales: less use than the single chart."""
+    def test_mark_calculations__still_charts_per_course_with_the_setting_off(self):
+        """Turning the per-course setting off stops students being asked where new XP goes; it
+        does not un-assign the XP already put against a course. Those courses still hold
+        different amounts, which the marks table on this page shows, so the charts stay per
+        course rather than collapsing into one line that could only be one of them."""
         siteconfig = SiteConfig.get()
         siteconfig.students_choose_xp_course = False
         siteconfig.save()
         self.addCleanup(self._restore_course_choice)
-        baker.make(
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
             CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
-            block=baker.make(Block), course=baker.make(Course, title='Art'),
+            block=baker.make(Block), course=art,
         )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
         self.client.force_login(self.student)
 
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertFalse(response.context['chart_per_course'])
-        # the chart's JS names the selector on every page, so the buttons' own attribute is
-        # what says whether any were rendered
-        self.assertNotContains(response, 'data-course=')
+        self.assertTrue(response.context['chart_per_course'])
+        self.assertContains(response, f'data-course="{self.course.id}"')
+        self.assertContains(response, f'data-course="{art.id}"')
+        # the courses really do still differ, which is why one chart would not do
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
 
     def test_mark_calculations__offers_one_chart_to_a_student_in_one_course(self):
         """One course means one chart, with no button bar to choose between."""
