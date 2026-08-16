@@ -31,6 +31,7 @@ from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
+from .transfer import LibraryTransferError
 from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests, library_listable_quests
 
 User = get_user_model()
@@ -125,6 +126,87 @@ def viewer_is_library_staff(request):
         bool: True when the request is being served from the Library deck by a staff user.
     """
     return request.tenant.schema_name == get_library_schema_name() and request.user.is_staff
+
+
+def redirect_failed_import(request, error, redirect_to):
+    """Send the user back to the Library, explaining why the import did not happen.
+
+    An import can fail for reasons the Library cannot see in advance, the common one being
+    a quest name this deck already uses for something else. Nothing was written when this
+    runs: the copy is atomic, so a campaign never lands half-imported. Telling the teacher
+    which quest clashed is what lets them rename it and try again, rather than meeting a
+    500 page or a bare 404 (#2364, #2397).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        error (LibraryTransferError): the failure, whose message names the content.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the error message.
+    """
+    messages.error(
+        request,
+        f"That import could not be completed, so nothing was added to your deck. {error} "
+        "Renaming your own copy and importing again should clear it."
+    )
+    return redirect(redirect_to)
+
+
+def warn_about_unmet_prereqs(request, unmet_prereqs):
+    """Tell the importer which gating did not come across with the content.
+
+    A prerequisite can only be rebuilt if this deck has the thing it points at. When it
+    does not, the quest arrives *without* that gate, which means more available than its
+    author intended rather than less: a quest meant to unlock after another one is
+    immediately open to anyone who can see it. Saying so here is what stops that being a
+    surprise found later, and it lands beside the "publish it and give it a prerequisite"
+    message the teacher is already acting on.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        unmet_prereqs (list[str]): names of the prerequisites this deck does not have.
+    """
+    if not unmet_prereqs:
+        return
+
+    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+    messages.warning(
+        request,
+        f"Heads up: this content required {names}, which your deck does not have, so "
+        "that requirement was not carried over. Anything gated on it arrives ungated, so "
+        "check its prerequisites before you publish."
+    )
+
+
+def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
+    """Tell the sharer which gating did not travel with the content they just shared.
+
+    A prerequisite only crosses if the thing it points at is in the Library too. A rank or
+    a course can never be, and a quest outside what is being pushed is simply not there
+    yet, so those gates are dropped at this end and the copy in the Library is ungated.
+
+    Nobody downstream can tell, because the Library row simply has no prerequisite: the
+    teacher who imports it later has nothing to be warned about.
+
+    That makes this the only place the loss is visible, and the sharer is also the one who
+    can act on it, by widening what they share or by re-gating it (#2399, #2450).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        unmet_prereqs (list[str]): names of the prerequisites that did not travel.
+    """
+    if not unmet_prereqs:
+        return
+
+    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+    messages.warning(
+        request,
+        f"One thing did not travel: this content was gated on {names}, which is not in the "
+        "Library, so the copy there is not gated on it and anyone importing it will get it "
+        "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
+        "grade, block or course cannot be shared at all."
+    )
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -475,7 +557,10 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             if quest is None:
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
-            import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+            try:
+                result = import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+            except LibraryTransferError as error:
+                return redirect_failed_import(request, error, 'library:quest_list')
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
@@ -492,6 +577,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             f"students can see it: <strong>{publish_link}</strong>, and give it a "
             f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
+        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         return redirect('quests:drafts')
 
@@ -591,7 +677,12 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
-            import_campaign_to(destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id)
+            try:
+                result = import_campaign_to(
+                    destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
+                )
+            except LibraryTransferError as error:
+                return redirect_failed_import(request, error, 'library:category_list')
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
@@ -611,6 +702,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
+        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')
@@ -713,7 +805,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
 
         # Perform export
-        export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
         with library_schema_context():
             # Get the newly exported quest
@@ -747,6 +839,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         return redirect('quests:quests')
 
 
@@ -856,7 +949,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 )
 
         # Export campaign and quests
-        exported_campaign = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+        shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
 
         with library_schema_context():
             exported_campaign = Category.objects.get(import_id=campaign.import_id)
@@ -894,6 +987,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             f"'{link}' has been shared to the Library. A Library admin has been notified: "
             "it will appear in the Library once they review and publish it."
         )
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         return redirect('quests:categories')
 
 

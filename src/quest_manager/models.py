@@ -16,6 +16,7 @@ from siteconfig.models import SiteConfig
 
 from badges.models import BadgeAssertion
 from comments.models import Comment
+from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin, PrereqAllConditionsMet
 from tags.models import TagsModelMixin
 
@@ -60,7 +61,7 @@ class CategoryManager(models.Manager):
         return qs
 
 
-class Category(IsAPrereqMixin, models.Model):
+class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
     """ Used to group quests into 'Campaigns'
     """
     title = models.CharField(max_length=50, unique=True)
@@ -616,7 +617,7 @@ class QuestManager(models.Manager):
         return self.get_queryset().none()
 
 
-class Quest(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
+class Quest(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMixin, XPItem):
     """
     A model representing a Quest.
 

@@ -15,6 +15,7 @@ from library.utils import get_library_schema_name, library_schema_context
 from library.models import ContentOrigin
 from library.views import LibraryQuestListView, shared_library_enabled_view, viewer_is_library_staff
 from library.importer import import_quest_to, import_campaign_to
+from library.transfer import LibraryTransferError
 from library.exporter import (
     build_library_clone_name,
     clone_quests_into_library,
@@ -24,6 +25,8 @@ from library.exporter import (
 )
 from model_bakery import baker
 from notifications.models import Notification
+from courses.models import Rank
+from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
@@ -55,6 +58,17 @@ class LibraryTenantTestCaseMixin(ByteDeckTenantTestCase):
             cls._setup_library_tenant()
 
         super().setUpClass()
+
+    def _message_texts(self, response):
+        """The messages queued for the user by a request.
+
+        Args:
+            response (HttpResponse): the response to read the message storage from.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in get_messages(response.wsgi_request)]
 
     def setUp(self):
         """Turn the Shared Library on for the deck under test.
@@ -1379,21 +1393,29 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
         with self.assertRaises(Quest.DoesNotExist):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=uuid.uuid4())
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_clone_quests_into_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A database error while copying conflicting quests is re-raised with context."""
-        mock_import_data.side_effect = IntegrityError("duplicate key")
-        quest = baker.make(Quest, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to copy conflicting quests to library schema"):
-            clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
+    def test_export_quest_to_library__name_already_taken_in_the_library_names_the_quest(self):
+        """A quest whose name the Library already holds fails with that name in the message."""
+        with library_schema_context():
+            baker.make(Quest, name="Taken In The Library", published=True)
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_export_quest_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A database error while importing a quest is re-raised as a clearer ValidationError with context."""
-        mock_import_data.side_effect = IntegrityError("duplicate key")
-        quest = baker.make(Quest, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to import quest to library schema"):
+        quest = baker.make(Quest, name="Taken In The Library", published=True)
+
+        with self.assertRaisesMessage(LibraryTransferError, "Taken In The Library"):
             export_quest_to_library(source_schema=self.tenant.schema_name, quest_import_id=quest.import_id)
+
+    def test_clone_quests_into_library__database_failure_is_reported_as_a_transfer_error(self):
+        """A constraint that only the database can see still reaches the caller readably.
+
+        `full_clean` catches the failures that can be checked in Python, so this covers the
+        branch below it: a database-level error is reported as a `LibraryTransferError`
+        rather than escaping as a bare `IntegrityError`. The patch is scoped to the copy
+        itself, since the fixture above it has to be able to save normally.
+        """
+        quest = baker.make(Quest, published=True)
+
+        with patch("library.transfer.Quest.save", side_effect=IntegrityError("duplicate key")):
+            with self.assertRaises(LibraryTransferError):
+                clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[quest])
 
     def test_export_campaign_to_library__no_published_quests_raises_validation_error(self):
         """Exporting a campaign that has no published quests (and no skip list) is rejected with a ValidationError."""
@@ -1402,13 +1424,15 @@ class ExporterErrorPathTests(LibraryTenantTestCaseMixin):
         with self.assertRaisesMessage(ValidationError, "Cannot export a campaign without any published quests."):
             export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
 
-    @patch("library.exporter.LibraryQuestResource.import_data")
-    def test_export_campaign_to_library__import_failure_wrapped_as_validation_error(self, mock_import_data):
-        """A validation error while importing a campaign is re-raised as a clearer ValidationError with context."""
-        mock_import_data.side_effect = ValidationError("bad data")
+    def test_export_campaign_to_library__name_already_taken_in_the_library_names_the_quest(self):
+        """A campaign carrying a quest whose name the Library holds fails with that name."""
+        with library_schema_context():
+            baker.make(Quest, name="Clashing Campaign Quest", published=True)
+
         campaign = baker.make(Category)
-        baker.make(Quest, campaign=campaign, published=True)
-        with self.assertRaisesMessage(ValidationError, "Failed to import campaign to library schema"):
+        baker.make(Quest, name="Clashing Campaign Quest", campaign=campaign, published=True)
+
+        with self.assertRaisesMessage(LibraryTransferError, "Clashing Campaign Quest"):
             export_campaign_to_library(source_schema=self.tenant.schema_name, campaign_import_id=campaign.import_id)
 
 
@@ -1984,9 +2008,12 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
             self.assertNotEqual(clone.import_id, quest.import_id)
             self.assertIn("(Exported on", clone.name)
 
-    def test_clone_quests_into_library__returns_none_when_there_is_nothing_to_copy(self):
+    def test_clone_quests_into_library__returns_nothing_when_there_is_nothing_to_copy(self):
         """A campaign with no conflicts skips the copy step entirely."""
-        self.assertIsNone(clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[]))
+        result = clone_quests_into_library(source_schema=self.tenant.schema_name, quests=[])
+
+        self.assertEqual(result.quests, [])
+        self.assertEqual(result.unmet_prereqs, [])
 
     def test_build_library_clone_name__falls_back_to_a_numbered_suffix(self):
         """A taken dated name pushes the next copy on to a numbered suffix."""
@@ -2021,6 +2048,199 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
         with library_schema_context():
             clone = self._library_clone_of(quest)
             self.assertTrue(clone.name.endswith("#1"), f"expected a numbered suffix, got {clone.name!r}")
+
+class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
+    """A name clash on import is reported to the teacher, not raised in their face.
+
+    Quest names are unique per deck, so importing a quest whose name this deck already
+    uses for something else cannot succeed. The teacher is told which name clashed and
+    that nothing was added, rather than meeting a 500 page or a bare 404 (#2364, #2397).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a quest and a campaign in the Library, and a staff user to import them."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, published=True)
+            cls.library_quest = baker.make(
+                Quest, name="Contested Name", campaign=cls.library_campaign, published=True,
+            )
+
+        cls.test_teacher = User.objects.create_user('collision_teacher', is_staff=True)
+
+    def test_import_quest__tells_the_teacher_which_name_clashed(self):
+        """Importing onto a name this deck already uses redirects with an explanation."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+
+    def test_import_quest__adds_nothing_to_the_deck_when_the_name_clashes(self):
+        """The failed import leaves the deck exactly as it was."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        self.assertFalse(
+            Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists()
+        )
+
+    def test_import_category__tells_the_teacher_and_imports_none_of_the_campaign(self):
+        """One clashing quest stops the whole campaign, and says so rather than 404ing."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+        self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
+
+
+class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
+    """A prerequisite the importing deck does not have is reported, not dropped in silence.
+
+    The loss fails open: a quest meant to unlock after another one arrives with no gate at
+    all, so it is immediately available to anyone who can see it. The teacher is told which
+    requirement did not come across, beside the message telling them to publish it (#2399).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a Library quest gated on another quest that is not being imported."""
+        with library_schema_context():
+            cls.gate = baker.make(Quest, name="Finish The Prologue", published=True)
+            cls.library_quest = baker.make(Quest, name="Chapter Two", published=True)
+            Prereq.add_simple_prereq(cls.library_quest, cls.gate)
+
+        cls.test_teacher = User.objects.create_user('unmet_prereq_teacher', is_staff=True)
+
+    def test_import_quest__warns_that_a_missing_prerequisite_was_not_carried_over(self):
+        """Importing a gated quest onto a deck without the gate names what is missing."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertTrue(
+            any("Finish The Prologue" in text for text in self._message_texts(response)),
+            f"expected the missing prerequisite to be named, got {self._message_texts(response)}",
+        )
+
+    def test_import_quest__arrives_ungated_when_the_prerequisite_is_missing(self):
+        """The warning is warranted: the quest really does arrive with no prerequisite."""
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual(list(imported.prereqs()), [])
+
+    def test_import_quest__stays_quiet_when_the_deck_already_has_the_prerequisite(self):
+        """A deck holding the gate gets the prerequisite rebuilt and no warning."""
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertFalse(any("did not" in text or "not carried over" in text for text in self._message_texts(response)))
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
+
+    def test_import_quest__re_importing_does_not_duplicate_an_existing_prerequisite(self):
+        """Importing the same quest twice refreshes it without stacking up its gate again.
+
+        Re-importing is how a deck picks up an updated version of Library content, so it
+        happens to quests that already have their prerequisites wired up.
+        """
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
+
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
+
+    def test_import_quest__warns_about_a_prerequisite_that_could_never_travel(self):
+        """A rank gate is stripped on the way out, and the importer is told it is gone.
+
+        From the teacher's side a requirement that cannot cross (#2450) and one this deck
+        happens not to have (#2399) are the same loss, so both are named.
+        """
+        with library_schema_context():
+            gated = baker.make(Quest, name="Rank Gated Quest", published=True)
+            rank = baker.make(Rank, name="Digital Novice")
+            Prereq.add_simple_prereq(gated, rank)
+
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('library:import_quest', args=[gated.import_id]), follow=True)
+
+        self.assertTrue(
+            any("Digital Novice" in text for text in self._message_texts(response)),
+            f"expected the stripped rank to be named, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_a_gate_could_not_travel(self):
+        """Sharing a rank-gated quest tells the sharer the Library copy is ungated.
+
+        This is the only place the loss is visible. The Library row simply has no
+        prerequisite, so a teacher importing it later has nothing to be warned about
+        (#2399, #2450).
+        """
+        rank = baker.make(Rank, name="Digital Novice")
+        local = baker.make(Quest, name="Locally Gated Quest", published=True)
+        Prereq.add_simple_prereq(local, rank)
+
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertTrue(
+            any("Digital Novice" in text for text in self._message_texts(response)),
+            f"expected the sharer to be told, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__stays_quiet_when_the_gate_is_already_in_the_library(self):
+        """No warning when the Library already holds the quest this one is gated on.
+
+        A single-quest share carries only that quest, so its gate resolves in the Library
+        only if it is already there. Sharing the gate first is what makes that true.
+        """
+        gate = baker.make(Quest, name="Shareable Gate", published=True)
+        local = baker.make(Quest, name="Quest With A Shareable Gate", published=True)
+        Prereq.add_simple_prereq(local, gate)
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertFalse(
+            any("did not travel" in text for text in self._message_texts(response)),
+            f"expected no warning, got {self._message_texts(response)}",
+        )
 
 
 class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
