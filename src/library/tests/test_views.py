@@ -2472,6 +2472,7 @@ class LibraryImportPreviewQuestionTests(LibraryTenantTestCaseMixin):
 
         self.assertNotContains(response, reverse('questions:list', args=[self.library_quest.id]))
         self.assertNotContains(response, reverse('questions:move', args=[local_quest.id, local_question.id, 'up']))
+        self.assertNotContains(response, local_question.get_absolute_url())
         self.assertNotContains(response, reverse('questions:delete', args=[local_quest.id, local_question.id]))
 
     def test_quest_detail__still_offers_question_management_on_the_deck_that_owns_the_quest(self):
