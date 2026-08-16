@@ -269,15 +269,15 @@ class UnstampedDoubleStartRaceTest(ByteDeckTenantTestCase):
 
 
 class MigrationDedupTest(ByteDeckTenantTestCase):
-    # Drops and re-adds the QuestSubmission unique constraint via the schema
-    # editor, so give it a private fresh schema rather than mutating the shared
-    # reused one (and to avoid colliding with the persistent test tenant).
-    reuse_schema = False
-
     """Cover migration 0054's ``remove_duplicate_unstamped_in_progress_submissions``:
     it must delete duplicate never-completed in-progress rows that name no semester
     (keeping the earliest, flushing deletes in bounded batches) and spare completed,
     returned, and stamped rows."""
+
+    # Drops and re-adds the QuestSubmission unique constraint via the schema
+    # editor, so give it a private fresh schema rather than mutating the shared
+    # reused one (and to avoid colliding with the persistent test tenant).
+    reuse_schema = False
 
     def _constraint(self):
         """Return the no-semester partial unique constraint object from QuestSubmission's

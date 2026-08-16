@@ -686,9 +686,9 @@ class StudentOwnSemesterTest(ByteDeckTenantTestCase):
         """Archiving the semester a student was in leaves them with no current registration,
         and so with no semester: they are not moved into the cohort still running, whose
         roster they are absent from and whose teachers are not theirs (issue #2441). This is
-        the case the deck-wide fallback used to get wrong, and the one that costs a student
-        their work: XP earned into that cohort's semester is dropped when it is archived,
-        because archiving records final XP from the registrations and they hold none."""
+        the case that costs a student their work if it goes wrong: XP earned into a cohort's
+        semester is dropped when that semester is archived, because archiving records final
+        XP from the registrations, and a student outside that cohort holds none."""
         Semester.objects.complete_semester(self.deck_semester)
         self.other_semester.refresh_from_db()
         self.assertTrue(self.other_semester.is_open)

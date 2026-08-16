@@ -185,15 +185,15 @@ class RepeatableQuestFlowRegressionTest(ByteDeckTenantTestCase):
 
 
 class MigrationDedupTest(ByteDeckTenantTestCase):
-    # Drops and re-adds the QuestSubmission unique constraint via the schema
-    # editor, so give it a private fresh schema rather than mutating the shared
-    # reused one (and to avoid colliding with the persistent test tenant).
-    reuse_schema = False
-
     """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
     it must delete duplicate never-completed in-progress rows (keeping the
     earliest, flushing deletes in bounded batches) and spare completed,
     returned, and NULL-semester rows."""
+
+    # Drops and re-adds the QuestSubmission unique constraint via the schema
+    # editor, so give it a private fresh schema rather than mutating the shared
+    # reused one (and to avoid colliding with the persistent test tenant).
+    reuse_schema = False
 
     def _constraints(self):
         """Return QuestSubmission's partial unique constraints, so tests can drop and
