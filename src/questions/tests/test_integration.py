@@ -484,9 +484,9 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
     def test_quest_detail__marker_notes_popover_is_initialized(self):
         """The marker-notes popover in the question table is activated on this page (#2166).
 
-        Bootstrap popovers do nothing until initialized, so before the site-wide initializer the
-        icon here showed only its native "Marker Notes" title and the notes themselves could not
-        be read anywhere outside the question-management page.
+        A bootstrap popover does nothing until something initializes it: without the site-wide
+        initializer this icon offers only its native "Marker Notes" title, leaving the notes
+        themselves unreadable on the page a teacher marks from.
         """
         self.short_question.marker_notes = "<p>Accept any working URL.</p>"
         self.short_question.save()
