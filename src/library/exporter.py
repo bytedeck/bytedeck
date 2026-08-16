@@ -183,8 +183,9 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         campaign_import_id (UUID): Import ID of the campaign to export.
 
     Returns:
-        TransferResult: The quests as they now exist in the library, and the names of any
-            prerequisites that could not travel with them.
+        TransferResult: The quests as they now exist in the library, the names of any
+            prerequisites that could not travel with them, and the names of any quests in
+            the campaign that were not shared at all.
 
     Raises:
         Category.DoesNotExist: If the campaign is not found in the source schema.
@@ -194,6 +195,17 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
     with schema_context(source_schema):
         local_campaign = Category.objects.get(import_id=campaign_import_id)
         local_quests = list(local_campaign.current_quests())
+
+        # `current_quests()` is published and not archived, so archiving a quest quietly
+        # takes it out of the share. Name them, so the sharer finds out now rather than
+        # from whoever imports the campaign and wonders where the quest went (#2442).
+        shared_ids = {quest.id for quest in local_quests}
+        skipped_quests = sorted(
+            Quest.objects.all_including_archived()
+            .filter(campaign=local_campaign, archived=True)
+            .exclude(id__in=shared_ids)
+            .values_list('name', flat=True)
+        )
 
     # detect which local quests already exist in the library before the export happens
     library_conflicting_ids = get_library_conflicting_quests(local_quests)
@@ -228,4 +240,5 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
     return TransferResult(
         quests=exported.quests + cloned.quests,
         unmet_prereqs=sorted(set(exported.unmet_prereqs) | set(cloned.unmet_prereqs)),
+        skipped_quests=skipped_quests,
     )

@@ -2105,12 +2105,13 @@ class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
         self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
 
 
-class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
-    """A prerequisite the importing deck does not have is reported, not dropped in silence.
+class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
+    """What happens to a quest's gating when the importing deck does not have it.
 
-    The loss fails open: a quest meant to unlock after another one arrives with no gate at
-    all, so it is immediately available to anyone who can see it. The teacher is told which
-    requirement did not come across, beside the message telling them to publish it (#2399).
+    Imported content is a self-contained package: the importing teacher places it into
+    their own map and sets their own prerequisites, so a gate that did not travel is not
+    something they need telling about. It is the sharer's business, and is warned about on
+    the push instead (see `LibrarySharerWarningTests`).
     """
 
     @classmethod
@@ -2123,21 +2124,8 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
 
         cls.test_teacher = User.objects.create_user('unmet_prereq_teacher', is_staff=True)
 
-    def test_import_quest__warns_that_a_missing_prerequisite_was_not_carried_over(self):
-        """Importing a gated quest onto a deck without the gate names what is missing."""
-        self.client.force_login(self.test_teacher)
-
-        response = self.client.post(
-            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
-        )
-
-        self.assertTrue(
-            any("Finish The Prologue" in text for text in self._message_texts(response)),
-            f"expected the missing prerequisite to be named, got {self._message_texts(response)}",
-        )
-
     def test_import_quest__arrives_ungated_when_the_prerequisite_is_missing(self):
-        """The warning is warranted: the quest really does arrive with no prerequisite."""
+        """A quest whose gate this deck does not have arrives with no prerequisite."""
         self.client.force_login(self.test_teacher)
 
         self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
@@ -2145,16 +2133,13 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
         imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
         self.assertEqual(list(imported.prereqs()), [])
 
-    def test_import_quest__stays_quiet_when_the_deck_already_has_the_prerequisite(self):
-        """A deck holding the gate gets the prerequisite rebuilt and no warning."""
+    def test_import_quest__rebuilds_a_prerequisite_the_deck_already_has(self):
+        """A deck holding the gate gets the prerequisite rebuilt rather than dropped."""
         import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
         self.client.force_login(self.test_teacher)
 
-        response = self.client.post(
-            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
-        )
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
 
-        self.assertFalse(any("did not" in text or "not carried over" in text for text in self._message_texts(response)))
         imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
         self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
 
@@ -2172,40 +2157,56 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
         imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
         self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
 
-    def test_import_quest__warns_about_a_prerequisite_that_could_never_travel(self):
-        """A rank gate is stripped on the way out, and the importer is told it is gone.
+    def test_import_quest__tells_the_importer_only_what_they_have_to_do_next(self):
+        """The import message covers publishing and gating, and nothing about what was lost.
 
-        From the teacher's side a requirement that cannot cross (#2450) and one this deck
-        happens not to have (#2399) are the same loss, so both are named.
+        Everything the Library could not carry is reported to the sharer on the push. The
+        importer is told the two things they have to do, which is all that is theirs to act
+        on (#2452).
         """
-        with library_schema_context():
-            gated = baker.make(Quest, name="Rank Gated Quest", published=True)
-            rank = baker.make(Rank, name="Digital Novice")
-            Prereq.add_simple_prereq(gated, rank)
-
         self.client.force_login(self.test_teacher)
 
-        response = self.client.post(reverse('library:import_quest', args=[gated.import_id]), follow=True)
-
-        self.assertTrue(
-            any("Digital Novice" in text for text in self._message_texts(response)),
-            f"expected the stripped rank to be named, got {self._message_texts(response)}",
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
         )
+
+        texts = self._message_texts(response)
+        self.assertTrue(any("publish" in text.lower() and "prerequisite" in text.lower() for text in texts))
+        self.assertFalse(
+            any("Finish The Prologue" in text for text in texts),
+            f"the importer should not be told about gating that did not travel, got {texts}",
+        )
+
+
+class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
+    """What the Library tells the sharer it could not carry.
+
+    Content shared to the Library is meant to be a self-contained package, so the losses
+    belong to the person pushing it: they are the only one who can widen what they share,
+    and the only one who can still see what is missing (#2399, #2442, #2450).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to share content from this deck."""
+        cls.test_teacher = User.objects.create_user('sharer_warning_teacher', is_staff=True)
+
+    def _allow_staff_export(self):
+        """Let a staff user share, rather than only the deck owner."""
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
 
     def test_export_quest__warns_the_sharer_that_a_gate_could_not_travel(self):
         """Sharing a rank-gated quest tells the sharer the Library copy is ungated.
 
         This is the only place the loss is visible. The Library row simply has no
-        prerequisite, so a teacher importing it later has nothing to be warned about
-        (#2399, #2450).
+        prerequisite, so nobody downstream can tell it ever had one (#2399, #2450).
         """
         rank = baker.make(Rank, name="Digital Novice")
         local = baker.make(Quest, name="Locally Gated Quest", published=True)
         Prereq.add_simple_prereq(local, rank)
-
-        config = SiteConfig.get()
-        config.allow_staff_export = True
-        config.save()
+        self._allow_staff_export()
         self.client.force_login(self.test_teacher)
 
         response = self.client.post(
@@ -2227,10 +2228,7 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
         local = baker.make(Quest, name="Quest With A Shareable Gate", published=True)
         Prereq.add_simple_prereq(local, gate)
         export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
-
-        config = SiteConfig.get()
-        config.allow_staff_export = True
-        config.save()
+        self._allow_staff_export()
         self.client.force_login(self.test_teacher)
 
         response = self.client.post(
@@ -2239,6 +2237,49 @@ class LibraryUnmetPrereqWarningTests(LibraryTenantTestCaseMixin):
 
         self.assertFalse(
             any("did not travel" in text for text in self._message_texts(response)),
+            f"expected no warning, got {self._message_texts(response)}",
+        )
+
+    def test_export_category__warns_the_sharer_that_an_archived_quest_was_left_out(self):
+        """Sharing a campaign holding an archived quest names the quest that stayed behind.
+
+        The push succeeds and the campaign looks complete, so the omission is invisible
+        without this: it would surface on somebody else's deck, if at all (#2442).
+        """
+        campaign = baker.make(Category, published=True)
+        active = baker.make(Quest, name="Still Active Quest", campaign=campaign, published=True)
+        archived = baker.make(Quest, name="Retired Quest", campaign=campaign, published=True, archived=True)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Retired Quest" in text for text in texts),
+            f"expected the archived quest to be named, got {texts}",
+        )
+        with library_schema_context():
+            shared = set(Quest.objects.all_including_archived().values_list('import_id', flat=True))
+        self.assertIn(active.import_id, shared)
+        self.assertNotIn(archived.import_id, shared)
+
+    def test_export_category__stays_quiet_when_every_quest_travels(self):
+        """A campaign with nothing archived shares without a left-behind warning."""
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, name="First Quest", campaign=campaign, published=True)
+        baker.make(Quest, name="Second Quest", campaign=campaign, published=True)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertFalse(
+            any("not included" in text for text in self._message_texts(response)),
             f"expected no warning, got {self._message_texts(response)}",
         )
 
