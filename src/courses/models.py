@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_comma_separated_integer_list
 from django.db import connection, models, transaction
+from django.db.models import Count, Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.urls import reverse
@@ -14,6 +15,7 @@ import numpy
 from colorful.fields import RGBColorField
 from django_tenants.utils import get_public_schema_name
 
+from badges.models import BadgeAssertion
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
@@ -703,12 +705,68 @@ class CourseStudentManager(models.Manager):
 
     # for current active semester
     def calculate_xp(self, user):
-        xp = 0
-        studentcourses = self.current_courses(user)
-        if studentcourses:
-            for studentcourse in studentcourses:
-                xp += studentcourse.xp_adjustment
-        return xp
+        """The total of this student's manual XP adjustments across their current courses.
+
+        Aggregated in the database rather than summed in Python: CourseStudent.xp() asks for
+        this, and that runs once per registration for every student on the deck when a semester
+        is archived.
+
+        Returns:
+            int: the sum of their registrations' xp_adjustment, 0 when they have no course.
+        """
+        return self.current_courses(user).aggregate(total=Sum('xp_adjustment'))['total'] or 0
+
+    def xp_for_registrations(self, user, profile=None):
+        """Every current registration this student holds, with the XP counting toward it.
+
+        The assigned-versus-shared split (issue #2440) is the same question for every course a
+        student holds, so it is answered once here for all of them rather than once per
+        registration. Whatever wants more than one registration's XP goes through this: the
+        per-course ranks in the navbar ask on every page.
+
+        Args:
+            user: the student whose XP is being divided.
+            profile (Profile): their profile, for a caller holding one whose xp_cached is
+                newer than the database. Defaults to reading it.
+
+        Returns:
+            list[tuple]: (CourseStudent, xp) in registration order, empty when the student is
+            in no course. A student in one course has their whole total against it.
+        """
+        profile = profile if profile is not None else user.profile
+        registrations = list(self.current_courses(user))
+        if len(registrations) <= 1:
+            return [(registration, profile.xp_cached) for registration in registrations]
+
+        # xp_cached is the student's deck-wide total: quest XP, badge XP, and every one of
+        # their registrations' adjustments. Take out the parts that belong to a particular
+        # course, share what is left, and hand each registration back its own pieces.
+        xp_by_course = QuestSubmission.objects.xp_by_course(user)
+        for course_id, xp in BadgeAssertion.objects.xp_by_course(user).items():
+            xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
+
+        # Only courses the student still holds can claim XP: work assigned to a course whose
+        # registration has since been deleted has nowhere to count, so it stays in the shared
+        # pool rather than being subtracted from it and lost. A registration with no course at
+        # all is not one of those claims: unassigned XP is filed under no course too, and
+        # counting it as claimed would take the student's shared work out of the pool as well.
+        course_ids = {
+            registration.course_id for registration in registrations
+            if registration.course_id is not None
+        }
+        assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
+        adjustments = sum(registration.xp_adjustment for registration in registrations)
+        shared = (profile.xp_cached - assigned - adjustments) / len(registrations)
+
+        return [
+            (
+                registration,
+                (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
+                + registration.xp_adjustment
+                + shared,
+            )
+            for registration in registrations
+        ]
 
     def calc_semester_grades(self, semester, clamp_negative_xp=False):
         """Record every registration's final XP and deactivate it.
@@ -723,7 +781,10 @@ class CourseStudentManager(models.Manager):
         # semester stays open (CodeRabbit find on the #1734 B2 review)
         with transaction.atomic():
             for coursestudent in coursestudents:
-                coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+                # each registration's own XP, not a single figure reused for all of them: a
+                # student who assigned their work to one course must not have that course's
+                # total recorded against the other one too (issue #2440)
+                coursestudent.final_xp = coursestudent.xp()
                 if coursestudent.final_xp < 0:
                     if not clamp_negative_xp:
                         raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
@@ -789,6 +850,26 @@ class CourseStudentManager(models.Manager):
         if registration is not None:
             return registration.semester
         return SiteConfig.get().open_semester
+
+    def has_multicourse_students(self):
+        """Whether anyone on the deck is currently registered in more than one course.
+
+        Nothing about per-course XP (issue #2440) applies to a deck where every student takes
+        one course, so the pages that would explain it stay quiet unless somebody is actually
+        affected.
+
+        Returns:
+            bool: True when at least one student holds two or more registrations in an open
+            semester. False on the public tenant, which has no courses to read.
+        """
+        if connection.schema_name == get_public_schema_name():  # pragma: no cover
+            # unreachable from the tenant-only pages that ask this; guarded because the public
+            # schema has no courses tables, the same way all_users_in_open_semesters() is
+            return False
+
+        return self.get_queryset().in_open_semesters().get_students_only().values('user').annotate(
+            registrations=Count('id'),
+        ).filter(registrations__gt=1).exists()
 
     def all_users_in_open_semesters(self, students_only=False, active_only=False):
         """Every user registered in a course in a semester that is open right now.
@@ -910,6 +991,52 @@ class CourseStudent(models.Model):
     # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property
+    def xp(self, profile=None):
+        """The XP that counts toward this one registration.
+
+        A student in several courses splits their XP between them (issue #2440). Work they
+        assigned to one of their current courses counts wholly toward it; everything else is
+        shared evenly, which is what every submission did before they could assign one, and is
+        still what happens to badge XP, to work handed in while the deck had the setting off,
+        and to anything from before the choice existed.
+
+        Args:
+            profile (Profile): the student's profile, for a caller holding one whose xp_cached
+                is newer than the database. Profile.xp_invalidate_cache() works out the new
+                total and asks for the mark, so without this the mark would be a percentage of
+                the previous total. Defaults to reading the profile.
+
+        Returns:
+            float: this registration's share of the student's XP, including its own
+            xp_adjustment. Their whole total when this is their only course.
+        """
+        profile = profile if profile is not None else self.user.profile
+        # the split is worked out for the whole student at once; a registration that is not a
+        # current one is not part of that division, so it answers with the student's total
+        for registration, xp in CourseStudent.objects.xp_for_registrations(self.user, profile):
+            if registration.pk == self.pk:
+                return xp
+        return profile.xp_cached
+
+    def mark(self, profile=None):
+        """This registration's mark, worked out from its own XP.
+
+        A student in two courses has a different amount of XP in each (issue #2440), so each
+        registration has its own mark. Capping is a deck setting, applied here so every place
+        that shows a mark agrees about it.
+
+        Args:
+            profile (Profile): passed through to xp(), for a caller holding a profile whose
+                xp_cached is newer than the database.
+
+        Returns:
+            float: the percentage for this course, capped at 100 when the deck asks for that.
+        """
+        mark = self.calc_mark(self.xp(profile))
+        if SiteConfig.get().cap_marks_at_100_percent:
+            return min(mark, 100)
+        return mark
+
     def calc_mark(self, xp):
         if not self.course:  # course may be null if it was deleted.
             return 0

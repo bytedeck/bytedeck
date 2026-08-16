@@ -1432,8 +1432,10 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         badges = [badge] if badge else self.form.cleaned_data.get("awards", [])
 
         for badge in badges:
+            # a badge granted alongside a quest counts toward whichever course the student put
+            # that quest against, so the badge and the work it recognises land together (#2440)
             new_assertion = BadgeAssertion.objects.create_assertion(
-                self.submission.user, badge, self.request.user
+                self.submission.user, badge, self.request.user, course=self.submission.course
             )
             messages.success(
                 self.request,
@@ -1774,12 +1776,13 @@ def complete(request, submission_id):
 
     student_can_enter_xp = submission.quest.xp_can_be_entered_by_students and not submission.is_approved
 
+    # the student's own courses, so the form can ask which one this counts toward (#2440)
     if student_can_enter_xp:
-        form = SubmissionFormCustomXP(request.POST, request.FILES)
+        form = SubmissionFormCustomXP(request.POST, request.FILES, student=submission.user)
     elif request.FILES:  # if there are files, we need to use the full form
-        form = SubmissionForm(request.POST, request.FILES)
+        form = SubmissionForm(request.POST, request.FILES, student=submission.user)
     else:
-        form = SubmissionQuickReplyFormStudent(request.POST)
+        form = SubmissionQuickReplyFormStudent(request.POST, student=submission.user)
 
     # The quest's questions, bound to this POST as an answer formset over the submission's
     # draft rows. Only the "complete" action on a not-yet-completed submission involves the
@@ -1952,6 +1955,14 @@ def complete(request, submission_id):
             and not submission.quest.verification_required
         ):
             affected_users.extend(request.user.profile.current_teachers())
+
+        # Record which course the student said this counts toward, before the XP is granted so
+        # an auto-approved quest lands in the right course straight away (issue #2440).
+        # Assigned whatever they picked, "split evenly" (None) included: a submission a teacher
+        # returned carries its earlier choice, and redoing it has to be able to change that
+        # choice back. The form is seeded with the current course, so this writes back what the
+        # student was actually shown.
+        submission.course = form.cleaned_data.get('course')
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
@@ -2328,14 +2339,17 @@ def submission(request, submission_id=None, quest_id=None):
             sub.draft_comment = draft_comment
             sub.save()
 
-        initial = {"comment_text": sub.draft_comment.text}
+        # show the course this already counts toward, so a student returning to the page sees
+        # their earlier choice rather than the form offering to reset it (issue #2440)
+        initial = {"comment_text": sub.draft_comment.text, "course": sub.course}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
             main_comment_form = SubmissionFormCustomXP(initial=initial,
-                                                       minimum_xp=sub.quest.xp)
+                                                       minimum_xp=sub.quest.xp,
+                                                       student=request.user)
         else:
-            main_comment_form = SubmissionForm(initial=initial)
+            main_comment_form = SubmissionForm(initial=initial, student=request.user)
 
         # The quest's questions, as an answer formset over this submission's draft rows.
         # Only while the submission can still be worked on; answers on completed/approved

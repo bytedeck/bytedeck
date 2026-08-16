@@ -153,29 +153,37 @@ def redirect_failed_import(request, error, redirect_to):
     return redirect(redirect_to)
 
 
-def warn_about_unmet_prereqs(request, unmet_prereqs):
-    """Tell the importer which gating did not come across with the content.
+def warn_sharer_about_skipped_quests(request, skipped_quests):
+    """Tell the sharer which quests were left out of the campaign they just shared.
 
-    A prerequisite can only be rebuilt if this deck has the thing it points at. When it
-    does not, the quest arrives *without* that gate, which means more available than its
-    author intended rather than less: a quest meant to unlock after another one is
-    immediately open to anyone who can see it. Saying so here is what stops that being a
-    surprise found later, and it lands beside the "publish it and give it a prerequisite"
-    message the teacher is already acting on.
+    A campaign push carries `Category.current_quests()`, which is published and not
+    archived, so archiving a quest quietly removes it from everything shared afterwards.
+    The push still succeeds and the campaign still looks complete, so without this the
+    sharer has no way to notice: the gap only shows up on somebody else's deck, and only
+    if they happen to know what was supposed to be there (#2442).
 
     Args:
         request (HttpRequest): the current request, for the message framework.
-        unmet_prereqs (list[str]): names of the prerequisites this deck does not have.
+        skipped_quests (list[str]): names of the campaign's quests that were not shared.
+            Only published ones: an archived draft would not travel after unarchiving
+            either, so naming it would attach advice that does not work.
+
+    Returns:
+        None. Queues a warning message when anything was left behind, and does nothing
+        when the whole campaign travelled.
     """
-    if not unmet_prereqs:
+    if not skipped_quests:
         return
 
-    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+    names = ', '.join(f"'{name}'" for name in skipped_quests)
     messages.warning(
         request,
-        f"Heads up: this content required {names}, which your deck does not have, so "
-        "that requirement was not carried over. Anything gated on it arrives ungated, so "
-        "check its prerequisites before you publish."
+        f"{names} was not included, because archived quests are not shared. Unarchive it "
+        "and share the campaign again if it should be part of what other decks receive."
+        if len(skipped_quests) == 1 else
+        f"These quests were not included, because archived quests are not shared: {names}. "
+        "Unarchive them and share the campaign again if they should be part of what other "
+        "decks receive."
     )
 
 
@@ -558,7 +566,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
             try:
-                result = import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+                import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:quest_list')
 
@@ -577,7 +585,6 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             f"students can see it: <strong>{publish_link}</strong>, and give it a "
             f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
-        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         return redirect('quests:drafts')
 
@@ -678,7 +685,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
             try:
-                result = import_campaign_to(
+                import_campaign_to(
                     destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
                 )
             except LibraryTransferError as error:
@@ -702,7 +709,6 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
-        warn_about_unmet_prereqs(request, result.unmet_prereqs)
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')
@@ -988,6 +994,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             "it will appear in the Library once they review and publish it."
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_skipped_quests(request, shared.skipped_quests)
         return redirect('quests:categories')
 
 

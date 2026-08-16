@@ -28,6 +28,60 @@ import json
 User = get_user_model()
 
 
+class NavbarRankTests(ByteDeckTenantTestCase):
+    """The navbar's rank control, which is a dropdown for a student in more than one course.
+
+    Their XP is attributed per course (issue #2440), so they hold a rank in each and the navbar
+    shows all of them rather than a single number that belongs to none of their courses (#2453).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher (needed before students exist) and a student to log in as."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def _register(self, course):
+        """Put the student in a course in the deck's semester."""
+        return baker.make(
+            CourseStudent, user=self.student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def test_navbar__lists_a_rank_per_course_for_a_multicourse_student(self):
+        """Every course the student holds appears in the dropdown, named, and the icon shown
+        while it is closed is their highest rank."""
+        maths = self._register(baker.make(Course, title='Maths')).course
+        art = self._register(baker.make(Course, title='Art')).course
+        quest = baker.make(Quest, xp=60, max_xp=-1)
+        baker.make(
+            QuestSubmission, user=self.student, quest=quest, course=maths,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertContains(response, 'id="ranks-menu"')
+        self.assertContains(response, str(maths))
+        self.assertContains(response, str(art))
+        # 60 XP against Maths reaches the deck's second rank there, and that is the one the
+        # closed navbar shows, not the starting rank they are still at in Art
+        self.assertContains(response, 'title="Rank: Digital Novice in Maths"')
+
+    def test_navbar__keeps_a_single_rank_for_a_student_in_one_course(self):
+        """With one course there is nothing to choose between, so the navbar stays the plain
+        link it has always been rather than growing a dropdown with one row in it."""
+        self._register(baker.make(Course, title='Maths'))
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertNotContains(response, 'id="ranks-menu"')
+        self.assertContains(response, 'title="Rank: Digital Noob"')
+
+
 class RankViewTests(ByteDeckTenantTestCase):
 
     @classmethod
@@ -1449,13 +1503,13 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_SemesterArchive__student_with_negative_xp__view(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_SemesterArchive__student_with_negative_xp__view(self, registration_xp):
         """
             Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
-        xp_per_course.return_value = -10
+        registration_xp.return_value = -10
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -2248,6 +2302,59 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         siteconfig = SiteConfig.get()
         siteconfig.display_marks_calculation = True
         siteconfig.save()
+
+    def test_mark_calculations__reports_the_shown_courses_own_xp(self):
+        """A student in two courses is told which course the page is about and how much of their
+        XP counts toward it. Before #2440 the two courses always held the same even share, so
+        the page could talk about "per course" without naming one; now they differ, and the
+        number shown has to be the named course's own."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        art_registration = baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        shown = response.context['obj']
+        self.assertContains(response, 'registered in 2 courses')
+        self.assertContains(response, str(shown.course))
+        self.assertEqual(response.context['xp_per_course'], shown.xp())
+        # the whole point: the two courses no longer hold the same number
+        self.assertNotEqual(self.stu_course.xp(), art_registration.xp())
+        self.assertEqual(self.stu_course.xp(), 50)
+        self.assertEqual(art_registration.xp(), 0)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__table_lists_each_course_its_own_mark(self, fraction_complete):
+        """The table of the student's courses shows a mark per row. A student who put their work
+        against one of their two courses is at 10% there and 0% in the other, rather than the
+        same number repeated down the table (issue #2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertContains(response, '<strong>10%</strong>', html=True)
+        self.assertContains(response, '<strong>0%</strong>', html=True)
 
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page

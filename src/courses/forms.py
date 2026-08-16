@@ -4,9 +4,65 @@ from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
+from django_select2.forms import Select2Widget
 
 from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+
+
+class XPCourseChoiceMixin:
+    """Asks the student which of their courses this submission's XP counts toward (issue #2440).
+
+    They can also decline to choose: "split evenly between my courses" is the first option and
+    the one selected by default, so a student who ignores the question gets the even split that
+    every submission used to get.
+
+    The field is only worth showing when there is a choice to make, so it is dropped when the
+    deck has the setting off, when the student is in a single course, and when no student is in
+    view at all (a staff form). Dropping it leaves the submission unassigned, which is the same
+    thing as splitting it.
+    """
+
+    #: Asked the same way of everyone, so the question reads identically whether a student is
+    #: handing in a quest or a teacher is granting a badge.
+    label = 'Which course should this XP be awarded to?'
+
+    #: Wording of the "do not assign this to a course" choice, which teacher-facing forms
+    #: override, since they are choosing on someone else's behalf.
+    split_evenly_label = 'Split evenly between my courses'
+
+    def __init__(self, *args, student=None, **kwargs):
+        """
+        Args:
+            student (User): whose courses to offer. None for a form no student fills in,
+                or one where the student is picked on the form itself and so is not yet known.
+        """
+        super().__init__(*args, **kwargs)
+        registrations = CourseStudent.objects.current_courses(student) if student else None
+        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
+
+        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
+            del self.fields['course']
+            return
+
+        field = self.fields['course']
+        field.label = self.label
+        # the label asks the whole question, so a line of help text under it would only repeat it
+        field.help_text = ''
+        # the same select2 dropdown the other fields on these pages use (both templates already
+        # render the form's media), so the question does not stand out as a different kind of
+        # box. select2 draws an optional field's empty choice as its placeholder, so the
+        # "split evenly" wording has to be handed over as one or the box reads blank.
+        field.widget = Select2Widget(attrs={
+            'data-theme': 'bootstrap',
+            'data-placeholder': self.split_evenly_label,
+        })
+        # "split evenly" is the empty choice, and it is what a submission with no course does
+        # anyway, so it needs no separate value and is the safe thing to leave selected: a
+        # student who does not think about the question gets the old behaviour. Assigning the
+        # queryset last hands the choices, empty label included, to the widget set above.
+        field.empty_label = self.split_evenly_label
+        field.queryset = courses
 
 
 class NoScriptTagDatePickerInput(DatePickerInput):

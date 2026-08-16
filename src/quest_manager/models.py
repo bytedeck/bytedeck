@@ -1216,6 +1216,47 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
+    def xp_by_course(self, user):
+        """How much of this student's quest XP they assigned to each of their courses.
+
+        A quest's `max_xp` caps what it can ever be worth, however many times it was repeated,
+        so the cap has to be applied to the quest as a whole before the total is split up: a
+        student who spread one repeatable quest's submissions across two courses must not earn
+        more from it than a student who put them all in one. Each course therefore receives the
+        capped total in proportion to what it was assigned uncapped.
+
+        Args:
+            user: the student whose XP is being divided.
+
+        Returns:
+            dict: course id to XP, with None collecting everything left unassigned. Only the
+            student's own semester counts, and only quests that grant XP.
+        """
+        submissions = self.all_approved(user).grant_xp().annotate(
+            xp_earned=Greatest('quest__xp', 'xp_requested'),
+        )
+        per_quest_course = submissions.order_by().values(
+            'quest', 'quest__max_xp', 'course',
+        ).annotate(xp_sum=Sum('xp_earned'))
+
+        # what each quest earned in total, to apply its cap before dividing it up
+        quest_totals = {}
+        for row in per_quest_course:
+            quest_totals[row['quest']] = quest_totals.get(row['quest'], 0) + row['xp_sum']
+
+        xp_by_course = {}
+        for row in per_quest_course:
+            total = quest_totals[row['quest']]
+            max_xp = row['quest__max_xp']
+            if max_xp == -1:  # no limit
+                capped = total
+            else:
+                capped = min(total, max_xp or 0)  # max_xp is None when the quest was deleted
+            share = capped * row['xp_sum'] / total if total else 0
+            xp_by_course[row['course']] = xp_by_course.get(row['course'], 0) + share
+
+        return xp_by_course
+
     def remove_in_progress(self, semester=None):
         """Delete the submissions students had on the go but never completed.
 
@@ -1252,6 +1293,14 @@ class QuestSubmission(models.Model):
     # blank=True as well as null=True: a submission started while no semester is open belongs
     # to none, and full_clean() (create_submission calls it) rejects an unset non-blank field
     semester = models.ForeignKey('courses.Semester', on_delete=models.SET_NULL, null=True, blank=True)
+    # Which of the student's courses this work counts toward (issue #2440). Null means it was
+    # never assigned: work handed in before this existed, or while the deck had the setting
+    # off, or by a student with only one course to count it toward. Unassigned XP is shared
+    # evenly across their courses, which is what every submission used to do.
+    course = models.ForeignKey(
+        'courses.Course', on_delete=models.SET_NULL, null=True, blank=True,
+        help_text="The course this submission's XP counts toward.",
+    )
     flagged_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
                                    related_name="quest_submission_flagged_by",
                                    help_text="flagged by a teacher for follow up",

@@ -308,54 +308,100 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
 
+    def test_course_ranks__is_empty_without_a_second_course(self):
+        """One course holds all of a student's XP, so its rank is the rank they already have.
+        There is nothing to list, and the navbar keeps its single icon (issue #2453)."""
+        self.assertEqual(self.profile.course_ranks(), [])
+
+        self.create_active_course_registration()
+
+        self.assertEqual(self.profile.course_ranks(), [])
+
+    def test_course_ranks__gives_each_course_its_own_rank_highest_first(self):
+        """A student in two courses has different XP in each, so they are at a different rank
+        in each. The list leads with the highest, which is the one the navbar shows closed."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.user, course=course,
+                       block=baker.make('courses.Block'), semester=self.active_sem)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=60),
+            course=maths, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        course_ranks = self.profile.course_ranks()
+
+        # 60 XP all against Maths reaches the deck's second rank there, while Art, holding
+        # none of it, is still at the starting rank
+        self.assertEqual([course for course, rank in course_ranks], [maths, art])
+        self.assertEqual([rank.name for course, rank in course_ranks], ['Digital Novice', 'Digital Noob'])
+
     def test_mark__no_courses(self):
         """A student not in any current courses should return None"""
         # the test profile shouldn't be in any courses yet, but sanity check here
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__single_course(self, mock_current_courses):
-        """mark() returns the single course's calculated mark."""
-        mock_coursestudent = Mock()
-        mock_coursestudent.calc_mark.return_value = 125
-        mock_current_courses.return_value = [mock_coursestudent]
-        self.assertEqual(self.profile.mark(), 125)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__single_course(self, fraction_complete):
+        """mark() works the student's XP into a percentage of what their course is out of."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__multiple_courses(self, mock_current_courses):
-        """mark() divides the first course's mark by the number of courses."""
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 87
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 87 / 2)
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertEqual(self.profile.mark(), 10)
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__cap_100(self, mock_current_courses):
-        """Test that mark() caps at 100 if that SiteConfig option is set"""
-        config = SiteConfig.get()
-        config.cap_marks_at_100_percent = True
-        config.save()
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_xp_invalidate_cache__stores_a_mark_worked_out_from_the_new_total(self, fraction_complete):
+        """mark_cached has to be the mark for the XP just counted, not the one before it.
 
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 125
+        The mark now comes from the student's registration, which reads xp_cached back out of
+        the database, so the new total has to be saved before the mark is asked for."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
 
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1]
-        self.assertEqual(self.profile.mark(), 100)
+        self.profile.xp_invalidate_cache()
 
-        # Add a second course, should not be capped anymore
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 125 / 2)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.xp_cached, 50)
+        self.assertEqual(self.profile.mark_cached, 10)
 
-        # What if both are over 100?
-        mock_coursestudent1.calc_mark.return_value = 225
-        self.assertEqual(self.profile.mark(), 100)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__multiple_courses(self, fraction_complete):
+        """A student in several courses has a mark in each, so this one number is the first
+        registration's, whole. Each registration's XP is already only its own share, so nothing
+        is divided a second time here (issue #2440 moved the split from the mark into the XP)."""
+        # distinct blocks: registrations are ordered by block name, and two rows with the same
+        # ordering key can come back in either order, which would make this test flaky
+        first_registration = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='A block'),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            course=first_registration.course, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+        registrations = list(self.profile.current_courses())
 
-        # NEED TO RETURN SiteConfig object back to original state for other tests!
-        config.cap_marks_at_100_percent = False
-        config.save()
+        self.assertEqual(registrations[0], first_registration)
+        self.assertEqual(self.profile.mark(), registrations[0].mark())
+        # the courses really do differ, so returning the first one's mark is a choice and not a
+        # coincidence of both being the same number
+        self.assertNotEqual(registrations[0].mark(), registrations[1].mark())
 
 
 class SmartListTests(SimpleTestCase):

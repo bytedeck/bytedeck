@@ -23,7 +23,6 @@ from badges.models import BadgeAssertion
 from courses.models import CourseStudent, Rank, Semester
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
-from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
 
 from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
@@ -367,10 +366,17 @@ class Profile(models.Model):
         return xp
 
     def xp_per_course(self):
-        course_count = self.num_courses()
-        if not course_count or course_count == 0:
-            return 0
-        return self.xp_cached / course_count
+        """This student's XP as their first course sees it.
+
+        Kept for the places that want a single representative number for a student. Each
+        registration answers for itself through CourseStudent.xp(), which is where the
+        assigned-versus-shared split lives (issue #2440).
+
+        Returns:
+            float: the first current registration's XP, or 0 when they have no course.
+        """
+        registration = self.current_courses().first()
+        return registration.xp() if registration else 0
 
     def xp_to_date(self, date):
         # TODO: Combine this with other methods?
@@ -381,16 +387,18 @@ class Profile(models.Model):
         return xp
 
     def mark(self):
-        courses = self.current_courses()
-        cap_at_100 = SiteConfig.get().cap_marks_at_100_percent
-        if courses:
-            mark = courses[0].calc_mark(self.xp_cached) / len(courses)
-            if cap_at_100:
-                return min(mark, 100)
-            else:
-                return mark
-        else:
-            return None
+        """This student's mark in the first of their courses, for the places that want one number.
+
+        Each registration has its own mark now that XP is attributed per course (issue #2440);
+        CourseStudent.mark() is where that lives, and this delegates to it.
+
+        Returns:
+            float or None: the first current registration's mark, None with no course.
+        """
+        registration = self.current_courses().first()
+        # hand over this profile: xp_invalidate_cache() asks for the mark with a new xp_cached
+        # it has not saved yet, and the registration would otherwise read the old one back
+        return registration.mark(profile=self) if registration else None
 
     #################################
     #
@@ -400,6 +408,27 @@ class Profile(models.Model):
 
     def rank(self):
         return Rank.objects.get_rank(self.xp_cached)
+
+    def course_ranks(self):
+        """This student's rank in each of their current courses, highest rank first.
+
+        A student in several courses has a different amount of XP in each (issue #2440), so
+        they hold a different rank in each, and the navbar shows all of them. Their XP is
+        divided once for the whole student rather than per course, since this is asked on
+        every page.
+
+        Returns:
+            list[tuple]: (Course, Rank) pairs ordered by rank XP descending, so the first is
+            the rank to show when only one fits. Empty when they are in no course.
+        """
+        registrations = CourseStudent.objects.xp_for_registrations(self.user, profile=self)
+        if len(registrations) < 2:
+            # one course is the whole of their XP, which is the rank they already have: no
+            # per-course list to show, and the navbar keeps its single icon
+            return []
+
+        ranks = [(registration.course, Rank.objects.get_rank(xp)) for registration, xp in registrations]
+        return sorted(ranks, key=lambda course_rank: course_rank[1].xp, reverse=True)
 
     def next_rank(self):
         return Rank.objects.get_next_rank(self.xp_cached)

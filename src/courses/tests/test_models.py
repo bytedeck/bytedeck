@@ -11,6 +11,7 @@ from freezegun import freeze_time
 from unittest.mock import patch
 from model_bakery import baker
 
+from badges.models import Badge, BadgeAssertion
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
@@ -246,7 +247,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         student = baker.make(User)
         registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
-        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+        with patch('courses.models.CourseStudent.xp', return_value=-50):
             self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
             result = Semester.objects.complete_semester(clamp_negative_xp=True)
 
@@ -266,7 +267,13 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         for student in students:
             baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester, active=True)
 
-        with patch('profile_manager.models.Profile.xp_per_course', side_effect=[10, -50, 10, -50]):
+        # keyed on the registration rather than a list of return values: saving a registration
+        # recalculates the student's mark, which asks for its XP again, so how many times xp()
+        # is called is an implementation detail this test should not depend on
+        negative = students[1].coursestudent_set.get().pk
+
+        with patch('courses.models.CourseStudent.xp', autospec=True,
+                   side_effect=lambda registration, profile=None: -50 if registration.pk == negative else 10):
             with self.assertRaises(ValueError):
                 CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
 
@@ -816,8 +823,8 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_students.count(), 2)
         self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_xp):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
 
         # second student in same course as setup
@@ -829,7 +836,7 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         course2 = baker.make(Course)
         course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
 
-        xp_per_course.return_value = 500
+        registration_xp.return_value = 500
         CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
 
         self.course_student.refresh_from_db()
@@ -844,10 +851,10 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_student2.final_xp, 500)
         self.assertEqual(course_student3.final_xp, 500)
 
-    @patch('profile_manager.models.Profile.xp_per_course')
-    def test_calc_semester_grades__student_with_negative_xp(self, xp_per_course):
+    @patch('courses.models.CourseStudent.xp')
+    def test_calc_semester_grades__student_with_negative_xp(self, registration_xp):
         """Test that an assertion error is raised when there is a student with negative xp"""
-        xp_per_course.return_value = -10
+        registration_xp.return_value = -10
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
@@ -894,6 +901,38 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         Semester.objects.complete_semester()
 
         self.assertEqual(CourseStudent.objects.all_users_in_open_semesters().count(), 0)
+
+    def test_has_multicourse_students__false_when_everyone_takes_one_course(self):
+        """A second student in their own single course is not the same as one student in two,
+        so a deck of single-course students still answers no."""
+        baker.make(CourseStudent, user=baker.make(User), course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__true_once_one_student_holds_two_courses(self):
+        """One student in two courses is enough: they are the person the per-course XP split
+        applies to (issue #2440)."""
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course),
+                   block=baker.make(Block), semester=SiteConfig.get().active_semester)
+
+        self.assertTrue(CourseStudent.objects.has_multicourse_students())
+
+    def test_has_multicourse_students__ignores_staff_and_archived_semesters(self):
+        """A teacher registered in two courses is not a student with two marks, and a student
+        whose semester is over is no longer on the deck."""
+        teacher = baker.make(User, is_staff=True)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=teacher, course=course, block=baker.make(Block),
+                       semester=SiteConfig.get().active_semester)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
+
+        old = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        for course in (baker.make(Course), baker.make(Course)):
+            baker.make(CourseStudent, user=baker.make(User), course=course, block=baker.make(Block), semester=old)
+
+        self.assertFalse(CourseStudent.objects.has_multicourse_students())
 
 
 class CourseStudentModelTest(ByteDeckTenantTestCase):
@@ -965,6 +1004,264 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         days_so_far.return_value = 0
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
+
+    def _approved(self, student, xp, course=None, max_xp=-1):
+        """Give a student an approved, XP-granting submission, optionally assigned to a course."""
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        return baker.make(
+            QuestSubmission, user=student, quest=quest, course=course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+
+    def _register(self, student, course):
+        """Register a student in a course in the deck's semester and return the registration."""
+        return baker.make(
+            CourseStudent, user=student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def _uncap_marks(self):
+        """Put the shared deck's mark cap back off, for the tests that turn it on."""
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = False
+        config.save()
+
+    def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
+        """Nothing to divide, so their one course carries everything they earned."""
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course))
+        self._approved(student, xp=30)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.xp(), 30)
+
+    def test_xp__shares_unassigned_work_evenly(self):
+        """Work nobody assigned to a course is split between them, which is what every
+        submission did before students could choose (issue #2440). A deck that leaves the
+        setting off therefore behaves exactly as it always has."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 20)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__counts_assigned_work_toward_the_course_it_was_assigned_to(self):
+        """The point of the whole feature: XP the student put against one course counts there
+        in full, rather than half of it leaking into the other course."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 40)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__mixes_assigned_and_shared_work(self):
+        """Assigned and unassigned work add up: the student's own choices land where they said,
+        and everything else (badges, older work) is still shared."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        self._approved(student, xp=10)  # unassigned, so shared
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 45)
+        self.assertEqual(art_registration.xp(), 5)
+
+    def test_xp__adds_the_registrations_own_adjustment(self):
+        """xp_adjustment is already per course ("an adjustment to the user's XP for this
+        course"), so it belongs to its own registration rather than being shared."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        first.xp_adjustment = 12
+        first.save()
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 32)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__never_totals_more_than_the_student_earned(self):
+        """A repeatable quest's max_xp caps what it is worth however it is spread, so splitting
+        one across two courses cannot conjure XP that the student's own total does not have."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        quest = baker.make(Quest, xp=30, max_xp=40)
+        for course in (maths, art):
+            baker.make(
+                QuestSubmission, user=student, quest=quest, course=course,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+        student.profile.xp_invalidate_cache()
+
+        # the cap is applied to the quest first, then shared out in proportion to what each
+        # course was assigned: two equal submissions, so half the capped 40 each
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 20)
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+        self.assertEqual(student.profile.xp_cached, 40)
+
+    def test_xp__counts_a_badge_toward_the_course_it_was_granted_for(self):
+        """A badge granted alongside a quest carries that quest's course, so the badge and the
+        work it recognises count toward the same course (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        BadgeAssertion.objects.create_assertion(
+            student, baker.make(Badge, xp=20), course=maths,
+        )
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__shares_a_badge_that_belongs_to_no_course(self):
+        """A badge granted on its own, with no course behind it, is shared like any other
+        unassigned XP rather than landing arbitrarily in one course."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20))
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 10)
+        self.assertEqual(second.xp(), 10)
+
+    def test_xp__still_shares_unassigned_work_when_a_registration_has_no_course(self):
+        """A registration with no course holds no course id, and unassigned XP is filed under no
+        course either. The two must not be confused: work the student never assigned is still
+        theirs to share out, not something already counted toward a course of theirs."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        maths_registration = self._register(student, maths)
+        courseless = self._register(student, None)
+        self._approved(student, xp=40)  # unassigned, so shared between the two
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(courseless.course)
+        self.assertEqual(maths_registration.xp(), 20)
+        self.assertEqual(courseless.xp(), 20)
+
+    def test_xp__answers_with_the_whole_total_for_a_registration_that_is_not_current(self):
+        """The split divides a student's XP between the courses they are in now, so a
+        registration from a semester that is over is not part of it and answers with their
+        total, the same as a student with one course."""
+        student = baker.make(User)
+        old = baker.make(
+            CourseStudent, user=student, course=baker.make(Course), block=baker.make(Block),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self._register(student, baker.make(Course))
+        self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(old.xp(), student.profile.xp_cached)
+
+    def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
+        """Deleting a registration must not make its XP vanish. Work assigned to a course the
+        student no longer holds has nowhere to count, so it goes back into the shared pool and
+        is split like any other unassigned work, rather than being taken off the total and
+        credited nowhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        dropped = baker.make(Course, title='Dropped')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        dropped_registration = self._register(student, dropped)
+        self._approved(student, xp=30, course=dropped)
+        student.profile.xp_invalidate_cache()
+
+        dropped_registration.delete()
+
+        self.assertEqual(maths_registration.xp(), 15)
+        self.assertEqual(art_registration.xp(), 15)
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+
+    def test_xp__shares_out_work_assigned_to_a_course_the_student_never_had(self):
+        """Same for a course that was never theirs: whatever put it there, the XP is the
+        student's and has to keep counting somewhere."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=20, course=baker.make(Course, title='Someone else’s course'))
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 10)
+        self.assertEqual(art_registration.xp(), 10)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__is_worked_out_from_the_registrations_own_xp(self, fraction_complete):
+        """Each course has its own mark, because each has its own XP (issue #2440). A student
+        who put all their work against one course is at 0% in the other, not at the same mark
+        in both."""
+        fraction_complete.return_value = 0.5
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths', xp_for_100_percent=100)
+        art = baker.make(Course, title='Art', xp_for_100_percent=100)
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        # 40 XP halfway through a semester projects to 80, out of the course's 100
+        self.assertEqual(maths_registration.mark(), 80)
+        self.assertEqual(art_registration.mark(), 0)
+
+    @patch('courses.models.Semester.fraction_complete')
+    def test_mark__caps_at_100_when_the_deck_asks_for_that(self, fraction_complete):
+        """cap_marks_at_100_percent applies per registration, so a course a student is running
+        away with reads 100% rather than a projected 160%."""
+        fraction_complete.return_value = 0.5
+        config = SiteConfig.get()
+        config.cap_marks_at_100_percent = True
+        config.save()
+        # save(), not update(): the setting is cached, and only save() invalidates that cache
+        self.addCleanup(self._uncap_marks)
+
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course, xp_for_100_percent=100))
+        self._approved(student, xp=80)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.mark(), 100)
+
+    def test_calc_semester_grades__records_each_course_its_own_final_xp(self):
+        """Archiving writes each registration's own XP into its final_xp. A student who put all
+        their work against one course must not have that course's total recorded against the
+        other one as well (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=60, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        maths_registration.refresh_from_db()
+        art_registration.refresh_from_db()
+        self.assertEqual(maths_registration.final_xp, 60)
+        self.assertEqual(art_registration.final_xp, 0)
 
     def test_clean__refuses_a_student_in_two_open_semesters(self):
         """A student belongs to one semester at a time (#1781): they can take several courses
