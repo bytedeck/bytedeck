@@ -1,5 +1,78 @@
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils import timezone
+
+
+class IsLibraryContentMixin:
+    """Marks a model as content the Shared Library can carry between decks.
+
+    Sharing content copies rows from one deck's schema into another, so a reference only
+    survives the crossing if it points at something both schemas can name. `import_id` is
+    that name: it is generated once and travels with the content, whereas a primary key
+    means whatever happens to hold it in the destination.
+
+    Inheriting this declares "rows of this model can travel". It is checked rather than
+    assumed in two places that would otherwise need a hardcoded list of models:
+
+    * a quest's prerequisites, which are generic foreign keys and so can point at any
+      prerequisite model, most of which describe the deck rather than the content (a rank,
+      a grade, a block, a course). Those are stripped on the way out, because there is
+      nothing on the far side for them to point at.
+    * anything added later that needs the same question answered.
+
+    Steps to make a new model shareable:
+
+    1. add `IsLibraryContentMixin` to the class (this registers it, exactly as
+       `IsAPrereqMixin` registers a prerequisite model)
+    2. give it an `import_id` UUID field, unique and stable for the life of the row
+
+    Both halves are required: the mixin without an `import_id` would claim a portable
+    identity the model does not have, which `test_library_content__every_registered_model_has_an_import_id`
+    guards against.
+
+    The methods below are named for what they answer rather than reusing
+    `IsAPrereqMixin`'s `*_is_registered` wording. The models that carry this mixin carry
+    that one too, so identical names would resolve by method resolution order and silently
+    answer the wrong question: `Quest.model_is_registered(Rank)` would say True, because
+    `Rank` is a registered *prerequisite*, which is not what the caller asked.
+    """
+
+    @staticmethod
+    def is_shareable_model(model_class):
+        """Whether rows of this model can be shared to the Library.
+
+        Args:
+            model_class (type | None): the model to check.
+
+        Returns:
+            bool: True if the model inherits this mixin.
+        """
+        return bool(model_class) and issubclass(model_class, IsLibraryContentMixin)
+
+    @staticmethod
+    def is_shareable_content_type(content_type):
+        """Whether the model behind a ContentType can be shared to the Library.
+
+        Args:
+            content_type (ContentType): the content type to check.
+
+        Returns:
+            bool: True if its model inherits this mixin.
+        """
+        return IsLibraryContentMixin.is_shareable_model(content_type.model_class())
+
+    @staticmethod
+    def all_shareable_model_classes():
+        """Every model that can be shared to the Library.
+
+        Returns:
+            list[type]: the registered model classes.
+        """
+        return [
+            content_type.model_class()
+            for content_type in ContentType.objects.all()
+            if IsLibraryContentMixin.is_shareable_content_type(content_type)
+        ]
 
 
 class ContentOrigin(models.Model):
