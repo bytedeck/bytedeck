@@ -135,6 +135,17 @@ for {{user}}
 
           {# == XP Progress == #}
           <div role="tabpanel" class="tab-pane active" id="progress">
+            {% comment %} One chart per course, since each holds its own XP and is out of its
+               own amount (#2453). Buttons rather than a second tab strip, so it reads as
+               "which course am I looking at" and not as another kind of chart. {% endcomment %}
+            {% if chart_per_course %}
+              <div class="btn-group xp-chart-courses" role="group" aria-label="Which course to chart">
+                {% for course in courses %}
+                  <button type="button" class="btn btn-default {% if forloop.first %}active{% endif %}"
+                          data-course="{{ course.course.id }}">{{ course.course }}</button>
+                {% endfor %}
+              </div>
+            {% endif %}
             <div class="well chart-container">
               <div class="loading">
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>

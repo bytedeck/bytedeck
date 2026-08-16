@@ -1216,7 +1216,7 @@ class QuestSubmissionManager(models.Manager):
 
         return total_xp
 
-    def xp_by_course(self, user):
+    def xp_by_course(self, user, up_to_date=None):
         """How much of this student's quest XP they assigned to each of their courses.
 
         A quest's `max_xp` caps what it can ever be worth, however many times it was repeated,
@@ -1227,12 +1227,14 @@ class QuestSubmissionManager(models.Manager):
 
         Args:
             user: the student whose XP is being divided.
+            up_to_date (date): count only what they had earned by then, for charting their
+                progress through the semester (issue #2453). Defaults to everything.
 
         Returns:
             dict: course id to XP, with None collecting everything left unassigned. Only the
             student's own semester counts, and only quests that grant XP.
         """
-        submissions = self.all_approved(user).grant_xp().annotate(
+        submissions = self.all_approved(user, up_to_date=up_to_date).grant_xp().annotate(
             xp_earned=Greatest('quest__xp', 'xp_requested'),
         )
         per_quest_course = submissions.order_by().values(

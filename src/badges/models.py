@@ -525,7 +525,7 @@ class BadgeAssertionManager(models.Manager):
         ]
         return by_type
 
-    def xp_by_course(self, user):
+    def xp_by_course(self, user, up_to_date=None):
         """How much of this student's badge XP counts toward each of their courses.
 
         A badge granted alongside a quest carries that quest's course; one granted on its own
@@ -534,13 +534,16 @@ class BadgeAssertionManager(models.Manager):
 
         Args:
             user: the student whose badge XP is being divided.
+            up_to_date (date): count only badges granted by then, for charting their progress
+                through the semester (issue #2453). Defaults to all of them.
 
         Returns:
             dict: course id to XP, with None collecting everything left unassigned.
         """
-        rows = self.get_queryset(True, user=user).grant_xp().get_user(user).values('course').annotate(
-            xp_sum=Sum('badge__xp'),
-        )
+        qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
+        if up_to_date is not None:
+            qs = qs.get_issued_before(up_to_date)
+        rows = qs.values('course').annotate(xp_sum=Sum('badge__xp'))
         return {row['course']: row['xp_sum'] or 0 for row in rows}
 
     def calculate_xp(self, user):
