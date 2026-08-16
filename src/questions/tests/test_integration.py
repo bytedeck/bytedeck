@@ -481,6 +481,23 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
         response = self.assert200("quests:submission", args=[self.submission.id])
         self.assertNotContains(response, "Manage Questions")
 
+    def test_quest_detail__marker_notes_popover_is_initialized(self):
+        """The marker-notes popover in the question table is activated on this page (#2166).
+
+        Bootstrap popovers do nothing until initialized, so before the site-wide initializer the
+        icon here showed only its native "Marker Notes" title and the notes themselves could not
+        be read anywhere outside the question-management page.
+        """
+        self.short_question.marker_notes = "<p>Accept any working URL.</p>"
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        self.assertContains(response, "Accept any working URL.")
+        self.assertContains(response, 'data-toggle="popover"')
+        self.assertContains(response, """$('[data-toggle="popover"]').popover();""")
+
 
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
     """sync_draft_question_submissions heals duplicate draft rows for the same question."""
