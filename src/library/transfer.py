@@ -39,14 +39,19 @@ from .models import IsLibraryContentMixin
 class TransferResult(NamedTuple):
     """What a copy produced, and what it could not bring with it.
 
-    `unmet_prereqs` is the reason this is a result rather than a bare list of quests. A
-    prerequisite whose target the destination does not have cannot be rebuilt, and the
-    loss fails open: the quest arrives more available than its author intended. Naming it
-    here is what lets the view warn the teacher instead of leaving them to notice.
+    The two loss fields are the reason this is a result rather than a bare list of quests.
+    Content shared to the Library is meant to be a self-contained package, so anything the
+    copy could not carry is the *sharer's* business: they are the one who can widen what
+    they share, or decide the gap is fine. The views turn these into a warning on the push.
+
+    `unmet_prereqs` names gating that did not travel, which fails open: the copy in the
+    Library ends up less gated than its author wrote. `skipped_quests` names quests that
+    were left out of a shared campaign altogether.
     """
 
     quests: list
     unmet_prereqs: list
+    skipped_quests: list = ()
 
 
 class LibraryTransferError(Exception):
