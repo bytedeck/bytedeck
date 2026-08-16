@@ -2249,6 +2249,30 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         siteconfig.display_marks_calculation = True
         siteconfig.save()
 
+    def test_mark_calculations__explains_the_split_for_a_multicourse_student(self):
+        """A student in two courses is told which course the page is about and how much of their
+        XP counts toward it, rather than the old flat "total divided by number of courses",
+        which stopped being true once they could assign work to a course (issue #2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertContains(response, 'registered in 2 courses')
+        self.assertContains(response, 'counts toward it')
+        # all 50 XP was assigned to their first course, so none of it leaks into Art
+        self.assertEqual(response.context['xp_per_course'], 50)
+
     def test_mark_calculations__deactivated_shows_staff_the_deactivated_notice(self):
         """When mark-calculation display is turned off, staff get the 'deactivated' notice page
         (students get a 404 instead, since they shouldn't reach this URL)."""

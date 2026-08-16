@@ -940,6 +940,43 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         # log in the student for all tests here
         self.client.force_login(self.test_student)
 
+    def test_complete__records_the_course_the_student_chose(self):
+        """Handing in a quest with a course selected stamps that course on the submission, so the
+        XP counts toward it rather than being shared across their courses (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done', 'course': maths.pk},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, maths)
+
+    def test_complete__leaves_the_course_unset_when_the_student_was_not_asked(self):
+        """A student in a single course is never asked, so their submission stays unassigned and
+        its XP is shared, which for one course is the whole of it."""
+        baker.make('courses.CourseStudent', user=self.test_student, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        submission.refresh_from_db()
+        self.assertIsNone(submission.course)
+
     def test_complete__another_student_cannot_complete_someone_elses_submission(self):
         """A student POSTing complete for another student's submission 404s and changes nothing (#2167).
 

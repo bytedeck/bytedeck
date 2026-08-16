@@ -966,6 +966,124 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
 
+    def _approved(self, student, xp, course=None, max_xp=-1):
+        """Give a student an approved, XP-granting submission, optionally assigned to a course."""
+        quest = baker.make(Quest, xp=xp, max_xp=max_xp)
+        return baker.make(
+            QuestSubmission, user=student, quest=quest, course=course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+
+    def _register(self, student, course):
+        """Register a student in a course in the deck's semester and return the registration."""
+        return baker.make(
+            CourseStudent, user=student, course=course, block=baker.make(Block),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
+        """Nothing to divide, so their one course carries everything they earned."""
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course))
+        self._approved(student, xp=30)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(registration.xp(), 30)
+
+    def test_xp__shares_unassigned_work_evenly(self):
+        """Work nobody assigned to a course is split between them, which is what every
+        submission did before students could choose (issue #2440). A deck that leaves the
+        setting off therefore behaves exactly as it always has."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 20)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__counts_assigned_work_toward_the_course_it_was_assigned_to(self):
+        """The point of the whole feature: XP the student put against one course counts there
+        in full, rather than half of it leaking into the other course."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 40)
+        self.assertEqual(art_registration.xp(), 0)
+
+    def test_xp__mixes_assigned_and_shared_work(self):
+        """Assigned and unassigned work add up: the student's own choices land where they said,
+        and everything else (badges, older work) is still shared."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=40, course=maths)
+        self._approved(student, xp=10)  # unassigned, so shared
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp(), 45)
+        self.assertEqual(art_registration.xp(), 5)
+
+    def test_xp__adds_the_registrations_own_adjustment(self):
+        """xp_adjustment is already per course ("an adjustment to the user's XP for this
+        course"), so it belongs to its own registration rather than being shared."""
+        student = baker.make(User)
+        first = self._register(student, baker.make(Course))
+        second = self._register(student, baker.make(Course))
+        first.xp_adjustment = 12
+        first.save()
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(first.xp(), 32)
+        self.assertEqual(second.xp(), 20)
+
+    def test_xp__never_totals_more_than_the_student_earned(self):
+        """A repeatable quest's max_xp caps what it is worth however it is spread, so splitting
+        one across two courses cannot conjure XP that the student's own total does not have."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        quest = baker.make(Quest, xp=30, max_xp=40)
+        for course in (maths, art):
+            baker.make(
+                QuestSubmission, user=student, quest=quest, course=course,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+        student.profile.xp_invalidate_cache()
+
+        self.assertEqual(maths_registration.xp() + art_registration.xp(), student.profile.xp_cached)
+        self.assertEqual(student.profile.xp_cached, 40)
+
+    def test_calc_semester_grades__records_each_course_its_own_final_xp(self):
+        """Archiving writes each registration's own XP into its final_xp. A student who put all
+        their work against one course must not have that course's total recorded against the
+        other one as well (issue #2440)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        maths_registration = self._register(student, maths)
+        art_registration = self._register(student, art)
+        self._approved(student, xp=60, course=maths)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        maths_registration.refresh_from_db()
+        art_registration.refresh_from_db()
+        self.assertEqual(maths_registration.final_xp, 60)
+        self.assertEqual(art_registration.final_xp, 0)
+
     def test_clean__refuses_a_student_in_two_open_semesters(self):
         """A student belongs to one semester at a time (#1781): they can take several courses
         within it, but being in two open semesters at once would make "which semester did they

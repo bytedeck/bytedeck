@@ -13,6 +13,9 @@ from comments.sanitize import sanitize_comment_html
 from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
+from courses.models import Course
+from siteconfig.models import SiteConfig
+
 from .models import Category, Quest, CommonData
 
 
@@ -305,8 +308,43 @@ class TAQuestForm(QuestForm):
         remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
+class XPCourseChoiceMixin:
+    """Asks the student which of their courses this submission's XP counts toward (issue #2440).
+
+    The field is only worth showing when there is a choice to make, so it is dropped when the
+    deck has the setting off, when the student is in a single course, and when no student is in
+    view at all (a staff form). Dropping it rather than hiding it means the submission is left
+    unassigned, and unassigned XP is shared evenly across their courses, exactly as it was
+    before any of this existed.
+    """
+
+    def __init__(self, *args, student=None, **kwargs):
+        """
+        Args:
+            student (User): whose courses to offer. None for a form no student fills in.
+        """
+        super().__init__(*args, **kwargs)
+        from courses.models import CourseStudent  # locally: courses imports this app's models
+
+        registrations = CourseStudent.objects.current_courses(student) if student else None
+        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
+
+        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
+            del self.fields['course']
+            return
+
+        self.fields['course'].queryset = courses
+        self.fields['course'].empty_label = None
+        self.fields['course'].initial = courses.first().pk
+
+
 class SubmissionForm(forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
+
+    course = forms.ModelChoiceField(
+        queryset=Course.objects.none(), required=False, label='Counts toward',
+        help_text="Which of your courses this quest's XP should count toward.",
+    )
 
     attachments = RestrictedMultiFileFormField(
         required=False,
@@ -316,7 +354,7 @@ class SubmissionForm(forms.Form):
     )
 
 
-class SubmissionFormCustomXP(SubmissionForm):
+class SubmissionFormCustomXP(XPCourseChoiceMixin, SubmissionForm):
     xp_requested = forms.IntegerField(
         label="Requested XP",
         required=True,
@@ -381,8 +419,13 @@ class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
-class SubmissionQuickReplyFormStudent(SanitizeCommentTextMixin, forms.Form):
+class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    course = forms.ModelChoiceField(
+        queryset=Course.objects.none(), required=False, label='Counts toward',
+        help_text="Which of your courses this quest's XP should count toward.",
+    )
 
 
 class CommonDataForm(forms.ModelForm):

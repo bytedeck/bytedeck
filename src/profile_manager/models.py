@@ -367,10 +367,17 @@ class Profile(models.Model):
         return xp
 
     def xp_per_course(self):
-        course_count = self.num_courses()
-        if not course_count or course_count == 0:
-            return 0
-        return self.xp_cached / course_count
+        """This student's XP as their first course sees it.
+
+        Kept for the places that want a single representative number for a student. Each
+        registration answers for itself through CourseStudent.xp(), which is where the
+        assigned-versus-shared split lives (issue #2440).
+
+        Returns:
+            float: the first current registration's XP, or 0 when they have no course.
+        """
+        registration = self.current_courses().first()
+        return registration.xp() if registration else 0
 
     def xp_to_date(self, date):
         # TODO: Combine this with other methods?
@@ -384,7 +391,8 @@ class Profile(models.Model):
         courses = self.current_courses()
         cap_at_100 = SiteConfig.get().cap_marks_at_100_percent
         if courses:
-            mark = courses[0].calc_mark(self.xp_cached) / len(courses)
+            # the registration's own XP already carries its share, so no dividing here (#2440)
+            mark = courses[0].calc_mark(courses[0].xp())
             if cap_at_100:
                 return min(mark, 100)
             else:

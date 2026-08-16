@@ -1774,12 +1774,13 @@ def complete(request, submission_id):
 
     student_can_enter_xp = submission.quest.xp_can_be_entered_by_students and not submission.is_approved
 
+    # the student's own courses, so the form can ask which one this counts toward (#2440)
     if student_can_enter_xp:
-        form = SubmissionFormCustomXP(request.POST, request.FILES)
+        form = SubmissionFormCustomXP(request.POST, request.FILES, student=submission.user)
     elif request.FILES:  # if there are files, we need to use the full form
         form = SubmissionForm(request.POST, request.FILES)
     else:
-        form = SubmissionQuickReplyFormStudent(request.POST)
+        form = SubmissionQuickReplyFormStudent(request.POST, student=submission.user)
 
     # The quest's questions, bound to this POST as an answer formset over the submission's
     # draft rows. Only the "complete" action on a not-yet-completed submission involves the
@@ -1952,6 +1953,12 @@ def complete(request, submission_id):
             and not submission.quest.verification_required
         ):
             affected_users.extend(request.user.profile.current_teachers())
+
+        # record which course the student said this counts toward, before the XP is granted
+        # so an auto-approved quest lands in the right course straight away (issue #2440)
+        chosen_course = form.cleaned_data.get('course')
+        if chosen_course:
+            submission.course = chosen_course
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:

@@ -63,10 +63,9 @@ def mark_calculations(request, user_id=None):
     course_student = CourseStudent.objects.current_course(user)
     courses = CourseStudent.objects.current_courses(user)
     num_courses = courses.count()
-    if courses:
-        xp_per_course = user.profile.xp_cached / num_courses
-    else:
-        xp_per_course = None
+    # each registration answers for its own XP, so a student who assigned work to one course
+    # sees that course's real total rather than an even share of everything (issue #2440)
+    xp_per_course = course_student.xp() if course_student else None
 
     # only show mark ranges where student is enrolled in and is also active
     user_courses = user.profile.current_courses().values_list('course', flat=True)

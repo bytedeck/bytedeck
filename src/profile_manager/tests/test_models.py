@@ -324,12 +324,15 @@ class ProfileTestModel(ByteDeckTenantTestCase):
 
     @patch('profile_manager.models.Profile.current_courses')
     def test_mark__multiple_courses(self, mock_current_courses):
-        """mark() divides the first course's mark by the number of courses."""
+        """With several courses the mark is still the first one's, undivided: the registration's
+        own XP already carries only its share, so dividing here as well would halve it twice
+        (issue #2440 moved the split from the mark into the XP)."""
         mock_coursestudent1 = Mock()
         mock_coursestudent1.calc_mark.return_value = 87
         # The mark() method currently only checks the length of the list, and only uses the first course
         mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 87 / 2)
+        self.assertEqual(self.profile.mark(), 87)
+        mock_coursestudent1.calc_mark.assert_called_with(mock_coursestudent1.xp.return_value)
 
     @patch('profile_manager.models.Profile.current_courses')
     def test_mark__cap_100(self, mock_current_courses):
@@ -345,11 +348,10 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         mock_current_courses.return_value = [mock_coursestudent1]
         self.assertEqual(self.profile.mark(), 100)
 
-        # Add a second course, should not be capped anymore
+        # a second course does not change the cap: the mark is per course either way
         mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 125 / 2)
+        self.assertEqual(self.profile.mark(), 100)
 
-        # What if both are over 100?
         mock_coursestudent1.calc_mark.return_value = 225
         self.assertEqual(self.profile.mark(), 100)
 

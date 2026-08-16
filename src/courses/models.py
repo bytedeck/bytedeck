@@ -723,7 +723,10 @@ class CourseStudentManager(models.Manager):
         # semester stays open (CodeRabbit find on the #1734 B2 review)
         with transaction.atomic():
             for coursestudent in coursestudents:
-                coursestudent.final_xp = coursestudent.user.profile.xp_per_course()
+                # each registration's own XP, not a single figure reused for all of them: a
+                # student who assigned their work to one course must not have that course's
+                # total recorded against the other one too (issue #2440)
+                coursestudent.final_xp = coursestudent.xp()
                 if coursestudent.final_xp < 0:
                     if not clamp_negative_xp:
                         raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
@@ -910,6 +913,35 @@ class CourseStudent(models.Model):
     # return reverse('courses:detail', kwargs={'pk': self.pk})
 
     # @cached_property
+    def xp(self):
+        """The XP that counts toward this one registration.
+
+        A student in several courses splits their XP between them (issue #2440). Work they
+        assigned to a course counts wholly toward it; everything else is shared evenly, which
+        is what every submission did before they could assign one, and is still what happens
+        to badge XP, to work handed in while the deck had the setting off, and to anything
+        from before the choice existed.
+
+        Returns:
+            float: this registration's share of the student's XP, including its own
+            xp_adjustment. Their whole total when this is their only course.
+        """
+        profile = self.user.profile
+        course_count = profile.num_courses()
+        if course_count <= 1:
+            return profile.xp_cached
+
+        # xp_cached is the student's deck-wide total: quest XP, badge XP, and every one of
+        # their registrations' adjustments. Take out the parts that belong to a particular
+        # course, share what is left, and hand this registration back its own pieces.
+        xp_by_course = QuestSubmission.objects.xp_by_course(self.user)
+        assigned_here = xp_by_course.get(self.course_id, 0) if self.course_id else 0
+        assigned_anywhere = sum(xp for course_id, xp in xp_by_course.items() if course_id is not None)
+        adjustments = CourseStudent.objects.calculate_xp(self.user)
+        shared = profile.xp_cached - assigned_anywhere - adjustments
+
+        return assigned_here + self.xp_adjustment + shared / course_count
+
     def calc_mark(self, xp):
         if not self.course:  # course may be null if it was deleted.
             return 0
