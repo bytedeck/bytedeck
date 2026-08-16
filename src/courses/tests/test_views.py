@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.db import connection
+from django.db import connection, transaction
 from django.shortcuts import reverse
 from django.test.utils import CaptureQueriesContext
 from django_tenants.utils import get_public_schema_name
@@ -12,7 +12,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
-from courses.views import SemesterActivate, SemesterUpdate
+from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
@@ -650,6 +650,50 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
+
+    def test_lock_student__selects_the_student_row_for_update(self):
+        """The refusal above only helps if the two requests actually queue up, and what makes
+        them queue is this lock. The row locked has to be the student's own: locking their
+        registrations would lock nothing for a student registering for the first time, which is
+        exactly when two requests can race.
+        """
+        view = SerializedRegistrationMixin()
+
+        with transaction.atomic(), CaptureQueriesContext(connection) as queries:
+            view.lock_student(self.test_student1.id)
+
+        locking = [q['sql'] for q in queries.captured_queries if 'FOR UPDATE' in q['sql']]
+        self.assertEqual(len(locking), 1)
+        self.assertIn('auth_user', locking[0])
+        self.assertIn(str(self.test_student1.id), locking[0])
+
+    def test_CourseAddStudent_view__refuses_a_registration_that_lost_the_race(self):
+        """Two registrations for one student submitted at the same instant both validate clean,
+        because CourseStudent.clean() reads before either has written (#2438). The loser has to
+        notice on the way out and be refused, or the student ends up in two open semesters.
+
+        The race is staged by having the lock land the other registration, which is what waiting
+        for that lock and then getting it actually looks like. Since the staged row shares this
+        request's transaction, it rolls back along with the refusal, so what this pins is the
+        half that matters: the losing request is told why and writes nothing of its own. A true
+        two-thread test needs TransactionTestCase, and this suite deliberately has none: it
+        shares one schema across classes and nothing may commit.
+        """
+        self.client.force_login(self.test_teacher)
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+
+        def land_the_other_registration(view_self, user_id):
+            """Stand in for the request that got there first while this one waited."""
+            baker.make(CourseStudent, user_id=user_id, semester=other_semester, course=baker.make(Course))
+
+        with patch.object(SerializedRegistrationMixin, 'lock_student', land_the_other_registration):
+            response = self.client.post(
+                reverse('courses:join', args=[self.test_student1.id]), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'only be in one semester at a time')
+        self.assertContains(response, str(other_semester))
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
     def test_CourseStudentCreate_view__active_registration_in_old_semester_does_not_block(self):
         """A student with an active registration left over in an old (not-yet-closed) semester can

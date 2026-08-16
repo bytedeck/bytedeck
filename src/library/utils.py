@@ -52,6 +52,26 @@ def library_schema_if_requested(request):
 library_schema_context = functools.partial(schema_context, get_library_schema_name())
 
 
+def library_listable_quests():
+    """The quests the Library offers to other decks.
+
+    A quest carries `date_available` and `date_expired` across the schema boundary, so in
+    the Library those dates describe the timetable of the deck that shared it. The Library
+    is a catalogue rather than a feed of what a student can start right now, so it lists by
+    what it holds: published, not archived, and not sitting behind an unpublished campaign.
+    That matches how the Campaigns tab already counts importable quests, so the two tabs
+    agree on what the Library contains.
+
+    Must be called from within the library schema context.
+
+    Returns:
+        QuerySet[Quest]: the listable quests, unordered.
+    """
+    from quest_manager.models import Quest
+
+    return Quest.objects.get_queryset().published().active_or_no_campaign()
+
+
 def get_library_conflicting_quests(local_quests):
     """
     Given a list of local Quest objects, return the import_ids of any quests in

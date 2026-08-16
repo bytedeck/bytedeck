@@ -5,6 +5,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.views import SuccessMessageMixin
+from django.core.exceptions import ValidationError
 from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect, render, reverse
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
@@ -265,8 +266,52 @@ class ArchiveStudentsHelp(NonPublicOnlyViewMixin, TemplateView):
     template_name = 'courses/archive_students_help.html'
 
 
+class SerializedRegistrationMixin:
+    """Save a registration with the one-semester rule re-checked under a lock (issue #2438).
+
+    `CourseStudent.clean()` reads the student's other registrations while the form validates,
+    which leaves a window: two registrations for the same student submitted at the same instant
+    both look clean and both save, landing them in two open semesters at once, which is the
+    state the rule exists to prevent.
+
+    Locking the student's own row makes the two queue up instead, and re-running the rule after
+    the lock is taken means the second one sees what the first wrote. It is refused the same
+    way it would have been had it arrived a moment later: as a form error naming the semester
+    the student is already in, not a crash.
+    """
+
+    def lock_student(self, user_id):
+        """Take the lock that serializes this student's registrations.
+
+        The student's own row is what has to be locked: locking their existing registrations
+        would lock nothing at all for a student registering for the first time, which is
+        exactly when two requests can race.
+
+        Args:
+            user_id (int): the student being registered.
+        """
+        User.objects.select_for_update().get(pk=user_id)
+
+    def form_valid(self, form):
+        """Save the registration, refusing it if another one beat us to this student.
+
+        Returns:
+            HttpResponse: the usual redirect on success, or the re-rendered form carrying the
+            one-semester error when a registration landed while this one waited for the lock.
+        """
+        try:
+            with transaction.atomic():
+                self.lock_student(form.instance.user_id)
+                form.instance.clean()
+                return super().form_valid(form)
+        except ValidationError as error:
+            # keyed on 'semester' by CourseStudent.clean(), so it renders on that field
+            form.add_error(None, error)
+            return self.form_invalid(form)
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
+class CourseAddStudent(SerializedRegistrationMixin, NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     template_name = 'courses/coursestudent_form.html'
@@ -302,7 +347,9 @@ class CourseAddStudent(NonPublicOnlyViewMixin, CreateView):
         return super().post(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
         ctx['heading'] = 'Add student to course'
         ctx['submit_btn_value'] = 'Add'
         return ctx
@@ -323,7 +370,9 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return kwargs
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
         ctx['heading'] = f'Update {self.object.user.username}\'s course'
         ctx['submit_btn_value'] = 'Update'
         return ctx
@@ -333,7 +382,8 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
 
 
 # Student Course Registration View
-class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
+class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin,
+                          UserPassesTestMixin, CreateView):
 
     def test_func(self):
         """Allow the registration view only when the student is not already actively registered
@@ -452,7 +502,9 @@ class CourseStudentCreate(NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequ
         return kwargs
 
     def get_context_data(self, **kwargs):
-        ctx = super().get_context_data()
+        # kwargs carries the validated form from form_invalid(); dropping it rebuilds an
+        # unvalidated one, losing any error added to the form after it was validated
+        ctx = super().get_context_data(**kwargs)
 
         ctx['submit_btn_value'] = 'Join'
         ctx['heading'] = 'Join a course'
