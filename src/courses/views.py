@@ -28,7 +28,10 @@ from notifications.models import Notification
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
-from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
+from .forms import (
+    BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
+    ExcludedDateFormset, ExcludedDateFormsetHelper,
+)
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange, semester_for
 
 from django.db import transaction
