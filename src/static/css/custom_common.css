@@ -1361,3 +1361,19 @@ table[data-toggle="table"].bt-reveal {
 .fa-modifier-picker-input {
     display: none;
 }
+
+
+/* A question's file shown where it is read (questions/snippets/question_file.html): a
+   student's image, video or audio answer, and the teacher's solution file. Sized to sit in
+   the answer table without pushing the page wide, and to stay whole on a phone. */
+.question-media {
+    max-width: 100%;
+    max-height: 300px;
+    margin-bottom: 4px;
+}
+/* The same file in a narrow table cell (the Solution column of the question list), where it
+   stands in for its own download link rather than being read at full size. */
+.question-media-thumb {
+    max-width: 100%;
+    max-height: 40px;
+}

@@ -1,3 +1,5 @@
+import mimetypes
+
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 from django.db.utils import OperationalError, ProgrammingError
@@ -58,6 +60,40 @@ FILE_MIME_TYPES = {
     'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
     'all': 'All',
 }
+
+# Which browser element can play a stored file, by the MIME types above. The value is the
+# kind of media, so a template can pick between an image, a video player and an audio
+# player without repeating the type lists.
+_MEDIA_KINDS = (
+    ('image', IMAGE_MIME_TYPES),
+    ('video', VIDEO_MIME_TYPES),
+    ('audio', AUDIO_MIME_TYPES),
+)
+
+
+def media_kind_of(file_name):
+    """Say whether a stored file is an image, a video, an audio file, or none of those.
+
+    The answer is guessed from the name, because that is all a page rendering a saved file
+    has: the content type the browser sent is checked when the file is uploaded (see
+    `RestrictedFileFormField.validate_file`) and not kept. The guess is measured against
+    the same MIME lists that validation uses, so a file a question accepted as an image is
+    the kind of file this reports as an image.
+
+    Args:
+        file_name (str): the stored file's name or path.
+
+    Returns:
+        str: 'image', 'video', 'audio', or '' for anything else (a PDF, a zip, a name with
+        no extension to guess from).
+    """
+    mime_type = mimetypes.guess_type(file_name)[0] or ''
+
+    for kind, mime_types in _MEDIA_KINDS:
+        if mime_type in mime_types:
+            return kind
+
+    return ''
 
 
 class GFKChoiceIterator(ModelChoiceIterator):
