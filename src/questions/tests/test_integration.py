@@ -513,7 +513,7 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, answer.response_file.url)
 
     def test_display__a_video_answer_gets_a_player(self):
-        """A video answer is playable on the page rather than only downloadable."""
+        """A video answer is playable on the page, where the marker is reading it."""
         self.publish_file_answer("my_clip.mp4")
         self.client.force_login(self.test_teacher)
 
@@ -531,7 +531,7 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, '<audio class="question-media" controls preload="metadata">')
 
     def test_display__any_other_answer_file_is_offered_as_a_link(self):
-        """A file no browser can show is a download link, which is all it ever was."""
+        """A file the page cannot embed is offered as a link to open or save."""
         answer = self.publish_file_answer("my_notes.pdf")
         self.client.force_login(self.test_teacher)
 
