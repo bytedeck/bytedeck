@@ -1,3 +1,4 @@
+from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
@@ -70,6 +71,25 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
         usernames = Profile.objects.all_in_open_semesters().values_list('user__username', flat=True)
 
         self.assertIn('second_cohort', usernames)
+
+    def test_get_mailing_list__mails_an_enrolled_test_account_that_asked_for_it(self):
+        """A maintainer decision, pinned so it isn't quietly reversed (issue #2434): whether
+        an account receives deck email is the account's own choice, so a test account whose
+        address is verified and whose owner turned announcements-by-email on stays on the
+        mailing list. is_test_account keeps a row out of student lists; it is not a second,
+        silent way to switch off a preference somebody set."""
+        test_account = baker.make(User, username='test_account', email='test_account@bytedeck.com')
+        test_account.profile.is_test_account = True
+        test_account.profile.get_announcements_by_email = True
+        test_account.profile.save()
+        EmailAddress.objects.create(
+            user=test_account, email=test_account.email, verified=True, primary=True,
+        )
+        baker.make(CourseStudent, user=test_account, course=self.course, semester=self.active_semester)
+
+        emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
+
+        self.assertIn(test_account.email, emails)
 
     def test_all_active__returns_active_users(self):
         """all_active() returns every active user, including staff, regardless of semester."""

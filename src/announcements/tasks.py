@@ -23,6 +23,9 @@ User = get_user_model()
 def send_notifications(user_id, announcement_id):
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
+    # everyone enrolled, test accounts included, so a test account sees what a student sees
+    # (issue #2434). The announcement email reaches the same people plus the teachers, and
+    # leaves out only those who never asked for it; see ProfileManager.get_mailing_list().
     affected_users = CourseStudent.objects.all_users_in_open_semesters()
     notify.send(
         sending_user,
