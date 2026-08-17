@@ -201,9 +201,8 @@ class QuestionSubmissionForm(forms.ModelForm):
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); a distinct aria-label per question keeps each
             # input tellable apart for screen-reader users when a page has several short answers.
-            # The limit is in the help text because the input enforces it silently: at 200
-            # characters the browser simply stops accepting keystrokes, which reads as a
-            # broken page to a student who has more to say (#2401).
+            # The help text is where the student learns the limit: the input enforces it
+            # silently, by refusing keystrokes once the answer is full (#2401).
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,

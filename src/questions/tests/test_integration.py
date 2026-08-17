@@ -83,8 +83,8 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     def test_submission_page__short_answer_tells_the_student_its_limit(self):
         """A short answer says how long it may be, where the student is typing it (#2401).
 
-        The input stops accepting keystrokes at the limit and says nothing about why, so a
-        student writing a longer answer meets a page that looks broken.
+        The input itself enforces the limit silently, by refusing further keystrokes, so the
+        sentence under it is the only thing that tells a student the rule before they hit it.
         """
         response = self.assert200("quests:submission", args=[self.submission.id])
 
