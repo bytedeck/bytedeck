@@ -799,19 +799,29 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
 
 
 class ExportPermissionMixin:
-    def _require_export_permission(self, request):
-        """
-        Ensure the requesting user has permission to perform an export.
+    """Guards the export endpoints with the same rule that decides whether to offer them.
 
-        A user is allowed to export if either:
-        - They are the configured deck owner, or
-        - `allow_staff_export` is enabled in the site configuration and the user is staff.
+    `SiteConfig.can_user_export_to_library` is that rule, and it is asked here rather than
+    restated, so the endpoint and the Share buttons cannot drift apart. A second copy of the
+    rule is worse than a long one: whichever clause it is missing becomes an endpoint that
+    allows what no button offers, and nothing points at the difference (#2368).
+    """
+
+    def _require_export_permission(self, request):
+        """Refuse the request unless this user may share from this deck.
+
+        Args:
+            request (HttpRequest): the current request, for the user and its deck.
+
+        Returns:
+            None. Returns normally when the export may proceed.
 
         Raises:
-            PermissionDenied: If the requesting user does not have export permission.
+            PermissionDenied: if the user may not export. The message names the usual
+                reason, which is a teacher sharing on a deck where the owner has not
+                turned staff sharing on.
         """
-        config = SiteConfig.get()
-        if not (config.allow_staff_export or request.user == config.deck_owner):
+        if not SiteConfig.get().can_user_export_to_library(request.user):
             raise PermissionDenied("Only the deck owner can export unless allow_staff_export is enabled.")
 
 
