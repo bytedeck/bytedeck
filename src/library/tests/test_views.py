@@ -4,7 +4,7 @@ from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
 from django.http import Http404
 from django.test import RequestFactory
@@ -13,7 +13,7 @@ from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.utils import get_library_schema_name, library_schema_context
 from library.models import ContentOrigin
-from library.views import LibraryQuestListView, shared_library_enabled_view, viewer_is_library_staff
+from library.views import ExportQuestView, LibraryQuestListView, shared_library_enabled_view, viewer_is_library_staff
 from library.importer import import_quest_to, import_campaign_to
 from library.transfer import LibraryTransferError
 from library.exporter import (
@@ -2812,3 +2812,130 @@ class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
 
         self.assertContains(response, "Previewed Quest")
         self.assertContains(response, "Published quests in this campaign: 1")
+
+
+class LibraryExportPermissionTests(LibraryTenantTestCaseMixin):
+    """The export endpoints and the export buttons answer to one rule (#2368).
+
+    `SiteConfig.can_user_export_to_library` decides whether the Share buttons render, and
+    the export views' permission check decides whether the endpoints behind them run. Any
+    difference between the two is a button that leads to a refusal, or worse, an endpoint
+    that allows what no button offers.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A deck owner and an ordinary teacher, the two sides of `allow_staff_export`."""
+        cls.owner = User.objects.create_user('export_owner', is_staff=True)
+        cls.teacher = User.objects.create_user('export_teacher', is_staff=True)
+
+    def setUp(self):
+        """Own the deck as `owner`, with staff sharing off and the Library enabled."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.deck_owner = self.owner
+        config.allow_staff_export = False
+        config.enable_shared_library = True
+        config.save()
+
+    def endpoint_allows(self, user):
+        """Whether the export views would let this user through, on the current schema.
+
+        Args:
+            user (User): the user making the request.
+
+        Returns:
+            bool: True when the permission check passes, False when it raises.
+        """
+        request = RequestFactory().post('/')
+        request.user = user
+
+        try:
+            ExportQuestView()._require_export_permission(request)
+        except PermissionDenied:
+            return False
+
+        return True
+
+    def button_offers(self, user):
+        """Whether the Share buttons would be offered to this user, on the current schema.
+
+        Args:
+            user (User): the user viewing the page.
+
+        Returns:
+            bool: what the button gate decides.
+        """
+        return SiteConfig.get().can_user_export_to_library(user)
+
+    def assertEndpointAgreesWithButton(self, user):
+        """Assert the endpoint and the button reach the same verdict for a user.
+
+        Args:
+            user (User): the user to check both gates for.
+
+        Raises:
+            AssertionError: if one gate would allow what the other refuses.
+        """
+        offered = self.button_offers(user)
+        self.assertEqual(
+            self.endpoint_allows(user),
+            offered,
+            f"the endpoint and the button disagree for {user}: button offers={offered}",
+        )
+
+    def test_ExportPermissionMixin__refuses_an_export_from_the_library_deck(self):
+        """The Library does not share into itself, whoever asks.
+
+        Content reaching the Library is a copy from somewhere else, so an export run from
+        the Library deck has no meaning: it would be copying a quest over itself.
+
+        The Library deck's own config is opened up first, so being on the Library schema is
+        the only thing left that can refuse. Without that the check would pass on the
+        Library deck simply not recognising this user, which is true of every user and would
+        hide whether the schema rule is applied at all.
+
+        Its `deck_owner` is left alone: users are per-schema, so the Library's config cannot
+        point at a user from this deck. Staff sharing covers the same ground here, since the
+        user is staff.
+        """
+        with library_schema_context():
+            library_config = SiteConfig.get()
+            library_config.allow_staff_export = True
+            library_config.enable_shared_library = True
+            library_config.save()
+
+            self.assertFalse(self.endpoint_allows(self.owner))
+            self.assertEndpointAgreesWithButton(self.owner)
+
+    def test_ExportPermissionMixin__lets_the_deck_owner_export(self):
+        """The deck owner can always share from their own deck."""
+        self.assertTrue(self.endpoint_allows(self.owner))
+        self.assertEndpointAgreesWithButton(self.owner)
+
+    def test_ExportPermissionMixin__refuses_other_staff_while_staff_sharing_is_off(self):
+        """With `allow_staff_export` off, sharing is the deck owner's decision alone."""
+        self.assertFalse(self.endpoint_allows(self.teacher))
+        self.assertEndpointAgreesWithButton(self.teacher)
+
+    def test_ExportPermissionMixin__lets_other_staff_export_once_staff_sharing_is_on(self):
+        """With `allow_staff_export` on, any teacher on the deck can share."""
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+
+        self.assertTrue(self.endpoint_allows(self.teacher))
+        self.assertEndpointAgreesWithButton(self.teacher)
+
+    def test_ExportPermissionMixin__refuses_everyone_when_the_shared_library_is_off(self):
+        """A deck that opted out of the Library cannot share to it.
+
+        The view decorator 404s such a request first, so this is the second line rather
+        than the one users meet; it matters because it is what keeps the two gates equal.
+        """
+        config = SiteConfig.get()
+        config.enable_shared_library = False
+        config.save()
+
+        self.assertFalse(self.endpoint_allows(self.owner))
+        self.assertEndpointAgreesWithButton(self.owner)
