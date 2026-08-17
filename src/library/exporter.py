@@ -5,37 +5,25 @@ from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
 
-from .transfer import TransferResult, snapshot_quest, write_quests
+from .transfer import TransferResult, build_available_quest_name, snapshot_quest, write_quests
 from .utils import library_schema_context, get_library_conflicting_quests
 
 
 def build_library_clone_name(local_name, taken_names):
     """Return a name for a clone of `local_name` that is free in the Library.
 
-    Quest names are unique per schema and capped at the model's max_length, so a
-    clone of a quest whose original is already in the Library needs a name of its
-    own. Falls back to numbered suffixes when the dated one is also taken.
+    A clone of a quest whose original is already in the Library needs a name of its own,
+    and dating it says what the copy is. The uniqueness work itself is shared with the
+    import direction, which faces the same constraint from the other side.
 
     Args:
         local_name (str): the source quest's name.
         taken_names (set[str]): every name already spoken for in the Library.
-            Must include archived quests: they still hold their name against the
-            unique constraint even though the default manager hides them.
 
     Returns:
         str: a name not in `taken_names`, within the field's max_length.
     """
-    max_len = Quest._meta.get_field('name').max_length or 50
-    base_suffix = f" (Exported on {date.today()})"
-
-    candidate = local_name[:max_len - len(base_suffix)] + base_suffix
-    counter = 1
-    while candidate in taken_names:
-        full_suffix = f"{base_suffix} #{counter}"
-        candidate = local_name[:max_len - len(full_suffix)] + full_suffix
-        counter += 1
-
-    return candidate
+    return build_available_quest_name(local_name, taken_names, f" (Exported on {date.today()})")
 
 
 def clone_quests_into_library(*, source_schema, quests):

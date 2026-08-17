@@ -15,6 +15,13 @@
       <p>Import ID: {{ local_quest.import_id }}</p>
     </div>
   {% else %}
+    {% if colliding_names %}
+      <div class="alert alert-info">
+        Your deck already has a quest called <strong>{{ colliding_names.0 }}</strong>, and two quests
+        cannot share a name. The copy you import will arrive with today's date added to its name so
+        both can exist; rename it afterwards to whatever suits your deck.
+      </div>
+    {% endif %}
     <p>Are you sure you want to import this quest into your deck?</p>
   {% endif %}
   <form action="" method="post">
