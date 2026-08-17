@@ -38,9 +38,9 @@ from .models import IsLibraryContentMixin
 
 
 class TransferResult(NamedTuple):
-    """What a copy produced, and what it could not bring with it.
+    """What a copy produced, what it could not bring with it, and what it had to change.
 
-    The two loss fields are the reason this is a result rather than a bare list of quests.
+    The loss fields are the reason this is a result rather than a bare list of quests.
     Content shared to the Library is meant to be a self-contained package, so anything the
     copy could not carry is the *sharer's* business: they are the one who can widen what
     they share, or decide the gap is fine. The views turn these into a warning on the push.
@@ -49,12 +49,16 @@ class TransferResult(NamedTuple):
     Library ends up less gated than its author wrote. `skipped_quests` names quests that
     were left out of a shared campaign altogether. `dropped_common_data` names the shared
     General Info blocks the copy arrives without.
+
+    `renamed_quests` is the odd one out: nothing was lost, but a name was changed to get
+    the copy in, so it is reported to whoever is standing in front of it (#2364).
     """
 
     quests: list
     unmet_prereqs: list
     skipped_quests: list = ()
     dropped_common_data: list = ()
+    renamed_quests: list = ()
 
 
 class LibraryTransferError(Exception):
@@ -94,6 +98,38 @@ QUESTION_FIELDS_NOT_COPIED = {
     'datetime_created': 'auto_now_add. The destination stamps its own creation time.',
     'datetime_last_edit': 'auto_now. Always the time of the copy.',
 }
+
+
+def build_available_quest_name(name, taken_names, suffix):
+    """Return a version of `name` that no quest in the destination schema is using.
+
+    `Quest.name` is unique per schema, so a copy whose name is already spoken for cannot be
+    written at all. Both directions of the transfer hit this: pushing a second copy of a
+    quest that is already in the Library, and pulling a quest onto a deck that happens to
+    have written its own quest of the same name. Both answer it the same way, by giving the
+    copy a name of its own and saying so, rather than refusing the transfer.
+
+    Args:
+        name (str): the name the copy would like to keep.
+        taken_names (set[str]): every name already spoken for in the destination schema.
+            Must include archived quests: they still hold their name against the unique
+            constraint even though the default manager hides them.
+        suffix (str): what to append to distinguish the copy, e.g. " (Imported on
+            2026-08-17)". Numbered when even the suffixed name is taken.
+
+    Returns:
+        str: a name not in `taken_names`, truncated to fit the field's max_length.
+    """
+    max_len = Quest._meta.get_field('name').max_length or 50
+
+    candidate = name[:max_len - len(suffix)] + suffix
+    counter = 1
+    while candidate in taken_names:
+        numbered = f"{suffix} #{counter}"
+        candidate = name[:max_len - len(numbered)] + numbered
+        counter += 1
+
+    return candidate
 
 
 def _copied_field_names(model, not_copied):

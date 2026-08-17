@@ -2050,12 +2050,12 @@ class ConflictingQuestCloneTests(LibraryTenantTestCaseMixin):
             clone = self._library_clone_of(quest)
             self.assertTrue(clone.name.endswith("#1"), f"expected a numbered suffix, got {clone.name!r}")
 
-class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
-    """A name clash on import is reported to the teacher, not raised in their face.
+class LibraryImportNameCollisionTests(LibraryTenantTestCaseMixin):
+    """Importing a quest whose name this deck already uses for something else.
 
-    Quest names are unique per deck, so importing a quest whose name this deck already
-    uses for something else cannot succeed. The teacher is told which name clashed and
-    that nothing was added, rather than meeting a 500 page or a bare 404 (#2364, #2397).
+    Quest names are unique per deck, so the arriving copy is renamed rather than refused:
+    a teacher should not have to go and rename their own quest before they can import
+    (#2364), and one clashing name should not cost a whole campaign its import (#2397).
     """
 
     @classmethod
@@ -2069,8 +2069,33 @@ class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
 
         cls.test_teacher = User.objects.create_user('collision_teacher', is_staff=True)
 
-    def test_import_quest__tells_the_teacher_which_name_clashed(self):
-        """Importing onto a name this deck already uses redirects with an explanation."""
+    def test_import_quest__gives_the_arriving_copy_a_name_of_its_own(self):
+        """The import succeeds, and both quests exist afterwards under different names."""
+        local = baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertNotEqual(imported.pk, local.pk)
+        self.assertTrue(imported.name.startswith("Contested Name (Imported on "))
+
+    def test_import_quest__leaves_the_teachers_own_quest_untouched(self):
+        """Renaming happens to the arriving copy, never to what the deck already had."""
+        local = baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        local.refresh_from_db()
+        self.assertEqual(local.name, "Contested Name")
+
+    def test_import_quest__tells_the_teacher_the_copy_arrived_under_another_name(self):
+        """A quest that is not called what the Library said it was called is worth saying.
+
+        Otherwise the teacher goes looking for the name they clicked on and finds their own
+        quest instead, with the import apparently having done nothing.
+        """
         baker.make(Quest, name="Contested Name")
         self.client.force_login(self.test_teacher)
 
@@ -2078,31 +2103,112 @@ class LibraryImportCollisionMessageTests(LibraryTenantTestCaseMixin):
             reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertTrue(
+            any(imported.name in text for text in self._message_texts(response)),
+            f"expected the new name to be given, got {self._message_texts(response)}",
+        )
 
-    def test_import_quest__adds_nothing_to_the_deck_when_the_name_clashes(self):
-        """The failed import leaves the deck exactly as it was."""
+    def test_import_quest__says_nothing_about_renaming_when_the_name_was_free(self):
+        """An import with no clash keeps the message to the two steps that always apply."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertFalse(
+            any("already had a quest" in text for text in self._message_texts(response)),
+            f"expected no rename message, got {self._message_texts(response)}",
+        )
+
+    def test_import_category__imports_the_whole_campaign_despite_one_clashing_name(self):
+        """The campaign and every one of its quests arrive; only the clashing one is renamed."""
+        with library_schema_context():
+            baker.make(Quest, name="Uncontested Name", campaign=self.library_campaign, published=True)
         baker.make(Quest, name="Contested Name")
         self.client.force_login(self.test_teacher)
 
-        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+        self.client.post(reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True)
 
+        self.assertTrue(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        self.assertTrue(imported.name.startswith("Contested Name (Imported on "))
+        self.assertTrue(Quest.objects.all_including_archived().filter(name="Uncontested Name").exists())
+
+    def test_import_quest__names_the_clash_on_the_confirmation_page(self):
+        """The teacher sees the clash before clicking Import, not after.
+
+        The Library page shows what is on offer, not what is already on their own deck, so
+        this is the one thing they cannot check for themselves.
+        """
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertContains(response, "cannot share a name")
+        self.assertContains(response, "Contested Name")
+
+    def test_import_quest__confirmation_page_stays_quiet_when_no_name_clashes(self):
+        """A quest whose name is free gets the plain confirmation page."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertNotContains(response, "cannot share a name")
+
+    def test_import_category__names_the_clash_on_the_confirmation_page(self):
+        """The campaign confirmation page names the quests that will arrive renamed."""
+        baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+
+        self.assertContains(response, "cannot share a name")
+        self.assertContains(response, "Contested Name")
+
+    def test_import_quest__reports_a_failure_that_renaming_cannot_fix(self):
+        """A write the database refuses still redirects with an explanation, not a 500.
+
+        Renaming answers the name clash and nothing else, so the failure path stays: the
+        teacher is told which quest could not be copied and that nothing was added.
+        """
+        self.client.force_login(self.test_teacher)
+
+        with patch.object(Quest, 'save', side_effect=IntegrityError("duplicate key value")):
+            response = self.client.post(
+                reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("nothing was added to your deck" in text for text in self._message_texts(response)),
+            f"expected a failure message, got {self._message_texts(response)}",
+        )
         self.assertFalse(
             Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists()
         )
 
-    def test_import_category__tells_the_teacher_and_imports_none_of_the_campaign(self):
-        """One clashing quest stops the whole campaign, and says so rather than 404ing."""
-        baker.make(Quest, name="Contested Name")
+    def test_import_category__reports_a_failure_that_renaming_cannot_fix(self):
+        """A campaign whose quest the database refuses is discarded whole, and says so.
+
+        The campaign import stays all-or-nothing for everything except the name clash: a
+        half-imported campaign would leave the deck holding quests whose prerequisites point
+        at the ones that never arrived.
+        """
         self.client.force_login(self.test_teacher)
 
-        response = self.client.post(
-            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
-        )
+        with patch.object(Quest, 'save', side_effect=IntegrityError("duplicate key value")):
+            response = self.client.post(
+                reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+            )
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(any("Contested Name" in text for text in self._message_texts(response)))
+        self.assertTrue(
+            any("nothing was added to your deck" in text for text in self._message_texts(response)),
+            f"expected a failure message, got {self._message_texts(response)}",
+        )
         self.assertFalse(Category.objects.filter(import_id=self.library_campaign.import_id).exists())
 
 

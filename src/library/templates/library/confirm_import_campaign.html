@@ -40,6 +40,16 @@
           You will lose any local changes.
         </div>
       {% endif %}
+      {% if colliding_names %}
+        <div class="alert alert-info panel-top">
+          Your deck already has {{ colliding_names|length|pluralize:"a quest,quests" }} called
+          {% for name in colliding_names %}<strong>{{ name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %},
+          and two quests cannot share a name. The arriving
+          {{ colliding_names|length|pluralize:"copy,copies" }} will have today's date added to
+          {{ colliding_names|length|pluralize:"its,their" }} name so both can exist; rename
+          {{ colliding_names|length|pluralize:"it,them" }} afterwards to whatever suits your deck.
+        </div>
+      {% endif %}
       <div class="well panel-top">
         <p>Are you sure you want to import this campaign into your deck?</p>
         <p>This will import all quests associated with the campaign from the shared library.</p>

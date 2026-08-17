@@ -72,6 +72,40 @@ def library_listable_quests():
     return Quest.objects.get_queryset().published().active_or_no_campaign()
 
 
+def get_colliding_quest_names(library_quests):
+    """The names among `library_quests` that a different quest on this deck already uses.
+
+    A name clash is what the importing teacher cannot see for themselves: the Library page
+    shows what is on offer, not what is already on their own deck, so without this the
+    first they hear of it is after clicking Import. The import handles the clash by
+    renaming the arriving copy, and naming the clash up front is what makes that a choice
+    rather than a surprise (#2364, #2397).
+
+    Matching is on name and *not* import_id: a quest this deck already holds under the same
+    import_id is the same quest arriving again, which is an overwrite rather than a clash.
+
+    Must be called from within the destination (local) schema context.
+
+    Args:
+        library_quests (Iterable[Quest]): the quests being offered for import, read from
+            the Library schema.
+
+    Returns:
+        list[str]: the clashing names, sorted, empty when nothing on this deck collides.
+    """
+    from quest_manager.models import Quest
+
+    wanted_names = [quest.name for quest in library_quests]
+    arriving_ids = [quest.import_id for quest in library_quests]
+
+    return sorted(
+        Quest.objects.all_including_archived()
+        .filter(name__in=wanted_names)
+        .exclude(import_id__in=arriving_ids)
+        .values_list('name', flat=True)
+    )
+
+
 def get_library_conflicting_quests(local_quests):
     """
     Given a list of local Quest objects, return the import_ids of any quests in

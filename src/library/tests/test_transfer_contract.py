@@ -723,49 +723,119 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         Quest.objects.all_including_archived().filter(import_id__in=import_ids).delete()
         Category.objects.filter(import_id=campaign.import_id).delete()
 
-    def test_import_quest_to__raises_a_readable_error_when_the_name_is_already_taken_locally(self):
-        """Importing a quest whose name a different local quest holds says so (#2364).
+    def test_import_quest_to__renames_a_quest_whose_name_is_already_taken_locally(self):
+        """A quest arrives under a name of its own when this deck already uses the one it has (#2364).
 
-        Quest.name is unique per deck, and the view guards only on import_id, so the clash
-        reaches the database. The failure is raised as a `LibraryTransferError` naming the
-        quest, which is a type the view can catch and put in front of the teacher, rather
-        than a library-internal exception that escapes as a 500 carrying a constraint name.
+        Quest.name is unique per deck, so the clash would otherwise reach the database and
+        fail the import. The arriving copy is renamed instead, which is what makes a
+        collision recoverable in place: the teacher does not have to go and rename their own
+        quest first. Their quest is left exactly as it was.
         """
         campaign, import_ids = self._push_campaign("Collision Campaign", ["Photoshop Basics"])
         self._clear_locally(campaign, import_ids)
-        Quest.objects.create(name="Photoshop Basics", xp=999)
+        local = Quest.objects.create(name="Photoshop Basics", xp=999)
 
-        with self.assertRaises(LibraryTransferError) as caught:
-            import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
 
-        self.assertIn("Photoshop Basics", str(caught.exception))
-        self.assertFalse(Quest.objects.all_including_archived().filter(import_id=import_ids[0]).exists())
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertNotEqual(imported.pk, local.pk)
+        self.assertTrue(imported.name.startswith("Photoshop Basics (Imported on "))
+        self.assertEqual(result.renamed_quests, [("Photoshop Basics", imported.name)])
+        local.refresh_from_db()
+        self.assertEqual(local.name, "Photoshop Basics")
+        self.assertEqual(local.xp, 999)
 
-    def test_import_campaign_to__one_colliding_name_discards_the_whole_import(self):
-        """One taken quest name still discards the whole campaign import, but says so (#2397).
+    def test_import_campaign_to__renames_only_the_quest_that_collides(self):
+        """One taken name costs that quest its name, not the campaign its import (#2397).
 
-        The import stays all-or-nothing: a campaign that arrived half-imported would leave
-        the deck holding quests whose prerequisites point at the ones that never came. What
-        changes is that the caller is told. The failure is raised as a `LibraryTransferError`
-        naming the quest that clashed, instead of being recorded in a result object that no
-        caller reads and leaving the view to fall through to a bare 404.
+        A clash used to discard the whole campaign, and the bigger the campaign the likelier
+        one of its quests collided, so the campaigns most worth importing were the hardest
+        to import. Only the colliding quest is renamed; its siblings arrive untouched.
         """
         campaign, import_ids = self._push_campaign(
-            "Partial Campaign", ["Good Quest One", "Bad Quest Two", "Good Quest Three"],
+            "Partial Campaign", ["Good Quest One", "Taken Quest Two", "Good Quest Three"],
         )
         self._clear_locally(campaign, import_ids)
-        Quest.objects.create(name="Bad Quest Two", xp=999)
+        Quest.objects.create(name="Taken Quest Two", xp=999)
 
-        with self.assertRaises(LibraryTransferError) as caught:
-            import_campaign_to(
-                destination_schema=connection.schema_name,
-                quest_import_ids=import_ids,
-                campaign_import_id=campaign.import_id,
-            )
+        result = import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=import_ids,
+            campaign_import_id=campaign.import_id,
+        )
 
-        self.assertIn("Bad Quest Two", str(caught.exception))
+        imported = Quest.objects.all_including_archived().filter(import_id__in=import_ids)
+        self.assertEqual(imported.count(), 3)
+        self.assertTrue(Category.objects.filter(import_id=campaign.import_id).exists())
+        self.assertEqual([wanted for wanted, _ in result.renamed_quests], ["Taken Quest Two"])
+        self.assertQuerySetEqual(
+            imported.filter(name__in=["Good Quest One", "Good Quest Three"]).order_by('name'),
+            ["Good Quest One", "Good Quest Three"],
+            transform=lambda quest: quest.name,
+        )
+
+    def test_import_campaign_to__discards_the_whole_import_when_a_quest_cannot_be_written(self):
+        """A failure that renaming cannot fix still takes the whole campaign with it (#2397).
+
+        The import stays all-or-nothing: a campaign that arrived half-imported would leave
+        the deck holding quests whose prerequisites point at the ones that never came. Only
+        the name clash is recoverable, because renaming is an answer to it; anything else is
+        raised as a `LibraryTransferError` naming the quest, and nothing is written.
+        """
+        campaign, import_ids = self._push_campaign(
+            "Rejected Campaign", ["Fine Quest One", "Rejected Quest Two"],
+        )
+        self._clear_locally(campaign, import_ids)
+
+        def reject_the_second(self, *args, **kwargs):
+            """Fail the write for one quest of the batch, as the database would."""
+            if self.name == "Rejected Quest Two":
+                raise IntegrityError("duplicate key value")
+            return original_save(self, *args, **kwargs)
+
+        original_save = Quest.save
+        with patch.object(Quest, 'save', reject_the_second):
+            with self.assertRaises(LibraryTransferError) as caught:
+                import_campaign_to(
+                    destination_schema=connection.schema_name,
+                    quest_import_ids=import_ids,
+                    campaign_import_id=campaign.import_id,
+                )
+
+        self.assertIn("Rejected Quest Two", str(caught.exception))
         self.assertEqual(list(Quest.objects.all_including_archived().filter(import_id__in=import_ids)), [])
         self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
+    def test_import_quest_to__leaves_the_name_alone_when_nothing_local_holds_it(self):
+        """A quest whose name is free arrives with the name its author gave it.
+
+        The rename is the exception, so this pins that it stays the exception: a deck with
+        no clash sees no suffix and `renamed_quests` is empty.
+        """
+        campaign, import_ids = self._push_campaign("Free Name Campaign", ["Unclaimed Quest"])
+        self._clear_locally(campaign, import_ids)
+
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertEqual(imported.name, "Unclaimed Quest")
+        self.assertEqual(result.renamed_quests, [])
+
+    def test_import_quest_to__re_importing_is_not_treated_as_a_name_collision(self):
+        """A quest this deck already holds is the same quest arriving again, not a clash.
+
+        It is matched by `import_id` and its row is updated in place, so its own name must
+        not count as taken against it: renaming here would leave the deck with the quest
+        under a dated name every time it was re-imported.
+        """
+        campaign, import_ids = self._push_campaign("Repeat Campaign", ["Repeatable Quest"])
+        Quest.objects.all_including_archived().filter(import_id__in=import_ids).update(name="Repeatable Quest")
+
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertEqual(imported.name, "Repeatable Quest")
+        self.assertEqual(result.renamed_quests, [])
 
 
 class LibraryContentRegistrationTests(ByteDeckTenantTestCase):

@@ -32,7 +32,13 @@ from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
 from .transfer import LibraryTransferError
-from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests, library_listable_quests
+from .utils import (
+    get_colliding_quest_names,
+    get_library_conflicting_quests,
+    get_library_schema_name,
+    library_listable_quests,
+    library_schema_context,
+)
 
 User = get_user_model()
 
@@ -151,6 +157,37 @@ def redirect_failed_import(request, error, redirect_to):
         "Renaming your own copy and importing again should clear it."
     )
     return redirect(redirect_to)
+
+
+def tell_importer_about_renamed_quests(request, renamed_quests):
+    """Tell the importing teacher which arriving quests were given a name of their own.
+
+    `Quest.name` is unique per deck, so a quest whose name this deck already uses is
+    renamed on the way in rather than blocking the import (see `resolve_name_collisions`).
+    The rename is silent otherwise, and a quest that is not called what the Library page
+    said it was called is exactly the sort of thing a teacher goes looking for and cannot
+    find, so it is named here along with what it is now called (#2364, #2397).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        renamed_quests (list[tuple[str, str]]): `(wanted_name, given_name)` pairs.
+
+    Returns:
+        None. Queues an informational message when anything was renamed, and does nothing
+        when every quest kept the name it arrived with.
+    """
+    if not renamed_quests:
+        return
+
+    renames = ', '.join(f"'{wanted}' is now '{given}'" for wanted, given in renamed_quests)
+    messages.info(
+        request,
+        f"Your deck already had a quest called '{renamed_quests[0][0]}', so the copy that "
+        f"just arrived is called '{renamed_quests[0][1]}'. Rename it to whatever suits your deck."
+        if len(renamed_quests) == 1 else
+        f"Your deck already had quests with some of these names, so the arriving copies were "
+        f"renamed: {renames}. Rename them to whatever suits your deck."
+    )
 
 
 def warn_sharer_about_dropped_common_data(request, dropped_common_data):
@@ -556,6 +593,8 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             HttpResponse: Rendered confirmation template with:
                 - quest: The quest from the shared library.
                 - local_quest: The local quest with a matching import_id, if one exists.
+                - colliding_names: The quest's name, when a different local quest already
+                  uses it and the copy will therefore arrive renamed.
         """
         # Look for a matching local quest (even if archived) to show a warning if it already exists
         local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
@@ -579,6 +618,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             'quest': quest,
             # A Quest from the local deck matching the import_id, or None if not found.
             'local_quest': local_quest,
+            'colliding_names': get_colliding_quest_names([quest]),
         })
 
     def post(self, request, quest_import_id):
@@ -608,7 +648,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
             try:
-                import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+                imported = import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:quest_list')
 
@@ -627,6 +667,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             f"students can see it: <strong>{publish_link}</strong>, and give it a "
             f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
+        tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
         return redirect('quests:drafts')
 
@@ -681,6 +722,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
 
         # Need local import_ids so the template can indicate which library quests already exist locally
         local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
+        colliding_names = get_colliding_quest_names(shared_quests)
 
         context = {
             'category': library_category,
@@ -693,6 +735,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             'category_displayed_quests': shared_quests,
             'local_category': local_category,
             'local_quest_import_ids': local_quest_import_ids,
+            'colliding_names': colliding_names,
         }
         return render(request, self.template_name, context)
 
@@ -727,7 +770,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
             try:
-                import_campaign_to(
+                imported = import_campaign_to(
                     destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
                 )
             except LibraryTransferError as error:
@@ -751,6 +794,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
+        tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')
