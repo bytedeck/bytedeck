@@ -1,3 +1,4 @@
+from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 
 from model_bakery import baker
@@ -70,6 +71,49 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
         usernames = Profile.objects.all_in_open_semesters().values_list('user__username', flat=True)
 
         self.assertIn('second_cohort', usernames)
+
+    def make_verified_recipient(self, username, **user_kwargs):
+        """Create a user who wants announcement email and whose address is verified, so
+        get_mailing_list() has no reason of its own to leave them out."""
+        user = baker.make(User, username=username, email=f'{username}@bytedeck.com', **user_kwargs)
+        user.profile.get_announcements_by_email = True
+        user.profile.save()
+        EmailAddress.objects.create(user=user, email=user.email, verified=True, primary=True)
+        return user
+
+    def test_get_mailing_list__excludes_an_enrolled_test_account(self):
+        """A test account exists so a teacher can see the student view without being a real
+        recipient, so enrolling one in a course must not put the address behind it on the
+        deck's mailing list (issue #2434)."""
+        test_account = self.make_verified_recipient('test_account')
+        test_account.profile.is_test_account = True
+        test_account.profile.save()
+        baker.make(CourseStudent, user=test_account, course=self.course, semester=self.active_semester)
+
+        emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
+
+        self.assertNotIn(test_account.email, emails)
+
+    def test_get_mailing_list__includes_an_enrolled_student(self):
+        """The other side of the same filter: an ordinary student in a course is exactly who
+        the mailing list is for."""
+        student = self.make_verified_recipient('mailing_list_student')
+        baker.make(CourseStudent, user=student, course=self.course, semester=self.active_semester)
+
+        emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
+
+        self.assertIn(student.email, emails)
+
+    def test_get_mailing_list__keeps_a_teacher_enrolled_in_a_course(self):
+        """Staff are dropped from the student half of the list, and picked up again by the
+        teacher half, so a teacher who is also registered in a course still gets the email
+        (once: the two halves are merged with distinct())."""
+        teacher = self.make_verified_recipient('enrolled_teacher', is_staff=True)
+        baker.make(CourseStudent, user=teacher, course=self.course, semester=self.active_semester)
+
+        emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
+
+        self.assertEqual(emails.count(teacher.email), 1)
 
     def test_all_active__returns_active_users(self):
         """all_active() returns every active user, including staff, regardless of semester."""

@@ -61,6 +61,8 @@ class ProfileManager(models.Manager):
             QuerySet[Profile]: the profiles of active students registered in any semester
             that is open right now, across all of them when several are.
         """
+        # the roster is unfiltered because all_students() already drops staff and test
+        # accounts; asking the roster for them as well would only add a join (issue #2434)
         courses_user_list = CourseStudent.objects.all_users_in_open_semesters()
         qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
@@ -72,7 +74,13 @@ class ProfileManager(models.Manager):
         for_announcement_email=False,
         for_notification_email=False,
     ):
-        """
+        """The users a deck's email should go to: its students, plus its teachers.
+
+        The two halves are gathered separately, so the student half is students: staff and
+        test accounts enrolled in a course are left out of it (issue #2434). Staff come back
+        through the teacher half; a test account exists so a teacher can see the student
+        view without being a real recipient, so mail must not reach the address behind it.
+
         :param as_emails_list: If True, return a list of emails instead of a queryset of users
         :param for_announcement_email: If True, only return users who want announcements by email
         :param for_notification_email: If True, only return users who want notifications by email
@@ -90,7 +98,7 @@ class ProfileManager(models.Manager):
         verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
         students_to_email = (
-            CourseStudent.objects.all_users_in_open_semesters()
+            CourseStudent.objects.all_users_in_open_semesters(students_only=True)
                                  .filter(verified_emails)
                                  .exclude(empty_emails)
                                  .filter(email_filter)

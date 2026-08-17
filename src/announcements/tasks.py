@@ -23,6 +23,9 @@ User = get_user_model()
 def send_notifications(user_id, announcement_id):
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
+    # everyone enrolled, test accounts included: an in-app notification stays on the deck, and
+    # a test account exists so a teacher can see what a student sees. The announcement *email*
+    # is students-only, since that one leaves the deck for a real inbox (issue #2434).
     affected_users = CourseStudent.objects.all_users_in_open_semesters()
     notify.send(
         sending_user,

@@ -64,6 +64,11 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     if quest.available_outside_course:
         users = User.objects.all()
     else:
+        # everyone enrolled, test accounts included: the cache is what the Available tab is
+        # built from, and a test account exists so a teacher can see that tab as a student
+        # does. Leaving it out would leave the teacher looking at stale availability. The
+        # badge-grant task below is students_only because granting is not a preview: a badge
+        # handed to a test account is a real award (issue #2434).
         users = CourseStudent.objects.all_users_in_open_semesters()
 
     users = users.order_by('id').filter(id__gte=start_from_user_id)[:settings.CELERY_TASKS_BUNCH_SIZE]
@@ -209,7 +214,8 @@ def update_quest_conditions_all_users(self, start_from_user_id):
 
     cache.set('update_conditions_all_task_waiting', True, settings.CONDITIONS_UPDATE_COUNTDOWN)
 
-    # only cycle through users currently in a course
+    # only cycle through users currently in a course, test accounts included, for the same
+    # reason update_conditions_for_quest() does (issue #2434)
     users = CourseStudent.objects.all_users_in_open_semesters()
     users = users.order_by('id').filter(id__gte=start_from_user_id)
 
