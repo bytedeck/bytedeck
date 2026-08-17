@@ -2746,3 +2746,69 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
+
+
+class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
+    """What the campaign import confirmation page tells a teacher about the campaign.
+
+    It is the page the import decision is made on, so the campaign's name, its blurb and
+    the quests that would arrive all belong on it, and a campaign that genuinely has no
+    blurb has to say so rather than leave a gap. The page reads some of that from the
+    campaign object and some from values the view pre-computes, so these assert on what
+    is rendered rather than on which source it came from (#2370).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a described campaign with one quest in the Library, and a staff user."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(
+                Category,
+                title="Rendered Campaign Title",
+                short_description="A blurb the importing teacher needs to read.",
+                published=True,
+            )
+            cls.library_quest = baker.make(
+                Quest, name="Previewed Quest", campaign=cls.library_campaign, published=True,
+            )
+
+        cls.test_teacher = User.objects.create_user('preview_teacher', is_staff=True)
+
+    def preview(self):
+        """Fetch the campaign import confirmation page as a signed-in teacher.
+
+        Returns:
+            HttpResponse: the rendered confirmation page.
+        """
+        self.client.force_login(self.test_teacher)
+
+        return self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+
+    def test_ImportCampaignView__names_the_campaign_in_the_heading(self):
+        """The heading says which campaign is being imported."""
+        response = self.preview()
+
+        self.assertContains(response, "Rendered Campaign Title")
+
+    def test_ImportCampaignView__shows_the_campaigns_own_description(self):
+        """The campaign's blurb is shown, rather than being reported as absent."""
+        response = self.preview()
+
+        self.assertContains(response, "A blurb the importing teacher needs to read.")
+        self.assertNotContains(response, "[No description provided]")
+
+    def test_ImportCampaignView__says_a_campaign_with_no_description_has_none(self):
+        """A campaign that really has no blurb still says so, rather than showing nothing."""
+        with library_schema_context():
+            Category.objects.filter(pk=self.library_campaign.pk).update(short_description="")
+
+        response = self.preview()
+
+        self.assertContains(response, "[No description provided]")
+
+    def test_ImportCampaignView__lists_the_campaigns_quests(self):
+        """The quests that would arrive are listed, with their count and XP."""
+        response = self.preview()
+
+        self.assertContains(response, "Previewed Quest")
+        self.assertContains(response, "Published quests in this campaign: 1")
