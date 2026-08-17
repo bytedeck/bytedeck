@@ -141,11 +141,11 @@ class QuestionMoveView(
     found by ordering rather than by ``ordinal ± 1``. Moving the first question up or the last
     question down is a no-op.
 
-    Reordering takes several clicks, and a redirect drops the teacher back at the top of the
-    page between them, so the question list posts these moves in the background and swaps the
-    table in place (#2216). An AJAX request therefore gets the re-rendered table back as JSON;
-    a plain form post still redirects to the list, which is what the page does without
-    JavaScript.
+    There are two ways to ask for a move. The question list posts one in the background and
+    swaps the answer into the page, which keeps the teacher's place in a long list across the
+    several clicks a reorder takes (#2216): that request gets the re-rendered table as JSON. A
+    plain form post gets a redirect to the list, which is the path a browser running no
+    JavaScript takes.
     """
 
     http_method_names = ['post']

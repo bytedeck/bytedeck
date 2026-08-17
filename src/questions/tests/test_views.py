@@ -353,10 +353,10 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         )
 
     def test_move__ajax_returns_the_table_in_the_new_order(self):
-        """A background move answers with the re-rendered table instead of a redirect (#2216).
+        """A background move answers with the re-rendered table, in the order it just set (#2216).
 
-        The page swaps that HTML in, so the teacher keeps their place in a long list rather
-        than being returned to the top of the page on every click.
+        The page swaps that HTML into the list, which is what keeps the teacher's place on a
+        long list of questions.
         """
         self.client.force_login(self.test_teacher)
 
@@ -384,10 +384,10 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         self.assertIn("disabled", table[form_start:table.index("</form>", form_start)])
 
     def test_move__ajax_at_the_end_of_the_list_still_returns_the_table(self):
-        """A move with nowhere to go redraws the list unchanged rather than failing quietly.
+        """A move with nowhere to go answers with the list as it stands.
 
-        The buttons at the ends are disabled, so this only happens if a stale page is clicked
-        after someone else reordered the quest, and the answer is the current order.
+        The arrows at the ends are disabled, so this happens when a stale page is clicked
+        after someone else reordered the quest: the reply shows that person's order.
         """
         self.client.force_login(self.test_teacher)
 
@@ -397,11 +397,11 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
         self.assertIn("Q1", response.json()["question_table_html"])
 
-    def test_move__a_plain_post_still_redirects(self):
-        """Without JavaScript the form posts normally and the view redirects to the list.
+    def test_move__a_plain_post_redirects_to_the_list(self):
+        """A form post that is not an XHR redirects to the question list.
 
-        The background move is an enhancement layered on top of that, so a browser that never
-        runs the script reorders questions exactly as it did before.
+        That is the path a browser running no JavaScript takes, so reordering works there
+        too: each click reloads the list in its new order.
         """
         self.client.force_login(self.test_teacher)
 

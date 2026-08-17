@@ -36,11 +36,11 @@
 {% block js %}
 <script>
   $(document).ready(function () {
-    // Reordering is a several-click job, and letting each move reload the page sends the
-    // teacher back to the top of it every time. The move is posted in the background instead
-    // and the table redrawn from the server's own render, so the ordering and the disabled
-    // arrows at the ends of the list stay the server's business (#2216). Without JavaScript
-    // the same forms post normally and the view redirects, exactly as before.
+    // Reordering is a several-click job, so each move is posted in the background and the
+    // table redrawn from the server's answer: the teacher keeps their place in the list
+    // between clicks, and the ordering and the disabled arrows at its ends stay the server's
+    // business (#2216). These are ordinary forms, so with JavaScript off they post normally
+    // and the view redirects to the reloaded list.
     var $table = $('#question-table');
 
     $table.on('submit', 'form.question-move-form', function (event) {
