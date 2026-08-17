@@ -2670,3 +2670,75 @@ class LibraryImportPreviewQuestionTests(LibraryTenantTestCaseMixin):
         response = self.client.get(reverse('quests:quest_detail', args=[local_quest.id]))
 
         self.assertContains(response, reverse('questions:list', args=[local_quest.id]))
+
+
+class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
+    """Related data on a Library page comes from the Library, not the viewer's own deck.
+
+    Every Library view collects its objects inside `library_schema_context()`. Anything
+    still lazy when the template renders is evaluated after the connection has switched
+    back, so it queries this deck's tables using the Library row's primary key: no error,
+    just another deck's data presented as the shared content's (#2369).
+
+    Tags are the probe used throughout: they are a related manager on every listed quest,
+    they render on all four pages, and taggit keys them by object id, so a local quest
+    holding the same id supplies exactly the wrong answer.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a tagged quest and campaign in the Library, and a staff user to view them."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, title="Chemistry Basics", published=True)
+            cls.library_quest = baker.make(
+                Quest, name="Titration Practice", campaign=cls.library_campaign, published=True,
+            )
+            cls.library_quest.tags.add("chemistry")
+
+        cls.test_teacher = User.objects.create_user('lazy_queryset_teacher', is_staff=True)
+
+    def setUp(self):
+        """Give this deck a quest at the same id, tagged differently, and sign the teacher in."""
+        super().setUp()
+        # taggit keys tags by object id, so a local quest at the Library quest's id is what
+        # a lazily-evaluated `quest.tags.all` would find after the schema switches back.
+        local = baker.make(Quest, name="A Local Quest")
+        Quest.objects.filter(pk=local.pk).update(id=self.library_quest.id)
+        Quest.objects.get(pk=self.library_quest.id).tags.add("local-only")
+        self.client.force_login(self.test_teacher)
+
+    def assertShowsLibraryTags(self, response):
+        """Assert a rendered page shows the Library quest's tag and not this deck's.
+
+        Args:
+            response (HttpResponse): the rendered Library page.
+        """
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "chemistry")
+        self.assertNotContains(response, "local-only")
+
+    def test_quest_list__shows_the_library_quests_own_tags(self):
+        """The Library quest list renders tags read from the Library."""
+        self.assertShowsLibraryTags(self.client.get(reverse('library:quest_list')))
+
+    def test_campaign_detail__shows_the_library_quests_own_tags(self):
+        """The Library campaign detail page renders tags read from the Library."""
+        self.assertShowsLibraryTags(
+            self.client.get(reverse('library:category_detail_view', args=[self.library_campaign.import_id]))
+        )
+
+    def test_import_campaign_confirmation__shows_the_library_quests_own_tags(self):
+        """The campaign import preview renders tags read from the Library.
+
+        This is the page a teacher decides on, so showing their own deck's data back to
+        them is the most misleading place for it to happen.
+        """
+        self.assertShowsLibraryTags(
+            self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+        )
+
+    def test_import_quest_confirmation__shows_the_library_quests_own_tags(self):
+        """The quest import preview renders tags read from the Library."""
+        self.assertShowsLibraryTags(
+            self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+        )

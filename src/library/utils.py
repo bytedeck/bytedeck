@@ -1,6 +1,7 @@
 import functools
 
 from django.apps import apps
+from django.db.models import prefetch_related_objects
 from django_tenants.utils import schema_context
 
 
@@ -70,6 +71,38 @@ def library_listable_quests():
     from quest_manager.models import Quest
 
     return Quest.objects.get_queryset().published().active_or_no_campaign()
+
+
+def load_library_quests_for_render(quests):
+    """Read everything a Library quest's template will ask for, while the schema is right.
+
+    Library views select their quests inside `library_schema_context()` and render after it
+    has closed. Anything still lazy at that point (a related manager, a queryset, an
+    unfetched foreign key) is evaluated by the template engine, by which time the connection
+    is back on the viewer's own deck: it reads *this* deck's tables using the Library row's
+    primary key, and the page shows the viewer their own data as though it were the shared
+    content's. Nothing raises, so the only sign is that the wrong thing is on the screen
+    (#2369, #2163).
+
+    Loading it here rather than at each call site means the fix is one line per view instead
+    of a prefetch per relation that the next template change can silently outgrow.
+
+    Rendering the page *on* the Library schema is not the alternative it looks like: the
+    page is mostly the viewer's own deck (their profile, their SiteConfig, their navbar),
+    none of which exists in the Library schema.
+
+    Must be called from within the library schema context, on an already-evaluated list.
+
+    Args:
+        quests (list[Quest]): the quests about to be rendered. A list, not a queryset:
+            `prefetch_related_objects` needs the rows to exist.
+
+    Returns:
+        list[Quest]: the same list, with `tags`, `question_set` and `campaign` populated.
+    """
+    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
+
+    return quests
 
 
 def get_colliding_quest_names(library_quests):

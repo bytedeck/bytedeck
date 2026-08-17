@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import connection
-from django.db.models import Q, prefetch_related_objects
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -38,6 +38,7 @@ from .utils import (
     get_library_schema_name,
     library_listable_quests,
     library_schema_context,
+    load_library_quests_for_render,
 )
 
 User = get_user_model()
@@ -481,9 +482,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             # get_page (rather than page) turns a junk or out-of-range ?page= into the
             # nearest real page instead of raising
             page = paginator.get_page(self.get_page_number())
-            # Force evaluation inside the library context: the template renders this after
-            # the schema has switched back to the caller's own deck.
-            page_quests = list(page.object_list)
+            # Read inside the library context: the template renders this after the schema
+            # has switched back to the caller's own deck.
+            page_quests = load_library_quests_for_render(list(page.object_list))
             num_quests = library_listable_quests().count() if search_term else paginator.count
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
@@ -604,12 +605,9 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             quest = get_published_library_object(Quest, quest_import_id)
 
             if quest is not None:
-                # The page renders outside this context, and a quest's questions are a lazy
-                # queryset: evaluated at render time it would read *this* deck's questions
-                # table with the Library quest's pk, and show whichever local quest happens
-                # to hold that id (#2163). Reading them here, in the schema they live in,
-                # fills the prefetch cache the template then renders from.
-                prefetch_related_objects([quest], 'question_set')
+                # The page renders outside this context, so everything it shows has to be
+                # read in here (#2163, #2369).
+                load_library_quests_for_render([quest])
 
         if quest is None:
             return redirect_awaiting_review(request, 'quest', 'library:quest_list')
@@ -715,8 +713,8 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             category_total_xp_available = library_category.xp_sum()
             category_published = library_category.published
 
-            # Force evaluation of the queryset in the library to get full Quest objects for rendering.
-            shared_quests = list(library_category.current_quests())
+            # Read in the library, since the page renders after this context has closed.
+            shared_quests = load_library_quests_for_render(list(library_category.current_quests()))
             # Extract import_ids from the list to compare with the local quests.
             quest_import_ids = [q.import_id for q in shared_quests]
 
@@ -1141,7 +1139,7 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
         with library_schema_context():
             category = get_object_or_404(Category, import_id=campaign_import_id)
 
-            displayed_quests = list(category.current_quests())
+            displayed_quests = load_library_quests_for_render(list(category.current_quests()))
 
             if displayed_quests:
                 quest_info = [
