@@ -336,3 +336,75 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         response = self.client.get(reverse(
             "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q1.id, "direction": "up"}))
         self.assertEqual(response.status_code, 405)
+
+    def _move_by_ajax(self, question, direction):
+        """POST a move the way the question list's JavaScript does.
+
+        Args:
+            question (Question): the question to move.
+            direction (str): 'up' or 'down'.
+
+        Returns:
+            HttpResponse: the view's response to an XHR.
+        """
+        return self.client.post(
+            reverse("questions:move", kwargs={"quest_id": self.quest.id, "pk": question.id, "direction": direction}),
+            headers={"x-requested-with": "XMLHttpRequest"},
+        )
+
+    def test_move__ajax_returns_the_table_in_the_new_order(self):
+        """A background move answers with the re-rendered table, in the order it just set (#2216).
+
+        The page swaps that HTML into the list, which is what keeps the teacher's place on a
+        long list of questions.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self._move_by_ajax(self.q1, "down")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._ordinals(), {"Q1": 2, "Q2": 1, "Q3": 3})
+        table = response.json()["question_table_html"]
+        self.assertLess(table.index("Q2"), table.index("Q1"), "the table came back in the old order")
+
+    def test_move__ajax_table_disables_the_arrows_at_the_ends_of_the_list(self):
+        """The re-rendered table decides which arrows are dead, so the page never has to.
+
+        A question moved to the top can go no further, and the returned HTML says so: it is
+        the same template the page was built from, rendered by the same server.
+        """
+        self.client.force_login(self.test_teacher)
+
+        table = self._move_by_ajax(self.q2, "up").json()["question_table_html"]
+
+        up_at_top = reverse(
+            "questions:move", kwargs={"quest_id": self.quest.id, "pk": self.q2.id, "direction": "up"})
+        # the form of the question now at the top, up to its button's disabled attribute
+        form_start = table.index(up_at_top)
+        self.assertIn("disabled", table[form_start:table.index("</form>", form_start)])
+
+    def test_move__ajax_at_the_end_of_the_list_still_returns_the_table(self):
+        """A move with nowhere to go answers with the list as it stands.
+
+        The arrows at the ends are disabled, so this happens when a stale page is clicked
+        after someone else reordered the quest: the reply shows that person's order.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self._move_by_ajax(self.q1, "up")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._ordinals(), {"Q1": 1, "Q2": 2, "Q3": 3})
+        self.assertIn("Q1", response.json()["question_table_html"])
+
+    def test_move__a_plain_post_redirects_to_the_list(self):
+        """A form post that is not an XHR redirects to the question list.
+
+        That is the path a browser running no JavaScript takes, so reordering works there
+        too: each click reloads the list in its new order.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self._move(self.q1, "down")
+
+        self.assertRedirects(response, reverse("questions:list", kwargs={"quest_id": self.quest.id}))
