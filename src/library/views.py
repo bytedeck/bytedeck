@@ -160,6 +160,66 @@ def redirect_failed_import(request, error, redirect_to):
     return redirect(redirect_to)
 
 
+def redirect_already_imported(request, local_object, content_type, redirect_to):
+    """Send the user back, explaining that this deck already has the content.
+
+    Content is matched across decks by `import_id`, so a deck that already holds this
+    content holds *this* content, not something like it. Re-importing is refused because
+    overwriting a deck's own copy is not supported yet (#2376), and the confirmation page
+    says so and disables its button.
+
+    That makes this the case where the button was not what was clicked: a stale tab, the
+    back button, a resubmitted form, or two teachers importing at once. Meeting a bare 403
+    there reads as "you are not allowed to do that", when what happened is that the deck
+    already has it, so the answer names the local copy and links to it (#2373).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        local_object (Quest | Category): this deck's copy, which the message links to.
+        content_type (str): "quest" or "campaign", used in the message.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the warning message.
+    """
+    link = f'<a href="{local_object.get_absolute_url()}">{local_object.name}</a>'
+    messages.warning(
+        request,
+        f"Your deck already has this {content_type}: {link}. Nothing was imported, because "
+        f"replacing a {content_type} you already have is not supported yet. Delete your copy "
+        "first if you want the Library's version instead."
+    )
+    return redirect(redirect_to)
+
+
+def redirect_already_shared(request, local_object, content_type, redirect_to):
+    """Send the user back, explaining that the Library already has this content.
+
+    The counterpart to `redirect_already_imported`, for a push that would land on a copy
+    already in the Library. Pushing again is refused for the same reason in reverse:
+    updating what is already there is not supported yet (#2376).
+
+    The message names the content but does not link to the Library's copy, because a
+    teacher cannot open another deck: the link would be a dead end.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        local_object (Quest | Category): the content that was being shared.
+        content_type (str): "quest" or "campaign", used in the message.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the warning message.
+    """
+    messages.warning(
+        request,
+        f"'{local_object.name}' is already in the Library, so it was not shared again. "
+        f"Sharing an updated version of a {content_type} that is already there is not "
+        "supported yet."
+    )
+    return redirect(redirect_to)
+
+
 def tell_importer_about_renamed_quests(request, renamed_quests):
     """Tell the importing teacher which arriving quests were given a name of their own.
 
@@ -630,15 +690,17 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         Returns:
             HttpResponseRedirect: Redirects to the draft quests view on success.
 
-        Raises:
-            PermissionDenied: If a quest with the same import ID already exists locally.
+            HttpResponseRedirect: back to the Library with an explanation when this deck
+                already has the quest.
         """
         # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # Block import if the quest already exists locally (shouldn't happen because import button would be disabled)
-        if Quest.objects.all_including_archived().filter(import_id=quest_import_id).exists():
-            raise PermissionDenied(f'Quest with import_id {quest_import_id} already exists in the current deck.')
+        # The real check behind the confirmation page's disabled button, which a stale tab
+        # or a resubmitted form gets past (#2373).
+        local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
+        if local_quest:
+            return redirect_already_imported(request, local_quest, 'quest', 'library:quest_list')
 
         with library_schema_context():
             quest = get_published_library_object(Quest, quest_import_id)
@@ -748,16 +810,17 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         Returns:
             HttpResponseRedirect: Redirects to the inactive campaigns view after import.
 
-        Raises:
-            PermissionDenied: If a campaign with the same import ID already exists locally.
+            HttpResponseRedirect: back to the Library with an explanation when this deck
+                already has the campaign.
         """
         # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # Block import if campaign already exists locally (shouldn't happen because import button would be disabled)
-        local_category_qs = Category.objects.filter(import_id=campaign_import_id)
-        if local_category_qs.exists():
-            raise PermissionDenied(f'Campaign with import ID {campaign_import_id} already exists in the current deck.')
+        # The real check behind the confirmation page's disabled button, which a stale tab
+        # or a resubmitted form gets past (#2373).
+        local_category = Category.objects.filter(import_id=campaign_import_id).first()
+        if local_category:
+            return redirect_already_imported(request, local_category, 'campaign', 'library:category_list')
 
         with library_schema_context():
             category = get_published_library_object(Category, campaign_import_id)
@@ -876,8 +939,8 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         Returns:
             HttpResponseRedirect: Redirect to the main quests list after successful export.
 
-        Raises:
-            PermissionDenied: If a quest with the same import ID already exists in the library.
+            HttpResponseRedirect: back to the deck's quests with an explanation when the
+                Library already has the quest.
         """
         self._require_export_permission(request)
 
@@ -901,8 +964,10 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
-            if Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists():
-                raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
+            already_shared = Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists()
+
+        if already_shared:
+            return redirect_already_shared(request, quest, 'quest', 'quests:quests')
 
         # Perform export
         shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
@@ -1024,8 +1089,8 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         Returns:
             HttpResponseRedirect: Redirect to the quests categories list on success.
 
-        Raises:
-            PermissionDenied: If a campaign with the same import ID already exists in the shared library.
+            HttpResponseRedirect: back to the deck's campaigns with an explanation when the
+                Library already has the campaign.
         """
         self._require_export_permission(request)
 
@@ -1043,11 +1108,10 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
-            # Block if campaign already exists in library
-            if Category.objects.filter(import_id=campaign.import_id).exists():
-                raise PermissionDenied(
-                    f"A campaign with import_id {campaign.import_id} already exists in the shared library."
-                )
+            already_shared = Category.objects.filter(import_id=campaign.import_id).exists()
+
+        if already_shared:
+            return redirect_already_shared(request, campaign, 'campaign', 'quests:categories')
 
         # Export campaign and quests
         shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
