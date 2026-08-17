@@ -476,6 +476,84 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         # multi-paragraph notes keep their tags (rather than being flattened or escaped)
         self.assertContains(response, "<p>First note.</p><p>Second note.</p>")
 
+    def publish_file_answer(self, file_name, content=b"pretend media"):
+        """Give the submission a published file answer, as if the student had uploaded one.
+
+        Args:
+            file_name (str): the name to store the file under, whose extension decides how
+                the page shows it.
+            content (bytes): the file's contents, which nothing here reads.
+
+        Returns:
+            QuestionSubmission: the published answer, with the file attached.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Upload your work.</p>",
+        )
+        self.complete_with_answers()
+        answer = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        answer.response_file = SimpleUploadedFile(file_name, content)
+        answer.save()
+
+        return answer
+
+    def test_display__an_image_answer_is_shown_on_the_page(self):
+        """A picture a student uploaded is displayed where it is read (#2172).
+
+        A marker working through a set of answers reads the image itself; the link stays for
+        opening or saving the original.
+        """
+        answer = self.publish_file_answer("my_drawing.png")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<img class="question-media"')
+        self.assertContains(response, answer.response_file.url)
+
+    def test_display__a_video_answer_gets_a_player(self):
+        """A video answer is playable on the page, where the marker is reading it."""
+        self.publish_file_answer("my_clip.mp4")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<video class="question-media" controls preload="metadata">')
+
+    def test_display__an_audio_answer_gets_a_player(self):
+        """An audio answer is playable on the page, the same as a video one."""
+        self.publish_file_answer("my_reading.mp3")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<audio class="question-media" controls preload="metadata">')
+
+    def test_display__any_other_answer_file_is_offered_as_a_link(self):
+        """A file the page cannot embed is offered as a link to open or save."""
+        answer = self.publish_file_answer("my_notes.pdf")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertNotContains(response, '<img class="question-media"')
+        self.assertContains(response, f'<a href="{answer.response_file.url}" target="_blank">')
+
+    def test_display__a_solution_image_is_shown_to_staff(self):
+        """The teacher's example answer is shown too, beside the answers it is compared with."""
+        self.short_question.solution_file = SimpleUploadedFile("the_solution.png", b"pretend image")
+        self.short_question.save()
+        self.complete_with_answers()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.short_question.refresh_from_db()
+        self.assertContains(response, "<b>Solution file:</b>")
+        self.assertContains(response, self.short_question.solution_file.url)
+        self.assertContains(response, '<img class="question-media"')
+
     def test_display__student_does_not_see_marker_notes(self):
         """Solutions and marker notes stay staff-only in the answers display."""
         self.short_question.solution_text = "SECRET SOLUTION"

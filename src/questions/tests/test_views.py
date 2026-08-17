@@ -108,6 +108,33 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, "—")
         self.assertNotContains(response, "&mdash;")
 
+    def test_list__an_image_solution_shows_as_a_thumbnail(self):
+        """A picture used as a solution is shown in the table, not just named (#2172).
+
+        The Solution column is narrow, so the thumbnail stands in for the download link
+        rather than sitting beside it.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=7, type="file_upload",
+            instructions="Upload a photo", solution_file=SimpleUploadedFile("example.png", b"pretend image"),
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, '<img class="question-media-thumb"')
+        self.assertContains(response, image_question.solution_file.url)
+
+    def test_list__a_video_solution_stays_a_link(self):
+        """A video solution is named rather than embedded: a player has no room in the column."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        # the setUp file question's solution is an .mp4
+        self.assertNotContains(response, "<video")
+        self.assertContains(response, self.file_question1.solution_file.url)
+
     def test_list__invalid_quest_404(self):
         """The question list for a nonexistent quest is a 404."""
         self.client.force_login(self.test_teacher)
