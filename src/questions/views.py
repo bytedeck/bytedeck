@@ -1,7 +1,8 @@
 from django.db import transaction
 from django.db.models import Max
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
+from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
@@ -138,14 +139,35 @@ class QuestionMoveView(
     swapping ordinals. The question swaps with the nearest question in the requested direction;
     ordinals aren't necessarily contiguous (deleting a question leaves a gap), so the neighbour is
     found by ordering rather than by ``ordinal ± 1``. Moving the first question up or the last
-    question down is a no-op. Always redirects back to the quest's question list.
+    question down is a no-op.
+
+    Reordering takes several clicks, and a redirect drops the teacher back at the top of the
+    page between them, so the question list posts these moves in the background and swaps the
+    table in place (#2216). An AJAX request therefore gets the re-rendered table back as JSON;
+    a plain form post still redirects to the list, which is what the page does without
+    JavaScript.
     """
 
     http_method_names = ['post']
 
     def post(self, request, *args, **kwargs):
-        """Swap the question's ordinal with its up/down neighbour (if any), then redirect to
-        the list. `direction` comes from the URL and must be 'up' or 'down' (else 404)."""
+        """Swap the question's ordinal with its up/down neighbour (if any), then show the list.
+
+        Args:
+            request (HttpRequest): the move request. An ``X-Requested-With`` header of
+                ``XMLHttpRequest`` asks for the table back instead of a redirect.
+            *args: unused, passed through from the URL resolver.
+            **kwargs: URL keywords; ``pk`` names the question and ``direction`` (which must be
+                'up' or 'down') the way to move it.
+
+        Returns:
+            JsonResponse | HttpResponseRedirect: the re-rendered question table under
+            ``question_table_html`` for an AJAX caller, otherwise a redirect to the list.
+
+        Raises:
+            Http404: if ``direction`` is neither 'up' nor 'down', or the question is not one of
+                this quest's.
+        """
         direction = self.kwargs['direction']
         if direction not in ('up', 'down'):
             raise Http404(f"Cannot move a question '{direction}'.")
@@ -162,7 +184,32 @@ class QuestionMoveView(
         if neighbour is not None:
             self._swap_ordinals(question, neighbour)
 
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'question_table_html': self._render_table(request, question.quest)})
+
         return redirect('questions:list', quest_id=question.quest_id)
+
+    @staticmethod
+    def _render_table(request, quest):
+        """Render the quest's questions as the list page shows them.
+
+        The server re-renders the snippet the page was built from, so the order and which
+        arrows are disabled at the ends of the list stay decided in one place. Working that
+        out in JavaScript instead would be a second copy of the same rule, free to drift.
+
+        Args:
+            request (HttpRequest): the current request, so the template renders with the same
+                context processors the page uses.
+            quest (Quest): the quest whose questions to render.
+
+        Returns:
+            str: the rendered table.
+        """
+        return render_to_string(
+            'questions/snippets/question_table.html',
+            {'quest': quest, 'questions': Question.objects.filter(quest_id=quest.id)},
+            request=request,
+        )
 
     @staticmethod
     def _swap_ordinals(question, neighbour):
