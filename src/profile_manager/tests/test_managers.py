@@ -105,15 +105,16 @@ class ProfileManagerTest(ByteDeckTenantTestCase):
         self.assertIn(student.email, emails)
 
     def test_get_mailing_list__keeps_a_teacher_enrolled_in_a_course(self):
-        """Staff are dropped from the student half of the list, and picked up again by the
-        teacher half, so a teacher who is also registered in a course still gets the email
-        (once: the two halves are merged with distinct())."""
+        """Filtering the student half to students drops a teacher who is registered in a
+        course out of it, so this pins that the teacher half still picks them up and they
+        keep getting the email. Nothing here exercises the merge's distinct(): with staff
+        gone from the student half, an enrolled teacher is in one source queryset only."""
         teacher = self.make_verified_recipient('enrolled_teacher', is_staff=True)
         baker.make(CourseStudent, user=teacher, course=self.course, semester=self.active_semester)
 
         emails = Profile.objects.get_mailing_list(as_emails_list=True, for_announcement_email=True)
 
-        self.assertEqual(emails.count(teacher.email), 1)
+        self.assertIn(teacher.email, emails)
 
     def test_all_active__returns_active_users(self):
         """all_active() returns every active user, including staff, regardless of semester."""
