@@ -47,12 +47,14 @@ class TransferResult(NamedTuple):
 
     `unmet_prereqs` names gating that did not travel, which fails open: the copy in the
     Library ends up less gated than its author wrote. `skipped_quests` names quests that
-    were left out of a shared campaign altogether.
+    were left out of a shared campaign altogether. `dropped_common_data` names the shared
+    General Info blocks the copy arrives without.
     """
 
     quests: list
     unmet_prereqs: list
     skipped_quests: list = ()
+    dropped_common_data: list = ()
 
 
 class LibraryTransferError(Exception):
@@ -158,7 +160,8 @@ def snapshot_quest(quest):
     Returns:
         dict: with keys `fields` (the quest's own values), `tags` (tag names), `campaign`
         (a campaign snapshot or None), `prereqs` (the shareable things it requires, each as
-        an import_id and a name) and `questions` (its submission questions).
+        an import_id and a name), `questions` (its submission questions) and
+        `common_data_title` (the General Info block it uses, which does not travel).
     """
     return {
         'fields': {name: _read_field(quest, name) for name in _copied_field_names(Quest, QUEST_FIELDS_NOT_COPIED)},
@@ -168,6 +171,9 @@ def snapshot_quest(quest):
         'campaign': snapshot_campaign(quest.campaign),
         'prereqs': _snapshot_prereqs(quest),
         'questions': _snapshot_questions(quest),
+        # Not copied (CommonData has no import_id to match it across schemas), but the
+        # title travels so the sharer can be told the block stays behind (#2398).
+        'common_data_title': quest.common_data.title if quest.common_data else None,
     }
 
 
@@ -386,8 +392,8 @@ def write_quests(writes, *, with_campaign):
             campaign.
 
     Returns:
-        TransferResult: the written quests, and the names of any prerequisites the
-        destination does not have.
+        TransferResult: the written quests, the names of any prerequisites the destination
+        does not have, and the General Info blocks that did not come with them.
 
     Raises:
         LibraryTransferError: if any quest cannot be written.
@@ -406,7 +412,15 @@ def write_quests(writes, *, with_campaign):
         for (snapshot, _, _), quest in zip(writes, written):
             unmet.extend(_write_prereqs(quest, snapshot['prereqs']))
 
-    return TransferResult(quests=written, unmet_prereqs=sorted(set(unmet)))
+    dropped_common_data = sorted({
+        snapshot['common_data_title'] for snapshot, _, _ in writes if snapshot['common_data_title']
+    })
+
+    return TransferResult(
+        quests=written,
+        unmet_prereqs=sorted(set(unmet)),
+        dropped_common_data=dropped_common_data,
+    )
 
 
 def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None):

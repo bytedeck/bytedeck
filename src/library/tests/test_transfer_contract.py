@@ -256,7 +256,9 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
         it is excluded from the transfer entirely. A quest whose instructions refer to a
         shared preamble arrives on the destination deck without that panel.
 
-        When #2398 is fixed this should assert the CommonData arrives instead.
+        That is the settled behaviour rather than a gap waiting on a fix: the block is
+        left behind on purpose, and the sharer is warned by name on the push so the loss
+        is not a surprise (`LibrarySharerWarningTests` covers the warning).
         """
         quest, campaign = self._build_populated_quest()
         self.assertIsNotNone(quest.common_data)
@@ -269,8 +271,11 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
     def test_round_trip__drops_campaign_map_order(self):
         """A campaign's quest-map placement resets to the default (#2396).
 
-        When #2396 is fixed this should assert map_order arrives as 7, or the campaign
-        should be documented as deliberately deck-relative.
+        Deliberately deck-relative: where a campaign sits on the quest map is an
+        arrangement of the deck it was arranged on, and the importing deck places it where
+        it wants. No warning goes with it either, unlike the losses in `TransferResult`,
+        because nothing was lost: the sharer's placement was never the importer's to
+        receive (#2396).
         """
         _, campaign = self._build_populated_quest()
         self.assertEqual(campaign.map_order, 7)

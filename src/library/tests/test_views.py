@@ -2241,6 +2241,86 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
             f"expected no warning, got {self._message_texts(response)}",
         )
 
+    def test_export_quest__warns_the_sharer_that_the_general_info_block_stays_behind(self):
+        """Sharing a quest that uses a General Info block says the copy arrives without it.
+
+        `CommonData` has no `import_id`, so there is no key that means the same block in
+        another deck's schema and it cannot travel. That is correct, but the quest arrives
+        missing a panel its instructions may refer to, so the sharer is told (#2398).
+        """
+        common = CommonData.objects.create(title="Lab Safety Rules", instructions="<p>goggles on</p>")
+        local = baker.make(Quest, name="Quest With Shared Preamble", published=True, common_data=common)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertTrue(
+            any("Lab Safety Rules" in text for text in self._message_texts(response)),
+            f"expected the General Info block to be named, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__stays_quiet_when_the_quest_uses_no_general_info(self):
+        """A quest with no shared preamble shares without that warning."""
+        local = baker.make(Quest, name="Self Contained Quest", published=True, common_data=None)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertFalse(
+            any("General Info" in text for text in self._message_texts(response)),
+            f"expected no warning, got {self._message_texts(response)}",
+        )
+
+    def test_export_category__warns_once_for_a_block_shared_by_several_quests(self):
+        """A campaign whose quests share one General Info block names it a single time.
+
+        The block is deduplicated, since naming the same rubric once per quest would bury
+        the message it belongs to.
+        """
+        common = CommonData.objects.create(title="Marking Rubric", instructions="<p>how marks work</p>")
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, name="Rubric Quest One", campaign=campaign, published=True, common_data=common)
+        baker.make(Quest, name="Rubric Quest Two", campaign=campaign, published=True, common_data=common)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        naming_it = [text for text in self._message_texts(response) if "Marking Rubric" in text]
+        self.assertEqual(len(naming_it), 1, f"expected exactly one message, got {self._message_texts(response)}")
+        self.assertEqual(naming_it[0].count("Marking Rubric"), 1)
+
+    def test_export_category__names_every_general_info_block_left_behind(self):
+        """A campaign using two different General Info blocks names both of them.
+
+        One message listing both, rather than one message each: they are the same kind of
+        loss and the sharer fixes them the same way.
+        """
+        campaign = baker.make(Category, published=True)
+        for title, quest_name in [("Marking Rubric", "Graded Quest"), ("Video Howto", "Filmed Quest")]:
+            common = CommonData.objects.create(title=title, instructions=f"<p>{title}</p>")
+            baker.make(Quest, name=quest_name, campaign=campaign, published=True, common_data=common)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        naming_them = [
+            text for text in self._message_texts(response)
+            if "Marking Rubric" in text and "Video Howto" in text
+        ]
+        self.assertEqual(len(naming_them), 1, f"expected one message naming both, got {self._message_texts(response)}")
+
     def test_export_category__warns_the_sharer_that_an_archived_quest_was_left_out(self):
         """Sharing a campaign holding an archived quest names the quest that stayed behind.
 
