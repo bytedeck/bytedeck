@@ -28,7 +28,10 @@ from notifications.models import Notification
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from djcytoscape.views import UpdateMapMessageMixin
 
-from .forms import BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, SemesterForm, ExcludedDateFormset, ExcludedDateFormsetHelper
+from .forms import (
+    BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
+    ExcludedDateFormset, ExcludedDateFormsetHelper,
+)
 from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange, semester_for
 
 from django.db import transaction
@@ -194,7 +197,7 @@ class RankList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class RankCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('name', 'xp', 'icon', 'fa_icon')
+    form_class = RankForm
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 
@@ -208,7 +211,7 @@ class RankCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class RankUpdate(NonPublicOnlyViewMixin, UpdateMapMessageMixin, UpdateView):
-    fields = ('name', 'xp', 'icon', 'fa_icon')
+    form_class = RankForm
     model = Rank
     success_url = reverse_lazy('courses:ranks')
 

@@ -153,6 +153,40 @@ def redirect_failed_import(request, error, redirect_to):
     return redirect(redirect_to)
 
 
+def warn_sharer_about_dropped_common_data(request, dropped_common_data):
+    """Tell the sharer that a quest's shared General Info block will not travel.
+
+    `CommonData` is the block of text several quests can share (a marking rubric, how to
+    record a video, lab safety rules). It has no `import_id`, so there is no key that
+    means the same block in another deck's schema, and copying the raw id would attach the
+    quest to whatever text happens to sit at that id there. Leaving it behind is therefore
+    correct; the problem is that the quest arrives missing a panel its instructions may
+    refer to, and nobody is told (#2398).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        dropped_common_data (list[str]): titles of the General Info blocks left behind.
+
+    Returns:
+        None. Queues a warning message when a block was left behind, and does nothing when
+        the content did not use one.
+    """
+    if not dropped_common_data:
+        return
+
+    names = ', '.join(f"'{title}'" for title in dropped_common_data)
+    messages.warning(
+        request,
+        f"The shared General Info {names} does not travel to the Library, so the copy "
+        "there arrives without that panel. Paste the text into the quest instructions "
+        "and share it again if this info is required in the quest."
+        if len(dropped_common_data) == 1 else
+        f"Shared General Info does not travel to the Library, so the copies there arrive "
+        f"without those panels: {names}. Paste the text into the quest instructions and "
+        "share them again if this info is required in the quests."
+    )
+
+
 def warn_sharer_about_skipped_quests(request, skipped_quests):
     """Tell the sharer which quests were left out of the campaign they just shared.
 
@@ -854,6 +888,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             "it will appear in the Library once they review and publish it."
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
 
@@ -1003,6 +1038,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
+        warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')
 
 

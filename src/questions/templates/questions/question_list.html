@@ -28,5 +28,46 @@
     <strong>Marker Notes</strong>, which only staff ever see.
     Deleting a question keeps any answers students have already submitted.</p>
   </div>
-  {% include 'questions/snippets/question_table.html' %}
+  <div id="question-table">
+    {% include 'questions/snippets/question_table.html' %}
+  </div>
+{% endblock %}
+
+{% block js %}
+<script>
+  $(document).ready(function () {
+    // Reordering is a several-click job, so each move is posted in the background and the
+    // table redrawn from the server's answer: the teacher keeps their place in the list
+    // between clicks, and the ordering and the disabled arrows at its ends stay the server's
+    // business (#2216). These are ordinary forms, so with JavaScript off they post normally
+    // and the view redirects to the reloaded list.
+    var $table = $('#question-table');
+
+    $table.on('submit', 'form.question-move-form', function (event) {
+      event.preventDefault();
+      var $form = $(this);
+
+      $.ajax({
+        type: 'POST',
+        url: $form.attr('action'),
+        data: $form.serialize(),
+        success: function (data) {
+          $table.html(data.question_table_html);
+          // The site-wide initializer ran on the rows this just replaced, so the new ones
+          // need theirs: an uninitialized bootstrap tooltip or popover does nothing.
+          $table.find('[data-toggle="tooltip"]').tooltip();
+          $table.find('[data-toggle="popover"]').popover();
+          // Put focus back on the same button of the same question, so a teacher moving a
+          // question several places keeps clicking (or pressing enter on) one button.
+          $table.find('form[action="' + $form.attr('action') + '"] button').focus();
+        },
+        error: function () {
+          // Nothing was redrawn, so the page still shows the old order: reload to find out
+          // what the server actually did.
+          window.location.reload();
+        }
+      });
+    });
+  });
+</script>
 {% endblock %}

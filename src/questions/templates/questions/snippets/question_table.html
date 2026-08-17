@@ -65,13 +65,13 @@
       </td>
       {% if not dont_edit_questions %}
       <td class="text-nowrap">
-        <form method="post" action="{% url 'questions:move' quest.id question.id 'up' %}" class="preview-action-form">
+        <form method="post" action="{% url 'questions:move' quest.id question.id 'up' %}" class="preview-action-form question-move-form">
           {% csrf_token %}
           <button type="submit" class="btn btn-default" title="Move up"{% if forloop.first %} disabled{% endif %}>
             <i class="fa fa-fw fa-arrow-up"></i>
           </button>
         </form>
-        <form method="post" action="{% url 'questions:move' quest.id question.id 'down' %}" class="preview-action-form">
+        <form method="post" action="{% url 'questions:move' quest.id question.id 'down' %}" class="preview-action-form question-move-form">
           {% csrf_token %}
           <button type="submit" class="btn btn-default" title="Move down"{% if forloop.last %} disabled{% endif %}>
             <i class="fa fa-fw fa-arrow-down"></i>

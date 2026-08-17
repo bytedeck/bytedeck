@@ -250,4 +250,5 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         quests=exported.quests + cloned.quests,
         unmet_prereqs=sorted(set(exported.unmet_prereqs) | set(cloned.unmet_prereqs)),
         skipped_quests=skipped_quests,
+        dropped_common_data=sorted(set(exported.dropped_common_data) | set(cloned.dropped_common_data)),
     )
