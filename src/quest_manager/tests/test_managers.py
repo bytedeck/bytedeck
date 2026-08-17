@@ -122,8 +122,25 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a student user shared across the queryset tests."""
+        """Create a student user shared across the queryset tests, registered in the deck's
+        semester: their registration is what names the semester their work counts in."""
         cls.student = baker.make(User, username='student', is_staff=False)
+        baker.make(
+            CourseStudent, user=cls.student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
+
+    def start_new_semester(self):
+        """Start a fresh semester and move the student into it, the way a term rolls over.
+
+        Pointing the deck at a new semester is only half of it: a student's semester comes
+        from their own registration, so per-semester repeat limits only reset for them once
+        they are registered in the new one.
+        """
+        new_semester = baker.make(Semester)
+        SiteConfig.get().set_active_semester(new_semester.id)
+        CourseStudent.objects.filter(user=self.student).update(semester=new_semester)
+        return new_semester
 
     def test_not_in_progress_completed_or_cooldown__all_five_conditions(self):
         """ Test that all 5 conditions are met for this queryset method:
@@ -236,9 +253,8 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
                 self.assertIn(quest_repeatable_twice_all_time, qs)
                 self.assertIn(quest_infinite_repeatables, qs)  # only the infinite repeats should be avail.
 
-                # Create a new semester and set it to the current one, which should make the per semester quest available again
-                new_semester = baker.make(Semester)
-                SiteConfig.get().set_active_semester(new_semester.id)
+                # Start a new semester and register the student in it, which should make the per semester quest available again
+                new_semester = self.start_new_semester()
                 qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
                 self.assertNotIn(quest_not_repeatable, qs)
                 self.assertIn(quest_repeatable_once_per_sem, qs)
@@ -265,8 +281,7 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
 
                     # Finally, make sure quest_repeatable_twice_all_time doesn't refresh in a new semester
                     # Condition 5
-                    new_semester = baker.make(Semester)
-                    SiteConfig.get().set_active_semester(new_semester.id)
+                    self.start_new_semester()
                     qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
 
                     self.assertNotIn(quest_not_repeatable, qs)
@@ -581,6 +596,9 @@ class QuestManagerTest(ByteDeckTenantTestCase):
 
         """
         active_semester = baker.make(Semester)
+        # the student's registration is what makes this their semester, so the submissions
+        # stamped with it below are the ones that read as their current work
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=active_semester)
 
         quest_inprog_sem2 = baker.make(Quest, name='Quest-inprogress-sem2')
         sub_inprog_sem2 = baker.make(QuestSubmission, user=self.student, quest=quest_inprog_sem2)
@@ -788,16 +806,32 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a teacher, a student, and a stack of submissions spanning two semesters."""
+        """Create a teacher, a student registered in the semester they earn XP in, and a
+        stack of submissions spanning two semesters."""
         cls.teacher = baker.make(User, username='teacher', is_staff=True)
         cls.student = baker.make(User, username='student', is_staff=False)
 
         cls.sub1, cls.sub2 = cls.make_test_submissions_stack()
         cls.active_semester = cls.sub1.semester
+        # the registration is what names the student's semester (issue #2441): without one
+        # they are in no semester, and none of their stamped submissions read as current
+        baker.make(CourseStudent, user=cls.student, course=baker.make(Course), semester=cls.active_semester)
 
     def setUp(self):
         """Set the active semester to the one holding sub1 before each test."""
         SiteConfig.get().set_active_semester(self.active_semester.id)
+
+    def close_every_semester(self):
+        """Put the deck between terms: nothing open and nothing pointed at.
+
+        Archiving the semesters is the half that matters to a student, since their semester
+        comes from a registration and an archived one is not current; clearing the pointer is
+        what leaves the deck itself with no default.
+        """
+        Semester.objects.update(status=Semester.Status.ARCHIVED)
+        config = SiteConfig.get()
+        config.active_semester = None
+        config.save()
 
     def test_get_queryset__default_returns_published_unarchived(self):
         """QuestSubmissionManager.get_queryset by default should return all published, not archived quest submissions"""
@@ -809,10 +843,13 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
         self.assertQuerySetEqual(qs, [self.sub1])
 
-    def test_get_queryset__active_semester_only_is_empty_with_no_open_semester(self):
-        """Between semesters nothing was earned "this semester", so the semester-scoped
-        queryset is empty instead of matching submissions whose semester was deleted."""
-        orphaned = baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=False, semester=None)
+    def test_get_queryset__active_semester_only_holds_the_unstamped_work_with_no_open_semester(self):
+        """Between semesters the deck-wide staff view holds exactly what belongs to no
+        semester: what was handed in while nobody was registered anywhere. Leaving it out
+        would put it beyond every approval queue on the deck (issue #2413), since a teacher's
+        own queue is built from a registration and between terms nobody holds one. The
+        archived semesters' work is past, so it drops out."""
+        unstamped = baker.make(QuestSubmission, user=self.student, quest__published=True, quest__archived=False, semester=None)
         Semester.objects.update(status=Semester.Status.ARCHIVED)
         config = SiteConfig.get()
         config.active_semester = None
@@ -820,8 +857,7 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
 
         qs = QuestSubmission.objects.get_queryset(active_semester_only=True)
 
-        self.assertFalse(qs.exists())
-        self.assertNotIn(orphaned, qs)
+        self.assertQuerySetEqual(qs, [unstamped])
 
     def test_get_queryset__active_semester_only_spans_every_open_semester(self):
         """A deck-wide staff view covers both cohorts when a deck runs two semesters at once
@@ -838,34 +874,73 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         self.assertIn(their_submission, qs)
 
     def test_create_submission__is_not_stamped_when_no_semester_is_open(self):
-        """A quest started between semesters belongs to no semester, so its XP counts toward
-        none. See #2413: starting a quest at all in that state is the open question."""
-        config = SiteConfig.get()
-        config.active_semester = None
-        config.save()
+        """A quest started between semesters belongs to no semester, and the student can
+        still see it: their in-progress list is the work in the semester they are in, which
+        is none, so it holds the unstamped rows (issue #2413)."""
+        self.close_every_semester()
 
         submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
 
         self.assertIsNone(submission.semester_id)
+        self.assertIn(submission, QuestSubmission.objects.all_not_completed(user=self.student))
 
     def test_create_submission__is_stamped_with_the_students_own_semester(self):
         """A quest is stamped with the semester the student is registered in, not the one the
         deck points at (issue #2157 Phase 3). The two are the same until several semesters can
         be open at once, so the second one here is built directly to tell them apart."""
         other_semester = baker.make(Semester, status=Semester.Status.OPEN)
-        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+        their_student = baker.make(User, username='other_cohort_student')
+        baker.make(CourseStudent, user=their_student, course=baker.make(Course), semester=other_semester)
 
-        submission = QuestSubmission.objects.create_submission(self.student, baker.make(Quest, published=True))
+        submission = QuestSubmission.objects.create_submission(their_student, baker.make(Quest, published=True))
 
         self.assertEqual(submission.semester_id, other_semester.id)
         self.assertNotEqual(submission.semester_id, SiteConfig.get().open_semester_id)
 
-    def test_create_submission__unregistered_user_still_uses_the_deck_semester(self):
+    def test_create_submission__unregistered_user_is_stamped_with_no_semester(self):
         """A teacher trying out a quest has no registration to read a semester from, so their
-        submission keeps landing in the deck's open semester as it always did."""
+        submission belongs to no semester rather than to the deck's open one, which is a term
+        they are not in (issue #2441)."""
+        self.assertIsNotNone(SiteConfig.get().open_semester_id)
+
         submission = QuestSubmission.objects.create_submission(self.teacher, baker.make(Quest, published=True))
 
-        self.assertEqual(submission.semester_id, SiteConfig.get().open_semester_id)
+        self.assertIsNone(submission.semester_id)
+
+    def test_create_submission__student_between_terms_is_stamped_with_no_semester(self):
+        """The regression #2441 is about. A student whose semester was archived while a second
+        cohort keeps running holds no current registration, so their work belongs to no
+        semester: stamping it with the cohort still running would attribute it to a term they
+        are absent from, and archiving that term would then drop it, since final XP is
+        recorded from the registrations and they hold none there."""
+        alum = baker.make(User, username='archived_cohort_student')
+        baker.make(
+            CourseStudent, user=alum, course=baker.make(Course),
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        still_running = SiteConfig.get().open_semester
+
+        submission = QuestSubmission.objects.create_submission(alum, baker.make(Quest, published=True))
+
+        self.assertIsNotNone(still_running)
+        self.assertIsNone(submission.semester_id)
+        self.assertFalse(CourseStudent.objects.filter(user=alum, semester=still_running).exists())
+
+    def test_create_submission__unstamped_double_start_returns_the_existing_submission(self):
+        """The double-start guard covers the work that belongs to no semester too (issue
+        #2413). Postgres treats NULLs as distinct, so the constraint keyed on the semester
+        never sees two unstamped rows as duplicates; the second constraint does, and the
+        request that loses the race is handed the submission that won rather than a copy."""
+        self.close_every_semester()
+        quest = baker.make(Quest, published=True)
+
+        first = QuestSubmission.objects.create_submission(self.student, quest)
+        # bypass the in-progress check start() would make, which is what a concurrent second
+        # request effectively does: it passed that check before the first request saved
+        second = QuestSubmission.objects.create_submission(self.student, quest)
+
+        self.assertEqual(first, second)
+        self.assertEqual(QuestSubmission.objects.all_not_completed(user=self.student).filter(quest=quest).count(), 1)
 
     def test_all_completed_past__returns_every_semester_when_none_is_open(self):
         """With no open semester every completed submission is in a past semester, so the

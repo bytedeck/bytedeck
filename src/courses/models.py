@@ -841,18 +841,22 @@ class CourseStudentManager(models.Manager):
         pointer can no longer say which of them a given student is in, but their
         registration always can.
 
+        Someone holding no open-semester registration is in no semester at all (issue
+        #2441). Handing them the deck's default instead puts their work in a term they were
+        never registered in: it lands in a deck-wide approval queue no teacher owns, counts
+        toward that cohort's totals, and is dropped when that cohort's semester is archived,
+        because archiving records final XP from the registrations and they hold none.
+
         Args:
             user: the User whose semester is wanted.
 
         Returns:
-            Semester or None: the open semester this user is registered in. Someone with no
-            such registration (a teacher trying out a quest, a student who hasn't joined a
-            course yet) gets the deck's open semester, which is None between semesters.
+            Semester or None: the open semester this user is registered in, or None when
+            they hold none (a teacher trying out a quest, a student between terms, a student
+            who hasn't joined a course yet).
         """
         registration = self.current_courses(user).select_related('semester').first()
-        if registration is not None:
-            return registration.semester
-        return SiteConfig.get().open_semester
+        return registration.semester if registration is not None else None
 
     def has_multicourse_students(self):
         """Whether anyone on the deck is currently registered in more than one course.
@@ -922,7 +926,8 @@ def semester_for(user=None):
 
     Returns:
         Semester or None: that student's own semester, or the deck's open semester when no
-        particular student is in view. None when neither exists, between semesters.
+        particular student is in view. None when neither exists: between semesters, and for
+        anyone not registered in one, whose work belongs to no semester (issue #2441).
     """
     if user is None:
         return SiteConfig.get().open_semester
@@ -1082,6 +1087,21 @@ def coursestudent_post_save_callback(instance, **kwargs):
     If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
     """
     instance.user.profile.xp_invalidate_cache()
+
+
+@receiver(post_save, sender=CourseStudent)
+def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
+    """Bring the quests a student had on the go into the semester they have just joined.
+
+    Work handed in while they were registered in no semester belongs to none (issue #2441),
+    and joining a course is the moment it gains one. Without this it would be stranded: out
+    of their in-progress list, which is their new semester's, and out of their available
+    list, which drops a quest they already have a submission of.
+    """
+    from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
+
+    if created and instance.semester_id is not None and instance.semester.is_open:
+        QuestSubmission.objects.adopt_unstamped_in_progress(instance.user_id, instance.semester_id)
 
 
 @receiver(post_save, sender=Rank)

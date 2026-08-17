@@ -1880,9 +1880,11 @@ class TestAjax_TagChart(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create the target user whose tag chart is requested, and cache the active semester."""
+        """Create the target user whose tag chart is requested, registered in the deck's
+        semester so their work counts toward it, and cache that semester."""
         cls.user = baker.make(User)
         cls.semester = SiteConfig.get().active_semester
+        baker.make(CourseStudent, user=cls.user, course=baker.make(Course), semester=cls.semester)
 
     def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
         """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.

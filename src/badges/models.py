@@ -349,16 +349,17 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         """Assertions granted in `semester`.
 
+        None is a semester's worth of badges in its own right rather than a missing filter
+        (issue #2413), matching how submissions read: a student between terms is in no
+        semester, so a badge granted to them is stamped with none, and it is still theirs.
+
         Args:
-            semester: a Semester, or None when no semester is open.
+            semester: a Semester, or None for the badges that belong to no semester.
 
         Returns:
-            BadgeAssertionQuerySet: the assertions from that semester, or an empty queryset
-            when there is no semester (no semester is open). Assertions granted while no
-            semester was open belong to no semester, so they are left out either way.
+            BadgeAssertionQuerySet: the assertions from that semester, or the unstamped ones
+            when there is no semester.
         """
-        if semester is None:
-            return self.none()
         return self.filter(semester=semester)
 
     def get_issued_before(self, date):

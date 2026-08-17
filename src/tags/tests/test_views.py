@@ -80,6 +80,12 @@ class TagCRUDViewTests(ByteDeckTenantTestCase):
         """Create teacher/student users and a tag for the CRUD view tests."""
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student = User.objects.create_user('test_student')
+        # the registration is what makes the deck's semester theirs (issue #2441), so the
+        # work stamped with it below counts toward the XP these views total by tag
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
 
         cls.tag = Tag.objects.create(name="test-tag")
 

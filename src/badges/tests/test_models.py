@@ -418,14 +418,19 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
         self.assertIsNone(new_assertion.semester_id)
 
-    def test_get_queryset__active_semester_only_is_empty_with_no_open_semester(self):
-        """With no semester open, nothing was earned this semester: the semester-scoped
-        queryset is empty rather than matching the unstamped assertions."""
+    def test_get_queryset__active_semester_only_holds_the_unstamped_assertions_with_no_open_semester(self):
+        """With no semester open, "this semester" is the work that belongs to none: a badge
+        granted between terms is stamped with no semester (issue #2413) and is still the
+        student's, so the semester-scoped queryset is where it shows up. The assertion from
+        the archived semester is past, so it drops out of that queryset but not the
+        unscoped one."""
         Semester.objects.complete_semester()
-        BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
 
-        self.assertFalse(BadgeAssertion.objects.get_queryset(active_semester_only=True).exists())
-        self.assertTrue(BadgeAssertion.objects.get_queryset(active_semester_only=False).exists())
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+        self.assertIn(unstamped, semester_scoped)
+        self.assertNotIn(self.assertion, semester_scoped)
+        self.assertIn(self.assertion, BadgeAssertion.objects.get_queryset(active_semester_only=False))
 
     def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
         """The granted notification uses the badge type's own fa_icon when it has one, rather
@@ -454,6 +459,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
     def test_get_by_type_for_user__one_entry_per_badge_type(self):
         """ get_by_type_for_user should return one entry per BadgeType, where the entry for the
         granted badge's type contains the user's assertion and all other entries are empty. """
+        # registered in the semester the recipe stamps, or the assertion isn't theirs to list
+        baker.make('courses.CourseStudent', user=self.student, course=baker.make('courses.Course'), semester=self.sem)
         assertion = self.badge_assertion_recipe.make()
         badge_list_by_type = BadgeAssertion.objects.get_by_type_for_user(self.student)
         self.assertEqual(len(badge_list_by_type), BadgeType.objects.count())
