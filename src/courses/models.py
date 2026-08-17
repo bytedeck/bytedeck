@@ -765,9 +765,29 @@ class CourseStudentManager(models.Manager):
             list[tuple]: (CourseStudent, xp) in registration order, empty when the student is
             in no course. A student in one course has their whole total against it.
         """
+        return self.xp_across(user, list(self.current_courses(user)), profile=profile, up_to_date=up_to_date)
+
+    def xp_across(self, user, registrations, profile=None, up_to_date=None):
+        """The same division as xp_for_registrations(), across registrations given explicitly.
+
+        Whoever already holds a student's registrations can hand them straight over rather
+        than having them read back (issue #2459): archiving a semester has all of them in
+        memory, and asking each one separately would repeat this whole calculation, which is
+        one question about the student rather than one per course.
+
+        Args:
+            user: the student whose XP is being divided.
+            registrations (list[CourseStudent]): the registrations to divide it between. They
+                should all be the student's own, and from one semester: the shared pool is
+                split by how many there are.
+            profile (Profile): as xp_for_registrations().
+            up_to_date (date): as xp_for_registrations().
+
+        Returns:
+            list[tuple]: (CourseStudent, xp) in the order given.
+        """
         profile = profile if profile is not None else user.profile
         total = profile.xp_cached if up_to_date is None else profile.xp_to_date(up_to_date)
-        registrations = list(self.current_courses(user))
         if len(registrations) <= 1:
             return [(registration, total) for registration in registrations]
 
@@ -804,27 +824,51 @@ class CourseStudentManager(models.Manager):
     def calc_semester_grades(self, semester, clamp_negative_xp=False):
         """Record every registration's final XP and deactivate it.
 
-        clamp_negative_xp: record a negative XP as zero instead of raising (used
-        by the suspension auto-close, where there is no teacher around to fix
-        the balance first).
+        The work is done a student at a time rather than a registration at a time (issue
+        #2459). Both of the things this repeats are per-student, not per-course: the
+        assigned-versus-shared split, and the XP cache the save invalidates. Asking once per
+        registration ran each of them again for every course a student holds.
+
+        Args:
+            semester: the Semester being archived.
+            clamp_negative_xp (bool): record a negative XP as zero instead of raising (used
+                by the suspension auto-close, where there is no teacher around to fix the
+                balance first).
+
+        Raises:
+            ValueError: when a student's XP is negative and clamp_negative_xp is False.
         """
-        coursestudents = self.get_queryset().get_semester(semester)
-        # atomic: a negative-XP refusal mid-loop must roll back the registrations
-        # already deactivated in this call, or they'd sit deactivated while the
-        # semester stays open (CodeRabbit find on the #1734 B2 review)
+        by_student = {}
+        for coursestudent in self.get_queryset().get_semester(semester).select_related('user__profile'):
+            by_student.setdefault(coursestudent.user, []).append(coursestudent)
+
+        # atomic: a negative-XP refusal must roll back the registrations already written in
+        # this call, or they'd sit deactivated while the semester stays open (CodeRabbit find
+        # on the #1734 B2 review)
         with transaction.atomic():
-            for coursestudent in coursestudents:
+            graded = []
+            for student, registrations in by_student.items():
                 # each registration's own XP, not a single figure reused for all of them: a
                 # student who assigned their work to one course must not have that course's
-                # total recorded against the other one too (issue #2440)
-                coursestudent.final_xp = coursestudent.xp()
-                if coursestudent.final_xp < 0:
-                    if not clamp_negative_xp:
-                        raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                         f"Fix it before closing the semester")
-                    coursestudent.final_xp = 0
-                coursestudent.active = False
-                coursestudent.save()
+                # total recorded against the other one too (issue #2440). Divided across the
+                # registrations being archived, which is what this semester holds, rather than
+                # across whatever the student is registered in now.
+                for coursestudent, final_xp in self.xp_across(student, registrations):
+                    if final_xp < 0:
+                        if not clamp_negative_xp:
+                            raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                             f"Fix it before closing the semester")
+                        final_xp = 0
+                    coursestudent.final_xp = final_xp
+                    coursestudent.active = False
+                    graded.append(coursestudent)
+
+            # written in one statement, which fires no post_save, so the XP cache each save
+            # would have invalidated is invalidated here instead: once per student, after all
+            # of their registrations are final, rather than once per registration
+            self.bulk_update(graded, ['final_xp', 'active'])
+            for student in by_student:
+                student.profile.xp_invalidate_cache()
 
     def all_for_semester(self, semester, students_only=False):
         """The registrations in one particular semester.
