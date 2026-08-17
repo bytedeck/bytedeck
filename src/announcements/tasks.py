@@ -21,8 +21,21 @@ User = get_user_model()
 
 @app.task(name='announcements.tasks.send_notifications')
 def send_notifications(user_id, announcement_id):
+    """Notify everyone taking a course that an announcement has been published.
+
+    This is the in-app half of publishing; send_announcement_emails() is the other. They
+    reach different people on purpose: a notification goes to everyone enrolled, while the
+    email adds the teachers and drops anyone who did not ask for it, has no address, or has
+    not verified the one they gave.
+
+    Args:
+        user_id (int): the staff member publishing, who the notification is sent as.
+        announcement_id (int): the Announcement being published.
+    """
     announcement = get_object_or_404(Announcement, pk=announcement_id)
     sending_user = User.objects.get(id=user_id)
+    # everyone enrolled, test accounts included, so a test account sees what a student sees
+    # (issue #2434)
     affected_users = CourseStudent.objects.all_users_in_open_semesters()
     notify.send(
         sending_user,

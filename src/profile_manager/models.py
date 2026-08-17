@@ -61,6 +61,8 @@ class ProfileManager(models.Manager):
             QuerySet[Profile]: the profiles of active students registered in any semester
             that is open right now, across all of them when several are.
         """
+        # the roster is unfiltered because all_students() already drops staff and test
+        # accounts; asking the roster for them as well would only add a join (issue #2434)
         courses_user_list = CourseStudent.objects.all_users_in_open_semesters()
         qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
@@ -72,10 +74,24 @@ class ProfileManager(models.Manager):
         for_announcement_email=False,
         for_notification_email=False,
     ):
-        """
+        """The users a deck's email should go to: everyone enrolled, plus its teachers.
+
+        Whether a given account receives mail is the account's own choice, not something the
+        roster decides: `get_announcements_by_email` and `get_notifications_by_email` both
+        default to False, and only take effect once the address is verified. So the roster
+        here is deliberately unfiltered, test accounts included (issue #2434): a test account
+        whose address was verified and whose owner turned the option on has asked for this
+        mail, usually so a teacher can see what a student receives, and a flag meaning "leave
+        this out of student lists" is not a reason to ignore that.
+
+        Whichever roster they come from, everyone here has an address of their own that they
+        verified, so nothing is sent to an address nobody confirmed.
+
         :param as_emails_list: If True, return a list of emails instead of a queryset of users
         :param for_announcement_email: If True, only return users who want announcements by email
         :param for_notification_email: If True, only return users who want notifications by email
+        :returns: the matching Users, deduplicated, or their email addresses as a list of
+            strings when as_emails_list is True (which is what a send passes to bcc).
         """
 
         email_filter = models.Q()
