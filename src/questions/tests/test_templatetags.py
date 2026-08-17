@@ -1,8 +1,10 @@
+from types import SimpleNamespace
+
 from django.test import SimpleTestCase
 from django.utils.safestring import SafeString
 
 from questions.models import QuestionType
-from questions.templatetags.question_tags import plain_text, question_type_icon, unwrap_p
+from questions.templatetags.question_tags import media_kind, plain_text, question_type_icon, unwrap_p
 
 
 class UnwrapPTest(SimpleTestCase):
@@ -88,3 +90,20 @@ class PlainTextTest(SimpleTestCase):
     def test_plain_text__result_is_not_marked_safe(self):
         """The result stays escapable, so a stray quote cannot break out of a title attribute."""
         self.assertNotIsInstance(plain_text('<p>a " quote</p>'), SafeString)
+
+
+class MediaKindFilterTest(SimpleTestCase):
+    """Tests for the ``media_kind`` filter, which the answer display uses to embed a file."""
+
+    def test_media_kind__reads_a_file_fields_name(self):
+        """The filter is handed a file field's value, and answers from the name it stores."""
+        self.assertEqual(media_kind(SimpleNamespace(name="answers/2026/my_drawing.png")), "image")
+
+    def test_media_kind__is_empty_for_no_file(self):
+        """A question with nothing uploaded answers with the empty string, not an error.
+
+        Every file field on a question is optional, so the template asks about plenty of
+        empty ones; `None` and an unset `FieldFile` are both falsy, hence one check.
+        """
+        self.assertEqual(media_kind(None), "")
+        self.assertEqual(media_kind(""), "")

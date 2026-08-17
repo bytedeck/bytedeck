@@ -6,6 +6,7 @@ from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
 
 from questions.models import QuestionType
+from utilities.fields import media_kind_of
 
 register = template.Library()
 
@@ -23,6 +24,27 @@ _TYPE_ICONS = {
 def question_type_icon(question_type):
     """Return the Font Awesome icon class for a question's ``type`` (empty string if unknown)."""
     return _TYPE_ICONS.get(question_type, "")
+
+
+@register.filter
+def media_kind(value):
+    """Return how a question's stored file can be shown: 'image', 'video', 'audio' or ''.
+
+    A marker reading a set of answers should see the picture, not a filename to download and
+    open (#2172), so the answer display asks each file what it is and embeds it accordingly.
+    Anything else, and anything with no file, answers with the empty string and is offered
+    as a link.
+
+    Args:
+        value: a file field's value (a `FieldFile`), or None/empty when nothing was uploaded.
+
+    Returns:
+        str: the kind of media, or '' when it is not one this page can embed.
+    """
+    if not value:
+        return ''
+
+    return media_kind_of(value.name)
 
 
 @register.filter
