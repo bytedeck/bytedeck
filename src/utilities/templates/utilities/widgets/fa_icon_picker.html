@@ -1,0 +1,20 @@
+{% comment %}
+Font Awesome icon-picker widget (utilities.widgets.FontAwesomeIconPickerWidget).
+Renders the normal text input (the bare icon name) with a live preview addon, a
+button that opens a searchable grid of Font Awesome 4.7.0 icons, and the panel
+the grid is built into. Behaviour lives in static/js/fa_icon_picker.js; the icon
+list comes from window.faIcons (static/js/fa_icons_4.7.0.js).
+{% endcomment %}
+<div class="fa-icon-picker"{% if widget.modifiers_field_name %} data-modifiers-field="{{ widget.modifiers_field_name }}"{% endif %}>
+  <div class="input-group">
+    <span class="input-group-addon fa-icon-picker-preview" aria-hidden="true"><i class="fa fa-fw{% if widget.value %} fa-{{ widget.value }}{% endif %}"></i></span>
+    {% include "django/forms/widgets/input.html" %}
+    <span class="input-group-btn">
+      <button type="button" class="btn btn-default fa-icon-picker-toggle" title="Pick an icon"><i class="fa fa-th"></i></button>
+    </span>
+  </div>
+  <div class="fa-icon-picker-panel well well-sm" hidden>
+    <input type="text" class="form-control input-sm fa-icon-picker-search" placeholder="Search icons..." autocomplete="off">
+    <div class="fa-icon-picker-grid"></div>
+  </div>
+</div>

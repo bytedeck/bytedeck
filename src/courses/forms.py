@@ -6,8 +6,9 @@ from crispy_forms.bootstrap import Accordion, AccordionGroup
 from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from django_select2.forms import Select2Widget
 
-from .models import Block, Course, CourseStudent, MarkRange, Semester, ExcludedDate
+from .models import Block, Course, CourseStudent, MarkRange, Rank, Semester, ExcludedDate
 from siteconfig.models import SiteConfig
+from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeModifierPickerWidget
 
 
 class XPCourseChoiceMixin:
@@ -76,6 +77,42 @@ class NoScriptTagDatePickerInput(DatePickerInput):
         attrs = super().build_attrs(*args, **kwargs)
         attrs.pop('data-dbdp-debug', None)
         return attrs
+
+
+class RankForm(forms.ModelForm):
+    """Rank add/edit form.
+
+    The Font Awesome icon field uses the searchable icon picker
+    (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), which writes the
+    bare icon name. The modifier field sits right below it with toggle buttons for the
+    common transforms (rotate, flip, spin, pulse) that a rank might want.
+    """
+
+    class Meta:
+        """Binds the icon/modifier picker widgets and plain-language labels onto Rank's
+        two icon fields (the Font Awesome ``fa_icon``/``fa_icon_modifiers`` and the
+        ``icon`` image fallback)."""
+
+        model = Rank
+        fields = ['name', 'xp', 'fa_icon', 'fa_icon_modifiers', 'icon']
+        widgets = {
+            # Tell the picker which field holds the modifiers so its live preview
+            # can reflect rotations/flips/etc. as they are toggled or typed.
+            'fa_icon': FontAwesomeIconPickerWidget(modifiers_field_name='fa_icon_modifiers'),
+            'fa_icon_modifiers': FontAwesomeModifierPickerWidget(),
+        }
+        labels = {
+            # "Fa icon" is jargon; call it "Icon". The ImageField (a fallback used
+            # where the font icon can't be, e.g. quest maps) then can't also be
+            # "Icon", so it becomes "Backup image".
+            'fa_icon': 'Icon',
+            'fa_icon_modifiers': 'Icon modifiers',
+            'icon': 'Backup image',
+        }
+        help_texts = {
+            'fa_icon_modifiers': 'Optional. Rotate, flip, or animate the icon above.',
+            'icon': 'A fallback image, used where the icon above can\'t be (e.g. in the quest maps).',
+        }
 
 
 class MarkRangeForm(forms.ModelForm):
