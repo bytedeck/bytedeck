@@ -15,6 +15,11 @@ from .models import Question, QuestionSubmission, QuestionType
 # 16 MiB, the maximum size of a student's file response.
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
 
+# How many characters a student may type into a short answer. One number for the field's
+# validation, the input's maxlength and the help text that tells the student, so what they
+# are told and what they are held to cannot drift apart (#2401).
+SHORT_ANSWER_MAX_LENGTH = 200
+
 
 class AnswerSummernoteWidget(ByteDeckSummernoteSafeInplaceWidget):
     """A long-answer editor sized for one answer among several on the submission page.
@@ -196,11 +201,17 @@ class QuestionSubmissionForm(forms.ModelForm):
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); a distinct aria-label per question keeps each
             # input tellable apart for screen-reader users when a page has several short answers.
+            # The help text is where the student learns the limit: the input enforces it
+            # silently, by refusing keystrokes once the answer is full (#2401).
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,
-                max_length=200,
-                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': self._response_aria_label()}),
+                max_length=SHORT_ANSWER_MAX_LENGTH,
+                help_text=f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.",
+                widget=forms.TextInput(attrs={
+                    'maxlength': str(SHORT_ANSWER_MAX_LENGTH),
+                    'aria-label': self._response_aria_label(),
+                }),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]

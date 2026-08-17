@@ -8,6 +8,7 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
+from questions.forms import SHORT_ANSWER_MAX_LENGTH
 from questions.models import Question, QuestionSubmission
 from questions.utils import sync_draft_question_submissions
 
@@ -78,6 +79,16 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(len(formset.forms), 2)
         self.assertContains(response, "What is your website URL?")
         self.assertContains(response, "Describe your process.")
+
+    def test_submission_page__short_answer_tells_the_student_its_limit(self):
+        """A short answer says how long it may be, where the student is typing it (#2401).
+
+        The input itself enforces the limit silently, by refusing further keystrokes, so the
+        sentence under it is the only thing that tells a student the rule before they hit it.
+        """
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
 
     def test_submission_page__summernote_assets_load_once(self):
         """The answer editors ride on the assets the comment box already loads (#2169).

@@ -6,7 +6,12 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
-from questions.forms import QuestionForm, QuestionSubmissionForm, QuestionSubmissionFormsetFactory
+from questions.forms import (
+    SHORT_ANSWER_MAX_LENGTH,
+    QuestionForm,
+    QuestionSubmissionForm,
+    QuestionSubmissionFormsetFactory,
+)
 from questions.models import Question, QuestionSubmission
 
 
@@ -94,6 +99,19 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertNotIn("response_file", form.fields)
         self.assertEqual(form.fields["response_text"].max_length, 200)
         self.assertTrue(form.fields["response_text"].required)
+
+    def test_init__short_answer_help_text_states_the_limit_it_enforces(self):
+        """The student is told the length the field holds them to (#2401).
+
+        One constant feeds the field's validation, the input's maxlength and this sentence,
+        so the number a student reads is the number they are actually capped at.
+        """
+        form = QuestionSubmissionForm(instance=self.short_answer)
+        field = form.fields["response_text"]
+
+        self.assertEqual(field.help_text, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
+        self.assertEqual(field.max_length, SHORT_ANSWER_MAX_LENGTH)
+        self.assertEqual(field.widget.attrs["maxlength"], str(SHORT_ANSWER_MAX_LENGTH))
 
     def test_init__long_answer_field(self):
         """Long answer forms get an unbounded rich-text field and no file field."""
