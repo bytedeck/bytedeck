@@ -967,7 +967,9 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
     """
 
     def setUp(self):
-        """Start each test with an empty portal-configuration cache."""
+        """Start each test with no stored configuration id and an empty legacy cache."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_portal_configuration_id='')
+        self.tenant.refresh_from_db()
         cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
 
     def default_configuration(self, login_page_enabled=False):
@@ -1009,7 +1011,8 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
     def test_portal_configuration_id__clones_the_default_with_a_deck_headline(self):
         """The deck's configuration copies the account default's features (so no
         portal capability is lost) and replaces only the headline; the id is
-        cached so later portal visits reuse the same configuration."""
+        stored on the deck so every later portal visit reuses the same
+        configuration instead of cloning another (#2465)."""
         with patch('tenant.billing.stripe.billing_portal.Configuration.list',
                    return_value=Mock(data=[self.default_configuration()])), \
                 patch('tenant.billing.stripe.billing_portal.Configuration.create',
@@ -1021,7 +1024,8 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         self.assertEqual(kwargs['business_profile']['privacy_policy_url'], 'https://x.test/p')
         self.assertEqual(kwargs['features'], {'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}})
         self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
-        self.assertEqual(cache.get(_portal_configuration_cache_key(self.tenant.schema_name)), 'bpc_deck')
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_portal_configuration_id, 'bpc_deck')
 
     def test_portal_configuration_id__carries_the_default_login_page_setting(self):
         """A default with the hosted login page enabled produces a clone with it
@@ -1035,7 +1039,9 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
             portal_configuration_id(self.tenant)
         self.assertEqual(mock_create.call_args.kwargs['login_page'], {'enabled': True})
 
-        cache.delete(_portal_configuration_cache_key(self.tenant.schema_name))
+        # the first half stored its configuration id; clear it so the second half clones again
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_portal_configuration_id='')
+        self.tenant.refresh_from_db()
         with patch('tenant.billing.stripe.billing_portal.Configuration.list',
                    return_value=Mock(data=[self.default_configuration(login_page_enabled=False)])), \
                 patch('tenant.billing.stripe.billing_portal.Configuration.create',
@@ -1053,12 +1059,26 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
             create_checkout_session(self.tenant)
         self.assertTrue(mock_create.call_args.kwargs['idempotency_key'].startswith('deck-checkout-v2-'))
 
-    def test_portal_configuration_id__served_from_cache_without_calling_stripe(self):
-        """A cached configuration id is reused: no Stripe call, no second configuration."""
+    def test_portal_configuration_id__served_from_the_stored_id_without_calling_stripe(self):
+        """A deck with a stored configuration id reuses it: no Stripe call, no
+        second configuration."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(stripe_portal_configuration_id='bpc_stored')
+        self.tenant.refresh_from_db()
+        with patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
+            self.assertEqual(portal_configuration_id(self.tenant), 'bpc_stored')
+        mock_create.assert_not_called()
+
+    def test_portal_configuration_id__adopts_a_cached_id_into_the_stored_field(self):
+        """A deck whose configuration id still sits in the legacy cache keeps that
+        configuration: the id moves into the field (and out of the cache) instead
+        of a duplicate configuration being cloned (#2465 upgrade path)."""
         cache.set(_portal_configuration_cache_key(self.tenant.schema_name), 'bpc_cached', 60)
         with patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
             self.assertEqual(portal_configuration_id(self.tenant), 'bpc_cached')
         mock_create.assert_not_called()
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_portal_configuration_id, 'bpc_cached')
+        self.assertIsNone(cache.get(_portal_configuration_cache_key(self.tenant.schema_name)))
 
     def test_portal_configuration_id__none_when_stripe_cannot_provide_one(self):
         """A Stripe failure (or an account with no default configuration) yields
@@ -1070,6 +1090,8 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
             self.assertIsNone(portal_configuration_id(self.tenant))
         with patch('tenant.billing.stripe.billing_portal.Configuration.list', return_value=Mock(data=[])):
             self.assertIsNone(portal_configuration_id(self.tenant))
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.stripe_portal_configuration_id, '')
 
     def test_create_portal_session__passes_the_deck_configuration_and_survives_without_one(self):
         """The portal session carries the deck's configuration; when none could
