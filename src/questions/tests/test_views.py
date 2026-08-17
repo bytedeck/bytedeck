@@ -95,6 +95,19 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, self.question1.instructions)
         self.assertContains(response, self.question2.instructions)
 
+    def test_list__help_text_uses_no_em_dashes(self):
+        """The page's copy keeps to the project's punctuation (#2357).
+
+        Em dashes are ruled out in anything users read, so the help text explaining what
+        questions do uses a colon and a comma where it needs a break in a sentence.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertNotContains(response, "—")
+        self.assertNotContains(response, "&mdash;")
+
     def test_list__invalid_quest_404(self):
         """The question list for a nonexistent quest is a 404."""
         self.client.force_login(self.test_teacher)
