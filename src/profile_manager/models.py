@@ -84,9 +84,14 @@ class ProfileManager(models.Manager):
         mail, usually so a teacher can see what a student receives, and a flag meaning "leave
         this out of student lists" is not a reason to ignore that.
 
+        Whichever roster they come from, everyone here has an address of their own that they
+        verified, so nothing is sent to an address nobody confirmed.
+
         :param as_emails_list: If True, return a list of emails instead of a queryset of users
         :param for_announcement_email: If True, only return users who want announcements by email
         :param for_notification_email: If True, only return users who want notifications by email
+        :returns: the matching Users, deduplicated, or their email addresses as a list of
+            strings when as_emails_list is True (which is what a send passes to bcc).
         """
 
         email_filter = models.Q()

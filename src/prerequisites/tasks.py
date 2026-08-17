@@ -46,6 +46,11 @@ def update_conditions_for_quest(self, quest_id, start_from_user_id):
     Args:
         quest_id (int): The quest with updated prerequisites (i.e this quest is the parent_object of an updated Prereq),
         start_from_user_id (int): user_id to start with for the next bunch of calculations
+
+    Returns:
+        str: what the celery log shows at the end of the task: the quest's name once this
+        bunch is done, or why nothing was done (the quest was deleted while the task was
+        queued, or another run of it had already started).
     """
     quest = Quest.objects.filter(id=quest_id).first()
     if not quest:
@@ -205,7 +210,13 @@ def update_quest_conditions_all_users(self, start_from_user_id):
     This is done in bunches of users (CELERY_TASKS_BUNCH_SIZE), recursively.
 
     Args:
-        user_id to start with for the next bunch of calculations
+        start_from_user_id (int): the user id to start this bunch at. The recursive call
+            passes the id after the last one it handled; a fresh sweep starts at 1.
+
+    Returns:
+        str or None: the "Skipping task, already running." the celery log shows when a sweep
+        is already under way, and nothing otherwise: the work is handed to per-user tasks, so
+        there is no result to report once a bunch has been dispatched.
     """
 
     if start_from_user_id == 1 and cache.get('update_conditions_all_task_waiting'):
