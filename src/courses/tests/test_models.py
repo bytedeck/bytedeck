@@ -825,6 +825,11 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
     @patch('courses.models.CourseStudent.xp')
     def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_xp):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
+        # Before any registration is created, not just before calc_semester_grades: saving one
+        # fires coursestudent_post_save_callback, which refreshes the student's cached mark
+        # through CourseStudent.xp(). With the mock still returning a MagicMock, that mark is
+        # written to Profile.mark_cached and the save raises FieldError.
+        registration_xp.return_value = 500
 
         # second student in same course as setup
         student2 = baker.make(User)
@@ -835,7 +840,6 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         course2 = baker.make(Course)
         course_student3 = baker.make(CourseStudent, user=student3, course=course2, semester=SiteConfig.get().active_semester)
 
-        registration_xp.return_value = 500
         CourseStudent.objects.calc_semester_grades(Semester.objects.get_current())
 
         self.course_student.refresh_from_db()
