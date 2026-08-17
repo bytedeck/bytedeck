@@ -748,9 +748,10 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
     def test_import_campaign_to__renames_only_the_quest_that_collides(self):
         """One taken name costs that quest its name, not the campaign its import (#2397).
 
-        A clash used to discard the whole campaign, and the bigger the campaign the likelier
-        one of its quests collided, so the campaigns most worth importing were the hardest
-        to import. Only the colliding quest is renamed; its siblings arrive untouched.
+        Every quest in the campaign arrives, and the rename is confined to the one whose
+        name this deck already holds: its siblings keep theirs. The bigger the campaign the
+        likelier one of its quests collides, so a clash must stay a local matter rather
+        than something the whole import rides on.
         """
         campaign, import_ids = self._push_campaign(
             "Partial Campaign", ["Good Quest One", "Taken Quest Two", "Good Quest Three"],
