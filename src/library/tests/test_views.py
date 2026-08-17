@@ -2712,22 +2712,26 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
 
         Args:
             response (HttpResponse): the rendered Library page.
+
+        Raises:
+            AssertionError: if the page did not render, or shows this deck's tag in place
+                of the Library's.
         """
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "chemistry")
         self.assertNotContains(response, "local-only")
 
-    def test_quest_list__shows_the_library_quests_own_tags(self):
+    def test_LibraryQuestListView__shows_the_library_quests_own_tags(self):
         """The Library quest list renders tags read from the Library."""
         self.assertShowsLibraryTags(self.client.get(reverse('library:quest_list')))
 
-    def test_campaign_detail__shows_the_library_quests_own_tags(self):
+    def test_CategoryDetailView__shows_the_library_quests_own_tags(self):
         """The Library campaign detail page renders tags read from the Library."""
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:category_detail_view', args=[self.library_campaign.import_id]))
         )
 
-    def test_import_campaign_confirmation__shows_the_library_quests_own_tags(self):
+    def test_ImportCampaignView__shows_the_library_quests_own_tags(self):
         """The campaign import preview renders tags read from the Library.
 
         This is the page a teacher decides on, so showing their own deck's data back to
@@ -2737,7 +2741,7 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
             self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
         )
 
-    def test_import_quest_confirmation__shows_the_library_quests_own_tags(self):
+    def test_ImportQuestView__shows_the_library_quests_own_tags(self):
         """The quest import preview renders tags read from the Library."""
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
