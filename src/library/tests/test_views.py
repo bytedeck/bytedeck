@@ -2751,10 +2751,11 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
     """What the campaign import confirmation page tells a teacher about the campaign.
 
-    It is the page the import decision is made on, so the campaign's own name and blurb
-    have to be on it. They were not: the template read an `object` variable this view never
-    supplies, and rebound `category` to it for the whole block, so every `category.*` lookup
-    inside resolved to nothing (#2370).
+    It is the page the import decision is made on, so the campaign's name, its blurb and
+    the quests that would arrive all belong on it, and a campaign that genuinely has no
+    blurb has to say so rather than leave a gap. The page reads some of that from the
+    campaign object and some from values the view pre-computes, so these assert on what
+    is rendered rather than on which source it came from (#2370).
     """
 
     @classmethod
