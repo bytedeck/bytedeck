@@ -75,7 +75,7 @@ class TenantAdminForm(TenantBaseForm):
     class Meta(TenantBaseForm.Meta):
         fields = TenantBaseForm.Meta.fields + [
             'max_active_users', 'paid_until', 'trial_end_date',
-            'stripe_customer_id', 'stripe_subscription_id', 'can_delete']
+            'stripe_customer_id', 'stripe_subscription_id', 'stripe_portal_configuration_id', 'can_delete']
 
     def clean_name(self):
         name = super().clean_name()

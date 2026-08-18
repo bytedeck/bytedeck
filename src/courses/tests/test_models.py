@@ -2,6 +2,8 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 from django.core.exceptions import ValidationError
@@ -523,6 +525,31 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
 
+    def test_get_queryset__orders_semesters_sharing_a_first_day_by_record(self):
+        """A new semester takes today as its default first day, so a deck setting up a second
+        cohort has two starting on the same date. Ordering on the date alone would let the
+        database return those two in either order, reshuffling a registration form's semester
+        list between page loads, so the oldest record comes first among them."""
+        first_day = self.semester.first_day
+        first = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+        second = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+
+        sharing_a_first_day = Semester.objects.filter(first_day=first_day)
+
+        self.assertEqual(list(sharing_a_first_day), [self.semester, first, second])
+
+    def test_get_datetimes_by_days_since_start__answers_a_run_of_days_off_one_read(self):
+        """A whole run of class days at once, each the same date asking for it singly gives,
+        and read from the semester's excluded days once however many days are wanted: the
+        progress chart asks for every class day so far (issue #2459)."""
+        with CaptureQueriesContext(connection) as one_day:
+            self.semester.get_datetimes_by_days_since_start([5])
+        with CaptureQueriesContext(connection) as twenty_days:
+            dates = self.semester.get_datetimes_by_days_since_start(range(1, 21))
+
+        self.assertEqual(dates[4:6], [self.semester.get_datetime_by_days_since_start(day) for day in (5, 6)])
+        self.assertEqual(len(twenty_days), len(one_day))
+
     def test_reset_students_xp_cached__zeroes_xp(self):
         """Students' xp_cached should be set to 0."""
         student = baker.make(User)
@@ -865,9 +892,9 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         splits = Counter()
         divide = CourseStudent.objects.xp_across  # bound, so the patch below can delegate to it
 
-        def counting_divide(manager, user, registrations, profile=None, up_to_date=None):
+        def counting_divide(manager, user, registrations, profile=None):
             splits[user.pk] += 1
-            return divide(user, registrations, profile=profile, up_to_date=up_to_date)
+            return divide(user, registrations, profile=profile)
 
         with patch('courses.models.CourseStudentManager.xp_across', autospec=True, side_effect=counting_divide):
             CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
@@ -1226,37 +1253,124 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         self.assertEqual(old.xp(), student.profile.xp_cached)
 
-    def test_xp_to_date__answers_with_the_whole_total_for_a_registration_that_is_not_current(self):
-        """Charting a registration from a semester that is over plots the student's own total,
-        for the same reason xp() does: it is not part of the division between their courses."""
-        student = baker.make(User)
-        old = baker.make(
-            CourseStudent, user=student, course=baker.make(Course), block=baker.make(Block),
-            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
-        )
-        self._register(student, baker.make(Course))
-        self._register(student, baker.make(Course))
-        self._approved(student, xp=40)
-        today = timezone.localtime()
+    def _approved_yesterday(self, student, xp, course=None):
+        """Give a student an approved submission dated yesterday.
 
-        self.assertEqual(old.xp_to_date(today), student.profile.xp_to_date(today))
+        The date filter is on time_approved, which baker would otherwise fill with a random
+        datetime that may not be behind us.
+        """
+        submission = self._approved(student, xp=xp, course=course)
+        submission.time_approved = timezone.localtime() - timedelta(days=1)
+        submission.save()
+        return submission
 
-    def test_xp_to_date__divides_what_the_student_had_earned_by_then(self):
+    def test_xp_across_series__divides_what_the_student_had_earned_by_then(self):
         """A course's progress line is its own share as of each day, not an even share of the
-        student's whole total (issue #2453)."""
+        student's whole total (issue #2453), and the whole line is worked out in one pass
+        (issue #2459)."""
         student = baker.make(User)
         maths = baker.make(Course, title='Maths')
-        maths_registration = self._register(student, maths)
-        art_registration = self._register(student, baker.make(Course, title='Art'))
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        self._approved_yesterday(student, xp=40, course=maths)
         today = timezone.localtime()
-        # approved yesterday: the date filter is on time_approved, which baker would otherwise
-        # fill with a random datetime that may not be behind us
-        submission = self._approved(student, xp=40, course=maths)
-        submission.time_approved = today - timedelta(days=1)
-        submission.save()
 
-        self.assertEqual(maths_registration.xp_to_date(today), 40)
-        self.assertEqual(art_registration.xp_to_date(today), 0)
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[0, 0], [40, 0]])
+
+    def test_xp_across_series__is_the_students_whole_total_when_they_have_one_course(self):
+        """Nothing to divide, so their one course carries everything they had earned by each
+        date, and carries it as the exact figure rather than a share worked out from one."""
+        student = baker.make(User)
+        registrations = [self._register(student, baker.make(Course))]
+        self._approved_yesterday(student, xp=30)
+        today = timezone.localtime()
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([xp for row in series for _registration, xp in row], [0, 30])
+
+    def test_xp_across_series__counts_an_adjustment_at_every_date(self):
+        """A manual adjustment is not something the student earned on a day, so it stands
+        against its own course from the first point on the chart, the same as xp() counts it."""
+        student = baker.make(User)
+        maths_registration = self._register(student, baker.make(Course, title='Maths'))
+        maths_registration.xp_adjustment = 10
+        maths_registration.save()
+        registrations = [maths_registration, self._register(student, baker.make(Course, title='Art'))]
+        today = timezone.localtime()
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[10, 0], [10, 0]])
+
+    def test_xp_across_series__counts_badge_xp_from_the_day_it_was_granted(self):
+        """Badge XP counts toward the course the badge was granted against, and appears on the
+        chart from the day it was granted rather than from the start of the term."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        assertion = baker.make(
+            BadgeAssertion, user=student, badge=baker.make(Badge, xp=20), course=maths,
+            semester=SiteConfig.get().active_semester,
+        )
+        today = timezone.localtime()
+        # timestamp is auto_now_add, so it has to be written after the assertion is made
+        BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=today - timedelta(days=1))
+
+        series = CourseStudent.objects.xp_across_series(
+            student, registrations, [today - timedelta(days=2), today])
+
+        self.assertEqual([[xp for _registration, xp in row] for row in series], [[0, 0], [20, 0]])
+
+    def test_xp_across_series__totals_agree_with_the_students_xp_at_that_date(self):
+        """What the courses are given between them at each date is the student's whole XP as
+        of then, cap and all, so a chart drawn from the series agrees with the total the
+        student is shown. Pinned against Profile.xp_to_date(), which is where that number is
+        defined."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        registrations = [self._register(student, maths), self._register(student, baker.make(Course, title='Art'))]
+        # a repeatable quest taken past its cap and split across two courses, which is the case
+        # where a date's per-course figures are fractions rather than whole submissions
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        for course in (maths, None):
+            submission = baker.make(
+                QuestSubmission, user=student, quest=quest, course=course,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+            submission.time_approved = timezone.localtime() - timedelta(days=1)
+            submission.save()
+        dates = [timezone.localtime() - timedelta(days=2), timezone.localtime()]
+
+        series = CourseStudent.objects.xp_across_series(student, registrations, dates)
+
+        self.assertEqual(
+            [sum(xp for _registration, xp in row) for row in series],
+            [student.profile.xp_to_date(date) for date in dates],
+        )
+        self.assertEqual([sum(xp for _registration, xp in row) for row in series], [0, 15])
+
+    def test_xp_across_series__costs_the_same_however_many_dates(self):
+        """Reading each source once is the point of the series: a progress chart asks for a
+        whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the XP is looked up."""
+        student = baker.make(User)
+        registrations = [self._register(student, baker.make(Course)), self._register(student, baker.make(Course))]
+        self._approved_yesterday(student, xp=40)
+        today = timezone.localtime()
+        dates = [today - timedelta(days=day) for day in reversed(range(20))]
+
+        with CaptureQueriesContext(connection) as one_date:
+            CourseStudent.objects.xp_across_series(student, registrations, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            CourseStudent.objects.xp_across_series(student, registrations, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
 
     def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
         """Deleting a registration must not make its XP vanish. Work assigned to a course the

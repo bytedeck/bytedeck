@@ -128,6 +128,13 @@ class Tenant(TenantMixin):
         max_length=255, blank=True, default='',
         help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
     )
+    stripe_portal_configuration_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="The Billing Portal configuration (bpc_...) whose headline names this deck, created "
+                  "automatically on the owner's first portal visit. Clear it to have the next portal visit "
+                  "rebuild the configuration from the account default (e.g. after changing the default's "
+                  "features in the Stripe dashboard)."
+    )
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
     # normal annotation to the Django Admin queryset doesn't work because these fields aren't linked via foreign keys

@@ -1,5 +1,5 @@
 -r requirements-production.txt
-django-debug-toolbar>=7.1.0,<8.0
+django-debug-toolbar>=7.1.1,<8.0
 
 # CLI
 coveralls>=4.1.0,<5.0  # includes coverage
