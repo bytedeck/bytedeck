@@ -79,6 +79,20 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
 
+    def test_get_range_for_user__none_when_the_student_has_no_mark(self):
+        """A student can hold a course and still have no mark: a course run on XP alone has
+        none (issue #403), and a mark is only cached once something recalculates it. Asking the
+        database to compare a range's minimum against NULL raises, so the lookup stops first."""
+        user = baker.make(User)
+        baker.make(
+            CourseStudent, user=user, course=baker.make(Course, uses_marks=False),
+            semester=SiteConfig.get().active_semester, block=baker.make(Block),
+        )
+        user.profile.xp_invalidate_cache()
+
+        self.assertIsNone(user.profile.mark_cached)
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
     def test_get_range_for_user__by_cached_mark(self):
         """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
         """
@@ -1371,6 +1385,29 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
             CourseStudent.objects.xp_across_series(student, registrations, dates)
 
         self.assertEqual(len(every_date), len(one_date))
+
+    def test_mark__is_none_for_a_course_that_does_not_use_marks(self):
+        """A course can be run on XP alone (issue #403). A student in one has no percentage at
+        all, which is not the same as a percentage of zero: nothing that shows a mark should
+        show them one."""
+        student = baker.make(User)
+        registration = self._register(student, baker.make(Course, uses_marks=False))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(registration.mark())
+
+    def test_mark__is_still_worked_out_for_the_courses_that_do_use_marks(self):
+        """Turning marks off for one course leaves the others alone: a student in both gets a
+        percentage for the graded one and none for the other."""
+        student = baker.make(User)
+        graded = self._register(student, baker.make(Course, xp_for_100_percent=1000))
+        for_joy = self._register(student, baker.make(Course, uses_marks=False))
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNotNone(graded.mark())
+        self.assertIsNone(for_joy.mark())
 
     def test_xp__shares_out_work_assigned_to_a_course_the_student_has_left(self):
         """Deleting a registration must not make its XP vanish. Work assigned to a course the

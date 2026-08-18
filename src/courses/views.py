@@ -85,9 +85,16 @@ def mark_calculations(request, user_id=None):
     else:
         user = request.user
 
-    course_student = CourseStudent.objects.current_course(user)
     courses = CourseStudent.objects.current_courses(user)
     num_courses = courses.count()
+    # the explanation below is about one course, and it is arithmetic ending in a percentage,
+    # so it has to be about a course that has one: a course run on XP alone has no mark
+    # (issue #403). None when every course they are in is like that, which the page explains
+    # instead of calculating.
+    course_student = next(
+        (registration for registration in courses if registration.course and registration.course.uses_marks),
+        None,
+    )
     # each registration answers for its own XP, so a student who assigned work to one course
     # sees that course's real total rather than an even share of everything (issue #2440)
     xp_per_course = course_student.xp() if course_student else None
@@ -107,7 +114,7 @@ def mark_calculations(request, user_id=None):
         # inject the xp needed for passing the mark range
         # cant do it with template tags as you can only multiply/divide once
         days_percentage = course_student.semester.fraction_complete()
-        total_xp = courses.first().course.xp_for_100_percent
+        total_xp = course_student.course.xp_for_100_percent
         for markrange in markranges:
             mark_percentage = markrange.minimum_mark / 100
             markrange.xp_needed = math.floor(total_xp * mark_percentage * days_percentage)
@@ -119,6 +126,8 @@ def mark_calculations(request, user_id=None):
         'xp_per_course': xp_per_course,
         'num_courses': num_courses,
         'markranges': markranges,
+        # every course they are in is run on XP alone, so there is no mark to explain (#403)
+        'no_course_uses_marks': num_courses > 0 and course_student is None,
         # One progress chart per course, for anyone holding more than one (issue #2453). Not
         # gated on students_choose_xp_course: that setting decides whether students are asked
         # where new XP goes, while XP already assigned keeps counting where it was put. A deck
@@ -237,7 +246,7 @@ class CourseList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
@@ -251,7 +260,7 @@ class CourseCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class CourseUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('title', 'xp_for_100_percent', 'icon', 'active')
+    fields = ('title', 'xp_for_100_percent', 'uses_marks', 'icon', 'active')
     model = Course
     success_url = reverse_lazy('courses:course_list')
 
@@ -1234,6 +1243,9 @@ def ajax_progress_chart(request, user_id=0):
             # the charted course's own scale: courses can be out of different amounts, so the
             # axis and the mark lines have to be redrawn when a student switches (issue #2453)
             "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
+            # a course run on XP alone has no percentage, so the chart drops its mark lines and
+            # its percent axis rather than drawing marks the student is never given (issue #403)
+            "uses_marks": charted_course.uses_marks if charted_course else False,
         }
         json_data = json.dumps(progress_chart)
 

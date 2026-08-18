@@ -194,7 +194,8 @@ data-classes="table table-no-bordered table-hover"
                     </td>
 
                     {% if config.display_marks_calculation %}
-                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_cached|default_if_none:0 }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
+                    {# blank rather than 0 for a student with no mark: a course run on XP alone has none (#403) #}
+                    <td>{% if object.visible_to_other_students or request.user.is_staff %}{{ object.mark_cached|default_if_none:"" }}{% else %}<i class="fa fa-eye-slash"></i>{% endif %}</td>
                     {% endif %}
 
                 {% endif %}
