@@ -526,7 +526,7 @@ class BadgeAssertionManager(models.Manager):
         ]
         return by_type
 
-    def xp_by_course(self, user, up_to_date=None):
+    def xp_by_course(self, user):
         """How much of this student's badge XP counts toward each of their courses.
 
         A badge granted alongside a quest carries that quest's course; one granted on its own
@@ -535,17 +535,51 @@ class BadgeAssertionManager(models.Manager):
 
         Args:
             user: the student whose badge XP is being divided.
-            up_to_date (date): count only badges granted by then, for charting their progress
-                through the semester (issue #2453). Defaults to all of them.
 
         Returns:
             dict: course id to XP, with None collecting everything left unassigned.
         """
         qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
-        if up_to_date is not None:
-            qs = qs.get_issued_before(up_to_date)
         rows = qs.values('course').annotate(xp_sum=Sum('badge__xp'))
         return {row['course']: row['xp_sum'] or 0 for row in rows}
+
+    def xp_by_course_series(self, user, dates):
+        """How much of this student's badge XP counted toward each course, at each of `dates`.
+
+        What xp_by_course() answers for one date, answered for a whole series off a single
+        query (issue #2459). Charting a course's progress asks it once per class day, and
+        asking the database that many times over is the cost this removes.
+
+        Badges have no per-badge cap the way quests do, so each date's figure is simply the
+        running total of everything granted by then, and a date's whole badge XP is the sum
+        of its map.
+
+        Args:
+            user: the student whose badge XP is being divided.
+            dates: the dates to answer for, in ascending order.
+
+        Returns:
+            list[dict]: one course-id-to-XP map per date, in the order the dates were given,
+            with None collecting everything left unassigned.
+        """
+        assertions = self.get_queryset(True, user=user).grant_xp().get_user(user).order_by(
+            'timestamp',
+        ).values('course', 'badge__xp', 'timestamp')
+
+        # one pass over the assertions and one over the dates, walking both forward together
+        pending = list(assertions)
+        position = 0
+        running = {}  # course -> the XP granted toward it so far
+        series = []
+        for date in dates:
+            while position < len(pending) and pending[position]['timestamp'] <= date:
+                row = pending[position]
+                course_id = row['course']
+                running[course_id] = running.get(course_id, 0) + (row['badge__xp'] or 0)
+                position += 1
+            series.append(dict(running))
+
+        return series
 
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)

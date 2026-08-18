@@ -21,7 +21,7 @@ def patch_registration_xp(xp):
     Returns:
         The patcher, for use as a decorator or a context manager.
     """
-    def split(manager, user, registrations, profile=None, up_to_date=None):
+    def split(manager, user, registrations, profile=None):
         return [(registration, xp(registration) if callable(xp) else xp) for registration in registrations]
 
     return patch('courses.models.CourseStudentManager.xp_across', autospec=True, side_effect=split)
