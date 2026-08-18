@@ -1,5 +1,9 @@
+import datetime
+
 from unittest import mock
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from model_bakery import baker
@@ -203,6 +207,9 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
 
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
+        # a student's semester comes from their registration (issue #2157 Phase 3), so without
+        # one none of their stamped assertions read as this semester's
+        baker.make('courses.CourseStudent', user=cls.student, course=baker.make('courses.Course'), semester=cls.sem)
 
     def test_user_badge_assertion_count__annotates_count_per_user(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
@@ -221,6 +228,49 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.get(id=self.student.id).assertion_count, 3)
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
+
+    def _granted_on(self, date, xp, course=None):
+        """Grant the student a badge worth `xp`, stamped as granted on `date`.
+
+        The timestamp is auto_now_add, so it has to be written after the fact rather than
+        handed to the assertion when it is made.
+        """
+        assertion = baker.make(
+            BadgeAssertion, user=self.student, badge=baker.make(Badge, xp=xp),
+            semester=self.sem, course=course,
+        )
+        BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=date)
+        return assertion
+
+    def test_xp_by_course_series__answers_each_date_with_what_had_been_granted_by_then(self):
+        """Each date gets the split as it stood then, which is what plots a course's line
+        through the semester (issue #2459). Badges have no cap, so a date's figure is the
+        running total of everything granted by then."""
+        maths = baker.make('courses.Course')
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10, course=maths)
+        self._granted_on(monday + datetime.timedelta(days=2), xp=25)
+
+        series = BadgeAssertion.objects.xp_by_course_series(
+            self.student, [monday - datetime.timedelta(days=1), monday, monday + datetime.timedelta(days=2)])
+
+        self.assertEqual(series, [{}, {maths.id: 10}, {maths.id: 10, None: 25}])
+
+    def test_xp_by_course_series__costs_the_same_however_many_dates(self):
+        """Reading the assertions once is the point of the series: charting a course asks for
+        a whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the assertions are looked up."""
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10)
+        dates = [monday + datetime.timedelta(days=day) for day in range(20)]
+
+        with CaptureQueriesContext(connection) as one_date:
+            BadgeAssertion.objects.xp_by_course_series(self.student, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            BadgeAssertion.objects.xp_by_course_series(self.student, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
 
     def test_all_for_user_distinct__distinct_by_badge_and_sorted(self):
         """

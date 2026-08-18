@@ -1022,8 +1022,11 @@ class SemesterArchive(RefuseSemesterMixin, NonPublicOnlyViewMixin, LoginRequired
         return redirect('courses:semester_list')
 
 
-def _registration_to_chart(user, course_id):
-    """Which of a student's registrations the progress chart is being asked for.
+def _registrations_to_chart(user, course_id):
+    """A student's current registrations, and which of them the progress chart is being asked for.
+
+    All of them, not just the one being charted: dividing a student's XP between their courses
+    is one question about the whole student (issue #2440), so the answer needs the full set.
 
     Args:
         user: the student being charted.
@@ -1031,18 +1034,28 @@ def _registration_to_chart(user, course_id):
             whichever course comes first.
 
     Returns:
-        CourseStudent or None: their registration in that course, falling back to their first
-        one when the request named no course or named one they are not in. None when they are
-        in no course at all, which the caller charts as a flat zero.
+        tuple: (list[CourseStudent], index or None). The index picks out their registration in
+        the course the request named, falling back to their first when it named no course or
+        one they are not in. None when they are in no course at all, which the caller charts
+        as a flat zero.
     """
-    registrations = CourseStudent.objects.current_courses(user)
+    registrations = list(CourseStudent.objects.current_courses(user))
+    chosen = None
     try:
         # whatever the page posted: the chart asks for no course at all when the student has
         # only one, and nothing stops a request naming something that is not an id
-        chosen = registrations.filter(course_id=int(course_id)).first()
+        named = int(course_id)
     except (TypeError, ValueError):
-        chosen = None
-    return chosen if chosen is not None else registrations.first()
+        named = None
+
+    if named is not None:
+        chosen = next(
+            (index for index, registration in enumerate(registrations) if registration.course_id == named),
+            None,
+        )
+    if chosen is None and registrations:
+        chosen = 0
+    return registrations, chosen
 
 
 @xml_http_request_required
@@ -1083,57 +1096,58 @@ def ajax_progress_chart(request, user_id=0):
             # which the weekend adjustment below would then index into.
             return HttpResponse(json.dumps({"days_in_semester": 0, "xp_data": []}), content_type='application/json')
 
-        # generate a list of dates, from first date of semester to today
-        datelist = []
-        for i in range(1, sem.days_so_far() + 1):
-            # need to ignore weekends and non-class days
-            next_day_of_class = sem.get_datetime_by_days_since_start(i, add_holidays=True)
-            datelist.append(next_day_of_class)
-
-        xp_data = []
-        # generate an list of dictionary data for chart.js:
-        #   x: day into course
-        #   y: XP earned so far
-
-        # A course's own line, not an even share of the student's whole total: since #2440 the
-        # two are different numbers for a student who assigned their work (issue #2453). The
-        # course to chart comes from the request, defaulting to the first of their courses.
-        registration = _registration_to_chart(user, request.POST.get('course'))
-
-        # days_so_far == len(datelist)
-        for day in range(0, sem.days_so_far()):
-            xp = registration.xp_to_date(datelist[day]) if registration else 0
-            xp_data.append(
-                # day 0-indexed
-                {'x': day + 1, 'y': xp}
-            )
+        # the date of every class day so far, weekends and non-class days skipped, off a
+        # single read of the semester's excluded days (issue #2459)
+        datelist = sem.get_datetimes_by_days_since_start(range(1, sem.days_so_far() + 1))
 
         today = timezone.localtime()
 
         # SAT and SUN are always excluded by numpy.busday_offset
         # use today.date() because its a datetime.datetime object and we compare it to a DateField (returns datetime.date)
-        if today.weekday() in [5, 6] or today.date() in sem.excluded_days():  # SAT, SAT or a day specifically excluded
-            # according to a comment inside get_datetime_by_days_since_start:
-            #   "work done on weekend/holidays won't show up till Monday"
+        # according to a comment inside get_datetime_by_days_since_start:
+        #   "work done on weekend/holidays won't show up till Monday"
+        # so on one of those days today's XP is asked for as well, to roll what was earned
+        # since the last class day back onto it
+        off_day = today.weekday() in [5, 6] or today.date() in sem.excluded_days()
 
-            # total_xp <= xp_to_date(today) since the latest xp_data day is the last valid day (usually a friday)
-            # ie. if today is sunday: friday's total xp <= sunday's total xp
-            # (if a submission is removed then will subtract from both friday and sunday xp)
-            total_xp = xp_data[-1]['y']
-            today_xp = registration.xp_to_date(today) if registration else 0
-            difference = today_xp - total_xp
+        # A course's own line, not an even share of the student's whole total: since #2440 the
+        # two are different numbers for a student who assigned their work (issue #2453). The
+        # course to chart comes from the request, defaulting to the first of their courses.
+        registrations, charted = _registrations_to_chart(user, request.POST.get('course'))
 
-            # if true: user has earned xp during the weekend.
-            # add that xp to the last valid date
-            if difference > 0:
-                xp_data[-1]['y'] += difference
+        if charted is None:
+            # in no course at all, so there is nothing of theirs to plot
+            xp_series = [0] * len(datelist)
+            today_xp = 0
+        else:
+            # every date in one pass rather than a query per class day (issue #2459)
+            dates = datelist + [today] if off_day else datelist
+            series = CourseStudent.objects.xp_across_series(user, registrations, dates)
+            xp_series = [row[charted][1] for row in series]
+            # on a class day the last point is today, and there is nothing later to roll back
+            today_xp = xp_series.pop() if off_day else xp_series[-1]
 
+        # a list of dictionary data for chart.js:
+        #   x: day into course (1-indexed)
+        #   y: XP earned so far
+        xp_data = [{'x': day + 1, 'y': xp} for day, xp in enumerate(xp_series)]
+
+        # the last plotted day is the last valid day (usually a friday), so its total is at most
+        # today's: if today is sunday, friday's total xp <= sunday's total xp
+        # (if a submission is removed then will subtract from both friday and sunday xp)
+        difference = today_xp - xp_data[-1]['y']
+        # if true: user has earned xp during the weekend.
+        # add that xp to the last valid date
+        if difference > 0:
+            xp_data[-1]['y'] += difference
+
+        charted_course = registrations[charted].course if charted is not None else None
         progress_chart = {
             "days_in_semester": sem.num_days(),
             "xp_data": xp_data,
             # the charted course's own scale: courses can be out of different amounts, so the
             # axis and the mark lines have to be redrawn when a student switches (issue #2453)
-            "xp_for_100_percent": registration.course.xp_for_100_percent if registration and registration.course else 0,
+            "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
         }
         json_data = json.dumps(progress_chart)
 

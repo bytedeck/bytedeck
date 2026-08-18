@@ -21,6 +21,52 @@ from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
 
 
+def split_xp_between_registrations(registrations, total, xp_by_course):
+    """Hand each of a student's registrations the XP that counts toward it.
+
+    Work they assigned to one of their current courses counts wholly toward it; everything
+    else is shared evenly (issue #2440), which is what every submission did before they could
+    assign one, and is still what happens to badge XP, to work handed in while the deck had
+    the setting off, and to anything from before the choice existed.
+
+    Args:
+        registrations (list[CourseStudent]): the registrations to divide the XP between. They
+            should all be one student's, and from one semester: the shared pool is split by
+            how many there are.
+        total (float): the student's whole deck-wide XP, including their adjustments.
+        xp_by_course (dict): course id to the XP assigned to it, with None collecting
+            everything left unassigned.
+
+    Returns:
+        list[tuple]: (CourseStudent, xp) in the order given.
+    """
+    if len(registrations) <= 1:
+        return [(registration, total) for registration in registrations]
+
+    # Only courses the student still holds can claim XP: work assigned to a course whose
+    # registration has since been deleted has nowhere to count, so it stays in the shared
+    # pool rather than being subtracted from it and lost. A registration with no course at
+    # all is not one of those claims: unassigned XP is filed under no course too, and
+    # counting it as claimed would take the student's shared work out of the pool as well.
+    course_ids = {
+        registration.course_id for registration in registrations
+        if registration.course_id is not None
+    }
+    assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
+    adjustments = sum(registration.xp_adjustment for registration in registrations)
+    shared = (total - assigned - adjustments) / len(registrations)
+
+    return [
+        (
+            registration,
+            (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
+            + registration.xp_adjustment
+            + shared,
+        )
+        for registration in registrations
+    ]
+
+
 class MarkRangeManager(models.Manager):
     def get_range(self, mark, courses=None):
         """ return the MarkRange encompassed by this mark adn the list of courses """
@@ -283,7 +329,18 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
     e.g. Semester.objects.open()."""
 
     def get_queryset(self):
-        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day')
+        """Semesters newest term first, with a tiebreaker so the order is stable.
+
+        Two semesters can start on the same day (a new one takes today as its default first
+        day, so a deck setting up a second cohort has two), and ordering by the date alone
+        leaves the database free to return those two in either order: a registration form's
+        semester list would then reshuffle between page loads.
+
+        Returns:
+            SemesterQuerySet: every semester, latest first day first, oldest record first
+            among semesters sharing one.
+        """
+        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day', 'id')
 
     def get_current(self, as_queryset=False):
         """The semester students are currently earning XP in, or nothing when none is open.
@@ -532,11 +589,6 @@ class Semester(models.Model):
         Returns:
             {datetime} -- [description]
         """
-        excluded_days = self.excluded_days()
-
-        # The next day of class excluding holidays/weekends, -1 because first day counts as 1, not zero.
-        d = numpy.busday_offset(self.first_day, class_days - 1, roll='forward', holidays=excluded_days).astype(date)
-
         # Might want to include the holidays (if class day is Friday, then work done on weekend/holidays won't show up
         # till Monday.  For chart, want to include those days
         # if (add_holidays):
@@ -544,11 +596,35 @@ class Semester(models.Model):
         #     # next_date = workday(self.first_day, class_days + 1, excluded_days)
         #     num_holidays_to_add = next_date - d - timedelta(days=1)  # If more than one day difference
         #     d += num_holidays_to_add
+        return self.get_datetimes_by_days_since_start([class_days])[0]
 
-        # convert from date to datetime
-        dt = datetime.combine(d, datetime.max.time())
-        # make timezone aware
-        return timezone.make_aware(dt, timezone.get_default_timezone())
+    def get_datetimes_by_days_since_start(self, class_days):
+        """The dates a run of class days fall on, off a single read of the excluded days.
+
+        A progress chart plots a point per class day so far and needs the date of every one of
+        them, so asking a day at a time is a query per day (issue #2459).
+
+        Args:
+            class_days: how many class days into the semester each wanted date is, counting
+                the semester's first day as 1.
+
+        Returns:
+            list[datetime]: the end of each of those days, in the order asked for and timezone
+            aware. Weekends and excluded days are not class days, so an offset landing on one
+            rolls forward to the next day that is.
+        """
+        excluded_days = list(self.excluded_days())
+
+        # The next day of class excluding holidays/weekends, -1 because first day counts as 1, not zero.
+        days = numpy.busday_offset(
+            self.first_day, [class_day - 1 for class_day in class_days], roll='forward', holidays=excluded_days,
+        ).astype(date)
+
+        # convert from date to datetime, and make timezone aware
+        return [
+            timezone.make_aware(datetime.combine(day, datetime.max.time()), timezone.get_default_timezone())
+            for day in days
+        ]
 
     def reset_students_xp_cached(self):
         """Zero the cached XP of every student registered in this semester.
@@ -746,7 +822,7 @@ class CourseStudentManager(models.Manager):
         """
         return self.current_courses(user).aggregate(total=Sum('xp_adjustment'))['total'] or 0
 
-    def xp_for_registrations(self, user, profile=None, up_to_date=None):
+    def xp_for_registrations(self, user, profile=None):
         """Every current registration this student holds, with the XP counting toward it.
 
         The assigned-versus-shared split (issue #2440) is the same question for every course a
@@ -758,16 +834,14 @@ class CourseStudentManager(models.Manager):
             user: the student whose XP is being divided.
             profile (Profile): their profile, for a caller holding one whose xp_cached is
                 newer than the database. Defaults to reading it.
-            up_to_date (date): divide what they had earned by then rather than their total,
-                which is how each course's progress chart is plotted (issue #2453).
 
         Returns:
             list[tuple]: (CourseStudent, xp) in registration order, empty when the student is
             in no course. A student in one course has their whole total against it.
         """
-        return self.xp_across(user, list(self.current_courses(user)), profile=profile, up_to_date=up_to_date)
+        return self.xp_across(user, list(self.current_courses(user)), profile=profile)
 
-    def xp_across(self, user, registrations, profile=None, up_to_date=None):
+    def xp_across(self, user, registrations, profile=None):
         """The same division as xp_for_registrations(), across registrations given explicitly.
 
         Whoever already holds a student's registrations can hand them straight over rather
@@ -781,45 +855,61 @@ class CourseStudentManager(models.Manager):
                 should all be the student's own, and from one semester: the shared pool is
                 split by how many there are.
             profile (Profile): as xp_for_registrations().
-            up_to_date (date): as xp_for_registrations().
 
         Returns:
             list[tuple]: (CourseStudent, xp) in the order given.
         """
         profile = profile if profile is not None else user.profile
-        total = profile.xp_cached if up_to_date is None else profile.xp_to_date(up_to_date)
+        total = profile.xp_cached
         if len(registrations) <= 1:
+            # nothing to divide, so the two queries below are not worth making
             return [(registration, total) for registration in registrations]
 
         # the total is the student's deck-wide figure: quest XP, badge XP, and every one of
         # their registrations' adjustments. Take out the parts that belong to a particular
         # course, share what is left, and hand each registration back its own pieces.
-        xp_by_course = QuestSubmission.objects.xp_by_course(user, up_to_date=up_to_date)
-        for course_id, xp in BadgeAssertion.objects.xp_by_course(user, up_to_date=up_to_date).items():
+        xp_by_course = QuestSubmission.objects.xp_by_course(user)
+        for course_id, xp in BadgeAssertion.objects.xp_by_course(user).items():
             xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
 
-        # Only courses the student still holds can claim XP: work assigned to a course whose
-        # registration has since been deleted has nowhere to count, so it stays in the shared
-        # pool rather than being subtracted from it and lost. A registration with no course at
-        # all is not one of those claims: unassigned XP is filed under no course too, and
-        # counting it as claimed would take the student's shared work out of the pool as well.
-        course_ids = {
-            registration.course_id for registration in registrations
-            if registration.course_id is not None
-        }
-        assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
-        adjustments = sum(registration.xp_adjustment for registration in registrations)
-        shared = (total - assigned - adjustments) / len(registrations)
+        return split_xp_between_registrations(registrations, total, xp_by_course)
 
-        return [
-            (
-                registration,
-                (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
-                + registration.xp_adjustment
-                + shared,
-            )
-            for registration in registrations
-        ]
+    def xp_across_series(self, user, registrations, dates):
+        """The same division as xp_across(), answered for a whole series of dates at once.
+
+        A course's progress chart plots a point per class day, so it asks what each date's XP
+        was over and over. Asking one date at a time re-queries the student's submissions and
+        their assertions for every one of them (issue #2459); this reads each once and walks
+        the dates.
+
+        Args:
+            user: the student whose XP is being divided.
+            registrations (list[CourseStudent]): as xp_across(). These should be all of the
+                student's current ones, since the total being divided counts every one of
+                their adjustments.
+            dates: the dates to answer for, in ascending order.
+
+        Returns:
+            list[list[tuple]]: one (CourseStudent, xp) list per date, in the order the dates
+            were given, each in the order the registrations were given.
+        """
+        quest_series = QuestSubmission.objects.xp_by_course_series(user, dates)
+        badge_series = BadgeAssertion.objects.xp_by_course_series(user, dates)
+        # every one of the student's adjustments counts toward the total being divided, the
+        # same as calculate_xp() adds them into their deck-wide XP: the registrations given
+        # are all of their current ones, so they are already in memory
+        adjustments = sum(registration.xp_adjustment for registration in registrations)
+
+        series = []
+        for quest_xp, badge_by_course in zip(quest_series, badge_series):
+            xp_by_course = dict(quest_xp.by_course)
+            for course_id, xp in badge_by_course.items():
+                xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
+
+            total = quest_xp.total + sum(badge_by_course.values()) + adjustments
+            series.append(split_xp_between_registrations(registrations, total, xp_by_course))
+
+        return series
 
     def calc_semester_grades(self, semester, clamp_negative_xp=False):
         """Record every registration's final XP and deactivate it.
@@ -1105,23 +1195,6 @@ class CourseStudent(models.Model):
             if registration.pk == self.pk:
                 return xp
         return profile.xp_cached
-
-    def xp_to_date(self, date):
-        """The XP that counted toward this registration as of a date.
-
-        The same division as xp(), taken at a point in the past, which is what plots a course's
-        progress through the semester rather than the student's whole-deck line (issue #2453).
-
-        Args:
-            date: the day to count up to, inclusive.
-
-        Returns:
-            float: this registration's share of what the student had earned by then.
-        """
-        for registration, xp in CourseStudent.objects.xp_for_registrations(self.user, up_to_date=date):
-            if registration.pk == self.pk:
-                return xp
-        return self.user.profile.xp_to_date(date)
 
     def mark(self, profile=None):
         """This registration's mark, worked out from its own XP.
