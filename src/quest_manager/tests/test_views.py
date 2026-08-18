@@ -974,6 +974,29 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNotNone(assertion, 'the badge was not granted')
         self.assertEqual(assertion.course, maths)
 
+    def test_complete__auto_approved_message_signs_off_on_its_own_line(self):
+        """Handing in an auto-approved quest signs off with a line break, not a literal <br>.
+
+        Messages are escaped unless they are built safely (#2498), and this one carries a break
+        and the deck AI's name, so it has to be built with format_html or the student reads the
+        tag as text.
+        """
+        quest = baker.make(Quest, xp=5, verification_required=False)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done'},
+            follow=True,
+        )
+
+        self.assertContains(response, 'Try refreshing your browser in a few moments.')
+        self.assertContains(response, 'Thanks! <br>')
+        self.assertNotContains(response, '&lt;br&gt;')
+        # The deck AI is a User, so its name reaches the page as an escaped format_html argument.
+        self.assertContains(response, str(SiteConfig.get().deck_ai))
+
     def test_complete__records_the_course_the_student_chose(self):
         """Handing in a quest with a course selected stamps that course on the submission, so the
         XP counts toward it rather than being shared across their courses (issue #2440)."""

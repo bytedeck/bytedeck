@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.db import models
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.html import format_html, format_html_join
 
 from url_or_relative_url_field.fields import URLOrRelativeURLField
 
@@ -389,8 +390,9 @@ class CytoScapeQueryset(models.QuerySet):
         [map1, map2, ..., mapN]
         >>> map1, map2, ..., and mapN
         """
-        # .join functions do not convert to str
-        names = [f'<a href="{scape.get_absolute_url()}">{str(scape)}</a>' for scape in self]
+        # format_html rather than an f-string: the result is handed to a django message, which
+        # renders markup only when it is marked safe, and which escapes the map name on the way in.
+        names = [format_html('<a href="{}">{}</a>', scape.get_absolute_url(), str(scape)) for scape in self]
 
         if self.count() == 0:
             return None
@@ -398,10 +400,14 @@ class CytoScapeQueryset(models.QuerySet):
             return names[0]
         # oxford comma not applicable
         elif self.count() == 2:
-            return " and ".join(names)
-        # oxford comma
+            return format_html('{} and {}', *names)
+        # oxford comma. str.join would drop the safeness the links were just built with.
         else:
-            return ", ".join(names[:-1]) + f", and {names[-1]}"
+            return format_html(
+                '{}, and {}',
+                format_html_join(', ', '{}', ((name,) for name in names[:-1])),
+                names[-1],
+            )
 
 
 class CytoScapeManager(models.Manager):

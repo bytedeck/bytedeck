@@ -1941,8 +1941,12 @@ def complete(request, submission_id):
             note_verb += " (auto-approved quest)"
             msg_text += " and automatically approved."
             msg_text += " Please give me a moment to calculate what new quests this should make available to you."
-            msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-            msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
+            # format_html so the break renders: everything appended above is plain text, which
+            # a message escapes, and the deck AI's name is escaped as an argument.
+            msg_text = format_html(
+                "{} Try refreshing your browser in a few moments. Thanks! <br>{}",
+                msg_text, SiteConfig.get().deck_ai,
+            )
 
         icon = "<i class='fa fa-shield fa-lg'></i>"
 

@@ -1,4 +1,8 @@
+import re
+from pathlib import Path
+
 from allauth.socialaccount.models import SocialApp
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 # from django.core import mail
@@ -228,3 +232,51 @@ class MessagesSnippetEscapingTest(ByteDeckTenantTestCase):
         html = render_messages_snippet('<strong>Done</strong>', extra_tags='safe dismissible')
 
         self.assertIn('<strong>Done</strong>', html)
+
+    def test_public_base__escapes_a_plain_message_too(self):
+        """The public tenant shows messages from its own base template, on the same terms.
+
+        It is a separate renderer from messages-snippet.html, so it shares the decision
+        rather than repeating it: every message it shows today is a hardcoded literal, but
+        an escaping default that only half the site honours is not a default (#2498).
+        """
+        html = render_to_string(
+            'public/base.html',
+            {'messages': [Message(messages_constants.WARNING, '<script>alert(1)</script>')]},
+        )
+
+        self.assertNotIn('<script>alert(1)</script>', html)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', html)
+
+    def test_public_base__renders_markup_built_with_format_html(self):
+        """A safely-built message keeps its markup on the public tenant as well."""
+        html = render_to_string(
+            'public/base.html',
+            {'messages': [Message(messages_constants.SUCCESS, format_html('<strong>{}</strong>', 'Deck created'))]},
+        )
+
+        self.assertIn('<strong>Deck created</strong>', html)
+
+    def test_message_templates__all_render_a_message_through_the_shared_include(self):
+        """No template may render a message body on its own terms.
+
+        Both renderers include `_message_body.html`, which is what makes escape-by-default a
+        default rather than a local choice. A third renderer that inlines `{{ message }}` or
+        `{{ message|safe }}` would silently opt out of it, so this catches that at the source.
+        """
+        templates_root = Path(settings.BASE_DIR) / 'templates'
+        shared_include = templates_root / '_message_body.html'
+        offenders = []
+
+        for path in Path(settings.BASE_DIR).rglob('*.html'):
+            if path == shared_include:
+                continue
+            for number, line in enumerate(path.read_text().splitlines(), start=1):
+                if re.search(r'{{\s*message(\.message)?\s*(\|[^}]*)?}}', line):
+                    offenders.append(f'{path.relative_to(settings.BASE_DIR)}:{number}')
+
+        self.assertEqual(
+            offenders, [],
+            'these templates render a message themselves instead of including _message_body.html: '
+            + ', '.join(offenders),
+        )
