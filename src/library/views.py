@@ -3,7 +3,7 @@ import functools
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
@@ -430,7 +430,12 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
         "review_url": review_url,
         "source_deck_url": source_deck_url,
     })
-    send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
+    # on_commit, not straight away: the push that this announces is written in one
+    # transaction, and an email is not recallable. Sending it inline would mean a reviewer
+    # could be told to come and look at content that a later failure rolled back (#2372).
+    transaction.on_commit(
+        lambda: send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
+    )
 
 
 @method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
@@ -978,33 +983,36 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         if already_shared:
             return redirect_already_shared(request, quest, 'quest', 'quests:quests')
 
-        # Perform export
-        shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        # One transaction over the push, the notification it raises and the origin row it
+        # records: a reviewer told to come and look at content, or an attribution pointing
+        # at content, must not outlive a failure that rolled the content back (#2372).
+        with transaction.atomic():
+            shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
-        with library_schema_context():
-            # Get the newly exported quest
-            exported_quest = Quest.objects.get(import_id=quest.import_id)
+            with library_schema_context():
+                # Get the newly exported quest
+                exported_quest = Quest.objects.get(import_id=quest.import_id)
 
-            config = SiteConfig.get()
-            sender = config.deck_ai
+                config = SiteConfig.get()
+                sender = config.deck_ai
 
-            recipients = User.objects.filter(is_active=True, is_staff=True)
+                recipients = User.objects.filter(is_active=True, is_staff=True)
 
-            # Notification sent to all active Library staff about the export
-            notify.send(
-                sender=sender,
-                recipient=None,
-                affected_users=list(recipients),
-                verb=f"{request.user} exported a quest to the library from {source_schema}:",
-                action=quest,
-                target=exported_quest,
-                icon="<i class='fa fa-book'></i>"
-            )
+                # Notification sent to all active Library staff about the export
+                notify.send(
+                    sender=sender,
+                    recipient=None,
+                    affected_users=list(recipients),
+                    verb=f"{request.user} exported a quest to the library from {source_schema}:",
+                    action=quest,
+                    target=exported_quest,
+                    icon="<i class='fa fa-book'></i>"
+                )
 
-            # Email active Library staff so they know there's a quest to review/publish (#1949).
-            email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
+                # Email active Library staff so they know there's a quest to review/publish (#1949).
+                email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
 
-            record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
+                record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
 
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
@@ -1122,38 +1130,40 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         if already_shared:
             return redirect_already_shared(request, campaign, 'campaign', 'quests:categories')
 
-        # Export campaign and quests
-        shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+        # One transaction over the push, the notification it raises and the origin rows it
+        # records, for the same reason as the quest push above (#2372).
+        with transaction.atomic():
+            shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
 
-        with library_schema_context():
-            exported_campaign = Category.objects.get(import_id=campaign.import_id)
+            with library_schema_context():
+                exported_campaign = Category.objects.get(import_id=campaign.import_id)
 
-            config = SiteConfig.get()
-            sender = config.deck_ai
-            recipients = User.objects.filter(is_active=True, is_staff=True)
+                config = SiteConfig.get()
+                sender = config.deck_ai
+                recipients = User.objects.filter(is_active=True, is_staff=True)
 
-            notify.send(
-                sender=sender,
-                recipient=None,
-                affected_users=list(recipients),
-                verb=f"{request.user} exported a campaign to the library from {source_schema}:",
-                action=campaign,
-                target=exported_campaign,
-                icon="<i class='fa fa-book'></i>",
-            )
+                notify.send(
+                    sender=sender,
+                    recipient=None,
+                    affected_users=list(recipients),
+                    verb=f"{request.user} exported a campaign to the library from {source_schema}:",
+                    action=campaign,
+                    target=exported_campaign,
+                    icon="<i class='fa fa-book'></i>",
+                )
 
-            # Email active Library staff so they know there's a campaign to review/publish (#1949).
-            email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
+                # Email active Library staff so they know there's a campaign to review/publish (#1949).
+                email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
 
-            record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
-            # ...and each quest that travelled with it, so a quest imported on its own still
-            # says where it came from
-            record_push_origin(
-                ContentOrigin.QUEST,
-                exported_campaign.quest_set.values_list('import_id', flat=True),
-                request,
-                source_deck_url,
-            )
+                record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
+                # ...and each quest that travelled with it, so a quest imported on its own still
+                # says where it came from
+                record_push_origin(
+                    ContentOrigin.QUEST,
+                    exported_campaign.quest_set.values_list('import_id', flat=True),
+                    request,
+                    source_deck_url,
+                )
 
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
