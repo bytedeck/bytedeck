@@ -30,8 +30,13 @@
       The `safe` tag stays as the escape hatch for a plain string meant to carry markup;
       before, both branches escaped nothing, so any name interpolated into any message
       reached the page as HTML (#2498).
+
+      Matched against the tags as a list, not as a substring of `message.tags`: that
+      string joins every tag together, so `extra_tags='unsafe'` would contain "safe" and
+      turn escaping off. The level checks above match the same way but only pick an alert
+      colour, so a near-miss there is cosmetic; this one decides whether markup renders.
     {% endcomment %}
-    {% if 'safe' in message.tags %}
+    {% if message.extra_tags and 'safe' in message.extra_tags.split %}
     {{ message|safe }}
     {% else %}
     {{ message.message }}
