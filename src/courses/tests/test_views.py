@@ -636,6 +636,30 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         course_student.refresh_from_db()
         self.assertEqual(course_student.course.pk, new_course.pk)
 
+    def test_CourseStudentUpdate_view__staff_can_update_a_registration_in_an_archived_semester(self):
+        """A registration outlives the semester it is in, so a teacher spotting a wrong course
+        on a past one has to be able to correct it. The form offers only open semesters, which
+        left the registration's own value off the list and made the form unsaveable, whatever
+        else was being changed (issue #2507)."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        course_student = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block,
+            semester=archived, active=False,
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+        # and it stayed in its own term rather than being dragged into a running one
+        self.assertEqual(course_student.semester, archived)
+
     def test_CourseAddStudent_view__staff_can_add(self):
         '''Staff can add a student to a course'''
 
