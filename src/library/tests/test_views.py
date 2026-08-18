@@ -293,8 +293,12 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
-    def test_import_quest__post_when_quest_exists_locally_is_denied(self):
-        """POSTing to import a quest whose import_id already exists on the local deck is blocked (403), not duplicated."""
+    def test_import_quest__post_when_quest_exists_locally_is_refused(self):
+        """POSTing to import a quest whose import_id already exists on the local deck imports nothing.
+
+        The refusal is a redirect carrying an explanation rather than a 403, since the deck
+        already having the quest is a conflict and not a permission problem (#2373).
+        """
         self.client.force_login(self.test_teacher)
 
         local_quest = baker.make(Quest)
@@ -304,8 +308,8 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         url = reverse('library:import_quest', args=[library_quest.import_id])
         response = self.client.post(url)
 
-        self.assertEqual(response.status_code, 403)
-        # the local quest was not duplicated by the blocked import
+        self.assertRedirects(response, reverse('library:quest_list'))
+        # the local quest was not duplicated by the refused import
         self.assertEqual(Quest.objects.all_including_archived().filter(import_id=local_quest.import_id).count(), 1)
 
     def test_quest_library_list__shows_correct_badge_count(self):
@@ -507,9 +511,11 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
             f"Expected a pending-review message, got: {sharer_messages}",
         )
 
-    def test_export_post__denied_if_quest_already_exists_in_library(self):
-        """
-        Test that a POST request to export is denied with 403 if the quest already exists in the library.
+    def test_export_post__refused_if_quest_already_exists_in_library(self):
+        """A POST to export a quest already in the Library is refused with an explanation.
+
+        A redirect rather than a 403: the Library having it already is a conflict, not
+        something the sharer lacks permission for (#2373).
         """
         self.config.allow_staff_export = True
         self.config.full_clean()
@@ -520,7 +526,7 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         url = reverse("library:export_quest", kwargs={"quest_import_id": str(self.shared_quest.import_id)})
         response = self.client.post(url, data=AGREED_LICENCE)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(response, reverse('quests:quests'))
 
 
 class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
@@ -600,8 +606,12 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign__post_when_campaign_exists_locally_is_denied(self):
-        """POSTing to import a campaign whose import_id already exists on the local deck is blocked (403), not duplicated."""
+    def test_import_campaign__post_when_campaign_exists_locally_is_refused(self):
+        """POSTing to import a campaign whose import_id already exists on the local deck imports nothing.
+
+        The refusal is a redirect carrying an explanation rather than a 403, since the deck
+        already having the campaign is a conflict and not a permission problem (#2373).
+        """
         self.client.force_login(self.test_teacher)
 
         with library_schema_context():
@@ -612,7 +622,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         import_url = reverse('library:import_category', args=[library_category.import_id])
         response = self.client.post(import_url)
 
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(response, reverse('library:category_list'))
         self.assertEqual(Category.objects.filter(import_id=library_category.import_id).count(), 1)
 
     def test_category_detail__with_no_displayed_quests_has_empty_quest_info(self):
@@ -986,10 +996,11 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(url)
         self.assertContains(response, "A campaign with the same import ID already exists in the shared library")
 
-    def test_export_post__denied_if_campaign_exists(self):
-        """
-        Ensure that attempting to POST (perform export) for a campaign that already
-        exists in the library schema is forbidden and returns HTTP 403.
+    def test_export_post__refused_if_campaign_exists(self):
+        """A POST to export a campaign already in the Library is refused with an explanation.
+
+        A redirect rather than a 403: the Library having it already is a conflict, not
+        something the sharer lacks permission for (#2373).
         """
         self.config.allow_staff_export = True
         self.config.full_clean()
@@ -998,7 +1009,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.shared_category.import_id)})
         response = self.client.post(url, data=AGREED_LICENCE)
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(response, reverse('quests:categories'))
 
     def test_export_get__disables_button_if_no_quests(self):
         """
@@ -2939,3 +2950,152 @@ class LibraryExportPermissionTests(LibraryTenantTestCaseMixin):
 
         self.assertFalse(self.endpoint_allows(self.owner))
         self.assertEndpointAgreesWithButton(self.owner)
+
+
+class LibraryConflictMessageTests(LibraryTenantTestCaseMixin):
+    """Content that is already on the other side is a conflict, not a permission problem.
+
+    The confirmation pages disable the button in these cases, so the guards behind them
+    only fire when the button was not what was clicked: a stale tab, the back button, a
+    resubmitted form, or two teachers working at once. Meeting a bare 403 there says the
+    user did something forbidden, when what happened is that somebody got there first
+    (#2373).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a quest and a campaign in the Library, and a staff user to move them."""
+        with library_schema_context():
+            cls.library_campaign = baker.make(Category, title="Contested Campaign", published=True)
+            cls.library_quest = baker.make(
+                Quest, name="Contested Quest", campaign=cls.library_campaign, published=True,
+            )
+
+        cls.test_teacher = User.objects.create_user('conflict_teacher', is_staff=True)
+
+    def setUp(self):
+        """Sign the teacher in and let them share, so only the conflict guards can refuse."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+    def local_copy_of(self, model, obj, **kwargs):
+        """Give this deck its own copy of a Library object, under the same import_id.
+
+        Args:
+            model (type[Model]): Quest or Category.
+            obj (Model): the Library object to mirror.
+            **kwargs: extra field values for the local copy.
+
+        Returns:
+            Model: the local copy.
+        """
+        return baker.make(model, import_id=obj.import_id, **kwargs)
+
+    def test_ImportQuestView__explains_that_the_deck_already_has_the_quest(self):
+        """Re-importing a quest this deck already holds explains itself instead of 403ing."""
+        local = self.local_copy_of(Quest, self.library_quest, name="Our Own Copy")
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("Our Own Copy" in text for text in self._message_texts(response)),
+            f"expected the local quest to be named, got {self._message_texts(response)}",
+        )
+        self.assertContains(response, local.get_absolute_url())
+
+    def test_ImportCampaignView__explains_that_the_deck_already_has_the_campaign(self):
+        """Re-importing a campaign this deck already holds explains itself instead of 403ing."""
+        local = self.local_copy_of(Category, self.library_campaign, title="Our Own Campaign")
+
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("Our Own Campaign" in text for text in self._message_texts(response)),
+            f"expected the local campaign to be named, got {self._message_texts(response)}",
+        )
+        self.assertContains(response, local.get_absolute_url())
+
+    def test_ExportQuestView__explains_that_the_quest_is_already_in_the_library(self):
+        """Re-sharing a quest already in the Library explains itself instead of 403ing."""
+        local = self.local_copy_of(Quest, self.library_quest, name="Already Shared Quest")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("Already Shared Quest" in text for text in self._message_texts(response)),
+            f"expected the quest to be named, got {self._message_texts(response)}",
+        )
+
+    def test_ExportCampaignView__explains_that_the_campaign_is_already_in_the_library(self):
+        """Re-sharing a campaign already in the Library explains itself instead of 403ing."""
+        local = self.local_copy_of(Category, self.library_campaign, title="Already Shared Campaign")
+        baker.make(Quest, campaign=local, published=True)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any("Already Shared Campaign" in text for text in self._message_texts(response)),
+            f"expected the campaign to be named, got {self._message_texts(response)}",
+        )
+
+    def test_ImportQuestView__adds_nothing_when_the_deck_already_has_the_quest(self):
+        """The guard still holds: explaining the conflict must not also perform the import."""
+        self.local_copy_of(Quest, self.library_quest, name="Our Own Copy")
+
+        self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
+
+        self.assertEqual(
+            Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).count(), 1,
+        )
+
+    def test_ImportQuestView__escapes_markup_in_a_quest_name(self):
+        """A quest name carrying markup reaches the page as text, not as markup.
+
+        Every message renders through `|safe` (`templates/messages-snippet.html`), so a
+        name interpolated into one goes to the browser as HTML. Quest names are written by
+        staff, which narrows who could do it, not what happens if they do.
+        """
+        self.local_copy_of(Quest, self.library_quest, name="<script>alert(1)</script>")
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertNotContains(response, "<script>alert(1)</script>", html=False)
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_ExportQuestView__escapes_markup_in_a_quest_name(self):
+        """The share-side message escapes a name carrying markup too."""
+        local = self.local_copy_of(Quest, self.library_quest, name="<script>alert(2)</script>")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertNotContains(response, "<script>alert(2)</script>", html=False)
+        self.assertContains(response, "&lt;script&gt;alert(2)&lt;/script&gt;")
+
+    def test_ImportQuestView__keeps_the_link_to_the_local_copy_live(self):
+        """Escaping the name must not also escape the link the message provides."""
+        local = self.local_copy_of(Quest, self.library_quest, name="Our Own Copy")
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertContains(response, f'<a href="{local.get_absolute_url()}">Our Own Copy</a>')
