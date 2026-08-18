@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
 from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
+from courses.tests.utils import patch_registration_xp
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -247,7 +249,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         student = baker.make(User)
         registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
-        with patch('courses.models.CourseStudent.xp', return_value=-50):
+        with patch_registration_xp(-50):
             self.assertEqual(Semester.objects.complete_semester(), Semester.STUDENTS_WITH_NEGATIVE_XP)
             result = Semester.objects.complete_semester(clamp_negative_xp=True)
 
@@ -272,8 +274,7 @@ class SemesterModelManagerTest(ByteDeckTenantTestCase):
         # is called is an implementation detail this test should not depend on
         negative = students[1].coursestudent_set.get().pk
 
-        with patch('courses.models.CourseStudent.xp', autospec=True,
-                   side_effect=lambda registration, profile=None: -50 if registration.pk == negative else 10):
+        with patch_registration_xp(lambda registration: -50 if registration.pk == negative else 10):
             with self.assertRaises(ValueError):
                 CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
 
@@ -822,14 +823,9 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_students.count(), 2)
         self.assertQuerySetEqual(course_students, [sc1, sc2], ordered=False)
 
-    @patch('courses.models.CourseStudent.xp')
-    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_xp):
+    @patch_registration_xp(500)
+    def test_calc_semester_grades__deactivates_and_sets_final_xp(self, registration_split):
         """Test that method loops through all students, deactivates the student course, and sets a final_xp value"""
-        # Configured before the registrations below, not just before calc_semester_grades:
-        # saving a registration fires coursestudent_post_save_callback, which refreshes the
-        # student's cached mark through CourseStudent.xp(). A mark that is a MagicMock rather
-        # than a number is written to Profile.mark_cached, and that save raises FieldError.
-        registration_xp.return_value = 500
 
         # second student in same course as setup
         student2 = baker.make(User)
@@ -854,10 +850,64 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(course_student2.final_xp, 500)
         self.assertEqual(course_student3.final_xp, 500)
 
-    @patch('courses.models.CourseStudent.xp')
-    def test_calc_semester_grades__student_with_negative_xp(self, registration_xp):
+    def test_calc_semester_grades__divides_a_students_xp_once_however_many_courses(self):
+        """The split is one calculation about the whole student, so archiving asks for it a
+        fixed number of times per student rather than once per course they hold (issue #2459).
+        Pinned as a comparison rather than an absolute count, so the guard survives any
+        unrelated change to how many times a student's XP is worked out."""
+        three_courses = baker.make(User, username='three_courses')
+        for _ in range(3):
+            baker.make(
+                CourseStudent, user=three_courses, course=baker.make(Course),
+                semester=SiteConfig.get().active_semester,
+            )
+
+        splits = Counter()
+        divide = CourseStudent.objects.xp_across  # bound, so the patch below can delegate to it
+
+        def counting_divide(manager, user, registrations, profile=None, up_to_date=None):
+            splits[user.pk] += 1
+            return divide(user, registrations, profile=profile, up_to_date=up_to_date)
+
+        with patch('courses.models.CourseStudentManager.xp_across', autospec=True, side_effect=counting_divide):
+            CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        self.assertEqual(splits[three_courses.pk], splits[self.student.pk])
+
+    def test_calc_semester_grades__queues_an_available_quest_rebuild_per_student(self):
+        """Deactivating a registration changes what a student can see, so their available-quest
+        cache has to be rebuilt. prerequisites.signals queues that off CourseStudent's post_save,
+        which the bulk write here does not fire, so archiving asks for it itself: once per
+        student, and for every student, not only the multicourse ones."""
+        three_courses = baker.make(User, username='three_courses')
+        for _ in range(3):
+            baker.make(
+                CourseStudent, user=three_courses, course=baker.make(Course),
+                semester=SiteConfig.get().active_semester,
+            )
+
+        with patch('prerequisites.tasks.update_quest_conditions_for_user.apply_async') as rebuild:
+            CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        rebuilt_for = Counter(call.kwargs['args'][0] for call in rebuild.call_args_list)
+        self.assertEqual(rebuilt_for[three_courses.pk], 1)
+        self.assertEqual(rebuilt_for[self.student.pk], 1)
+
+    def test_xp_across__divides_between_the_registrations_it_is_given(self):
+        """The split is over the registrations handed in, not the ones the student holds in an
+        open semester, which is what lets archiving divide a closing semester's XP (#2459)."""
+        another_semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        elsewhere = baker.make(
+            CourseStudent, user=self.student, course=baker.make(Course), semester=another_semester,
+        )
+
+        pairs = CourseStudent.objects.xp_across(self.student, [self.course_student, elsewhere])
+
+        self.assertEqual([registration for registration, _ in pairs], [self.course_student, elsewhere])
+
+    @patch_registration_xp(-10)
+    def test_calc_semester_grades__student_with_negative_xp(self, registration_split):
         """Test that an assertion error is raised when there is a student with negative xp"""
-        registration_xp.return_value = -10
         self.assertRaises(ValueError, CourseStudent.objects.calc_semester_grades,
                           Semester.objects.get_current())
 
