@@ -488,7 +488,11 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_quest', args=[self.local_quest.import_id])
-        response = self.client.post(url, data=AGREED_LICENCE)
+        # captureOnCommitCallbacks: the email waits for the push to commit, so that a
+        # rolled-back push cannot invite anyone to review it (#2372). Under TestCase the
+        # surrounding transaction never commits, so the callbacks are run here instead.
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(url, data=AGREED_LICENCE)
         self.assertRedirects(response, reverse('quests:quests'))
 
         # An email was dispatched asynchronously to the library staff member.
@@ -1082,7 +1086,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.client.force_login(self.test_teacher)
 
         url = reverse('library:export_category', kwargs={'campaign_import_id': str(self.local_category.import_id)})
-        response = self.client.post(url, data=AGREED_LICENCE)
+        # captureOnCommitCallbacks: see the quest export test above.
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(url, data=AGREED_LICENCE)
         self.assertRedirects(response, reverse('quests:categories'))
 
         # An email was dispatched asynchronously to the library staff member.
@@ -3099,3 +3105,104 @@ class LibraryConflictMessageTests(LibraryTenantTestCaseMixin):
         )
 
         self.assertContains(response, f'<a href="{local.get_absolute_url()}">Our Own Copy</a>')
+
+
+class LibraryPushAtomicityTests(LibraryTenantTestCaseMixin):
+    """A push either lands whole or leaves the Library as it was (#2372).
+
+    A campaign push writes in several steps: its own quests, the campaign row, and the
+    conflict clones. Between them the Library holds part of a campaign, and a failure
+    there would strand it: quests whose prerequisites point at ones that never arrived,
+    under a campaign nobody pushed on purpose, with the sharer told nothing happened.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A staff user here, and a Library reviewer with an address to email."""
+        cls.test_teacher = User.objects.create_user('atomic_teacher', is_staff=True)
+        with library_schema_context():
+            # The review email goes to Library staff with an address, and returns early
+            # without one, which would make the "no email on failure" test vacuous.
+            User.objects.create_user('library_reviewer', email='reviewer@example.com', is_staff=True)
+
+    def setUp(self):
+        """Let staff share, sign the teacher in, and build the campaign to push."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        self.campaign = baker.make(Category, title="Atomic Campaign", published=True)
+        for name in ["Atomic Quest One", "Atomic Quest Two"]:
+            quest = baker.make(Quest, name=name, campaign=self.campaign)
+            Quest.objects.filter(pk=quest.pk).update(published=True)
+
+    def library_holds_anything(self):
+        """Whether the Library holds any part of the campaign being pushed.
+
+        Returns:
+            bool: True if its campaign row or either of its quests is there.
+        """
+        with library_schema_context():
+            return (
+                Category.objects.filter(import_id=self.campaign.import_id).exists()
+                or Quest.objects.all_including_archived().filter(name__startswith="Atomic Quest").exists()
+            )
+
+    def test_ExportCampaignView__leaves_the_library_untouched_when_the_push_fails(self):
+        """A failure part-way through a campaign push rolls the whole push back.
+
+        The origin row is written after the content, in the same transaction, so failing
+        there is the narrow case that used to leave the content behind with nothing to
+        undo it.
+        """
+        with patch('library.views.record_push_origin', side_effect=IntegrityError("no origin for you")):
+            with self.assertRaises(IntegrityError):
+                self.client.post(
+                    reverse('library:export_category', args=[self.campaign.import_id]), {'agree_license': 'on'},
+                )
+
+        self.assertFalse(self.library_holds_anything())
+
+    def test_ExportCampaignView__sends_no_review_email_when_the_push_fails(self):
+        """Nobody is invited to review content that was rolled back.
+
+        An email cannot be recalled, so it waits for the transaction to commit rather
+        than going out as soon as the code reaches it.
+        """
+        with patch('library.views.send_email_message') as send_email:
+            with patch('library.views.record_push_origin', side_effect=IntegrityError("no origin for you")):
+                with self.assertRaises(IntegrityError):
+                    self.client.post(
+                        reverse('library:export_category', args=[self.campaign.import_id]), {'agree_license': 'on'},
+                    )
+
+        send_email.apply_async.assert_not_called()
+
+    def test_ExportCampaignView__sends_the_review_email_when_the_push_succeeds(self):
+        """The deferral must not swallow the email on the path that should send one.
+
+        Pairs with the test above: on its own, "no email on failure" would also pass if the
+        email had simply stopped being sent.
+        """
+        # The patch has to outlive the capture block: the callbacks run when the capture
+        # block exits, which is after an inner patch would have been undone.
+        with patch('library.views.send_email_message') as send_email:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(
+                    reverse('library:export_category', args=[self.campaign.import_id]), {'agree_license': 'on'},
+                )
+
+        send_email.apply_async.assert_called_once()
+
+    def test_ExportCampaignView__pushes_the_whole_campaign_when_nothing_fails(self):
+        """The transaction is not so tight that an ordinary push stops working."""
+        response = self.client.post(
+            reverse('library:export_category', args=[self.campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        with library_schema_context():
+            self.assertTrue(Category.objects.filter(import_id=self.campaign.import_id).exists())
+            self.assertEqual(Quest.objects.all_including_archived().filter(name__startswith="Atomic Quest").count(), 2)

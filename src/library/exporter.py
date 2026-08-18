@@ -1,6 +1,7 @@
 from datetime import date
 from uuid import uuid4
 
+from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
@@ -184,6 +185,27 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         Category.DoesNotExist: If the campaign is not found in the source schema.
     """
 
+    # One transaction for the whole push. `write_quests` is atomic per batch, but this
+    # runs several of them (the campaign's own quests, then the conflict clones) with
+    # a campaign write between, so without this a failure part-way leaves the Library
+    # holding some of a campaign and the sharer being told nothing arrived (#2372).
+    with transaction.atomic():
+        return _push_campaign(source_schema, campaign_import_id)
+
+
+def _push_campaign(source_schema, campaign_import_id):
+    """Do the work of `export_campaign_and_copy_quests`, inside its transaction.
+
+    Split out so the transaction is one line at the top rather than an indent around
+    everything, and so the steps below read in the order they happen.
+
+    Args:
+        source_schema (str): Tenant schema that contains the source campaign.
+        campaign_import_id (UUID): Import ID of the campaign to export.
+
+    Returns:
+        TransferResult: as `export_campaign_and_copy_quests` describes.
+    """
     # Step 1: get local campaign and quests first (in source schema)
     with schema_context(source_schema):
         local_campaign = Category.objects.get(import_id=campaign_import_id)
