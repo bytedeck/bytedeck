@@ -2177,6 +2177,27 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(json.loads(response.content)['xp_for_100_percent'], self.course.xp_for_100_percent)
 
+    def test_ajax_progress_chart__costs_the_same_however_many_class_days(self):
+        """The chart is drawn from one pass over the student's work rather than a query per
+        class day (issue #2459), so a term a month in costs no more to draw than one four days
+        in. Pinned as a comparison rather than an absolute count, so the guard survives any
+        unrelated change to what the page asks for."""
+        self.client.force_login(self.student)
+        self.create_quest_and_submissions(self.base_xp, datetime.datetime(2024, 1, 2, tzinfo=self.tz))
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        # 2024-1-5 is a Friday, four class days in; 2024-2-1 is a Thursday, twenty-four
+        with freeze_time(datetime.datetime(2024, 1, 5, 6, tzinfo=self.tz)):
+            with CaptureQueriesContext(connection) as first_week:
+                self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        with freeze_time(datetime.datetime(2024, 2, 1, 6, tzinfo=self.tz)):
+            with CaptureQueriesContext(connection) as fifth_week:
+                response = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        # the later chart really does plot more days, so the counts are of unequal work
+        self.assertGreater(len(json.loads(response.content)['xp_data']), 4)
+        self.assertEqual(len(fifth_week), len(first_week))
+
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
         uses freeze_time to test the current day as Fri, Sat, Sun, and Mon
