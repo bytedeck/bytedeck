@@ -1,7 +1,9 @@
 {# Operator notification: a deck owner asked for their deck to be deleted (#2330). #}
-{# Sent to SUPPORT_EMAIL, never to deck users, so it names everything an operator #}
-{# needs without opening the admin. #}
-<p>The owner of a deck has asked for it to be <strong>deleted</strong>.</p>
+{# Addressed to the ByteDeck operators (SUPPORT_EMAIL), never to deck users, so it #}
+{# skips the user-facing footer (contact-us and Society blurb would have ByteDeck #}
+{# writing to itself) and reads as the internal action item it is. #}
+<p><strong>ByteDeck operations:</strong> a deck owner has asked for their deck to be
+  <strong>deleted</strong>.</p>
 
 {# the deck link stays OUTSIDE the <strong>: textify/html2text swallows the space before a link that opens inside one #}
 <p>Deck: <a href="{{ deck.get_root_url }}">{{ deck.primary_domain_url }}</a>
@@ -18,4 +20,5 @@
   right away. The owner can withdraw the request from their subscription page at any time,
   and their reminder emails stay muted while it stands.</p>
 
-{% include "tenant/email/_email_footer.html" %}
+<p>This is an automated notification from the deck lifecycle system; the requested deck's
+  row in the tenant admin has the full picture.</p>

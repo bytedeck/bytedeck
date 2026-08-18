@@ -149,7 +149,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name_text',
         'owner_email_text', 'owner_email_verified_boolean',
         'last_staff_login', 'google_signon_enabled',
-        'subscription_status_text', 'deletion_requested_text', 'paid_until_text', 'trial_end_date_text',
+        'subscription_status_text', 'deletable_text', 'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'quest_count',
     )
@@ -408,20 +408,26 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             obj.subscription_status_label,
         )
 
-    @admin.display(description="deletion requested", ordering="deletion_requested_on")
-    def deletion_requested_text(self, obj):
-        """The date the deck's owner asked for it to be deleted, next to the
-        Subscription column so a standing request is visible during any review
-        (deletion honors it without the year clock, see ``Tenant.is_deletable``).
+    @admin.display(description="deletable")
+    def deletable_text(self, obj):
+        """Whether this deck can be deleted, and why: "via request" (its owner
+        asked; the date is on the change form) or "via timeout" (a year
+        suspended), next to the Subscription column so decks whose waiting is
+        over surface during any review. Arming *Can delete* on the deck is the
+        one step left before the admin delete is allowed
+        (``Tenant.deletion_eligibility`` / ``is_deletable``).
 
         Args:
             obj (Tenant): The changelist row's tenant.
 
         Returns:
-            date | None: The request date, or None (an empty cell) when there is
-            no standing request.
+            str | None: "via request", "via timeout", or None (an empty cell)
+            while the deck cannot be deleted.
         """
-        return obj.deletion_requested_on
+        eligibility = obj.deletion_eligibility
+        if eligibility is None:
+            return None
+        return 'via request' if eligibility == 'request' else 'via timeout'
 
     @admin.display(description="paid until", ordering="paid_until")
     def paid_until_text(self, obj):

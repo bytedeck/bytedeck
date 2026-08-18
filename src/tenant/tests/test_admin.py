@@ -364,18 +364,28 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # the badge styles ride along via the ModelAdmin's Media declaration
         self.assertContains(response, "css/admin_deck_status.css")
 
-    def test_deletion_requested_text__shown_and_filterable_in_changelist(self):
-        """A standing deletion request shows its date in the changelist beside the
-        Subscription column, and the list offers the empty/non-empty filter so an
-        operator can pull every requested deck up for review (#2330)."""
+    def test_deletable_text__shows_why_a_deck_can_be_deleted(self):
+        """The "deletable" column marks decks whose deletion waiting is over:
+        "via request" for a suspended deck whose owner asked, empty for a live
+        deck even with a request standing, and the empty/non-empty request
+        filter stays available for pulling requests up for review (#2330).
+        The "via timeout" flavor is pinned on the model
+        (test_deletion_eligibility__names_the_path_or_none): building a
+        year-suspended ledger row here would only re-test that chain."""
+        # suspended (dates long lapsed) with a standing owner request
         Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            trial_end_date=date(2022, 1, 1), paid_until=None,
+            deletion_requested_on=date(2026, 8, 1), deletion_requested_by='the-owner')
+        # the OTHER deck is live with a request: no eligibility, empty cell
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=date(2032, 1, 1), paid_until=None,
             deletion_requested_on=date(2026, 8, 1), deletion_requested_by='the-owner')
         url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
         self.client.get(url)  # move client to public schema
         self.client.force_login(self.superuser)
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Aug. 1, 2026')
+        self.assertContains(response, 'via request', count=1)
         # the EmptyFieldListFilter's query parameter marks the filter's presence
         self.assertContains(response, 'deletion_requested_on__isempty')
 

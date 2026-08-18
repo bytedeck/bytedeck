@@ -497,6 +497,25 @@ class TenantDeletionClockTest(ByteDeckTenantTestCase):
         DeckNotice.objects.filter(pk=notice.pk).update(sent_on=FROZEN_TODAY - timedelta(days=days_ago))
         return notice
 
+    def test_deletion_eligibility__names_the_path_or_none(self):
+        """The eligibility chain behind is_deletable and the admin's "deletable"
+        column: 'request' for a suspended deck with a standing owner request
+        (outranking the clock), 'timeout' once the year has run, None while the
+        deck is live, unwarned, or mid-clock. Arming can_delete is deliberately
+        NOT part of eligibility (it is the operator's remaining step)."""
+        # suspended with a standing request: 'request', armed or not
+        self.assertEqual(
+            self.deck(deletion_requested_on=FROZEN_TODAY, can_delete=False).deletion_eligibility, 'request')
+        # suspended, warned over a year ago: 'timeout'
+        self.warn(days_ago=INACTIVE_DELETE_DAYS + 1)
+        self.assertEqual(self.deck().deletion_eligibility, 'timeout')
+        # a request outranks (and out-labels) the elapsed clock
+        self.assertEqual(self.deck(deletion_requested_on=FROZEN_TODAY).deletion_eligibility, 'request')
+        # live deck: never eligible, request or not
+        self.assertIsNone(self.deck(
+            trial_end_date=FROZEN_TODAY + timedelta(days=30),
+            deletion_requested_on=FROZEN_TODAY).deletion_eligibility)
+
     def test_is_deletable__owner_request_skips_the_year_clock(self):
         """A suspended, armed deck whose owner has a standing deletion request is
         deletable immediately: the request plus the operator arming can_delete

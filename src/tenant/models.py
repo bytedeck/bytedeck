@@ -480,32 +480,44 @@ class Tenant(TenantMixin):
         #2044 retirement policy. ALL of these must hold:
 
         * ``can_delete`` was deliberately armed by an admin (default False);
-        * the deck is SUSPENDED -- an active subscription, a running trial, or a
-          managed-manually deck (both dates blank) is never deletable, even when
-          its owner has asked for deletion (the operator controls the dates, so
-          suspending a deck whose owner wants out is an admin edit away);
-        * the waiting is over, either way it can be: the deck's owner has a
-          standing deletion request (``deletion_requested_on``), or the deck's
+        * the deck's waiting is over (``deletion_eligibility``): it is SUSPENDED
+          and either its owner has a standing deletion request or its
           ``deletion_date`` has arrived (a year of suspension, measured from the
           later of the suspension start and the episode's first suspended
           notice, so unrequested deletion can never outrun the year the warning
-          email promised; a deck never warned at all is never deletable that
-          way, since its clock has not started);
-        * never the public schema (deleting it would take down the installation).
+          email promised; a deck never warned at all never times out, since its
+          clock has not started). The public schema is never eligible.
+        """
+        return self.can_delete and self.deletion_eligibility is not None
+
+    @property
+    def deletion_eligibility(self):
+        """Why this deck's deletion waiting is over: ``'request'`` (its owner has a
+        standing deletion request, which outranks the year clock), ``'timeout'``
+        (the year-long suspension clock has run out), or None while neither
+        holds. Only a SUSPENDED deck is ever eligible (an active subscription, a
+        running trial, or a managed-manually deck is not, and the operator can
+        suspend a live deck by editing its dates), and the public schema never is.
+
+        Arming ``can_delete`` is the operator's remaining step: ``is_deletable``
+        is exactly this eligibility plus that arming, and the tenant admin's
+        "deletable" column shows this value so decks whose waiting is over
+        surface before anyone opens their change form.
+
+        Returns:
+            str | None: ``'request'``, ``'timeout'``, or None.
         """
         from django_tenants.utils import get_public_schema_name
 
         if self.schema_name == get_public_schema_name():
-            return False
-        if not self.can_delete:
-            return False
+            return None
         if not self.is_suspended:  # active sub, on trial, or managed manually
-            return False
+            return None
         if self.deletion_requested_on is not None:
-            # the owner asked: arming can_delete is the operator's review, and
-            # together they outrank the year clock
-            return True
-        return localdate() >= self.deletion_date
+            return 'request'
+        if localdate() >= self.deletion_date:
+            return 'timeout'
+        return None
 
     def sync_from_stripe_subscription(self, subscription):
         """The SINGLE write path from a Stripe Subscription object to this deck (plan §5.2).

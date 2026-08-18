@@ -908,6 +908,10 @@ class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
         self.assertIn(self.tenant.schema_name, kwargs["message"])
         self.assertIn(self.owner.get_username(), kwargs["message"])
         self.assertIn("Nothing happens on its own", kwargs["message"])
+        # addressed to the operators, so no user-facing footer: ByteDeck should
+        # not be inviting itself to "contact us" (review find on the #2330 PR)
+        self.assertIn("ByteDeck operations", kwargs["message"])
+        self.assertNotIn("contact us", kwargs["message"].lower())
 
         messages_text = [m.message for m in response.context['messages']]
         self.assertTrue(any("Nothing is deleted yet" in m for m in messages_text))
