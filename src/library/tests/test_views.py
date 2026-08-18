@@ -3062,3 +3062,40 @@ class LibraryConflictMessageTests(LibraryTenantTestCaseMixin):
         self.assertEqual(
             Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).count(), 1,
         )
+
+    def test_ImportQuestView__escapes_markup_in_a_quest_name(self):
+        """A quest name carrying markup reaches the page as text, not as markup.
+
+        Every message renders through `|safe` (`templates/messages-snippet.html`), so a
+        name interpolated into one goes to the browser as HTML. Quest names are written by
+        staff, which narrows who could do it, not what happens if they do.
+        """
+        self.local_copy_of(Quest, self.library_quest, name="<script>alert(1)</script>")
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertNotContains(response, "<script>alert(1)</script>", html=False)
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_ExportQuestView__escapes_markup_in_a_quest_name(self):
+        """The share-side message escapes a name carrying markup too."""
+        local = self.local_copy_of(Quest, self.library_quest, name="<script>alert(2)</script>")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertNotContains(response, "<script>alert(2)</script>", html=False)
+        self.assertContains(response, "&lt;script&gt;alert(2)&lt;/script&gt;")
+
+    def test_ImportQuestView__keeps_the_link_to_the_local_copy_live(self):
+        """Escaping the name must not also escape the link the message provides."""
+        local = self.local_copy_of(Quest, self.library_quest, name="Our Own Copy")
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        self.assertContains(response, f'<a href="{local.get_absolute_url()}">Our Own Copy</a>')

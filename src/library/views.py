@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.html import format_html
 from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
@@ -182,12 +183,17 @@ def redirect_already_imported(request, local_object, content_type, redirect_to):
     Returns:
         HttpResponseRedirect: a redirect carrying the warning message.
     """
-    link = f'<a href="{local_object.get_absolute_url()}">{local_object.name}</a>'
+    # format_html, not an f-string: every message is rendered through `|safe`
+    # (`templates/messages-snippet.html`), so a name carrying markup would reach the page
+    # as markup. The link below is ours and stays live; the name and URL are escaped.
     messages.warning(
         request,
-        f"Your deck already has this {content_type}: {link}. Nothing was imported, because "
-        f"replacing a {content_type} you already have is not supported yet. Delete your copy "
-        "first if you want the Library's version instead."
+        format_html(
+            'Your deck already has this {}: <a href="{}">{}</a>. Nothing was imported, '
+            'because replacing a {} you already have is not supported yet. Delete your '
+            "copy first if you want the Library's version instead.",
+            content_type, local_object.get_absolute_url(), local_object.name, content_type,
+        )
     )
     return redirect(redirect_to)
 
@@ -211,11 +217,14 @@ def redirect_already_shared(request, local_object, content_type, redirect_to):
     Returns:
         HttpResponseRedirect: a redirect carrying the warning message.
     """
+    # format_html for the same reason as `redirect_already_imported`: messages render safe.
     messages.warning(
         request,
-        f"'{local_object.name}' is already in the Library, so it was not shared again. "
-        f"Sharing an updated version of a {content_type} that is already there is not "
-        "supported yet."
+        format_html(
+            "'{}' is already in the Library, so it was not shared again. Sharing an "
+            "updated version of a {} that is already there is not supported yet.",
+            local_object.name, content_type,
+        )
     )
     return redirect(redirect_to)
 
