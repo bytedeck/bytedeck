@@ -1059,6 +1059,13 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
             create_checkout_session(self.tenant)
         self.assertTrue(mock_create.call_args.kwargs['idempotency_key'].startswith('deck-checkout-v2-'))
 
+    def test_stripe_portal_configuration_id__editable_in_the_tenant_admin_form(self):
+        """The stored id is clearable in the admin: blanking it is the documented
+        way to have the next portal visit rebuild the configuration from the
+        account default (e.g. after changing the default's features)."""
+        from tenant.admin import TenantAdminForm
+        self.assertIn('stripe_portal_configuration_id', TenantAdminForm.Meta.fields)
+
     def test_portal_configuration_id__served_from_the_stored_id_without_calling_stripe(self):
         """A deck with a stored configuration id reuses it: no Stripe call, no
         second configuration."""
