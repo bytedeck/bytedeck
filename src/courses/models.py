@@ -863,12 +863,18 @@ class CourseStudentManager(models.Manager):
                     coursestudent.active = False
                     graded.append(coursestudent)
 
-            # written in one statement, which fires no post_save, so the XP cache each save
-            # would have invalidated is invalidated here instead: once per student, after all
-            # of their registrations are final, rather than once per registration
+            # written in one statement, which fires no post_save. Everything those saves set
+            # off is therefore done here instead, once per student after all of their
+            # registrations are final, rather than once per registration:
+            #  - the XP cache, which coursestudent_post_save_callback invalidates;
+            #  - the available-quest cache, which prerequisites.signals queues a rebuild of,
+            #    because deactivating a registration changes what the student can see.
+            from prerequisites.tasks import update_quest_conditions_for_user  # locally: prerequisites imports this module
+
             self.bulk_update(graded, ['final_xp', 'active'])
             for student in by_student:
                 student.profile.xp_invalidate_cache()
+                update_quest_conditions_for_user.apply_async(args=[student.id], queue='default')
 
     def all_for_semester(self, semester, students_only=False):
         """The registrations in one particular semester.

@@ -874,6 +874,25 @@ class CourseStudentManagerTest(ByteDeckTenantTestCase):
 
         self.assertEqual(splits[three_courses.pk], splits[self.student.pk])
 
+    def test_calc_semester_grades__queues_an_available_quest_rebuild_per_student(self):
+        """Deactivating a registration changes what a student can see, so their available-quest
+        cache has to be rebuilt. prerequisites.signals queues that off CourseStudent's post_save,
+        which the bulk write here does not fire, so archiving asks for it itself: once per
+        student, and for every student, not only the multicourse ones."""
+        three_courses = baker.make(User, username='three_courses')
+        for _ in range(3):
+            baker.make(
+                CourseStudent, user=three_courses, course=baker.make(Course),
+                semester=SiteConfig.get().active_semester,
+            )
+
+        with patch('prerequisites.tasks.update_quest_conditions_for_user.apply_async') as rebuild:
+            CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        rebuilt_for = Counter(call.kwargs['args'][0] for call in rebuild.call_args_list)
+        self.assertEqual(rebuilt_for[three_courses.pk], 1)
+        self.assertEqual(rebuilt_for[self.student.pk], 1)
+
     def test_xp_across__divides_between_the_registrations_it_is_given(self):
         """The split is over the registrations handed in, not the ones the student holds in an
         open semester, which is what lets archiving divide a closing semester's XP (#2459)."""
