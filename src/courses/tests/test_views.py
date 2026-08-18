@@ -2186,17 +2186,25 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.create_quest_and_submissions(self.base_xp, datetime.datetime(2024, 1, 2, tzinfo=self.tz))
         url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
 
-        # 2024-1-5 is a Friday, four class days in; 2024-2-1 is a Thursday, twenty-four
-        with freeze_time(datetime.datetime(2024, 1, 5, 6, tzinfo=self.tz)):
-            with CaptureQueriesContext(connection) as first_week:
+        def cost_at(when):
+            """What one chart POST costs with the clock at `when`, and what it drew."""
+            with freeze_time(when):
+                # a request neither capture counts: OwnerOnlyWhenSuspendedMiddleware asks
+                # get_current_deck() for the deck's status, which reads it from the database on
+                # a cache miss. That entry expires an hour after it is written and these two
+                # calls are a month apart on a frozen clock, so each needs its own warm-up.
                 self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        with freeze_time(datetime.datetime(2024, 2, 1, 6, tzinfo=self.tz)):
-            with CaptureQueriesContext(connection) as fifth_week:
-                response = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+            return len(queries), json.loads(response.content)
+
+        # 2024-1-5 is a Friday, four class days in; 2024-2-1 is a Thursday, twenty-four
+        first_week, _ = cost_at(datetime.datetime(2024, 1, 5, 6, tzinfo=self.tz))
+        fifth_week, later_chart = cost_at(datetime.datetime(2024, 2, 1, 6, tzinfo=self.tz))
 
         # the later chart really does plot more days, so the counts are of unequal work
-        self.assertGreater(len(json.loads(response.content)['xp_data']), 4)
-        self.assertEqual(len(fifth_week), len(first_week))
+        self.assertGreater(len(later_chart['xp_data']), 4)
+        self.assertEqual(fifth_week, first_week)
 
     def test_ajax_xp_data__correct_xp_current_day(self):
         """ tests if xp_data from ajax request holds the correct xp on different days of the week.
