@@ -4,10 +4,9 @@ from pathlib import Path
 from allauth.socialaccount.models import SocialApp
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.sites.models import Site
-# from django.core import mail
 from django.contrib.messages import constants as messages_constants
 from django.contrib.messages.storage.base import Message
+from django.contrib.sites.models import Site
 from django.shortcuts import reverse
 from django.template.loader import render_to_string
 from django.templatetags.static import static

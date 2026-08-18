@@ -382,13 +382,18 @@ class TempCampaign:
 class CytoScapeQueryset(models.QuerySet):
 
     def get_maps_as_formatted_string(self):
-        """ returns queryset of maps as grammatically correct string with hyperlinks to map pages
-        [map1]
-        >>> map1
-        [map1, map2]
-        >>> map1 and map2
-        [map1, map2, ..., mapN]
-        >>> map1, map2, ..., and mapN
+        """Name every map in this queryset as a list of links, read as a sentence.
+
+        Each map is linked to its own page, and the names are joined the way the count
+        calls for::
+
+            [map1]                  ->  map1
+            [map1, map2]            ->  map1 and map2
+            [map1, map2, ..., mapN] ->  map1, map2, ..., and mapN
+
+        Returns:
+            SafeString | None: the linked names, safe to render, with each map's own name
+            escaped; None when the queryset is empty.
         """
         # format_html rather than an f-string: the result is handed to a django message, which
         # renders markup only when it is marked safe, and which escapes the map name on the way in.
