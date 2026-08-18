@@ -6,6 +6,8 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from tenant.utils import get_root_url
@@ -245,22 +247,38 @@ class Notification(models.Model):
             "target_url": target_url,
         }
 
-        url_common_part = "%(sender)s %(verb)s <a href='%(verify_read)s?next=%(target_url)s'>" % context
+        # format_html, so every value above is escaped as it goes in. This string is
+        # rendered with |safe (notifications/list.html, the dropdown, the digest email),
+        # and the values are names people choose: a student's own preferred_name reaches
+        # it through Profile.__str__, and a quest name through the target.
+        #
+        # `action` is the exception, and is marked safe deliberately: it is the output of
+        # html_strip, which keeps <img> on purpose so an image in a comment previews in
+        # the dropdown, and whose input is comment HTML that was sanitized on save.
+        safe_action = mark_safe(context["action"])
+
+        url_common_part = format_html(
+            "{} {} <a href='{}?next={}'>",
+            context["sender"], context["verb"], context["verify_read"], context["target_url"],
+        )
         if self.target_object:
             if self.action_object:
-                url = url_common_part + ' <em>%(target)s</em> with "%(action)s"</a>' % context
+                url = format_html('{} <em>{}</em> with "{}"</a>', url_common_part, context["target"], safe_action)
             else:
-                url = url_common_part + " <em>%(target)s</em></a>" % context
+                url = format_html("{} <em>{}</em></a>", url_common_part, context["target"])
         elif self.target_url:
             if self.target_link_text:
                 # plain verb, one small link at the end (maintainer request, 2026-08-08)
-                url = url_common_part + "%(link_text)s</a>" % context
+                url = format_html("{}{}</a>", url_common_part, context["link_text"])
             else:
                 # no link text given, so the verb itself is the link text: without
                 # this the anchor would render empty and the destination be unreachable
-                url = "%(sender)s <a href='%(verify_read)s?next=%(target_url)s'>%(verb)s</a>" % context
+                url = format_html(
+                    "{} <a href='{}?next={}'>{}</a>",
+                    context["sender"], context["verify_read"], context["target_url"], context["verb"],
+                )
         else:
-            url = url_common_part + "</a>"  # this is for 'teacher returned/approved ...'
+            url = format_html("{}</a>", url_common_part)  # this is for 'teacher returned/approved ...'
         return url
 
     def mark_read(self):
