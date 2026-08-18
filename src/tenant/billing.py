@@ -132,6 +132,14 @@ def portal_configuration_id(deck):
         login_page = to_plain_dict(default.login_page) if getattr(default, 'login_page', None) else {}
         configuration = stripe.billing_portal.Configuration.create(
             api_key=settings.STRIPE_SECRET_KEY,
+            # concurrent first visits both reach this create; the shared key makes
+            # Stripe return ONE configuration to both, so the row converges on a
+            # single id instead of orphaning a duplicate. Day-scoped like the
+            # checkout key: within a day a replay with CHANGED parameters (an
+            # operator cleared the field right after editing the account default)
+            # is rejected by Stripe and lands in the except below, so that visit
+            # falls back to the unnamed account-default portal until the key ages out
+            idempotency_key=f'deck-portal-config-{deck.schema_name}-{localdate()}',
             business_profile={
                 **to_plain_dict(default.business_profile),
                 'headline': f'Subscription for {deck_label(deck)}',
@@ -161,6 +169,9 @@ def _store_portal_configuration_id(deck, configuration_id):
     Args:
         deck (Tenant): The deck the configuration belongs to.
         configuration_id (str): The Stripe configuration id (``bpc_...``).
+
+    Returns:
+        None: The row and the instance are updated in place.
     """
     type(deck).objects.filter(pk=deck.pk).update(stripe_portal_configuration_id=configuration_id)
     deck.stripe_portal_configuration_id = configuration_id

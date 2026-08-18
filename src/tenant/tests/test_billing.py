@@ -1024,6 +1024,9 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         self.assertEqual(kwargs['business_profile']['privacy_policy_url'], 'https://x.test/p')
         self.assertEqual(kwargs['features'], {'subscription_cancel': {'enabled': True}, 'invoice_history': {'enabled': True}})
         self.assertEqual(kwargs['metadata'], {'schema_name': self.tenant.schema_name})
+        # the day-scoped idempotency key collapses concurrent first visits into
+        # one Stripe-side configuration (review find on the #2465 PR)
+        self.assertTrue(kwargs['idempotency_key'].startswith(f'deck-portal-config-{self.tenant.schema_name}-'))
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_portal_configuration_id, 'bpc_deck')
 
@@ -1071,8 +1074,10 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         second configuration."""
         Tenant.objects.filter(pk=self.tenant.pk).update(stripe_portal_configuration_id='bpc_stored')
         self.tenant.refresh_from_db()
-        with patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list') as mock_list, \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
             self.assertEqual(portal_configuration_id(self.tenant), 'bpc_stored')
+        mock_list.assert_not_called()
         mock_create.assert_not_called()
 
     def test_portal_configuration_id__adopts_a_cached_id_into_the_stored_field(self):
@@ -1080,8 +1085,10 @@ class DeckLabelOnStripeSurfacesTest(ByteDeckTenantTestCase):
         configuration: the id moves into the field (and out of the cache) instead
         of a duplicate configuration being cloned (#2465 upgrade path)."""
         cache.set(_portal_configuration_cache_key(self.tenant.schema_name), 'bpc_cached', 60)
-        with patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
+        with patch('tenant.billing.stripe.billing_portal.Configuration.list') as mock_list, \
+                patch('tenant.billing.stripe.billing_portal.Configuration.create') as mock_create:
             self.assertEqual(portal_configuration_id(self.tenant), 'bpc_cached')
+        mock_list.assert_not_called()
         mock_create.assert_not_called()
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_portal_configuration_id, 'bpc_cached')
