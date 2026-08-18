@@ -233,14 +233,14 @@
                     <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button"
                        aria-haspopup="true" aria-expanded="false"
                        title="Rank: {{ course_ranks.0.1 }} in {{ course_ranks.0.0 }}">
-                        <i class="{{ course_ranks.0.1.fa_icon }}"></i><!--
+                        <i class="{{ course_ranks.0.1.fa_icon_class }}"></i><!--
                      --><span class="visible-xs-inline-block">&nbsp;&nbsp;Ranks</span>
                     </a>
                     <ul class="dropdown-menu">
                         {% for course, rank in course_ranks %}
                         <li>
                             <a href="{% url 'courses:ranks' %}" title="Rank: {{ rank }}">
-                                <i class="{{ rank.fa_icon }} fa-fw"></i>&nbsp;&nbsp;{{ course }}
+                                <i class="{{ rank.fa_icon_class }} fa-fw"></i>&nbsp;&nbsp;{{ course }}
                             </a>
                         </li>
                         {% endfor %}
@@ -249,7 +249,7 @@
                 {% else %}
                 <li>
                     <a title="Rank: {{request.user.profile.rank}}" href="{% url 'courses:ranks' %}">
-                        <i class="{{request.user.profile.rank.fa_icon}}"></i>
+                        <i class="{{request.user.profile.rank.fa_icon_class}}"></i>
                         <span class="visible-xs-inline-block">&nbsp;&nbsp;{{request.user.profile.rank}}</span>
                     </a>
                 </li>

@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_comma_separated_integer_list
+from django.core.validators import RegexValidator, validate_comma_separated_integer_list
 from django.db import connection, models, transaction
 from django.db.models import Count, Sum
 from django.db.models.signals import post_delete, post_save
@@ -158,7 +158,10 @@ class RankManager(models.Manager):
         return None
 
     def create_zero_rank(self):
-        zero_rank = Rank(xp=0, name="None", icon="fa fa-circle-o")
+        # `icon` is an ImageField; the Font Awesome icon belongs in `fa_icon`
+        # (stored as a bare name), so the zero rank shows a circle-o like the
+        # seeded first rank.
+        zero_rank = Rank(xp=0, name="None", fa_icon="circle-o")
         zero_rank.save()
         return zero_rank
 
@@ -168,8 +171,23 @@ class Rank(IsAPrereqMixin, models.Model):
     xp = models.PositiveIntegerField(help_text='The XP at which this rank is granted')
     icon = models.ImageField(upload_to='icons/ranks/', null=True, blank=True,
                              help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
-    fa_icon = models.TextField(null=True, blank=True,
-                               help_text='html to render a font-awesome icon or icon stack etc.')
+    # Both fields are staff-editable and flow, unescaped, into the rank-up
+    # notification's icon HTML (rendered |safe), so they are validated down to safe
+    # Font Awesome class tokens: a single bare name here (no "fa-" prefix, no spaces),
+    # and space-separated modifier classes below. This keeps markup/quotes out and
+    # keeps fa_icon a bare name (typing "fa fa-star" or "fa-star" would render wrong).
+    fa_icon = models.TextField(
+        null=True, blank=True,
+        validators=[RegexValidator(
+            r'^(?!fa-)[a-z0-9-]*$',
+            'Enter a single Font Awesome icon name in lowercase, e.g. "star" (no "fa-" prefix, no spaces).')],
+        help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
+    fa_icon_modifiers = models.CharField(
+        max_length=100, blank=True, default='',
+        validators=[RegexValidator(
+            r'^[a-z0-9\s-]*$',
+            'Enter Font Awesome modifier classes in lowercase, e.g. "fa-rotate-270".')],
+        help_text='Optional extra Font Awesome classes applied to the icon, e.g. "fa-rotate-270" to rotate it.')
 
     objects = RankManager()
 
@@ -187,6 +205,18 @@ class Rank(IsAPrereqMixin, models.Model):
             return self.icon.url
         else:
             return SiteConfig.get().get_default_icon_url()
+
+    @property
+    def fa_icon_class(self):
+        """The Font Awesome class list to drop into ``<i class="...">``:
+        ``fa fa-<name>`` plus any ``fa_icon_modifiers``. Returns '' when no icon
+        is set, so a template renders a bare ``<i>`` instead of a stray "fa fa-"."""
+        name = (self.fa_icon or '').strip()
+        if not name:
+            return ''
+        classes = 'fa fa-' + name
+        modifiers = (self.fa_icon_modifiers or '').strip()
+        return classes + ' ' + modifiers if modifiers else classes
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -735,9 +765,29 @@ class CourseStudentManager(models.Manager):
             list[tuple]: (CourseStudent, xp) in registration order, empty when the student is
             in no course. A student in one course has their whole total against it.
         """
+        return self.xp_across(user, list(self.current_courses(user)), profile=profile, up_to_date=up_to_date)
+
+    def xp_across(self, user, registrations, profile=None, up_to_date=None):
+        """The same division as xp_for_registrations(), across registrations given explicitly.
+
+        Whoever already holds a student's registrations can hand them straight over rather
+        than having them read back (issue #2459): archiving a semester has all of them in
+        memory, and asking each one separately would repeat this whole calculation, which is
+        one question about the student rather than one per course.
+
+        Args:
+            user: the student whose XP is being divided.
+            registrations (list[CourseStudent]): the registrations to divide it between. They
+                should all be the student's own, and from one semester: the shared pool is
+                split by how many there are.
+            profile (Profile): as xp_for_registrations().
+            up_to_date (date): as xp_for_registrations().
+
+        Returns:
+            list[tuple]: (CourseStudent, xp) in the order given.
+        """
         profile = profile if profile is not None else user.profile
         total = profile.xp_cached if up_to_date is None else profile.xp_to_date(up_to_date)
-        registrations = list(self.current_courses(user))
         if len(registrations) <= 1:
             return [(registration, total) for registration in registrations]
 
@@ -774,27 +824,57 @@ class CourseStudentManager(models.Manager):
     def calc_semester_grades(self, semester, clamp_negative_xp=False):
         """Record every registration's final XP and deactivate it.
 
-        clamp_negative_xp: record a negative XP as zero instead of raising (used
-        by the suspension auto-close, where there is no teacher around to fix
-        the balance first).
+        The work is done a student at a time rather than a registration at a time (issue
+        #2459). Both of the things this repeats are per-student, not per-course: the
+        assigned-versus-shared split, and the XP cache the save invalidates. Asking once per
+        registration ran each of them again for every course a student holds.
+
+        Args:
+            semester: the Semester being archived.
+            clamp_negative_xp (bool): record a negative XP as zero instead of raising (used
+                by the suspension auto-close, where there is no teacher around to fix the
+                balance first).
+
+        Raises:
+            ValueError: when a student's XP is negative and clamp_negative_xp is False.
         """
-        coursestudents = self.get_queryset().get_semester(semester)
-        # atomic: a negative-XP refusal mid-loop must roll back the registrations
-        # already deactivated in this call, or they'd sit deactivated while the
-        # semester stays open (CodeRabbit find on the #1734 B2 review)
+        by_student = {}
+        for coursestudent in self.get_queryset().get_semester(semester).select_related('user__profile'):
+            by_student.setdefault(coursestudent.user, []).append(coursestudent)
+
+        # atomic: a negative-XP refusal must roll back the registrations already written in
+        # this call, or they'd sit deactivated while the semester stays open (CodeRabbit find
+        # on the #1734 B2 review)
         with transaction.atomic():
-            for coursestudent in coursestudents:
+            graded = []
+            for student, registrations in by_student.items():
                 # each registration's own XP, not a single figure reused for all of them: a
                 # student who assigned their work to one course must not have that course's
-                # total recorded against the other one too (issue #2440)
-                coursestudent.final_xp = coursestudent.xp()
-                if coursestudent.final_xp < 0:
-                    if not clamp_negative_xp:
-                        raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
-                                         f"Fix it before closing the semester")
-                    coursestudent.final_xp = 0
-                coursestudent.active = False
-                coursestudent.save()
+                # total recorded against the other one too (issue #2440). Divided across the
+                # registrations being archived, which is what this semester holds, rather than
+                # across whatever the student is registered in now.
+                for coursestudent, final_xp in self.xp_across(student, registrations):
+                    if final_xp < 0:
+                        if not clamp_negative_xp:
+                            raise ValueError(f"{coursestudent.user.get_full_name()} has a negative XP. "
+                                             f"Fix it before closing the semester")
+                        final_xp = 0
+                    coursestudent.final_xp = final_xp
+                    coursestudent.active = False
+                    graded.append(coursestudent)
+
+            # written in one statement, which fires no post_save. Everything those saves set
+            # off is therefore done here instead, once per student after all of their
+            # registrations are final, rather than once per registration:
+            #  - the XP cache, which coursestudent_post_save_callback invalidates;
+            #  - the available-quest cache, which prerequisites.signals queues a rebuild of,
+            #    because deactivating a registration changes what the student can see.
+            from prerequisites.tasks import update_quest_conditions_for_user  # locally: prerequisites imports this module
+
+            self.bulk_update(graded, ['final_xp', 'active'])
+            for student in by_student:
+                student.profile.xp_invalidate_cache()
+                update_quest_conditions_for_user.apply_async(args=[student.id], queue='default')
 
     def all_for_semester(self, semester, students_only=False):
         """The registrations in one particular semester.
@@ -841,18 +921,22 @@ class CourseStudentManager(models.Manager):
         pointer can no longer say which of them a given student is in, but their
         registration always can.
 
+        Someone holding no open-semester registration is in no semester at all (issue
+        #2441). Handing them the deck's default instead puts their work in a term they were
+        never registered in: it lands in a deck-wide approval queue no teacher owns, counts
+        toward that cohort's totals, and is dropped when that cohort's semester is archived,
+        because archiving records final XP from the registrations and they hold none.
+
         Args:
             user: the User whose semester is wanted.
 
         Returns:
-            Semester or None: the open semester this user is registered in. Someone with no
-            such registration (a teacher trying out a quest, a student who hasn't joined a
-            course yet) gets the deck's open semester, which is None between semesters.
+            Semester or None: the open semester this user is registered in, or None when
+            they hold none (a teacher trying out a quest, a student between terms, a student
+            who hasn't joined a course yet).
         """
         registration = self.current_courses(user).select_related('semester').first()
-        if registration is not None:
-            return registration.semester
-        return SiteConfig.get().open_semester
+        return registration.semester if registration is not None else None
 
     def has_multicourse_students(self):
         """Whether anyone on the deck is currently registered in more than one course.
@@ -922,7 +1006,8 @@ def semester_for(user=None):
 
     Returns:
         Semester or None: that student's own semester, or the deck's open semester when no
-        particular student is in view. None when neither exists, between semesters.
+        particular student is in view. None when neither exists: between semesters, and for
+        anyone not registered in one, whose work belongs to no semester (issue #2441).
     """
     if user is None:
         return SiteConfig.get().open_semester
@@ -1082,6 +1167,21 @@ def coursestudent_post_save_callback(instance, **kwargs):
     If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
     """
     instance.user.profile.xp_invalidate_cache()
+
+
+@receiver(post_save, sender=CourseStudent)
+def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
+    """Bring the quests a student had on the go into the semester they have just joined.
+
+    Work handed in while they were registered in no semester belongs to none (issue #2441),
+    and joining a course is the moment it gains one. Without this it would be stranded: out
+    of their in-progress list, which is their new semester's, and out of their available
+    list, which drops a quest they already have a submission of.
+    """
+    from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
+
+    if created and instance.semester_id is not None and instance.semester.is_open:
+        QuestSubmission.objects.adopt_unstamped_in_progress(instance.user_id, instance.semester_id)
 
 
 @receiver(post_save, sender=Rank)

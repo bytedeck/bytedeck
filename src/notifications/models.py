@@ -423,8 +423,17 @@ def deleted_object_receiver(sender, **kwargs):
 
 
 def notify_rank_up(notified_user, old_xp, new_xp):
-    """ notifies user if they've ranked up.
-    Mainly used alongside other notify.send
+    """Send a notification when a change in XP crosses into a new rank.
+
+    Compares the rank at ``old_xp`` with the rank at ``new_xp`` and, if they
+    differ, sends the user a "promoted you to <rank>" notification whose icon is
+    the new rank's Font Awesome icon. Typically called alongside the ``notify.send``
+    that awards the XP.
+
+    :param notified_user: the user to notify (and the notification's recipient).
+    :param old_xp: the user's XP before the change.
+    :param new_xp: the user's XP after the change.
+    :return: ``None``. Does nothing when both XP values fall in the same rank.
     """
     # cant import because of circular imports
     SiteConfig = apps.get_model('siteconfig.SiteConfig')
@@ -437,8 +446,10 @@ def notify_rank_up(notified_user, old_xp, new_xp):
     if old_rank.xp == new_rank.xp:
         return
 
-    fa_icon = new_rank.fa_icon or "fa-star"
-    icon = f"<i class='text-warning fa fa-lg fa-fw {fa_icon}'></i>"
+    # `fa_icon_class` already yields the full "fa fa-<name> <modifiers>" list, so
+    # the wrapper only adds colour/sizing (adding another "fa fa-" here would double it).
+    fa_classes = new_rank.fa_icon_class or "fa fa-star"
+    icon = f"<i class='text-warning fa-lg fa-fw {fa_classes}'></i>"
 
     #
     notify.send(

@@ -1,6 +1,7 @@
 import functools
 
 from django.apps import apps
+from django.db.models import prefetch_related_objects
 from django_tenants.utils import schema_context
 
 
@@ -70,6 +71,72 @@ def library_listable_quests():
     from quest_manager.models import Quest
 
     return Quest.objects.get_queryset().published().active_or_no_campaign()
+
+
+def load_library_quests_for_render(quests):
+    """Read everything a Library quest's template will ask for, while the schema is right.
+
+    Library views select their quests inside `library_schema_context()` and render after it
+    has closed. Anything still lazy at that point (a related manager, a queryset, an
+    unfetched foreign key) is evaluated by the template engine, by which time the connection
+    is back on the viewer's own deck: it reads *this* deck's tables using the Library row's
+    primary key, and the page shows the viewer their own data as though it were the shared
+    content's. Nothing raises, so the only sign is that the wrong thing is on the screen
+    (#2369, #2163).
+
+    Loading it here rather than at each call site means the fix is one line per view instead
+    of a prefetch per relation that the next template change can silently outgrow.
+
+    Rendering the page *on* the Library schema is not the alternative it looks like: the
+    page is mostly the viewer's own deck (their profile, their SiteConfig, their navbar),
+    none of which exists in the Library schema.
+
+    Must be called from within the library schema context, on an already-evaluated list.
+
+    Args:
+        quests (list[Quest]): the quests about to be rendered. A list, not a queryset:
+            `prefetch_related_objects` needs the rows to exist.
+
+    Returns:
+        list[Quest]: the same list, with `tags`, `question_set` and `campaign` populated.
+    """
+    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
+
+    return quests
+
+
+def get_colliding_quest_names(library_quests):
+    """The names among `library_quests` that a different quest on this deck already uses.
+
+    A name clash is what the importing teacher cannot see for themselves: the Library page
+    shows what is on offer, not what is already on their own deck, so without this the
+    first they hear of it is after clicking Import. The import handles the clash by
+    renaming the arriving copy, and naming the clash up front is what makes that a choice
+    rather than a surprise (#2364, #2397).
+
+    Matching is on name and *not* import_id: a quest this deck already holds under the same
+    import_id is the same quest arriving again, which is an overwrite rather than a clash.
+
+    Must be called from within the destination (local) schema context.
+
+    Args:
+        library_quests (Iterable[Quest]): the quests being offered for import, read from
+            the Library schema.
+
+    Returns:
+        list[str]: the clashing names, sorted, empty when nothing on this deck collides.
+    """
+    from quest_manager.models import Quest
+
+    wanted_names = [quest.name for quest in library_quests]
+    arriving_ids = [quest.import_id for quest in library_quests]
+
+    return sorted(
+        Quest.objects.all_including_archived()
+        .filter(name__in=wanted_names)
+        .exclude(import_id__in=arriving_ids)
+        .values_list('name', flat=True)
+    )
 
 
 def get_library_conflicting_quests(local_quests):

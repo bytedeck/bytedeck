@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from model_bakery import baker
 
+from courses.models import Course, CourseStudent
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -41,8 +42,8 @@ class DoubleStartRaceTest(ByteDeckTenantTestCase):
     """The concurrent-double-start vector from issue #1345."""
 
     def setUp(self):
-        """Create a student and a non-repeatable published quest, and grab the
-        active semester the submissions will land in."""
+        """Create a student registered in the active semester and a non-repeatable
+        published quest, and grab the semester the submissions will land in."""
         self.student = baker.make(User, is_staff=False)
         self.quest = baker.make(
             Quest, name="One-time quest", xp=10,
@@ -50,6 +51,10 @@ class DoubleStartRaceTest(ByteDeckTenantTestCase):
             published=True, archived=False,
         )
         self.active_semester = SiteConfig.get().active_semester
+        # the registration is what puts their submissions in this semester (issue #2441):
+        # without one they are in none, and the constraint under test here is the one keyed
+        # on a semester
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=self.active_semester)
 
     def _in_progress_count(self):
         """Return how many in-progress (not completed) submissions of the test
@@ -180,23 +185,28 @@ class RepeatableQuestFlowRegressionTest(ByteDeckTenantTestCase):
 
 
 class MigrationDedupTest(ByteDeckTenantTestCase):
-    # Drops and re-adds the QuestSubmission unique constraint via the schema
-    # editor, so give it a private fresh schema rather than mutating the shared
-    # reused one (and to avoid colliding with the persistent test tenant).
-    reuse_schema = False
-
     """Cover migration 0049's ``remove_duplicate_in_progress_submissions``:
     it must delete duplicate never-completed in-progress rows (keeping the
     earliest, flushing deletes in bounded batches) and spare completed,
     returned, and NULL-semester rows."""
 
-    def _constraint(self):
-        """Return the partial unique constraint object from QuestSubmission's
-        Meta, so tests can drop and re-add it via the schema editor."""
-        return next(
+    # Drops and re-adds the QuestSubmission unique constraint via the schema
+    # editor, so give it a private fresh schema rather than mutating the shared
+    # reused one (and to avoid colliding with the persistent test tenant).
+    reuse_schema = False
+
+    def _constraints(self):
+        """Return QuestSubmission's partial unique constraints, so tests can drop and
+        re-add them via the schema editor. Both are needed: one covers the submissions
+        that name a semester, the other the ones that name none (issue #2413), and the
+        historical state this test rebuilds predates each of them."""
+        return [
             c for c in QuestSubmission._meta.constraints
-            if c.name == "unique_inprogress_submission_per_quest_semester"
-        )
+            if c.name in (
+                "unique_inprogress_submission_per_quest_semester",
+                "unique_inprogress_submission_per_quest_no_semester",
+            )
+        ]
 
     def _run_dedup(self):
         """Invoke the migration's dedup function against the current (test)
@@ -214,9 +224,10 @@ class MigrationDedupTest(ByteDeckTenantTestCase):
         quest = baker.make(Quest, published=True, archived=False)
         active = SiteConfig.get().active_semester
 
-        # Recreate the historical duplicate state by dropping the constraint first.
+        # Recreate the historical duplicate state by dropping the constraints first.
         with connection.schema_editor() as schema_editor:
-            schema_editor.remove_constraint(QuestSubmission, self._constraint())
+            for constraint in self._constraints():
+                schema_editor.remove_constraint(QuestSubmission, constraint)
         try:
             keeper = baker.make(
                 QuestSubmission, user=student, quest=quest, semester=active, is_completed=False,
@@ -237,8 +248,9 @@ class MigrationDedupTest(ByteDeckTenantTestCase):
                 QuestSubmission, user=student, quest=quest, semester=active,
                 is_completed=False, first_time_completed=timezone.now(),
             )
-            # NULL-semester rows are skipped by the dedup (NULLs never violate
-            # the partial unique index).
+            # NULL-semester rows are skipped by this dedup (NULLs never violate the
+            # partial unique index it installs). Migration 0054 is what covers them,
+            # with a dedup of its own.
             null_sem_1 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
             null_sem_2 = baker.make(QuestSubmission, user=student, quest=quest, semester=None, is_completed=False)
 
@@ -255,11 +267,16 @@ class MigrationDedupTest(ByteDeckTenantTestCase):
         finally:
             # The dedup's deletes leave deferred trigger events pending in the
             # test transaction, and Postgres refuses CREATE INDEX while they
-            # exist -- force them to fire before re-adding the constraint.
+            # exist -- force them to fire before re-adding the constraints.
             with connection.cursor() as cursor:
                 cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+            # The surviving NULL-semester duplicates would violate the no-semester
+            # constraint, so clear them before putting it back. The base manager, since
+            # the default one filters by the quest's published/archived flags.
+            QuestSubmission._base_manager.filter(semester__isnull=True).delete()
             with connection.schema_editor() as schema_editor:
-                schema_editor.add_constraint(QuestSubmission, self._constraint())
+                for constraint in self._constraints():
+                    schema_editor.add_constraint(QuestSubmission, constraint)
 
     def test_remove_duplicate_in_progress_submissions__noop_when_no_duplicates(self):
         """With no duplicate rows the dedup deletes nothing (the empty branch)."""

@@ -13,12 +13,13 @@ or a regression, and the failure is where the decision gets recorded.
 """
 
 import datetime
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 from model_bakery import baker
 
-from django.db import connection
+from django.db import IntegrityError, connection
 from django_tenants.utils import schema_context
 from taggit.models import Tag
 
@@ -33,6 +34,7 @@ from prerequisites.models import IsAPrereqMixin, Prereq
 from badges.models import Badge
 from courses.models import Block, Course, Grade, Rank
 from quest_manager.models import Category, CommonData, Quest
+from questions.models import Question, QuestionType
 
 # The fields a Quest carries into the Library and back, as of today. This is not a wish
 # list: it is what the transfer currently moves, verified by `test_quest_field_inventory__every_field_is_classified`.
@@ -64,6 +66,18 @@ CATEGORY_FIELDS_NOT_TRANSFERRED = {
     'id': 'Primary key. The destination assigns its own.',
     'published': 'Deliberately forced to draft, same as quests.',
     'map_order': 'Dropped. Quest-map placement is relative to the deck it was arranged on (#2396).',
+}
+
+QUESTION_FIELDS_TRANSFERRED = frozenset({
+    'type', 'ordinal', 'required', 'instructions', 'solution_text', 'solution_file',
+    'allowed_file_type', 'marker_notes',
+})
+
+QUESTION_FIELDS_NOT_TRANSFERRED = {
+    'id': 'Primary key. The destination assigns its own.',
+    'quest': 'Not copied as an FK: it is set to the quest being written, whose pk differs per schema.',
+    'datetime_created': 'auto_now_add. The destination row stamps its own creation time.',
+    'datetime_last_edit': 'auto_now. Always the time of the import.',
 }
 
 
@@ -242,7 +256,9 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
         it is excluded from the transfer entirely. A quest whose instructions refer to a
         shared preamble arrives on the destination deck without that panel.
 
-        When #2398 is fixed this should assert the CommonData arrives instead.
+        That is the settled behaviour rather than a gap waiting on a fix: the block is
+        left behind on purpose, and the sharer is warned by name on the push so the loss
+        is not a surprise (`LibrarySharerWarningTests` covers the warning).
         """
         quest, campaign = self._build_populated_quest()
         self.assertIsNotNone(quest.common_data)
@@ -255,8 +271,11 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
     def test_round_trip__drops_campaign_map_order(self):
         """A campaign's quest-map placement resets to the default (#2396).
 
-        When #2396 is fixed this should assert map_order arrives as 7, or the campaign
-        should be documented as deliberately deck-relative.
+        Deliberately deck-relative: where a campaign sits on the quest map is an
+        arrangement of the deck it was arranged on, and the importing deck places it where
+        it wants. No warning goes with it either, unlike the losses in `TransferResult`,
+        because nothing was lost: the sharer's placement was never the importer's to
+        receive (#2396).
         """
         _, campaign = self._build_populated_quest()
         self.assertEqual(campaign.map_order, 7)
@@ -370,6 +389,231 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertEqual(list(library_quest.prereqs()), [])
 
 
+class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
+    """Pin what happens to a quest's submission questions when the quest changes decks."""
+
+    def _quest_with_questions(self):
+        """Create a published quest asking one question of each type.
+
+        Every transferred field is set to a non-default value, so a field that stops
+        travelling fails the round trip instead of matching by coincidence.
+
+        Returns:
+            Quest: the published quest, with three questions attached.
+        """
+        quest = Quest.objects.create(name="Quest With Questions", xp=10)
+        Quest.objects.filter(pk=quest.pk).update(published=True)
+
+        Question.objects.create(
+            quest=quest, ordinal=1, type=QuestionType.SHORT_ANSWER, required=False,
+            instructions="<p>What is the title of your project?</p>",
+            solution_text="Any title", marker_notes="<p>Accept anything</p>",
+        )
+        Question.objects.create(
+            quest=quest, ordinal=2, type=QuestionType.LONG_ANSWER,
+            instructions="<p>Describe your process.</p>",
+            solution_text="A paragraph", marker_notes="<p>Look for reflection</p>",
+        )
+        Question.objects.create(
+            quest=quest, ordinal=3, type=QuestionType.FILE_UPLOAD, allowed_file_type="image",
+            instructions="<p>Upload a photo.</p>",
+            solution_file="quest/question/solution/2026/08/16/example.png",
+            marker_notes="<p>Any photo of the build</p>",
+        )
+
+        return Quest.objects.get(pk=quest.pk)
+
+    def _push_and_pull(self, quest):
+        """Push a quest to the Library, publish it there, then pull it back into this deck.
+
+        The local copy is deleted in between, so the pull takes the path a deck seeing the
+        quest for the first time would.
+
+        Args:
+            quest (Quest): the local quest to push.
+
+        Returns:
+            Quest: the quest as it exists on this deck after being imported back.
+        """
+        local_schema = connection.schema_name
+        export_quest_to_library(source_schema=local_schema, quest_import_id=quest.import_id)
+
+        with library_schema_context():
+            Quest.objects.filter(import_id=quest.import_id).update(published=True)
+
+        Quest.objects.all_including_archived().filter(import_id=quest.import_id).delete()
+        import_quest_to(destination_schema=local_schema, quest_import_id=quest.import_id)
+
+        return Quest.objects.all_including_archived().get(import_id=quest.import_id)
+
+    def test_question_field_inventory__every_field_is_classified(self):
+        """Every concrete Question field is classified as transferred or not.
+
+        Same contract as the quest and campaign inventories: a field added to Question
+        fails this test until someone decides whether it belongs to the content (and so
+        should reach other decks) or to the deck it was written on.
+        """
+        concrete = {f.name for f in Question._meta.concrete_fields}
+        classified = QUESTION_FIELDS_TRANSFERRED | set(QUESTION_FIELDS_NOT_TRANSFERRED)
+
+        self.assertEqual(
+            concrete - classified,
+            set(),
+            "A field was added to Question without deciding whether it should travel to other decks. "
+            "Add it to QUESTION_FIELDS_TRANSFERRED or to QUESTION_FIELDS_NOT_TRANSFERRED with a reason.",
+        )
+        self.assertEqual(
+            classified - concrete,
+            set(),
+            "A field was removed from Question but is still classified in this module.",
+        )
+
+    def test_round_trip__carries_every_question_with_every_transferred_field(self):
+        """A quest's questions arrive on the far side as their author wrote them (#2162).
+
+        Before this, a quest whose instructions said "answer the questions below" arrived
+        as an empty-form quest: the questions were never serialised, so the content loss
+        was silent on both the push and the pull.
+        """
+        quest = self._quest_with_questions()
+        expected = [
+            {name: getattr(question, name) for name in QUESTION_FIELDS_TRANSFERRED}
+            for question in quest.question_set.all()
+        ]
+
+        imported = self._push_and_pull(quest)
+
+        arrived = list(imported.question_set.all())
+        self.assertEqual(len(arrived), 3)
+        for question, values in zip(arrived, expected):
+            for name in sorted(QUESTION_FIELDS_TRANSFERRED):
+                with self.subTest(ordinal=values['ordinal'], field=name):
+                    self.assertEqual(
+                        str(getattr(question, name)),
+                        str(values[name]),
+                        f"question {values['ordinal']}'s '{name}' did not survive the round trip.",
+                    )
+
+    def test_round_trip__carries_the_solution_file_by_path(self):
+        """The marker's example answer arrives pointing at the same stored file.
+
+        Decks share one media namespace, so a file field travels as its path and the bytes
+        never move, exactly as a quest's icon does.
+        """
+        quest = self._quest_with_questions()
+
+        imported = self._push_and_pull(quest)
+
+        file_question = imported.question_set.get(ordinal=3)
+        self.assertEqual(file_question.solution_file.name, "quest/question/solution/2026/08/16/example.png")
+
+    def test_re_import__updates_a_changed_question_in_place(self):
+        """Re-importing a quest refreshes its questions rather than duplicating them.
+
+        The question keeps its row, which is what keeps answers students already gave
+        attached to the question they answered.
+        """
+        quest = self._quest_with_questions()
+        self._push_and_pull(quest)
+        first = Quest.objects.all_including_archived().get(import_id=quest.import_id).question_set.get(ordinal=1)
+
+        with library_schema_context():
+            library_question = Question.objects.get(quest__import_id=quest.import_id, ordinal=1)
+            library_question.instructions = "<p>What did you name it?</p>"
+            library_question.save()
+
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual(imported.question_set.count(), 3)
+        refreshed = imported.question_set.get(ordinal=1)
+        self.assertEqual(refreshed.pk, first.pk)
+        self.assertEqual(refreshed.instructions, "<p>What did you name it?</p>")
+
+    def test_re_import__removes_a_question_the_author_deleted(self):
+        """A question dropped upstream is dropped here too, so the copies stay the same quest.
+
+        The quest's own fields are overwritten by a re-import, and its questions are part
+        of the same content: leaving a deleted question behind would have this deck asking
+        a question the shared quest no longer asks.
+        """
+        quest = self._quest_with_questions()
+        self._push_and_pull(quest)
+
+        with library_schema_context():
+            Question.objects.get(quest__import_id=quest.import_id, ordinal=2).delete()
+
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        self.assertEqual([question.ordinal for question in imported.question_set.all()], [1, 3])
+
+    def test_export_campaign_and_copy_quests__carries_questions_on_the_conflict_copy(self):
+        """A quest copied in beside the Library's existing version brings its questions.
+
+        The conflict path writes a second copy under a fresh import_id, and that copy is
+        the whole quest: a copy that arrived without its questions would be an empty-form
+        quest with a name saying otherwise.
+        """
+        campaign = Category(title="Conflicted Campaign", published=True)
+        campaign.save()
+        quest = self._quest_with_questions()
+        Quest.objects.filter(pk=quest.pk).update(campaign=campaign)
+        # Put the quest in the Library first, so sharing the campaign hits the conflict path.
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            copy = (
+                Quest.objects.all_including_archived()
+                .filter(name__startswith=quest.name)
+                .exclude(import_id=quest.import_id)
+                .get()
+            )
+            self.assertEqual([question.ordinal for question in copy.question_set.all()], [1, 2, 3])
+
+    def test_export_quest_to_library__reports_a_question_that_cannot_be_written(self):
+        """A question the destination refuses names the quest and the question it came from.
+
+        `instructions` is required, so a row saved without it (as `Question.objects.create`
+        allows, since it does not validate) cannot be written on the far side. The failure
+        is raised as a `LibraryTransferError` a view can put in front of the sharer, rather
+        than escaping as a validation error naming a model they never see.
+        """
+        quest = Quest.objects.create(name="Quest With A Bad Question", xp=10)
+        Quest.objects.filter(pk=quest.pk).update(published=True)
+        Question.objects.create(quest=quest, ordinal=2, instructions="")
+
+        with self.assertRaises(LibraryTransferError) as caught:
+            export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        self.assertIn("Quest With A Bad Question", str(caught.exception))
+        self.assertIn("question 2", str(caught.exception))
+        with library_schema_context():
+            self.assertFalse(Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists())
+
+    def test_export_quest_to_library__reports_a_question_the_database_rejects(self):
+        """A question the database refuses reaches the sharer as a readable failure too.
+
+        `full_clean` catches what it can see, so this is the narrow case it cannot: the row
+        is valid when validated and rejected when written. The quest's own write path
+        already reports that as a transfer error rather than letting a database exception
+        escape into a 500, and a question's write path answers the same way.
+        """
+        quest = Quest.objects.create(name="Quest The Database Refuses", xp=10)
+        Quest.objects.filter(pk=quest.pk).update(published=True)
+        Question.objects.create(quest=quest, ordinal=1, instructions="<p>Fine on the way out.</p>")
+
+        with patch.object(Question, 'save', side_effect=IntegrityError("duplicate key value")):
+            with self.assertRaises(LibraryTransferError) as caught:
+                export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        self.assertIn("Quest The Database Refuses", str(caught.exception))
+        self.assertIn("question 1", str(caught.exception))
+        self.assertIn("duplicate key value", str(caught.exception))
+
+
 class LibraryTransferErrorMessageTests(SimpleTestCase):
     """How a failed copy is described to the caller."""
 
@@ -479,49 +723,120 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         Quest.objects.all_including_archived().filter(import_id__in=import_ids).delete()
         Category.objects.filter(import_id=campaign.import_id).delete()
 
-    def test_import_quest_to__raises_a_readable_error_when_the_name_is_already_taken_locally(self):
-        """Importing a quest whose name a different local quest holds says so (#2364).
+    def test_import_quest_to__renames_a_quest_whose_name_is_already_taken_locally(self):
+        """A quest arrives under a name of its own when this deck already uses the one it has (#2364).
 
-        Quest.name is unique per deck, and the view guards only on import_id, so the clash
-        reaches the database. The failure is raised as a `LibraryTransferError` naming the
-        quest, which is a type the view can catch and put in front of the teacher, rather
-        than a library-internal exception that escapes as a 500 carrying a constraint name.
+        Quest.name is unique per deck, so the clash would otherwise reach the database and
+        fail the import. The arriving copy is renamed instead, which is what makes a
+        collision recoverable in place: the teacher does not have to go and rename their own
+        quest first. Their quest is left exactly as it was.
         """
         campaign, import_ids = self._push_campaign("Collision Campaign", ["Photoshop Basics"])
         self._clear_locally(campaign, import_ids)
-        Quest.objects.create(name="Photoshop Basics", xp=999)
+        local = Quest.objects.create(name="Photoshop Basics", xp=999)
 
-        with self.assertRaises(LibraryTransferError) as caught:
-            import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
 
-        self.assertIn("Photoshop Basics", str(caught.exception))
-        self.assertFalse(Quest.objects.all_including_archived().filter(import_id=import_ids[0]).exists())
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertNotEqual(imported.pk, local.pk)
+        self.assertTrue(imported.name.startswith("Photoshop Basics (Imported on "))
+        self.assertEqual(result.renamed_quests, [("Photoshop Basics", imported.name)])
+        local.refresh_from_db()
+        self.assertEqual(local.name, "Photoshop Basics")
+        self.assertEqual(local.xp, 999)
 
-    def test_import_campaign_to__one_colliding_name_discards_the_whole_import(self):
-        """One taken quest name still discards the whole campaign import, but says so (#2397).
+    def test_import_campaign_to__renames_only_the_quest_that_collides(self):
+        """One taken name costs that quest its name, not the campaign its import (#2397).
 
-        The import stays all-or-nothing: a campaign that arrived half-imported would leave
-        the deck holding quests whose prerequisites point at the ones that never came. What
-        changes is that the caller is told. The failure is raised as a `LibraryTransferError`
-        naming the quest that clashed, instead of being recorded in a result object that no
-        caller reads and leaving the view to fall through to a bare 404.
+        Every quest in the campaign arrives, and the rename is confined to the one whose
+        name this deck already holds: its siblings keep theirs. The bigger the campaign the
+        likelier one of its quests collides, so a clash must stay a local matter rather
+        than something the whole import rides on.
         """
         campaign, import_ids = self._push_campaign(
-            "Partial Campaign", ["Good Quest One", "Bad Quest Two", "Good Quest Three"],
+            "Partial Campaign", ["Good Quest One", "Taken Quest Two", "Good Quest Three"],
         )
         self._clear_locally(campaign, import_ids)
-        Quest.objects.create(name="Bad Quest Two", xp=999)
+        Quest.objects.create(name="Taken Quest Two", xp=999)
 
-        with self.assertRaises(LibraryTransferError) as caught:
-            import_campaign_to(
-                destination_schema=connection.schema_name,
-                quest_import_ids=import_ids,
-                campaign_import_id=campaign.import_id,
-            )
+        result = import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=import_ids,
+            campaign_import_id=campaign.import_id,
+        )
 
-        self.assertIn("Bad Quest Two", str(caught.exception))
+        imported = Quest.objects.all_including_archived().filter(import_id__in=import_ids)
+        self.assertEqual(imported.count(), 3)
+        self.assertTrue(Category.objects.filter(import_id=campaign.import_id).exists())
+        self.assertEqual([wanted for wanted, _ in result.renamed_quests], ["Taken Quest Two"])
+        self.assertQuerySetEqual(
+            imported.filter(name__in=["Good Quest One", "Good Quest Three"]).order_by('name'),
+            ["Good Quest One", "Good Quest Three"],
+            transform=lambda quest: quest.name,
+        )
+
+    def test_import_campaign_to__discards_the_whole_import_when_a_quest_cannot_be_written(self):
+        """A failure that renaming cannot fix still takes the whole campaign with it (#2397).
+
+        The import stays all-or-nothing: a campaign that arrived half-imported would leave
+        the deck holding quests whose prerequisites point at the ones that never came. Only
+        the name clash is recoverable, because renaming is an answer to it; anything else is
+        raised as a `LibraryTransferError` naming the quest, and nothing is written.
+        """
+        campaign, import_ids = self._push_campaign(
+            "Rejected Campaign", ["Fine Quest One", "Rejected Quest Two"],
+        )
+        self._clear_locally(campaign, import_ids)
+
+        def reject_the_second(self, *args, **kwargs):
+            """Fail the write for one quest of the batch, as the database would."""
+            if self.name == "Rejected Quest Two":
+                raise IntegrityError("duplicate key value")
+            return original_save(self, *args, **kwargs)
+
+        original_save = Quest.save
+        with patch.object(Quest, 'save', reject_the_second):
+            with self.assertRaises(LibraryTransferError) as caught:
+                import_campaign_to(
+                    destination_schema=connection.schema_name,
+                    quest_import_ids=import_ids,
+                    campaign_import_id=campaign.import_id,
+                )
+
+        self.assertIn("Rejected Quest Two", str(caught.exception))
         self.assertEqual(list(Quest.objects.all_including_archived().filter(import_id__in=import_ids)), [])
         self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
+    def test_import_quest_to__leaves_the_name_alone_when_nothing_local_holds_it(self):
+        """A quest whose name is free arrives with the name its author gave it.
+
+        The rename is the exception, so this pins that it stays the exception: a deck with
+        no clash sees no suffix and `renamed_quests` is empty.
+        """
+        campaign, import_ids = self._push_campaign("Free Name Campaign", ["Unclaimed Quest"])
+        self._clear_locally(campaign, import_ids)
+
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertEqual(imported.name, "Unclaimed Quest")
+        self.assertEqual(result.renamed_quests, [])
+
+    def test_import_quest_to__re_importing_is_not_treated_as_a_name_collision(self):
+        """A quest this deck already holds is the same quest arriving again, not a clash.
+
+        It is matched by `import_id` and its row is updated in place, so its own name must
+        not count as taken against it: renaming here would leave the deck with the quest
+        under a dated name every time it was re-imported.
+        """
+        campaign, import_ids = self._push_campaign("Repeat Campaign", ["Repeatable Quest"])
+        Quest.objects.all_including_archived().filter(import_id__in=import_ids).update(name="Repeatable Quest")
+
+        result = import_quest_to(destination_schema=connection.schema_name, quest_import_id=import_ids[0])
+
+        imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
+        self.assertEqual(imported.name, "Repeatable Quest")
+        self.assertEqual(result.renamed_quests, [])
 
 
 class LibraryContentRegistrationTests(ByteDeckTenantTestCase):

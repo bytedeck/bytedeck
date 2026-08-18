@@ -3,13 +3,14 @@ import functools
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db import connection
+from django.db import connection, transaction
 from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.html import format_html
 from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
@@ -32,7 +33,14 @@ from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
 from .transfer import LibraryTransferError
-from .utils import get_library_schema_name, library_schema_context, get_library_conflicting_quests, library_listable_quests
+from .utils import (
+    get_colliding_quest_names,
+    get_library_conflicting_quests,
+    get_library_schema_name,
+    library_listable_quests,
+    library_schema_context,
+    load_library_quests_for_render,
+)
 
 User = get_user_model()
 
@@ -151,6 +159,139 @@ def redirect_failed_import(request, error, redirect_to):
         "Renaming your own copy and importing again should clear it."
     )
     return redirect(redirect_to)
+
+
+def redirect_already_imported(request, local_object, content_type, redirect_to):
+    """Send the user back, explaining that this deck already has the content.
+
+    Content is matched across decks by `import_id`, so a deck that already holds this
+    content holds *this* content, not something like it. Re-importing is refused because
+    overwriting a deck's own copy is not supported yet (#2376), and the confirmation page
+    says so and disables its button.
+
+    That makes this the case where the button was not what was clicked: a stale tab, the
+    back button, a resubmitted form, or two teachers importing at once. Meeting a bare 403
+    there reads as "you are not allowed to do that", when what happened is that the deck
+    already has it, so the answer names the local copy and links to it (#2373).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        local_object (Quest | Category): this deck's copy, which the message links to.
+        content_type (str): "quest" or "campaign", used in the message.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the warning message.
+    """
+    # format_html, not an f-string: every message is rendered through `|safe`
+    # (`templates/messages-snippet.html`), so a name carrying markup would reach the page
+    # as markup. The link below is ours and stays live; the name and URL are escaped.
+    messages.warning(
+        request,
+        format_html(
+            'Your deck already has this {}: <a href="{}">{}</a>. Nothing was imported, '
+            'because replacing a {} you already have is not supported yet. Delete your '
+            "copy first if you want the Library's version instead.",
+            content_type, local_object.get_absolute_url(), local_object.name, content_type,
+        )
+    )
+    return redirect(redirect_to)
+
+
+def redirect_already_shared(request, local_object, content_type, redirect_to):
+    """Send the user back, explaining that the Library already has this content.
+
+    The counterpart to `redirect_already_imported`, for a push that would land on a copy
+    already in the Library. Pushing again is refused for the same reason in reverse:
+    updating what is already there is not supported yet (#2376).
+
+    The message names the content but does not link to the Library's copy, because a
+    teacher cannot open another deck: the link would be a dead end.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        local_object (Quest | Category): the content that was being shared.
+        content_type (str): "quest" or "campaign", used in the message.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the warning message.
+    """
+    # format_html for the same reason as `redirect_already_imported`: messages render safe.
+    messages.warning(
+        request,
+        format_html(
+            "'{}' is already in the Library, so it was not shared again. Sharing an "
+            "updated version of a {} that is already there is not supported yet.",
+            local_object.name, content_type,
+        )
+    )
+    return redirect(redirect_to)
+
+
+def tell_importer_about_renamed_quests(request, renamed_quests):
+    """Tell the importing teacher which arriving quests were given a name of their own.
+
+    `Quest.name` is unique per deck, so a quest whose name this deck already uses is
+    renamed on the way in rather than blocking the import (see `resolve_name_collisions`).
+    The rename is silent otherwise, and a quest that is not called what the Library page
+    said it was called is exactly the sort of thing a teacher goes looking for and cannot
+    find, so it is named here along with what it is now called (#2364, #2397).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        renamed_quests (list[tuple[str, str]]): `(wanted_name, given_name)` pairs.
+
+    Returns:
+        None. Queues an informational message when anything was renamed, and does nothing
+        when every quest kept the name it arrived with.
+    """
+    if not renamed_quests:
+        return
+
+    renames = ', '.join(f"'{wanted}' is now '{given}'" for wanted, given in renamed_quests)
+    messages.info(
+        request,
+        f"Your deck already had a quest called '{renamed_quests[0][0]}', so the copy that "
+        f"just arrived is called '{renamed_quests[0][1]}'. Rename it to whatever suits your deck."
+        if len(renamed_quests) == 1 else
+        f"Your deck already had quests with some of these names, so the arriving copies were "
+        f"renamed: {renames}. Rename them to whatever suits your deck."
+    )
+
+
+def warn_sharer_about_dropped_common_data(request, dropped_common_data):
+    """Tell the sharer that a quest's shared General Info block will not travel.
+
+    `CommonData` is the block of text several quests can share (a marking rubric, how to
+    record a video, lab safety rules). It has no `import_id`, so there is no key that
+    means the same block in another deck's schema, and copying the raw id would attach the
+    quest to whatever text happens to sit at that id there. Leaving it behind is therefore
+    correct; the problem is that the quest arrives missing a panel its instructions may
+    refer to, and nobody is told (#2398).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        dropped_common_data (list[str]): titles of the General Info blocks left behind.
+
+    Returns:
+        None. Queues a warning message when a block was left behind, and does nothing when
+        the content did not use one.
+    """
+    if not dropped_common_data:
+        return
+
+    names = ', '.join(f"'{title}'" for title in dropped_common_data)
+    messages.warning(
+        request,
+        f"The shared General Info {names} does not travel to the Library, so the copy "
+        "there arrives without that panel. Paste the text into the quest instructions "
+        "and share it again if this info is required in the quest."
+        if len(dropped_common_data) == 1 else
+        f"Shared General Info does not travel to the Library, so the copies there arrive "
+        f"without those panels: {names}. Paste the text into the quest instructions and "
+        "share them again if this info is required in the quests."
+    )
 
 
 def warn_sharer_about_skipped_quests(request, skipped_quests):
@@ -289,7 +430,12 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
         "review_url": review_url,
         "source_deck_url": source_deck_url,
     })
-    send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
+    # on_commit, not straight away: the push that this announces is written in one
+    # transaction, and an email is not recallable. Sending it inline would mean a reviewer
+    # could be told to come and look at content that a later failure rolled back (#2372).
+    transaction.on_commit(
+        lambda: send_email_message.apply_async(args=[subject, message, recipient_list], queue="default")
+    )
 
 
 @method_decorator([login_required, staff_member_required, shared_library_enabled_view], name='dispatch')
@@ -410,9 +556,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             # get_page (rather than page) turns a junk or out-of-range ?page= into the
             # nearest real page instead of raising
             page = paginator.get_page(self.get_page_number())
-            # Force evaluation inside the library context: the template renders this after
-            # the schema has switched back to the caller's own deck.
-            page_quests = list(page.object_list)
+            # Read inside the library context: the template renders this after the schema
+            # has switched back to the caller's own deck.
+            page_quests = load_library_quests_for_render(list(page.object_list))
             num_quests = library_listable_quests().count() if search_term else paginator.count
             num_campaigns = Category.objects.all_published_with_importable_quests().count()
 
@@ -522,6 +668,8 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             HttpResponse: Rendered confirmation template with:
                 - quest: The quest from the shared library.
                 - local_quest: The local quest with a matching import_id, if one exists.
+                - colliding_names: The quest's name, when a different local quest already
+                  uses it and the copy will therefore arrive renamed.
         """
         # Look for a matching local quest (even if archived) to show a warning if it already exists
         local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
@@ -530,6 +678,11 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         with library_schema_context():
             quest = get_published_library_object(Quest, quest_import_id)
 
+            if quest is not None:
+                # The page renders outside this context, so everything it shows has to be
+                # read in here (#2163, #2369).
+                load_library_quests_for_render([quest])
+
         if quest is None:
             return redirect_awaiting_review(request, 'quest', 'library:quest_list')
 
@@ -537,6 +690,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             'quest': quest,
             # A Quest from the local deck matching the import_id, or None if not found.
             'local_quest': local_quest,
+            'colliding_names': get_colliding_quest_names([quest]),
         })
 
     def post(self, request, quest_import_id):
@@ -550,15 +704,17 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
         Returns:
             HttpResponseRedirect: Redirects to the draft quests view on success.
 
-        Raises:
-            PermissionDenied: If a quest with the same import ID already exists locally.
+            HttpResponseRedirect: back to the Library with an explanation when this deck
+                already has the quest.
         """
         # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # Block import if the quest already exists locally (shouldn't happen because import button would be disabled)
-        if Quest.objects.all_including_archived().filter(import_id=quest_import_id).exists():
-            raise PermissionDenied(f'Quest with import_id {quest_import_id} already exists in the current deck.')
+        # The real check behind the confirmation page's disabled button, which a stale tab
+        # or a resubmitted form gets past (#2373).
+        local_quest = Quest.objects.all_including_archived().filter(import_id=quest_import_id).first()
+        if local_quest:
+            return redirect_already_imported(request, local_quest, 'quest', 'library:quest_list')
 
         with library_schema_context():
             quest = get_published_library_object(Quest, quest_import_id)
@@ -566,7 +722,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
                 return redirect_awaiting_review(request, 'quest', 'library:quest_list')
             # Use dest_schema because current schema is library
             try:
-                import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
+                imported = import_quest_to(destination_schema=dest_schema, quest_import_id=quest.import_id)
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:quest_list')
 
@@ -585,6 +741,7 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
             f"students can see it: <strong>{publish_link}</strong>, and give it a "
             f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
         )
+        tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
         return redirect('quests:drafts')
 
@@ -632,13 +789,14 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             category_total_xp_available = library_category.xp_sum()
             category_published = library_category.published
 
-            # Force evaluation of the queryset in the library to get full Quest objects for rendering.
-            shared_quests = list(library_category.current_quests())
+            # Read in the library, since the page renders after this context has closed.
+            shared_quests = load_library_quests_for_render(list(library_category.current_quests()))
             # Extract import_ids from the list to compare with the local quests.
             quest_import_ids = [q.import_id for q in shared_quests]
 
         # Need local import_ids so the template can indicate which library quests already exist locally
         local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
+        colliding_names = get_colliding_quest_names(shared_quests)
 
         context = {
             'category': library_category,
@@ -651,6 +809,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             'category_displayed_quests': shared_quests,
             'local_category': local_category,
             'local_quest_import_ids': local_quest_import_ids,
+            'colliding_names': colliding_names,
         }
         return render(request, self.template_name, context)
 
@@ -665,16 +824,17 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         Returns:
             HttpResponseRedirect: Redirects to the inactive campaigns view after import.
 
-        Raises:
-            PermissionDenied: If a campaign with the same import ID already exists locally.
+            HttpResponseRedirect: back to the Library with an explanation when this deck
+                already has the campaign.
         """
         # Set the local schema as dest_schema for later use
         dest_schema = connection.schema_name
 
-        # Block import if campaign already exists locally (shouldn't happen because import button would be disabled)
-        local_category_qs = Category.objects.filter(import_id=campaign_import_id)
-        if local_category_qs.exists():
-            raise PermissionDenied(f'Campaign with import ID {campaign_import_id} already exists in the current deck.')
+        # The real check behind the confirmation page's disabled button, which a stale tab
+        # or a resubmitted form gets past (#2373).
+        local_category = Category.objects.filter(import_id=campaign_import_id).first()
+        if local_category:
+            return redirect_already_imported(request, local_category, 'campaign', 'library:category_list')
 
         with library_schema_context():
             category = get_published_library_object(Category, campaign_import_id)
@@ -685,7 +845,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
             # Use dest_schema because current schema is library
             try:
-                import_campaign_to(
+                imported = import_campaign_to(
                     destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
                 )
             except LibraryTransferError as error:
@@ -709,25 +869,36 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
             "is reachable on the quest map."
         )
+        tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
         # The campaign will be deactivated by import_campaign_to()
         return redirect('quests:categories_inactive')
 
 
 class ExportPermissionMixin:
-    def _require_export_permission(self, request):
-        """
-        Ensure the requesting user has permission to perform an export.
+    """Guards the export endpoints with the same rule that decides whether to offer them.
 
-        A user is allowed to export if either:
-        - They are the configured deck owner, or
-        - `allow_staff_export` is enabled in the site configuration and the user is staff.
+    `SiteConfig.can_user_export_to_library` is that rule, and it is asked here rather than
+    restated, so the endpoint and the Share buttons cannot drift apart. A second copy of the
+    rule is worse than a long one: whichever clause it is missing becomes an endpoint that
+    allows what no button offers, and nothing points at the difference (#2368).
+    """
+
+    def _require_export_permission(self, request):
+        """Refuse the request unless this user may share from this deck.
+
+        Args:
+            request (HttpRequest): the current request, for the user and its deck.
+
+        Returns:
+            None. Returns normally when the export may proceed.
 
         Raises:
-            PermissionDenied: If the requesting user does not have export permission.
+            PermissionDenied: if the user may not export. The message names the usual
+                reason, which is a teacher sharing on a deck where the owner has not
+                turned staff sharing on.
         """
-        config = SiteConfig.get()
-        if not (config.allow_staff_export or request.user == config.deck_owner):
+        if not SiteConfig.get().can_user_export_to_library(request.user):
             raise PermissionDenied("Only the deck owner can export unless allow_staff_export is enabled.")
 
 
@@ -782,8 +953,8 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         Returns:
             HttpResponseRedirect: Redirect to the main quests list after successful export.
 
-        Raises:
-            PermissionDenied: If a quest with the same import ID already exists in the library.
+            HttpResponseRedirect: back to the deck's quests with an explanation when the
+                Library already has the quest.
         """
         self._require_export_permission(request)
 
@@ -807,36 +978,41 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
-            if Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists():
-                raise PermissionDenied(f"A quest with import_id {quest.import_id} already exists in the shared library.")
+            already_shared = Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists()
 
-        # Perform export
-        shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        if already_shared:
+            return redirect_already_shared(request, quest, 'quest', 'quests:quests')
 
-        with library_schema_context():
-            # Get the newly exported quest
-            exported_quest = Quest.objects.get(import_id=quest.import_id)
+        # One transaction over the push, the notification it raises and the origin row it
+        # records: a reviewer told to come and look at content, or an attribution pointing
+        # at content, must not outlive a failure that rolled the content back (#2372).
+        with transaction.atomic():
+            shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
-            config = SiteConfig.get()
-            sender = config.deck_ai
+            with library_schema_context():
+                # Get the newly exported quest
+                exported_quest = Quest.objects.get(import_id=quest.import_id)
 
-            recipients = User.objects.filter(is_active=True, is_staff=True)
+                config = SiteConfig.get()
+                sender = config.deck_ai
 
-            # Notification sent to all active Library staff about the export
-            notify.send(
-                sender=sender,
-                recipient=None,
-                affected_users=list(recipients),
-                verb=f"{request.user} exported a quest to the library from {source_schema}:",
-                action=quest,
-                target=exported_quest,
-                icon="<i class='fa fa-book'></i>"
-            )
+                recipients = User.objects.filter(is_active=True, is_staff=True)
 
-            # Email active Library staff so they know there's a quest to review/publish (#1949).
-            email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
+                # Notification sent to all active Library staff about the export
+                notify.send(
+                    sender=sender,
+                    recipient=None,
+                    affected_users=list(recipients),
+                    verb=f"{request.user} exported a quest to the library from {source_schema}:",
+                    action=quest,
+                    target=exported_quest,
+                    icon="<i class='fa fa-book'></i>"
+                )
 
-            record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
+                # Email active Library staff so they know there's a quest to review/publish (#1949).
+                email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
+
+                record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
 
         # Success message displayed on local deck
         link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
@@ -846,6 +1022,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             "it will appear in the Library once they review and publish it."
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
 
@@ -929,8 +1106,8 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         Returns:
             HttpResponseRedirect: Redirect to the quests categories list on success.
 
-        Raises:
-            PermissionDenied: If a campaign with the same import ID already exists in the shared library.
+            HttpResponseRedirect: back to the deck's campaigns with an explanation when the
+                Library already has the campaign.
         """
         self._require_export_permission(request)
 
@@ -948,44 +1125,45 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         source_deck_url = request.tenant.get_root_url()
 
         with library_schema_context():
-            # Block if campaign already exists in library
-            if Category.objects.filter(import_id=campaign.import_id).exists():
-                raise PermissionDenied(
-                    f"A campaign with import_id {campaign.import_id} already exists in the shared library."
+            already_shared = Category.objects.filter(import_id=campaign.import_id).exists()
+
+        if already_shared:
+            return redirect_already_shared(request, campaign, 'campaign', 'quests:categories')
+
+        # One transaction over the push, the notification it raises and the origin rows it
+        # records, for the same reason as the quest push above (#2372).
+        with transaction.atomic():
+            shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+
+            with library_schema_context():
+                exported_campaign = Category.objects.get(import_id=campaign.import_id)
+
+                config = SiteConfig.get()
+                sender = config.deck_ai
+                recipients = User.objects.filter(is_active=True, is_staff=True)
+
+                notify.send(
+                    sender=sender,
+                    recipient=None,
+                    affected_users=list(recipients),
+                    verb=f"{request.user} exported a campaign to the library from {source_schema}:",
+                    action=campaign,
+                    target=exported_campaign,
+                    icon="<i class='fa fa-book'></i>",
                 )
 
-        # Export campaign and quests
-        shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+                # Email active Library staff so they know there's a campaign to review/publish (#1949).
+                email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
 
-        with library_schema_context():
-            exported_campaign = Category.objects.get(import_id=campaign.import_id)
-
-            config = SiteConfig.get()
-            sender = config.deck_ai
-            recipients = User.objects.filter(is_active=True, is_staff=True)
-
-            notify.send(
-                sender=sender,
-                recipient=None,
-                affected_users=list(recipients),
-                verb=f"{request.user} exported a campaign to the library from {source_schema}:",
-                action=campaign,
-                target=exported_campaign,
-                icon="<i class='fa fa-book'></i>",
-            )
-
-            # Email active Library staff so they know there's a campaign to review/publish (#1949).
-            email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
-
-            record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
-            # ...and each quest that travelled with it, so a quest imported on its own still
-            # says where it came from
-            record_push_origin(
-                ContentOrigin.QUEST,
-                exported_campaign.quest_set.values_list('import_id', flat=True),
-                request,
-                source_deck_url,
-            )
+                record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
+                # ...and each quest that travelled with it, so a quest imported on its own still
+                # says where it came from
+                record_push_origin(
+                    ContentOrigin.QUEST,
+                    exported_campaign.quest_set.values_list('import_id', flat=True),
+                    request,
+                    source_deck_url,
+                )
 
         link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
@@ -995,6 +1173,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
+        warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')
 
 
@@ -1053,7 +1232,7 @@ class CategoryDetailView(NonPublicOnlyViewMixin, TemplateView):
         with library_schema_context():
             category = get_object_or_404(Category, import_id=campaign_import_id)
 
-            displayed_quests = list(category.current_quests())
+            displayed_quests = load_library_quests_for_render(list(category.current_quests()))
 
             if displayed_quests:
                 quest_info = [

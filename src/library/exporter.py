@@ -1,41 +1,30 @@
 from datetime import date
 from uuid import uuid4
 
+from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
 
-from .transfer import TransferResult, snapshot_quest, write_quests
+from .transfer import TransferResult, build_available_quest_name, snapshot_quest, write_quests
 from .utils import library_schema_context, get_library_conflicting_quests
 
 
 def build_library_clone_name(local_name, taken_names):
     """Return a name for a clone of `local_name` that is free in the Library.
 
-    Quest names are unique per schema and capped at the model's max_length, so a
-    clone of a quest whose original is already in the Library needs a name of its
-    own. Falls back to numbered suffixes when the dated one is also taken.
+    A clone of a quest whose original is already in the Library needs a name of its own,
+    and dating it says what the copy is. The uniqueness work itself is shared with the
+    import direction, which faces the same constraint from the other side.
 
     Args:
         local_name (str): the source quest's name.
         taken_names (set[str]): every name already spoken for in the Library.
-            Must include archived quests: they still hold their name against the
-            unique constraint even though the default manager hides them.
 
     Returns:
         str: a name not in `taken_names`, within the field's max_length.
     """
-    max_len = Quest._meta.get_field('name').max_length or 50
-    base_suffix = f" (Exported on {date.today()})"
-
-    candidate = local_name[:max_len - len(base_suffix)] + base_suffix
-    counter = 1
-    while candidate in taken_names:
-        full_suffix = f"{base_suffix} #{counter}"
-        candidate = local_name[:max_len - len(full_suffix)] + full_suffix
-        counter += 1
-
-    return candidate
+    return build_available_quest_name(local_name, taken_names, f" (Exported on {date.today()})")
 
 
 def clone_quests_into_library(*, source_schema, quests):
@@ -141,8 +130,13 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
     """
     with schema_context(source_schema):
         category = Category.objects.get(import_id=campaign_import_id)
-        # select_related: snapshot_quest reads quest.campaign for every row.
-        quests = Quest.objects.select_related('campaign').filter(published=True, campaign=category)
+        # select_related: snapshot_quest reads quest.campaign for every row, and its
+        # questions, which are a query each without the prefetch.
+        quests = (
+            Quest.objects.select_related('campaign')
+            .prefetch_related('question_set')
+            .filter(published=True, campaign=category)
+        )
 
         # filter out conflicts (they'll be cloned and exported later)
         if skip_import_ids:
@@ -191,6 +185,27 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         Category.DoesNotExist: If the campaign is not found in the source schema.
     """
 
+    # One transaction for the whole push. `write_quests` is atomic per batch, but this
+    # runs several of them (the campaign's own quests, then the conflict clones) with
+    # a campaign write between, so without this a failure part-way leaves the Library
+    # holding some of a campaign and the sharer being told nothing arrived (#2372).
+    with transaction.atomic():
+        return _push_campaign(source_schema, campaign_import_id)
+
+
+def _push_campaign(source_schema, campaign_import_id):
+    """Do the work of `export_campaign_and_copy_quests`, inside its transaction.
+
+    Split out so the transaction is one line at the top rather than an indent around
+    everything, and so the steps below read in the order they happen.
+
+    Args:
+        source_schema (str): Tenant schema that contains the source campaign.
+        campaign_import_id (UUID): Import ID of the campaign to export.
+
+    Returns:
+        TransferResult: as `export_campaign_and_copy_quests` describes.
+    """
     # Step 1: get local campaign and quests first (in source schema)
     with schema_context(source_schema):
         local_campaign = Category.objects.get(import_id=campaign_import_id)
@@ -245,4 +260,5 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
         quests=exported.quests + cloned.quests,
         unmet_prereqs=sorted(set(exported.unmet_prereqs) | set(cloned.unmet_prereqs)),
         skipped_quests=skipped_quests,
+        dropped_common_data=sorted(set(exported.dropped_common_data) | set(cloned.dropped_common_data)),
     )

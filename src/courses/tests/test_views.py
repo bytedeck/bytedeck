@@ -16,6 +16,7 @@ from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrati
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
+from courses.tests.utils import patch_registration_xp
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data, model_to_form_data, generate_formset_data
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
@@ -143,7 +144,7 @@ class RankViewTests(ByteDeckTenantTestCase):
         data = {
             'name': 'My Sample rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_create'), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -157,7 +158,7 @@ class RankViewTests(ByteDeckTenantTestCase):
         data = {
             'name': 'My updated rank',
             'xp': 23,
-            'fa_icon': 'fa fa-circle-o'
+            'fa_icon': 'circle-o'
         }
         response = self.client.post(reverse('courses:rank_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('courses:ranks'))
@@ -185,7 +186,7 @@ class RankViewTests(ByteDeckTenantTestCase):
 
         # test messages for quest_update
         response = self.client.post(reverse('courses:rank_update', args=[rank.id]), data={
-            'name': 'rank', 'xp': 0, 'fa_icon': 'fa fa-circle-o'
+            'name': 'rank', 'xp': 0, 'fa_icon': 'circle-o'
         })
         messages = list(response.wsgi_request._messages)  # unittest dont carry messages when redirecting
         self.assertEqual(response.status_code, 302)
@@ -1503,13 +1504,12 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
-    @patch('courses.models.CourseStudent.xp')
-    def test_SemesterArchive__student_with_negative_xp__view(self, registration_xp):
+    @patch_registration_xp(-10)
+    def test_SemesterArchive__student_with_negative_xp__view(self, registration_split):
         """
             Test if SemesterArchive returns a warning when there is a course student with
             a negative xp.
         """
-        registration_xp.return_value = -10
         self.client.force_login(self.test_teacher)
 
         post_data = {
@@ -1880,9 +1880,11 @@ class TestAjax_TagChart(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create the target user whose tag chart is requested, and cache the active semester."""
+        """Create the target user whose tag chart is requested, registered in the deck's
+        semester so their work counts toward it, and cache that semester."""
         cls.user = baker.make(User)
         cls.semester = SiteConfig.get().active_semester
+        baker.make(CourseStudent, user=cls.user, course=baker.make(Course), semester=cls.semester)
 
     def _tagged_quest_with_submissions(self, tag, xp, max_xp, quantity):
         """Make a tagged quest and `quantity` approved, active-semester submissions for self.user.

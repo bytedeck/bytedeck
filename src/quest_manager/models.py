@@ -841,45 +841,49 @@ class QuestSubmissionQuerySet(models.query.QuerySet):
     def get_semester(self, semester):
         """Submissions made in `semester`.
 
+        None is a semester's worth of work in its own right rather than a missing filter
+        (issue #2413): a student between terms, and staff who never register, are in no
+        semester, so what they hand in is stamped with none. Reading those rows back is the
+        only way the student who made them can see them.
+
         Args:
-            semester: a Semester or its id, or None when no semester is open.
+            semester: a Semester or its id, or None for the work that belongs to no semester.
 
         Returns:
-            QuestSubmissionQuerySet: the submissions in that semester, or an empty queryset
-            when there is no semester (no semester is open). Submissions whose semester was
-            deleted are left out either way: they belong to no semester rather than to this one.
+            QuestSubmissionQuerySet: the submissions in that semester, or the unstamped ones
+            when there is no semester.
         """
-        if semester is None:
-            return self.none()
         return self.filter(semester=semester)
 
-    def in_open_semesters(self):
-        """Submissions made in any semester that is open right now.
+    def in_open_or_no_semester(self):
+        """Submissions no finished term owns: what a deck-wide staff view of current work holds.
 
-        What a deck-wide staff view of "current" work should filter on: a deck can run
-        several semesters at once (issue #2157 Phase 3, #1781), and scoping to the deck's
-        default would hide everything the other cohort hands in.
+        Every open semester's work, since a deck can run several at once (issue #2157 Phase
+        3, #1781) and scoping to the deck's default would hide everything the other cohort
+        hands in. Plus the work stamped with no semester at all (issue #2413), which is what
+        someone registered in none hands in: a student between terms doing a quest marked
+        available outside a course, or staff trying one out. That work reaches no teacher's
+        own queue, since the queue is built from a registration and they hold none, so the
+        deck-wide view is the only place it can be approved from.
 
         Returns:
-            QuestSubmissionQuerySet: the submissions whose semester is open, empty between
-            semesters.
+            QuestSubmissionQuerySet: the submissions in an open semester or in none.
         """
         from courses.models import Semester  # locally, since courses imports this module
 
-        return self.filter(semester__status=Semester.Status.OPEN)
+        return self.filter(Q(semester__status=Semester.Status.OPEN) | Q(semester__isnull=True))
 
     def get_not_semester(self, semester):
         """Submissions made outside `semester`.
 
         Args:
-            semester: a Semester or its id, or None when no semester is open.
+            semester: a Semester or its id, or None for the work that belongs to no semester.
 
         Returns:
-            QuestSubmissionQuerySet: the submissions from any other semester, or all of them
-            when there is no semester (with none open, every submission is from a past one).
+            QuestSubmissionQuerySet: the submissions from any other semester. For None that
+            is every stamped submission: someone in no semester has all their past terms
+            behind them, and the unstamped work is what they are doing now.
         """
-        if semester is None:
-            return self
         return self.exclude(semester=semester)
 
     def get_completed_before(self, date):
@@ -944,9 +948,11 @@ class QuestSubmissionManager(models.Manager):
             exclude_quests_not_published (bool): drop submissions of draft quests.
             include_related (bool): join the related objects the templates almost always need.
             user (User): whose semester to limit to. Their registration names it (issue #2157
-                Phase 3). Without a user this is a deck-wide staff view, which covers every
-                open semester: a deck can run two cohorts on different calendars, and a
-                teacher's queues have to hold both cohorts' work, not one semester's.
+                Phase 3), and someone holding none is in no semester, so their work is the
+                work stamped with none. Without a user this is a deck-wide staff view, which
+                covers every open semester and the unstamped work besides: a deck can run two
+                cohorts on different calendars, and a teacher's queues have to hold both
+                cohorts' work rather than one semester's.
 
         Returns:
             QuestSubmissionQuerySet: the matching submissions.
@@ -955,7 +961,7 @@ class QuestSubmissionManager(models.Manager):
 
         qs = QuestSubmissionQuerySet(self.model, using=self._db)
         if active_semester_only:
-            qs = qs.get_semester(semester_for(user)) if user is not None else qs.in_open_semesters()
+            qs = qs.get_semester(semester_for(user)) if user is not None else qs.in_open_or_no_semester()
         if exclude_archived_quests:
             qs = qs.exclude_archived_quests()
         if exclude_quests_not_published:
@@ -1022,8 +1028,9 @@ class QuestSubmissionManager(models.Manager):
 
         Returns:
             QuestSubmissionQuerySet: their completed submissions outside their current
-            semester, awaiting-approval ones first. Between semesters they are in none, so
-            every completed submission counts as past.
+            semester, awaiting-approval ones first. For someone registered in no semester
+            that is every submission naming one, since the terms they were in are all behind
+            them and the unstamped work is what they are doing now.
         """
         from courses.models import semester_for  # locally, since courses imports this module
 
@@ -1119,16 +1126,20 @@ class QuestSubmissionManager(models.Manager):
     def create_submission(self, user, quest):
         """Create and return a new in-progress QuestSubmission of ``quest`` for ``user``.
 
-        The submission is placed in the active semester, with an ordinal
-        continuing from the user's last submission of this quest (1 for a first
-        attempt).
+        The submission is placed in the semester the student is registered in, with
+        an ordinal continuing from the user's last submission of this quest (1 for
+        a first attempt). Someone registered in none (staff trying out a quest, a
+        student between terms) is in no semester, so theirs is stamped with none
+        (issue #2441) rather than with a term they were never in.
 
-        Concurrency (issue #1345): the partial unique constraint on
-        QuestSubmission forbids a second *never-yet-completed* in-progress
+        Concurrency (issue #1345): the partial unique constraints on
+        QuestSubmission forbid a second *never-yet-completed* in-progress
         submission of the same quest per user/semester -- exactly what a
-        concurrent "double start" (e.g. two browser tabs) would create. If this
-        call loses that race, the existing in-progress submission is returned
-        instead of a duplicate.
+        concurrent "double start" (e.g. two browser tabs) would create. A separate
+        constraint covers the submissions that name no semester (issue #2413),
+        which Postgres would otherwise treat as all distinct. If this call loses
+        that race, the existing in-progress submission is returned instead of a
+        duplicate.
 
         :param user: the student starting the quest.
         :param quest: the Quest being started.
@@ -1147,7 +1158,8 @@ class QuestSubmissionManager(models.Manager):
         from courses.models import semester_for  # locally, since courses imports this module
 
         # the student's own semester, not the deck's: with more than one semester open the
-        # deck can't say which one this student earns XP in, but their registration can
+        # deck can't say which one this student earns XP in, but their registration can, and
+        # someone holding no registration is in none
         semester = semester_for(user)
         new_submission = QuestSubmission(
             quest=quest,
@@ -1259,6 +1271,42 @@ class QuestSubmissionManager(models.Manager):
 
         return xp_by_course
 
+    def adopt_unstamped_in_progress(self, user, semester):
+        """Move the work `user` has on the go that belongs to no semester into `semester`.
+
+        Someone registered in no semester hands work in stamped with none (issue #2441): the
+        welcome quest a new student does before joining a course, or a quest marked available
+        outside a course, done between terms. Once they join a course, that work is in
+        neither their in-progress list (which is now their new semester's) nor their
+        available list (which drops a quest they already have a submission of), so it would
+        sit where nobody can reach it. Re-attaching it is what mark_returned() already does
+        for a submission returned in a later semester (issue #1231).
+
+        Only work still in progress moves. What they finished outside a semester was
+        finished there, and its XP belongs to no term rather than to the one they are
+        starting.
+
+        Args:
+            user: the student who just registered, or their id.
+            semester: the Semester they registered in, or its id.
+
+        Returns:
+            int: how many submissions were moved.
+        """
+        # the base manager throughout: a submission of a quest since archived or unpublished
+        # is still theirs to finish, and the default manager would leave it behind
+        already_in_semester = self.model._base_manager.filter(
+            user=user, semester=semester, is_completed=False, first_time_completed__isnull=True,
+        ).values('quest_id')
+        return self.model._base_manager.filter(
+            user=user, semester__isnull=True, is_completed=False,
+        ).exclude(
+            # a never-completed submission can't join one already in that semester: the
+            # partial unique constraint holds one per (user, quest, semester), and it is the
+            # rule this would be breaking rather than an accident to work around
+            Q(first_time_completed__isnull=True) & Q(quest_id__in=already_in_semester),
+        ).update(semester=semester)
+
     def remove_in_progress(self, semester=None):
         """Delete the submissions students had on the go but never completed.
 
@@ -1335,6 +1383,16 @@ class QuestSubmission(models.Model):
                 fields=["user", "quest", "semester"],
                 condition=Q(is_completed=False) & Q(first_time_completed__isnull=True),
                 name="unique_inprogress_submission_per_quest_semester",
+            ),
+            # The same rule for the work that belongs to no semester (issue #2413). Postgres
+            # treats NULLs as distinct, so the constraint above never sees two unstamped
+            # rows as a duplicate and the double-start race goes unguarded. Semester is left
+            # out of the fields and pinned in the condition instead, which is the same rule
+            # written so the index can compare the rows.
+            models.UniqueConstraint(
+                fields=["user", "quest"],
+                condition=Q(is_completed=False) & Q(first_time_completed__isnull=True) & Q(semester__isnull=True),
+                name="unique_inprogress_submission_per_quest_no_semester",
             ),
         ]
 
