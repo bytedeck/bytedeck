@@ -525,6 +525,19 @@ class SemesterModelTest(ByteDeckTenantTestCase):
         expected = timezone.make_aware(datetime(2019, 9, 9, 23, 59, 59, 999999), timezone.get_default_timezone())
         self.assertEqual(dt, expected)
 
+    def test_get_queryset__orders_semesters_sharing_a_first_day_by_record(self):
+        """A new semester takes today as its default first day, so a deck setting up a second
+        cohort has two starting on the same date. Ordering on the date alone would let the
+        database return those two in either order, reshuffling a registration form's semester
+        list between page loads, so the oldest record comes first among them."""
+        first_day = self.semester.first_day
+        first = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+        second = baker.make(Semester, first_day=first_day, last_day=self.semester.last_day)
+
+        sharing_a_first_day = Semester.objects.filter(first_day=first_day)
+
+        self.assertEqual(list(sharing_a_first_day), [self.semester, first, second])
+
     def test_get_datetimes_by_days_since_start__answers_a_run_of_days_off_one_read(self):
         """A whole run of class days at once, each the same date asking for it singly gives,
         and read from the semester's excluded days once however many days are wanted: the

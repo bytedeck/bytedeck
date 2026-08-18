@@ -329,7 +329,18 @@ class SemesterManager(models.Manager.from_queryset(SemesterQuerySet)):
     e.g. Semester.objects.open()."""
 
     def get_queryset(self):
-        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day')
+        """Semesters newest term first, with a tiebreaker so the order is stable.
+
+        Two semesters can start on the same day (a new one takes today as its default first
+        day, so a deck setting up a second cohort has two), and ordering by the date alone
+        leaves the database free to return those two in either order: a registration form's
+        semester list would then reshuffle between page loads.
+
+        Returns:
+            SemesterQuerySet: every semester, latest first day first, oldest record first
+            among semesters sharing one.
+        """
+        return SemesterQuerySet(self.model, using=self._db).order_by('-first_day', 'id')
 
     def get_current(self, as_queryset=False):
         """The semester students are currently earning XP in, or nothing when none is open.
