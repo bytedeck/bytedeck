@@ -974,6 +974,76 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNotNone(assertion, 'the badge was not granted')
         self.assertEqual(assertion.course, maths)
 
+    def submit_with_payload(self, quest, extra=None):
+        """Hand in `quest` with an event-handler payload as the comment text.
+
+        Args:
+            quest (Quest): the quest to hand in.
+            extra (dict | None): extra POST data, which decides which submission form
+                the view builds.
+
+        Returns:
+            tuple[str, str]: the stored comment text, and the page a teacher then sees.
+        """
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        data = {'complete': True, 'comment_text': '<img src=x onerror="alert(1)">'}
+        data.update(extra or {})
+
+        self.client.force_login(self.test_student)
+        self.client.post(reverse('quests:complete', args=[submission.id]), data=data, follow=True)
+        stored = Comment.objects.order_by('-id').first()
+
+        self.client.force_login(self.test_teacher)
+        page = self.client.get(reverse('quests:submission', args=[submission.id]), follow=True)
+        return stored.text, page.content.decode()
+
+    def test_complete__strips_an_event_handler_from_a_submission_with_an_attachment(self):
+        """A comment handed in alongside a file cannot carry an event handler.
+
+        Attaching a file puts request.FILES on the POST, which is what makes the view build
+        SubmissionForm rather than the quick-reply form. Comment text is rendered with |safe
+        to the teacher who marks the work, so an `onerror` surviving here runs for them.
+        """
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+
+        stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
+        """The same holds on a quest whose XP the student enters.
+
+        That branch builds SubmissionFormCustomXP, which is the other form the view can
+        choose, and it inherits the sanitizing now that SubmissionForm does it.
+        """
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_xp=10)
+
+        stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
+        """Sanitizing must not cost the rich formatting the editor is there to provide."""
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+        self.client.force_login(self.test_student)
+
+        self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': '<b>bold</b> and <i>italic</i>', 'attachments': upload},
+            follow=True,
+        )
+
+        stored = Comment.objects.order_by('-id').first()
+        self.assertIn('<b>bold</b>', stored.text)
+        self.assertIn('<i>italic</i>', stored.text)
+
     def test_complete__auto_approved_message_signs_off_on_its_own_line(self):
         """Handing in an auto-approved quest signs off with a line break, not a literal <br>.
 

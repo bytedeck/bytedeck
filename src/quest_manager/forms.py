@@ -308,7 +308,27 @@ class TAQuestForm(QuestForm):
         remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
-class SubmissionForm(XPCourseChoiceMixin, forms.Form):
+class SanitizeCommentTextMixin:
+    """Sanitizes HTML entered in a form's `comment_text` field.
+
+    Comment text is written by anyone, including students, and is rendered with |safe,
+    so it must be sanitized or an injected script runs for whoever reads the comment
+    (issue #1343). It carries rich HTML from the Summernote editor, so the sanitizer is
+    an allow-list rather than a blanket escape: legitimate formatting survives while
+    scripts and event-handler attributes do not (issue #2113).
+
+    Every form with a `comment_text` field needs this, the Summernote-backed ones
+    included. The Summernote "Safe" widget bleaches on its way in but allows every
+    attribute (see `ByteDeckSummernoteSafeInplaceWidget.value_from_datadict`), so it
+    stops a `<script>` tag and not an `onerror=`.
+    """
+
+    def clean_comment_text(self):
+        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
+        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
+
+
+class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
 
     # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
@@ -352,22 +372,6 @@ class SubmissionFormStaff(SubmissionForm):
             ],
             attrs={'data-theme': 'bootstrap'}
         )
-
-
-class SanitizeCommentTextMixin:
-    """Sanitizes HTML entered in a form's `comment_text` field.
-
-    These plain-text (non-wysiwyg) comment fields are accessible to all users and
-    rendered with |safe, so they must be sanitized to stop injected scripts from
-    executing (issue #1343). In practice they carry rich HTML from the Summernote
-    editor, so we sanitize with an allow-list rather than escaping everything,
-    keeping legitimate formatting while stripping scripts and event handlers
-    (issue #2113).
-    """
-
-    def clean_comment_text(self):
-        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
-        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
 
 
 class SubmissionReplyForm(SanitizeCommentTextMixin, forms.Form):
