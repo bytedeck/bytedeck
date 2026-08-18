@@ -364,6 +364,21 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # the badge styles ride along via the ModelAdmin's Media declaration
         self.assertContains(response, "css/admin_deck_status.css")
 
+    def test_deletion_requested_text__shown_and_filterable_in_changelist(self):
+        """A standing deletion request shows its date in the changelist beside the
+        Subscription column, and the list offers the empty/non-empty filter so an
+        operator can pull every requested deck up for review (#2330)."""
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            deletion_requested_on=date(2026, 8, 1), deletion_requested_by='the-owner')
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Aug. 1, 2026')
+        # the EmptyFieldListFilter's query parameter marks the filter's presence
+        self.assertContains(response, 'deletion_requested_on__isempty')
+
     def test_subscription_status_text__no_status_for_public_schema(self):
         """The public schema row isn't a deck, so its Subscription cell is empty
         (None), while a real deck row renders its status badge."""

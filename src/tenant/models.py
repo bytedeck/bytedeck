@@ -112,9 +112,25 @@ class Tenant(TenantMixin):
         # the #2044 retirement policy; the help text stays free of issue numbers
         # (they mean nothing to an admin reading the form)
         help_text="Arms this deck for deletion: deletion from the admin is refused until an "
-                  "admin deliberately turns this on -- and even then only a deck that has been suspended "
-                  "for over a year, counted from when its owner was first sent the suspension notice, "
-                  "can actually be deleted."
+                  "admin deliberately turns this on -- and even then only a suspended deck whose "
+                  "owner has requested deletion, or one that has been suspended for over a year "
+                  "(counted from when its owner was first sent the suspension notice), can "
+                  "actually be deleted."
+    )
+
+    # An owner's standing request to have the deck deleted, made from the deck's
+    # subscription page. Advisory: an operator still reviews it and arms
+    # can_delete to honor it (the owner may not be a school deck's only
+    # stakeholder), but it lets deletion skip the year-long suspension clock,
+    # and it silences the deck's lifecycle reminder emails.
+    deletion_requested_on = models.DateField(
+        blank=True, null=True, editable=False,
+        help_text="When the deck owner asked for this deck to be deleted; blank = no standing request. "
+                  "Set and cleared by the owner from the deck's subscription page."
+    )
+    deletion_requested_by = models.CharField(
+        max_length=255, blank=True, default='', editable=False,
+        help_text="Who asked (their username at the time of the request), for the audit trail."
     )
 
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
@@ -465,12 +481,16 @@ class Tenant(TenantMixin):
 
         * ``can_delete`` was deliberately armed by an admin (default False);
         * the deck is SUSPENDED -- an active subscription, a running trial, or a
-          managed-manually deck (both dates blank) is never deletable;
-        * the deck's ``deletion_date`` has arrived: a year of suspension, measured
-          from the later of the suspension start and the episode's first suspended
-          notice, so deletion can never outrun the year the warning email
-          promised. A deck that was never warned is never deletable (its clock
-          has not started);
+          managed-manually deck (both dates blank) is never deletable, even when
+          its owner has asked for deletion (the operator controls the dates, so
+          suspending a deck whose owner wants out is an admin edit away);
+        * the waiting is over, either way it can be: the deck's owner has a
+          standing deletion request (``deletion_requested_on``), or the deck's
+          ``deletion_date`` has arrived (a year of suspension, measured from the
+          later of the suspension start and the episode's first suspended
+          notice, so unrequested deletion can never outrun the year the warning
+          email promised; a deck never warned at all is never deletable that
+          way, since its clock has not started);
         * never the public schema (deleting it would take down the installation).
         """
         from django_tenants.utils import get_public_schema_name
@@ -481,6 +501,10 @@ class Tenant(TenantMixin):
             return False
         if not self.is_suspended:  # active sub, on trial, or managed manually
             return False
+        if self.deletion_requested_on is not None:
+            # the owner asked: arming can_delete is the operator's review, and
+            # together they outrank the year clock
+            return True
         return localdate() >= self.deletion_date
 
     def sync_from_stripe_subscription(self, subscription):

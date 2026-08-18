@@ -1,0 +1,21 @@
+{# Operator notification: a deck owner asked for their deck to be deleted (#2330). #}
+{# Sent to SUPPORT_EMAIL, never to deck users, so it names everything an operator #}
+{# needs without opening the admin. #}
+<p>The owner of a deck has asked for it to be <strong>deleted</strong>.</p>
+
+{# the deck link stays OUTSIDE the <strong>: textify/html2text swallows the space before a link that opens inside one #}
+<p>Deck: <a href="{{ deck.get_root_url }}">{{ deck.primary_domain_url }}</a>
+  (schema <strong>{{ deck.schema_name }}</strong>)<br>
+  Requested by: <strong>{{ requested_by }}</strong>{% if owner_email %} ({{ owner_email }}){% endif %}<br>
+  Requested on: <strong>{{ deck.deletion_requested_on }}</strong><br>
+  Subscription status: <strong>{{ status_label }}</strong></p>
+
+<p>Nothing happens on its own. To honor the request: review the deck (the owner may not be
+  its only stakeholder), make sure any Stripe subscription is canceled, suspend the deck if
+  it is not already (its dates are editable in the admin), then arm <em>Can delete</em> on
+  the deck and delete it from the tenant admin. The owner's request stands in for the
+  year-long suspension clock, so a suspended, armed deck with a request can be deleted
+  right away. The owner can withdraw the request from their subscription page at any time,
+  and their reminder emails stay muted while it stands.</p>
+
+{% include "tenant/email/_email_footer.html" %}

@@ -111,7 +111,16 @@ def evaluate_deck_notices(deck):
 
     Pure evaluation -- no ledger writes, no delivery. Reads the deck's derived
     status properties and the DeckNotice ledger.
+
+    A deck whose owner has a standing deletion request gets NO notices of any
+    kind: asking for the deck to be deleted is the strongest possible signal
+    that its owner is done hearing from us, and every notice this engine sends
+    is a nudge toward keeping the deck alive. Canceling the request (from the
+    subscription page) turns the notices back on.
     """
+    if deck.deletion_requested_on is not None:
+        return []
+
     due = []
     today = localdate()
 
@@ -342,6 +351,12 @@ def record_and_deliver_payment_failure(deck, invoice_id):
     Returns:
         str: A short summary string for the webhook log.
     """
+    # a standing deletion request mutes this like every other lifecycle notice
+    # (the webhook path doesn't go through evaluate_deck_notices, so the mute
+    # has to be applied here too); the operator, not the owner, untangles any
+    # still-live Stripe subscription when honoring the request
+    if deck.deletion_requested_on is not None:
+        return 'deletion requested: payment-failure notice muted'
     period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
     if not settings.DECK_NOTICES_ENABLED:
         return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"
