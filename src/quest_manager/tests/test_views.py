@@ -3036,6 +3036,31 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         cls.other_student = User.objects.create_user('other_student')
         cls.quest = baker.make(Quest)
 
+    def test_hide__escapes_markup_in_the_quest_name(self):
+        """A quest name carrying markup reaches the message as text, not as markup.
+
+        Messages are rendered as HTML when they are built safely, so a name interpolated
+        into one has to be escaped on the way in or it becomes part of the page (#2498).
+        """
+        self.quest.name = "<script>alert(1)</script>"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_hide__keeps_the_messages_own_markup(self):
+        """Escaping the name must not also escape the emphasis the message adds."""
+        self.quest.name = "A Quest To Hide"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertContains(response, "<strong>A Quest To Hide</strong>")
+
     def test_hide__adds_the_quest_to_the_students_hidden_list(self):
         """Hiding a quest hides it for that student and sends them back to their quests page."""
         self.client.force_login(self.test_student)
@@ -3739,9 +3764,11 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(before, after)
         self.assertTrue(Category.objects.filter(id=race_campaign.id).exists())
+        # The apostrophe is left out of the needle: messages are escaped now, so it arrives
+        # as an entity. What is asserted is the part that identifies the message.
         self.assertContains(
             response,
-            "You can't delete this campaign because it contains published quests"
+            "delete this campaign because it contains published quests",
         )
 
     def test_CategoryPublish_view__publishes_campaign_and_quests(self):

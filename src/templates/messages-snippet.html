@@ -23,10 +23,18 @@
     <button type="button" class="close" data-dismiss="alert" aria-label="Close">
         <span aria-hidden="true">&times;</span>
     </button>
+    {% comment %}
+      `message.message` rather than `message`: the inner value keeps its safeness, so a
+      message built with format_html renders its markup and a plain string is escaped.
+      Rendering `message` would escape both, because Message itself is not a safe string.
+      The `safe` tag stays as the escape hatch for a plain string meant to carry markup;
+      before, both branches escaped nothing, so any name interpolated into any message
+      reached the page as HTML (#2498).
+    {% endcomment %}
     {% if 'safe' in message.tags %}
     {{ message|safe }}
     {% else %}
-    {{ message|safe }}
+    {{ message.message }}
     {% endif %}
 </div>
 {% endfor %}

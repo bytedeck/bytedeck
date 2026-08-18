@@ -728,18 +728,21 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         # An imported quest arrives as an unpublished draft with no prerequisite, so it is
         # invisible to students and unreachable on the map. Saying so is the difference
         # between "imported" and "usable", and each step links to the page that does it
         # rather than leaving the reader to find it (#2377).
-        publish_link = f'<a href="{reverse("quests:quest_update", args=[quest.id])}">publish it</a>'
-        prereq_link = f'<a href="{reverse("quests:quest_prereqs_update", args=[quest.id])}">prerequisite</a>'
         messages.success(
             request,
-            f"Successfully imported '{link}' to your deck. Two things left to do before "
-            f"students can see it: <strong>{publish_link}</strong>, and give it a "
-            f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
+            format_html(
+                "Successfully imported '<a href=\"{}\">{}</a>' to your deck. Two things left to do "
+                'before students can see it: <strong><a href="{}">publish it</a></strong>, and give '
+                'it a <strong><a href="{}">prerequisite</a></strong> so it is reachable on the '
+                "quest map.",
+                quest.get_absolute_url(), quest.name,
+                reverse("quests:quest_update", args=[quest.id]),
+                reverse("quests:quest_prereqs_update", args=[quest.id]),
+            )
         )
         tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
@@ -853,21 +856,22 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
-        link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         # As with a single quest: the campaign and its quests arrive unpublished and
         # unreachable, so the import is only half the job (#2377). Publishing is on the
         # campaign's own edit form; the prerequisite belongs to one of its quests, so that
         # step links to the campaign, where they are listed.
-        publish_link = (
-            f'<a href="{reverse("quests:category_update", args=[category.id])}">publish the campaign</a>'
-        )
-        prereq_link = f'<a href="{category.get_absolute_url()}">prerequisite</a>'
         messages.success(
             request,
-            f"Successfully imported '{link}' to your deck. Two things left to do before "
-            f"students can see it: <strong>{publish_link}</strong> (which publishes its "
-            f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
-            "is reachable on the quest map."
+            format_html(
+                "Successfully imported '<a href=\"{}\">{}</a>' to your deck. Two things left to do "
+                'before students can see it: <strong><a href="{}">publish the campaign</a></strong> '
+                "(which publishes its quests), and give its first quest a "
+                '<strong><a href="{}">prerequisite</a></strong> so the campaign is reachable on the '
+                "quest map.",
+                category.get_absolute_url(), category.name,
+                reverse("quests:category_update", args=[category.id]),
+                category.get_absolute_url(),
+            )
         )
         tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
@@ -1015,11 +1019,13 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
 
         # Success message displayed on local deck
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified: "
-            "it will appear in the Library once they review and publish it."
+            format_html(
+                "'<a href=\"{}\">{}</a>' has been shared to the Library. A Library admin has been "
+                "notified: it will appear in the Library once they review and publish it.",
+                quest.get_absolute_url(), quest.name,
+            )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
@@ -1165,11 +1171,13 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                     source_deck_url,
                 )
 
-        link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified: "
-            "it will appear in the Library once they review and publish it."
+            format_html(
+                "'<a href=\"{}\">{}</a>' has been shared to the Library. A Library admin has been "
+                "notified: it will appear in the Library once they review and publish it.",
+                campaign.get_absolute_url(), campaign.name,
+            )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)

@@ -285,7 +285,10 @@ class ProfileDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
         # Add success message
         messages.success(
             self.request,
-            f"The user <b>{user.get_full_name()}</b> and all of their submissions and courses have been successfully deleted."
+            format_html(
+                "The user <b>{}</b> and all of their submissions and courses have been successfully deleted.",
+                user.get_full_name(),
+            )
         )
 
         return redirect(self.success_url)
@@ -636,13 +639,21 @@ def comment_ban(request, profile_id, toggle=False):
             icon=icon,
         )
 
-        messages.warning(request,
-                         "<a href='" + profile.get_absolute_url() + "'>" +
-                         profile.user.username + "</a> banned from commenting publicly")
+        messages.warning(
+            request,
+            format_html(
+                "<a href='{}'>{}</a> banned from commenting publicly",
+                profile.get_absolute_url(), profile.user.username,
+            )
+        )
     else:
         messages.success(
-            request, "Commenting ban removed for <a href='" + profile.get_absolute_url() + "'>" +
-                     profile.user.username + "</a>")
+            request,
+            format_html(
+                "Commenting ban removed for <a href='{}'>{}</a>",
+                profile.get_absolute_url(), profile.user.username,
+            )
+        )
 
     return redirect_to_previous_page(request)
 

@@ -2,6 +2,7 @@ import json
 import re
 import uuid
 
+from django.utils.html import format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -1511,18 +1512,13 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             self.handle_rank_up_notification()
 
-            messages.success(self.request, (
-                "<a href='"
-                + self.submission.get_absolute_url()
-                + "'>Submission of "
-                + self.submission.quest.name
-                + "</a> "
-                + notification_kwargs["verb"]
-                + " for <a href='"
-                + self.submission.user.profile.get_absolute_url()
-                + "'>"
-                + self.submission.user.username
-                + "</a>"
+            messages.success(self.request, format_html(
+                "<a href='{}'>Submission of {}</a> {} for <a href='{}'>{}</a>",
+                self.submission.get_absolute_url(),
+                self.submission.quest.name,
+                notification_kwargs["verb"],
+                self.submission.user.profile.get_absolute_url(),
+                self.submission.user.username,
             ))
 
             return self.form_valid()
@@ -2052,8 +2048,11 @@ def start(request, quest_id):
             # instead of starting a new one, and let them know why (issue #57).
             messages.info(
                 request,
-                f"You already have <strong>{quest.name}</strong> in progress — "
-                "finish this one before starting it again.",
+                format_html(
+                    "You already have <strong>{}</strong> in progress: "
+                    "finish this one before starting it again.",
+                    quest.name,
+                ),
             )
             return redirect(sub)
     else:
@@ -2069,9 +2068,7 @@ def hide(request, quest_id):
 
     messages.warning(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been added to your list of hidden quests.",
+        format_html("<strong>{}</strong> has been added to your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:quests")
@@ -2085,9 +2082,7 @@ def unhide(request, quest_id):
 
     messages.success(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been removed from your list of hidden quests.",
+        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:available_all")
@@ -2440,8 +2435,10 @@ def unflag(request, submission_id):
 
     messages.success(
         request,
-        "Submission <a href='%s'>%s by %s</a> has been unflagged."
-        % (sub.get_absolute_url(), sub.quest_name(), sub.user),
+        format_html(
+            "Submission <a href='{}'>{} by {}</a> has been unflagged.",
+            sub.get_absolute_url(), sub.quest_name(), sub.user,
+        ),
     )
 
     return redirect("quests:approvals")
