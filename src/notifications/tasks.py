@@ -1,3 +1,5 @@
+import logging
+import smtplib
 from datetime import timedelta
 from email.utils import formataddr
 from urllib.parse import urlsplit
@@ -18,6 +20,8 @@ from notifications.models import Notification
 from profile_manager.models import Profile
 
 User = get_user_model()
+
+logger = logging.getLogger(__name__)
 
 
 @app.task(name='notifications.tasks.delete_old_notifications_for_all_tenants')
@@ -47,25 +51,100 @@ def email_notification_to_users_on_all_schemas():
     return "Scheduled email_notifications_to_users_on_schema for all schemas"
 
 
-@app.task(name='notifications.tasks.email_notifications_to_users_on_schema')
-def email_notifications_to_users_on_schema(root_url):
+@app.task(name='notifications.tasks.email_notifications_to_users_on_schema', bind=True, max_retries=5)
+def email_notifications_to_users_on_schema(self, root_url, only_usernames=None):
+    """Email each user's unread-notification digest for one deck, one message at a time.
 
-    notification_emails = get_notification_emails(root_url)
+    Sending per message keeps one rejected message from aborting the rest of
+    the deck's batch (a mid-batch SMTP error used to lose every digest after
+    it). Failures are sorted by SMTP class: a permanent (5xx) refusal drops
+    that user's digest with a log line, while a temporary one (4xx, like
+    Gmail's 451 rate-limit rejection, or a dropped connection or timeout)
+    collects the user for a retry of the UNSENT remainder only, with
+    exponential backoff, so nobody already emailed gets a duplicate. If the
+    retries run out, celery surfaces the failure to monitoring, and the
+    affected notifications remain unread, so they roll into the next daily
+    digest rather than being lost.
+
+    Args:
+        root_url: The deck's root URL; names the deck in the subject and sender.
+        only_usernames: Retry plumbing: build digests only for these users.
+            None (the nightly run) means every eligible user.
+
+    Returns:
+        str: A short summary for the worker log.
+    """
+    notification_emails = get_notification_emails(root_url, only_usernames=only_usernames)
+    # one backend instance; each send opens and closes its own short SMTP
+    # session, so a connection killed by one failure can't poison the next send
     connection = mail.get_connection()
-    connection.send_messages(notification_emails)
-    # send_email_notification_tenant.delay(root_url)
+    sent = 0
+    dropped = 0
+    retry_usernames = []
+    for email in notification_emails:
+        try:
+            connection.send_messages([email])
+            sent += 1
+        except smtplib.SMTPResponseException as e:
+            # one status code for the message: 4xx means "try again later"
+            if 400 <= e.smtp_code < 500:
+                retry_usernames.append(email.recipient_username)
+            else:
+                dropped += 1
+                logger.warning(
+                    "notification email to %s permanently refused: %s %s",
+                    email.to, e.smtp_code, e.smtp_error)
+        except smtplib.SMTPRecipientsRefused as e:
+            # every recipient refused, each with its own status (a digest has
+            # exactly one recipient, but the exception is shaped as a mapping)
+            codes = [code for code, _ in e.recipients.values()]
+            if any(400 <= code < 500 for code in codes):
+                retry_usernames.append(email.recipient_username)
+            else:
+                dropped += 1
+                logger.warning("notification email to %s refused: %s", email.to, e.recipients)
+        except (smtplib.SMTPException, ConnectionError, TimeoutError) as e:
+            # the session itself failed (disconnected, timed out): temporary
+            logger.info("notification email to %s hit a transient send failure: %s", email.to, e)
+            retry_usernames.append(email.recipient_username)
 
-    return f"Sent {len(notification_emails)} notification emails"
+    summary = f"Sent {sent} notification emails"
+    if dropped:
+        summary += f", dropped {dropped} permanently refused"
+    if retry_usernames:
+        # 5, 10, 20, 40, then 80 minutes; raises Retry, so the summary so far
+        # travels in the retry's own log line
+        raise self.retry(
+            kwargs={'root_url': root_url, 'only_usernames': retry_usernames},
+            countdown=300 * (2 ** self.request.retries),
+        )
+    return summary
 
 
-def get_notification_emails(root_url):
+def get_notification_emails(root_url, only_usernames=None):
+    """Build the digest emails for every user on the deck's notification mailing list.
+
+    Args:
+        root_url: The deck's root URL, passed through to the per-user builder.
+        only_usernames: When given, build only these users' digests (the send
+            task's retry path re-sends just the users whose sends failed
+            temporarily). None means the whole mailing list.
+
+    Returns:
+        list: EmailMultiAlternatives objects, each tagged with the recipient's
+        username as ``recipient_username`` so a failed send can name the user
+        to retry without reverse-mapping their email address.
+    """
     users_to_email = Profile.objects.get_mailing_list(for_notification_email=True)
 
     notification_emails = []
 
     for user in users_to_email:
+        if only_usernames is not None and user.username not in only_usernames:
+            continue
         email = generate_notification_email(user, root_url)
         if email:
+            email.recipient_username = user.username
             notification_emails.append(email)
 
     return notification_emails

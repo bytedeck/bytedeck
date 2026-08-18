@@ -115,6 +115,109 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertEqual(len(emails), 1)
         self.assertEqual(emails[0].to, [self.test_student2.email])
 
+    def _make_two_eligible_recipients(self):
+        """Give both students an unread notification, a verified email, an enrollment,
+        and the email-notifications preference, so the digest task builds two emails.
+
+        Returns:
+            tuple: (student1, student2), in mailing-list order.
+        """
+        from allauth.account.models import EmailAddress
+
+        course = baker.make('courses.Course')
+        semester = SiteConfig.get().active_semester
+        user_ct = ContentType.objects.get_for_model(User)
+        for student in (self.test_student1, self.test_student2):
+            baker.make(
+                Notification, recipient=student,
+                sender_content_type=user_ct, sender_object_id=self.test_teacher.id,
+            )
+            EmailAddress.objects.create(user=student, email=student.email, verified=True, primary=True)
+            baker.make('courses.CourseStudent', user=student, course=course, semester=semester)
+            student.profile.get_notifications_by_email = True
+            student.profile.save()
+        return self.test_student1, self.test_student2
+
+    def test_get_notification_emails__only_usernames_filters_and_tags(self):
+        """The retry filter builds just the named users' digests, and every built
+        email carries its recipient's username for the send task's retry plumbing."""
+        student1, student2 = self._make_two_eligible_recipients()
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        emails = get_notification_emails(root_url)
+        self.assertEqual(len(emails), 2)
+        self.assertEqual({e.recipient_username for e in emails}, {student1.username, student2.username})
+
+        emails = get_notification_emails(root_url, only_usernames=[student2.username])
+        self.assertEqual(len(emails), 1)
+        self.assertEqual(emails[0].recipient_username, student2.username)
+
+    def test_email_task__permanent_refusal_drops_only_that_user(self):
+        """A 5xx refusal for one user's digest is logged and skipped: the rest of
+        the batch still sends, the task succeeds, and nothing is retried."""
+        import smtplib
+        from unittest.mock import Mock
+
+        student1, _student2 = self._make_two_eligible_recipients()
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        connection = Mock()
+        connection.send_messages.side_effect = [
+            smtplib.SMTPResponseException(550, b'no such user'), 1]
+        with patch('notifications.tasks.mail.get_connection', return_value=connection):
+            task_result = tasks.email_notifications_to_users_on_schema.apply(
+                kwargs={'root_url': root_url})
+        self.assertTrue(task_result.successful())
+        self.assertEqual(task_result.result, 'Sent 1 notification emails, dropped 1 permanently refused')
+        self.assertEqual(connection.send_messages.call_count, 2)
+
+    def test_email_task__temporary_failure_retries_only_the_unsent(self):
+        """A 4xx rejection (Gmail's 451 throttle) never aborts the batch: the other
+        digests still send, and the task retries with ONLY the throttled users, so
+        nobody already emailed gets a duplicate (production find, 2026-08-18)."""
+        import smtplib
+
+        from celery.exceptions import Retry
+        from unittest.mock import Mock
+
+        student1, student2 = self._make_two_eligible_recipients()
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        connection = Mock()
+        connection.send_messages.side_effect = [
+            1, smtplib.SMTPDataError(451, b'4.3.0 Mail server temporarily rejected message')]
+        task = tasks.email_notifications_to_users_on_schema
+        with patch('notifications.tasks.mail.get_connection', return_value=connection), \
+                patch.object(task, 'retry', side_effect=Retry('retry scheduled')) as mock_retry:
+            task_result = task.apply(kwargs={'root_url': root_url})
+        self.assertFalse(task_result.successful())
+        mock_retry.assert_called_once()
+        kwargs = mock_retry.call_args.kwargs
+        self.assertEqual(kwargs['kwargs'], {'root_url': root_url, 'only_usernames': [student2.username]})
+        self.assertEqual(kwargs['countdown'], 300)
+
+    def test_email_task__disconnect_is_retried_as_temporary(self):
+        """A dead SMTP session (disconnect mid-batch) counts as temporary: the
+        affected user lands in the retry set rather than losing their digest."""
+        import smtplib
+
+        from celery.exceptions import Retry
+        from unittest.mock import Mock
+
+        student1, student2 = self._make_two_eligible_recipients()
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        connection = Mock()
+        connection.send_messages.side_effect = [smtplib.SMTPServerDisconnected('gone'), 1]
+        task = tasks.email_notifications_to_users_on_schema
+        with patch('notifications.tasks.mail.get_connection', return_value=connection), \
+                patch.object(task, 'retry', side_effect=Retry('retry scheduled')) as mock_retry:
+            task_result = task.apply(kwargs={'root_url': root_url})
+        self.assertFalse(task_result.successful())
+        self.assertEqual(
+            mock_retry.call_args.kwargs['kwargs'],
+            {'root_url': root_url, 'only_usernames': [student1.username]})
+
     def test_email_notification_to_users_on_all_schemas__runs_successfully(self):
         """The all-schemas email task completes successfully when applied."""
         task_result = tasks.email_notification_to_users_on_all_schemas.apply()
