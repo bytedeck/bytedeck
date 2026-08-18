@@ -16,8 +16,13 @@ for {{user}}
   <p>Hello {{ user.profile.get_preferred_name }},
     {% if not courses %}
       I can't calculate your mark because you haven't joined a course for this
-      semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
-      and join your course.</p>
+      semester yet.
+      {% if config.has_no_open_semester %}
+        No semester is open yet, so you can't join one: ask your teacher to open one.</p>
+      {% else %}
+        Please <a href="{% url 'courses:create' %}">go here</a>
+        and join your course.</p>
+      {% endif %}
     {% elif obj.semester.days_so_far < 0 %}
       I can't calculate your mark because semester hasn't started yet!  According
       to my records, the semester is scheduled to start on
