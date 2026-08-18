@@ -12,7 +12,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
-from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin
+from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin, _registration_added_message
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
@@ -706,6 +706,63 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
 
+    def test_CourseStudentCreate_view__message_names_the_course_group_and_semester(self):
+        """A deck can run several courses, groups and semesters at once, so the notice a student
+        gets on joining names all three rather than the course alone (issue #2179)."""
+        course = baker.make(Course, title='Digital Art 11')
+        block = baker.make(Block, name='Morning Block')
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data={
+            'semester': self.sem.pk, 'block': block.pk, 'course': course.pk,
+        })
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            'You have been added to the <strong>Digital Art 11</strong> course, '
+            'in the <strong>Morning Block</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_CourseStudentCreate_view__message_uses_the_decks_own_word_for_a_group(self):
+        """A deck renames "group" to whatever suits it, and the registration form already labels
+        the field with that name, so the notice has to agree with the form the student just
+        filled in rather than saying "group" regardless."""
+        config = SiteConfig.get()
+        config.custom_name_for_group = 'Cohort'
+        config.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertIn(f'in the <strong>{self.block}</strong> cohort', message)
+
+    def test_CourseStudentCreate_view__simple_registration_message_names_all_three(self):
+        """A deck with one of everything registers the student without showing them a form at all,
+        so that path builds the notice from the registration rather than from form data. It still
+        has to say the same thing the form path says."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        # one active block and course left, so all three fields render hidden and the view
+        # registers the student on the GET instead of asking them anything
+        Block.objects.exclude(pk=self.block.pk).delete()
+        Course.objects.exclude(pk=self.course.pk).delete()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
     def test_lock_student__selects_the_student_row_for_update(self):
         """The refusal above only helps if the two requests actually queue up, and what makes
         them queue is this lock. The row locked has to be the student's own: locking their
@@ -936,6 +993,55 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertFalse(any('added to' in m for m in messages))
+
+
+class RegistrationAddedMessageTests(CourseViewTestData, ByteDeckTenantTestCase):
+    """The notice a student gets when they are added to a course (issue #2179)."""
+
+    def test_registration_added_message__leaves_out_a_group_the_registration_has_not_got(self):
+        """A registration's group is nullable, and a sentence naming a group that is not there
+        reads worse than one that does not mention groups at all."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=None, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('group', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_registration_added_message__leaves_out_a_semester_the_registration_has_not_got(self):
+        """A registration's semester is nullable too, and deleting a semester sets it to null
+        rather than deleting the registration, so a registration can outlive its term."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block, semester=None,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('semester', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group.',
+        )
+
+    def test_registration_added_message__escapes_the_names_a_teacher_typed(self):
+        """Messages reach the page through the messages template's `|safe`, so a course named
+        with markup would otherwise be rendered as markup rather than shown as its name."""
+        course = baker.make(Course, title='<script>alert(1)</script>')
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=course, block=self.block, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('<script>', message)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', message)
 
 
 class MarkRangeViewTests(ByteDeckTenantTestCase):
