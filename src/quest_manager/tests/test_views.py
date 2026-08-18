@@ -3928,6 +3928,32 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertNotIn(archived_quest, displayed_quests)
 
 
+    def test_CategoryPublish__message_links_to_the_published_campaign(self):
+        """The publish message names the campaign as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        campaign = baker.make(Category, title='Robotics', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{campaign.get_absolute_url()}">Robotics</a>')
+
+    def test_CategoryPublish__escapes_markup_in_the_campaigns_title(self):
+        """A campaign whose title contains markup is named as text in the publish message (#2498)."""
+        campaign = baker.make(Category, title='Robotics <script>alert(1)</script>', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+
+
 class AjaxSubmissionCountTest(ByteDeckTenantTestCase):
     """ Tests for:
     def ajax_submission_count(request, quest_id=None)
@@ -5525,6 +5551,35 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
         archived_quest.refresh_from_db()
         self.assertTrue(archived_quest.archived)
+
+    def test_post__message_links_to_the_archived_quest(self):
+        """The archive message names the quest as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        response = self.client.post(reverse('quests:quest_archive', args=[self.quest_b.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{self.quest_b.get_absolute_url()}">Quest B</a>')
+
+    def test_post__escapes_markup_in_the_archived_quests_name(self):
+        """A quest whose name contains markup is named as text in the archive message (#2498)."""
+        quest = baker.make(Quest, name='Quest <script>alert(1)</script>', archived=False, published=True)
+
+        response = self.client.post(reverse('quests:quest_archive', args=[quest.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+
+    def test_unarchive__message_links_to_the_unarchived_quest(self):
+        """The unarchive message names the quest as a working link, for the same reason
+        the archive message does (#2498).
+        """
+        archived_quest = baker.make(Quest, name='Archived Quest', archived=True)
+
+        response = self.client.post(reverse('quests:unarchive', args=[archived_quest.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{archived_quest.get_absolute_url()}">Archived Quest</a>')
 
     def test_unarchive__nonexistent_quest_returns_404(self):
         """Unarchiving a quest id that does not exist 404s cleanly (#1856).

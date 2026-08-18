@@ -296,8 +296,10 @@ class CategoryPublish(View):
         """
         category = get_object_or_404(Category, pk=pk)
         category.publish_with_quests()
-        link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
-        messages.success(request, f'Campaign "{link}" and all quests published.')
+        messages.success(request, format_html(
+            'Campaign "<a href="{}">{}</a>" and all quests published.',
+            category.get_absolute_url(), category.title,
+        ))
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
@@ -532,7 +534,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
             )
             return redirect("quests:quest_detail", quest.id)
 
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
         # Archive the quest
         quest.archived = True
@@ -559,7 +561,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
 
         messages.success(
             request,
-            f"Quest '{link}' has been archived and all its submissions have been deleted."
+            format_html("Quest '{}' has been archived and all its submissions have been deleted.", quest_link),
         )
         return redirect("quests:archived")
 
@@ -1705,7 +1707,7 @@ def unarchive(request, quest_id):
     quest = get_object_or_404(Quest.objects.all_including_archived(), id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
-    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+    quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
@@ -1713,7 +1715,7 @@ def unarchive(request, quest_id):
     quest.full_clean()
     quest.save()
 
-    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    messages.success(request, format_html("Quest '{}' has been unarchived and moved to the Drafts tab.", quest_link))
     # Since the quest is sent to the Drafts tab redirect them there
     return redirect("quests:drafts")
 
