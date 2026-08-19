@@ -39,6 +39,7 @@ from .utils import (
     get_library_schema_name,
     library_listable_quests,
     library_schema_context,
+    load_library_quest_prereqs_for_render,
     load_library_quests_for_render,
 )
 
@@ -699,8 +700,10 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
 
             if quest is not None:
                 # The page renders outside this context, so everything it shows has to be
-                # read in here (#2163, #2369).
+                # read in here (#2163, #2369). This preview is the one Library page that
+                # names the quest's prerequisites, so it asks for those too (#2529).
                 load_library_quests_for_render([quest])
+                load_library_quest_prereqs_for_render([quest])
 
         if quest is None:
             return redirect_awaiting_review(request, 'quest', 'library:quest_list')

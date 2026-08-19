@@ -101,6 +101,10 @@ def load_library_quests_for_render(quests):
     page is mostly the viewer's own deck (their profile, their SiteConfig, their navbar),
     none of which exists in the Library schema.
 
+    Prerequisites are not included: only the quest import preview renders them, and resolving
+    each one costs a query, so `load_library_quest_prereqs_for_render` is a separate call
+    that the page showing them makes for itself.
+
     Must be called from within the library schema context, on an already-evaluated list.
 
     Args:
@@ -108,18 +112,38 @@ def load_library_quests_for_render(quests):
             `prefetch_related_objects` needs the rows to exist.
 
     Returns:
-        list[Quest]: the same list, with `tags`, `question_set`, `campaign` and
-        prerequisites populated.
+        list[Quest]: the same list, with `tags`, `question_set` and `campaign` populated.
+    """
+    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
+
+    return quests
+
+
+def load_library_quest_prereqs_for_render(quests):
+    """Read the prerequisites a Library quest's template will name, while the schema is right.
+
+    A prefetch is not enough on its own. `prefetch_for_parents` fills the cache that
+    `prereqs()` serves, but each row still reaches its target through a GenericForeignKey,
+    and `Prereq.__str__` follows that plus the content type to name it. Left lazy, those
+    lookups run once the schema has switched back and answer with this deck's rows, so the
+    quest import preview shows a gate named after one of the viewer's own quests, on a
+    Library quest that may have no gate at all (#2529).
+
+    Separate from `load_library_quests_for_render` because resolving each target costs a
+    query, and the Library's list and campaign pages do not render prerequisites at all:
+    their quest previews are fetched by a later AJAX request that renders inside its own
+    schema context, so they are not exposed to this and should not pay for it.
+
+    Must be called from within the library schema context, on an already-evaluated list.
+
+    Args:
+        quests (list[Quest]): the quests about to be rendered.
+
+    Returns:
+        list[Quest]: the same list, with each quest's prerequisites resolved.
     """
     from prerequisites.models import Prereq
 
-    prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
-
-    # Prerequisites need more than a prefetch. `prefetch_for_parents` fills the cache that
-    # `prereqs()` serves, but each row still reaches its target through a GenericForeignKey,
-    # and `Prereq.__str__` follows that plus the content type to name it. Left lazy, those
-    # lookups run once the schema has switched back and answer with this deck's rows: the
-    # import preview then shows a gate the arriving quest does not have (#2529).
     Prereq.objects.prefetch_for_parents(quests)
     for quest in quests:
         for prereq in quest.prereqs():
