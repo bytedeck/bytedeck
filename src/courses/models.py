@@ -1,3 +1,4 @@
+import math
 from datetime import date, datetime, timedelta
 
 from django.conf import settings
@@ -29,16 +30,18 @@ def split_xp_between_registrations(registrations, total, xp_by_course):
     assign one, and is still what happens to badge XP, to work handed in while the deck had
     the setting off, and to anything from before the choice existed.
 
+    Every share is whole XP, and they add up to the student's total: see whole_xp_shares().
+
     Args:
         registrations (list[CourseStudent]): the registrations to divide the XP between. They
             should all be one student's, and from one semester: the shared pool is split by
             how many there are.
-        total (float): the student's whole deck-wide XP, including their adjustments.
+        total (int): the student's whole deck-wide XP, including their adjustments.
         xp_by_course (dict): course id to the XP assigned to it, with None collecting
             everything left unassigned.
 
     Returns:
-        list[tuple]: (CourseStudent, xp) in the order given.
+        list[tuple]: (CourseStudent, xp) in the order given, the XP whole in each.
     """
     if len(registrations) <= 1:
         return [(registration, total) for registration in registrations]
@@ -56,15 +59,54 @@ def split_xp_between_registrations(registrations, total, xp_by_course):
     adjustments = sum(registration.xp_adjustment for registration in registrations)
     shared = (total - assigned - adjustments) / len(registrations)
 
-    return [
-        (
-            registration,
-            (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
-            + registration.xp_adjustment
-            + shared,
-        )
+    exact = [
+        (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
+        + registration.xp_adjustment
+        + shared
         for registration in registrations
     ]
+    return list(zip(registrations, whole_xp_shares(registrations, exact)))
+
+
+def whole_xp_shares(registrations, exact_shares):
+    """Round a student's exact per-course XP to whole XP that still adds up to their total.
+
+    Two things make a share fractional: the pool nobody assigned is divided evenly between
+    the courses, and a repeatable quest taken past its `max_xp` gives each course the capped
+    total in proportion to what it was assigned uncapped (issue #2440). Rounding each share
+    on its own then loses the odd XP, because rounding down is what an integer field does
+    with it: two courses sharing 5 XP came to 2 and 2, and `CourseStudent.final_xp` recorded
+    that permanently when the semester was archived (issue #2490).
+
+    So the odd XP is handed out a whole point at a time to the shares that came closest to
+    earning it (the largest-remainder method), leaving every course within 1 XP of its exact
+    share and the shares adding up to what the student actually earned. Ties go to the
+    registration made first, so a student is divided the same way however and whenever they
+    are asked about: what they are shown all term is what gets archived.
+
+    Args:
+        registrations (list[CourseStudent]): the registrations the shares belong to, in the
+            same order, for a stable tiebreak.
+        exact_shares (list[float]): each registration's exact share.
+
+    Returns:
+        list[int]: the same shares in whole XP, adding up to the exact shares' total.
+    """
+    whole = [math.floor(share) for share in exact_shares]
+    # what rounding down left over, which is a whole number of XP because the total being
+    # divided is: every source of XP the student has is counted in whole points
+    odd_xp = round(sum(exact_shares)) - sum(whole)
+
+    # the shares with the most of their own XP still to be given back come first, since
+    # whole - exact is the negative of what each one is owed
+    owed_most_first = sorted(
+        range(len(exact_shares)),
+        key=lambda index: (whole[index] - exact_shares[index], registrations[index].pk),
+    )
+    for index in owed_most_first[:odd_xp]:
+        whole[index] += 1
+
+    return whole
 
 
 class MarkRangeManager(models.Manager):
@@ -1208,7 +1250,7 @@ class CourseStudent(models.Model):
                 the previous total. Defaults to reading the profile.
 
         Returns:
-            float: this registration's share of the student's XP, including its own
+            int: this registration's share of the student's XP, including its own
             xp_adjustment. Their whole total when this is their only course.
         """
         profile = profile if profile is not None else self.user.profile
