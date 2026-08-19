@@ -10,6 +10,8 @@ from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect,
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -409,6 +411,36 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
+def _registration_added_message(registration):
+    """What a student is told when they have been added to a course.
+
+    Names the group and the semester alongside the course (issue #2179). A deck can run
+    several courses, several groups and several semesters at once, so naming only the course
+    leaves a student unable to tell which group they landed in or which term it counts toward.
+
+    Args:
+        registration (CourseStudent): the registration that was just created.
+
+    Returns:
+        str: the message, HTML-safe. The group and the semester are each left out when the
+        registration has none: both are nullable, and a half-written sentence is worse than a
+        shorter one.
+    """
+    # format_html escapes the names, which a teacher types and which reach the page through
+    # the messages template's `|safe`
+    parts = [format_html('You have been added to the <strong>{}</strong> course', registration.course)]
+    if registration.block:
+        parts.append(format_html(
+            'in the <strong>{}</strong> {}',
+            registration.block, SiteConfig.get().custom_name_for_group.lower(),
+        ))
+    if registration.semester:
+        parts.append(format_html('during the <strong>{}</strong> semester', registration.semester))
+
+    # safe because every name above went through format_html; the joining text is our own
+    return mark_safe(', '.join(parts) + '.')
+
+
 # Student Course Registration View
 class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin,
                           UserPassesTestMixin, CreateView):
@@ -433,8 +465,22 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s course"
     template_name = 'courses/coursestudent_form.html'
+
+    def get_success_message(self, cleaned_data):
+        """The message naming what the student just joined (issue #2179).
+
+        Built from the saved registration rather than from a `success_message` template, so
+        the deck's own word for a group can be used and the same wording serves the
+        simplified-registration shortcut in get(), which has no form to interpolate.
+
+        Args:
+            cleaned_data (dict): the form's cleaned data, which this does not need.
+
+        Returns:
+            str: the message, HTML-safe.
+        """
+        return _registration_added_message(self.object)
 
     @staticmethod
     def _no_open_semester():
@@ -488,10 +534,10 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
                     course=Course.objects.filter(active=True).first()
             )
 
-            # after object has been created, redirect to normal success url and display normal success message
-            # fstring used instead of self.success_message because form context not available
+            # after object has been created, redirect to normal success url and display the same
+            # message the form path shows, built from the registration rather than form context
             if created:
-                messages.success(request, f"You have been added to the {obj.course} Course")
+                messages.success(request, _registration_added_message(obj))
             return redirect(self.success_url)
         else:
             return super().get(request, *args, **kwargs)
