@@ -6,7 +6,7 @@ from django_select2.forms import Select2Widget
 from model_bakery import baker
 
 from badges.forms import BadgeAssertionForm
-from courses.forms import CourseStudentForm, SemesterForm
+from courses.forms import CourseStudentForm, CourseStudentStaffForm, SemesterForm
 from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.forms import SubmissionQuickReplyFormStudent
@@ -91,6 +91,59 @@ class CourseStudentFormTest(ByteDeckTenantTestCase):
         form = CourseStudentForm(student_registration=True)
 
         self.assertIsInstance(form.fields['semester'].widget, forms.HiddenInput)
+
+
+class CourseStudentStaffFormTest(ByteDeckTenantTestCase):
+    """The registration form as staff edit an existing registration (issue #2507)."""
+
+    def _registration(self, status):
+        """A registration in a semester with the given status."""
+        return baker.make(
+            CourseStudent, user=baker.make(User), course=baker.make(Course),
+            block=baker.make(Block), semester=baker.make(Semester, status=status),
+        )
+
+    def test_semester_field__offers_the_registrations_own_archived_semester(self):
+        """A semester is archived while its registrations live on, and a field that does not
+        offer its own current value can never validate, so a past registration could not be
+        edited at all."""
+        registration = self._registration(Semester.Status.ARCHIVED)
+
+        form = CourseStudentStaffForm(instance=registration)
+
+        self.assertIn(registration.semester, form.fields['semester'].queryset)
+
+    def test_semester_field__still_offers_every_open_semester(self):
+        """Keeping the registration's own semester must not cost the choices that were already
+        there: a registration can still be moved between the terms that are running."""
+        another = baker.make(Semester, status=Semester.Status.OPEN)
+        registration = self._registration(Semester.Status.ARCHIVED)
+
+        form = CourseStudentStaffForm(instance=registration)
+
+        self.assertIn(SiteConfig.get().active_semester, form.fields['semester'].queryset)
+        self.assertIn(another, form.fields['semester'].queryset)
+
+    def test_semester_field__leaves_out_other_semesters_that_are_not_open(self):
+        """Only this registration's own semester is added back. An archived semester some other
+        registration is in is still not somewhere to move this one."""
+        someone_elses = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        registration = self._registration(Semester.Status.ARCHIVED)
+
+        form = CourseStudentStaffForm(instance=registration)
+
+        self.assertNotIn(someone_elses, form.fields['semester'].queryset)
+
+    def test_semester_field__unchanged_for_a_registration_in_an_open_semester(self):
+        """The usual case is a registration in a running term, where its own semester is among
+        the open ones already and nothing is added."""
+        registration = self._registration(Semester.Status.OPEN)
+
+        form = CourseStudentStaffForm(instance=registration)
+
+        self.assertEqual(
+            set(form.fields['semester'].queryset), set(Semester.objects.open()),
+        )
 
 
 class SemesterFormTest(ByteDeckTenantTestCase):

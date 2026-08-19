@@ -661,6 +661,26 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
             result = scapes[0:index].get_maps_as_formatted_string()
             self.assertEqual(result, expected)
 
+    def test_get_maps_as_formatted_string__is_safe_and_escapes_the_map_name(self):
+        """The links survive being put in a message, and a map name carrying markup does not.
+
+        The result goes straight into a django message, which escapes anything that is not
+        marked safe, so the anchors have to be built safely. That only holds if the name
+        interpolated between them is escaped on the way in (#2498).
+        """
+        quest = baker.make('quest_manager.Quest')
+        baker.make(
+            CytoScape, name="Map <script>alert(1)</script>",
+            initial_content_type=ContentType.objects.get_for_model(Quest),
+            initial_object_id=quest.id,
+        )
+
+        result = CytoScape.objects.all().get_maps_as_formatted_string()
+
+        self.assertTrue(hasattr(result, '__html__'), "the anchors must be marked safe")
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', result)
+        self.assertNotIn('<script>alert(1)</script>', result)
+
 
 class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
     """Targeted tests for previously-uncovered CytoScape map-generation branches."""

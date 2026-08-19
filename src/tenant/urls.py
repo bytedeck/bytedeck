@@ -18,6 +18,9 @@ urlpatterns = [
     path("subscription/", views.SubscriptionDetail.as_view(), name="subscription"),
     path("subscription/activating/", views.SubscriptionActivating.as_view(), name="subscription_activating"),
     path("subscription/status/", views.subscription_status, name="subscription_status"),
+    # The owner's standing "please delete this deck" request and its withdrawal (#2330).
+    path("subscription/request-deletion/", views.request_deck_deletion, name="request_deletion"),
+    path("subscription/cancel-deletion-request/", views.cancel_deck_deletion_request, name="cancel_deletion_request"),
 
     # Stripe webhook (public schema only; signature-verified, csrf_exempt -- PR 7).
     path("stripe/webhook/", views.stripe_webhook, name="stripe_webhook"),

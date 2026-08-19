@@ -223,6 +223,25 @@ class CourseStudentForm(forms.ModelForm):
 
 
 class CourseStudentStaffForm(CourseStudentForm):
+    """The registration form as staff edit an existing registration, rather than create one."""
+
+    def __init__(self, *args, **kwargs):
+        """Keep the registration's own semester among the choices.
+
+        Offering only the open semesters is right for creating a registration: a student is
+        registered into a term that is running. But an archived semester keeps its
+        registrations, and a form that does not offer a field's current value cannot be saved
+        at all, so correcting the course or the group on a past registration failed validation
+        on the semester and there was no way through it (issue #2507).
+
+        This only adds the "leave it where it is" choice. Every open semester was already
+        offered, so it does not newly allow moving a registration from one term to another.
+        """
+        super().__init__(*args, **kwargs)
+        if self.instance.semester_id is not None:
+            self.fields['semester'].queryset = (
+                self.fields['semester'].queryset | Semester.objects.filter(pk=self.instance.semester_id)
+            )
 
     class Meta:
         model = CourseStudent

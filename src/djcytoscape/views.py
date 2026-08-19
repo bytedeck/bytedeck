@@ -12,6 +12,7 @@ from django.views.decorators.http import require_POST
 from django.views.generic import ListView
 from django.views.generic.edit import UpdateView, DeleteView, FormView
 from django.urls import reverse_lazy
+from django.utils.html import format_html
 
 from hackerspace_online.decorators import staff_member_required
 
@@ -40,7 +41,7 @@ class UpdateMapMessageMixin:
             if maps:
                 messages.success(
                     self.request,
-                    f"These maps are being updated: {maps.get_maps_as_formatted_string()} "
+                    format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()),
                 )
         return super().form_valid(*args, **kwargs)
 

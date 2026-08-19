@@ -57,9 +57,28 @@ def shared_library_enabled_view(f):
     `SiteConfig.get()` returns None on the public schema, which has no deck
     config and so has no Shared Library either: that is treated the same way, so
     this holds on its own rather than relying on running after a non-public check.
+
+    Args:
+        f (callable): the view function to guard.
+
+    Returns:
+        callable: `f` wrapped so it only runs on a deck with the Library enabled.
     """
     @functools.wraps(f)
     def wrapper(request, *args, **kwargs):
+        """Run the wrapped view only if this deck has the Shared Library on.
+
+        Args:
+            request (HttpRequest): the current request.
+            *args: positional arguments for the wrapped view.
+            **kwargs: keyword arguments for the wrapped view.
+
+        Returns:
+            HttpResponse: whatever the wrapped view returns.
+
+        Raises:
+            Http404: if the deck has the Shared Library off, or has no deck config.
+        """
         config = SiteConfig.get()
         if config is None or not config.enable_shared_library:
             raise Http404("The Shared Library is not enabled on this deck.")
@@ -71,9 +90,9 @@ def get_published_library_object(model, import_id):
     """Fetch a published object from the Shared Library by its import ID.
 
     Content lands in the Library unpublished and stays invisible to other decks
-    until a Library admin reviews and publishes it (#1949). That gate used to
-    filter only the listing pages, so a POST straight to an import URL pulled
-    unreviewed content down. Both import paths go through here instead.
+    until a Library admin reviews and publishes it (#1949). Both import paths go
+    through here, so the gate holds against a POST straight to an import URL and
+    not only against what the listing pages choose to show.
 
     Must be called from within the library schema context.
 
@@ -401,7 +420,7 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     an email address (e.g. only the ``deck_ai`` bot user is staff).
 
     Args:
-        content_type (str): "quest" or "campaign" -- used in the subject/body.
+        content_type (str): "quest" or "campaign", used in the subject/body.
         content_name (str): the human-readable name of the shared content.
         exported_obj (Quest | Category): the copy now in the library schema,
             used to build the review/publish link on the Library deck.
@@ -423,7 +442,7 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     review_url = f"{library_root_url.rstrip('/')}{exported_obj.get_absolute_url()}"
 
     subject = f"[ByteDeck Library] New {content_type} awaiting review: {content_name}"
-    message = get_template("library/email/content_pushed.txt").render({
+    message = get_template("library/email/content_pushed.html").render({
         "sharer": sharer,
         "content_type": content_type,
         "content_name": content_name,
@@ -520,10 +539,10 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         Populate context with a page of the shared library's listable quests.
 
-        The Library is read one page at a time: the whole thing used to be loaded into
-        memory and rendered on every request, which does not survive a Library worth
-        browsing (#2379). Searching happens in the database for the same reason, so it
-        covers every quest rather than only the ones already sent to the browser.
+        The Library is read one page at a time, since loading all of it into memory on
+        every request does not survive a Library worth browsing (#2379). Searching
+        happens in the database for the same reason, so it covers every quest rather
+        than only the ones already sent to the browser.
 
         Args:
             **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
@@ -728,18 +747,21 @@ class ImportQuestView(NonPublicOnlyViewMixin, View):
 
         # Show a message with a link to the imported quest
         quest = get_object_or_404(Quest, import_id=quest_import_id)
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         # An imported quest arrives as an unpublished draft with no prerequisite, so it is
         # invisible to students and unreachable on the map. Saying so is the difference
         # between "imported" and "usable", and each step links to the page that does it
         # rather than leaving the reader to find it (#2377).
-        publish_link = f'<a href="{reverse("quests:quest_update", args=[quest.id])}">publish it</a>'
-        prereq_link = f'<a href="{reverse("quests:quest_prereqs_update", args=[quest.id])}">prerequisite</a>'
         messages.success(
             request,
-            f"Successfully imported '{link}' to your deck. Two things left to do before "
-            f"students can see it: <strong>{publish_link}</strong>, and give it a "
-            f"<strong>{prereq_link}</strong> so it is reachable on the quest map."
+            format_html(
+                "Successfully imported '<a href=\"{}\">{}</a>' to your deck. Two things left to do "
+                'before students can see it: <strong><a href="{}">publish it</a></strong>, and give '
+                'it a <strong><a href="{}">prerequisite</a></strong> so it is reachable on the '
+                "quest map.",
+                quest.get_absolute_url(), quest.name,
+                reverse("quests:quest_update", args=[quest.id]),
+                reverse("quests:quest_prereqs_update", args=[quest.id]),
+            )
         )
         tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
@@ -853,21 +875,22 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
 
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
-        link = f'<a href="{category.get_absolute_url()}">{category.name}</a>'
         # As with a single quest: the campaign and its quests arrive unpublished and
         # unreachable, so the import is only half the job (#2377). Publishing is on the
         # campaign's own edit form; the prerequisite belongs to one of its quests, so that
         # step links to the campaign, where they are listed.
-        publish_link = (
-            f'<a href="{reverse("quests:category_update", args=[category.id])}">publish the campaign</a>'
-        )
-        prereq_link = f'<a href="{category.get_absolute_url()}">prerequisite</a>'
         messages.success(
             request,
-            f"Successfully imported '{link}' to your deck. Two things left to do before "
-            f"students can see it: <strong>{publish_link}</strong> (which publishes its "
-            f"quests), and give its first quest a <strong>{prereq_link}</strong> so the campaign "
-            "is reachable on the quest map."
+            format_html(
+                "Successfully imported '<a href=\"{}\">{}</a>' to your deck. Two things left to do "
+                'before students can see it: <strong><a href="{}">publish the campaign</a></strong> '
+                "(which publishes its quests), and give its first quest a "
+                '<strong><a href="{}">prerequisite</a></strong> so the campaign is reachable on the '
+                "quest map.",
+                category.get_absolute_url(), category.name,
+                reverse("quests:category_update", args=[category.id]),
+                category.get_absolute_url(),
+            )
         )
         tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
@@ -1015,11 +1038,13 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
 
         # Success message displayed on local deck
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified: "
-            "it will appear in the Library once they review and publish it."
+            format_html(
+                "'<a href=\"{}\">{}</a>' has been shared to the Library. A Library admin has been "
+                "notified: it will appear in the Library once they review and publish it.",
+                quest.get_absolute_url(), quest.name,
+            )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
@@ -1165,11 +1190,13 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                     source_deck_url,
                 )
 
-        link = f'<a href="{campaign.get_absolute_url()}">{campaign.name}</a>'
         messages.success(
             request,
-            f"'{link}' has been shared to the Library. A Library admin has been notified: "
-            "it will appear in the Library once they review and publish it."
+            format_html(
+                "'<a href=\"{}\">{}</a>' has been shared to the Library. A Library admin has been "
+                "notified: it will appear in the Library once they review and publish it.",
+                campaign.get_absolute_url(), campaign.name,
+            )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)

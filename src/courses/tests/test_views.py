@@ -12,7 +12,7 @@ from freezegun import freeze_time
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
-from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin
+from courses.views import SemesterActivate, SemesterUpdate, SerializedRegistrationMixin, _registration_added_message
 from quest_manager.models import Quest, QuestSubmission
 from badges.models import Badge, BadgeAssertion
 from notifications.models import Notification, notify_rank_up
@@ -636,6 +636,31 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         course_student.refresh_from_db()
         self.assertEqual(course_student.course.pk, new_course.pk)
 
+    def test_CourseStudentUpdate_view__staff_can_update_a_registration_in_an_archived_semester(self):
+        """A registration outlives the semester it is in, so a teacher spotting a wrong course
+        on a past one has to be able to correct it. The staff form has to keep the
+        registration's own archived semester among its choices for that: a field whose current
+        value is not on its list cannot validate, and the form is then unsaveable whatever else
+        is being changed (issue #2507)."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        course_student = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block,
+            semester=archived, active=False,
+        )
+        new_course = baker.make(Course)
+
+        form_data = model_to_form_data(course_student, CourseStudentStaffForm)
+        form_data['course'] = new_course.pk
+
+        self.client.force_login(self.test_teacher)
+        response = self.client.post(reverse('courses:update', args=[course_student.pk]), data=form_data)
+
+        self.assertRedirects(response, reverse('profiles:profile_detail', args=[course_student.user.profile.pk]))
+        course_student.refresh_from_db()
+        self.assertEqual(course_student.course.pk, new_course.pk)
+        # and it stayed in its own term rather than being dragged into a running one
+        self.assertEqual(course_student.semester, archived)
+
     def test_CourseAddStudent_view__staff_can_add(self):
         '''Staff can add a student to a course'''
 
@@ -705,6 +730,64 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         # Now try acessing page a second time, should give 403 permission denied:
         response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
         self.assertEqual(response.status_code, 403)
+
+    def test_CourseStudentCreate_view__message_names_the_course_group_and_semester(self):
+        """A deck can run several courses, groups and semesters at once, and the registration
+        form asks the student to pick all three, so the notice confirming it names all three
+        (issue #2179)."""
+        course = baker.make(Course, title='Digital Art 11')
+        block = baker.make(Block, name='Morning Block')
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data={
+            'semester': self.sem.pk, 'block': block.pk, 'course': course.pk,
+        })
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            'You have been added to the <strong>Digital Art 11</strong> course, '
+            'in the <strong>Morning Block</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_CourseStudentCreate_view__message_uses_the_decks_own_word_for_a_group(self):
+        """A deck renames "group" to whatever suits it, and the registration form already labels
+        the field with that name, so the notice has to agree with the form the student just
+        filled in rather than saying "group" regardless."""
+        config = SiteConfig.get()
+        config.custom_name_for_group = 'Cohort'
+        config.save()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.post(reverse('courses:create'), data=self.valid_form_data)
+
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertIn(f'in the <strong>{self.block}</strong> cohort', message)
+
+    def test_CourseStudentCreate_view__simple_registration_message_names_all_three(self):
+        """A deck with one of everything registers the student without showing them a form at all,
+        so that path builds the notice from the registration rather than from form data. It still
+        has to say the same thing the form path says."""
+        config = SiteConfig.get()
+        config.simplified_course_registration = True
+        config.save()
+        # one active block and course left, so all three fields render hidden and the view
+        # registers the student on the GET instead of asking them anything
+        Block.objects.exclude(pk=self.block.pk).delete()
+        Course.objects.exclude(pk=self.course.pk).delete()
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('courses:create'))
+
+        self.assertRedirects(response, reverse('quests:quests'))
+        [message] = [str(m) for m in response.wsgi_request._messages]
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
 
     def test_lock_student__selects_the_student_row_for_update(self):
         """The refusal above only helps if the two requests actually queue up, and what makes
@@ -803,6 +886,71 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'No semesters are currently open')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    # the staff banner also says "No semester is open" on every page, so these assert on the
+    # refusal page's own wording rather than on anything the banner could be supplying
+    REFUSAL_TO_STAFF = 'nobody can be registered in a course until you create'
+
+    def test_CourseAddStudent_view__blocked_when_no_open_semester__get(self):
+        """Staff adding a student need a semester to add them into just as much as a student
+        joining does (issue #2506). With none open the form's semester field has no choices, so
+        the page explains the reason rather than rendering a form that could only fail."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.get(reverse('courses:join', args=[self.test_student1.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.REFUSAL_TO_STAFF)
+        self.assertNotContains(response, 'id="coursestudentform"')
+
+    def test_CourseAddStudent_view__blocked_when_no_open_semester__post(self):
+        """The refusal covers the POST too: the GET-side check alone would not stop a teacher
+        submitting the same URL directly (issue #2506). Without it the submission fails anyway,
+        on the semester field's empty queryset, but says only "not one of the available
+        choices"."""
+        self.client.force_login(self.test_teacher)
+        self._close_active_semester()
+
+        response = self.client.post(
+            reverse('courses:join', args=[self.test_student1.id]), data=self.valid_form_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.REFUSAL_TO_STAFF)
+        self.assertNotContains(response, 'not one of the available choices')
+        self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
+
+    def test_NoOpenSemesterMixin__refusal_is_worded_for_whoever_is_looking(self):
+        """A student is told to ask their teacher, because that is all they can do about it. The
+        teacher is the one who can fix it, so they are told what to fix instead (issue #2506)."""
+        self._close_active_semester()
+
+        self.client.force_login(self.test_teacher)
+        to_staff = self.client.get(reverse('courses:join', args=[self.test_student1.id]))
+        self.client.force_login(self.test_student1)
+        to_student = self.client.get(reverse('courses:create'))
+
+        self.assertContains(to_staff, 'Manage semesters</a> to open one, then come back')
+        self.assertNotContains(to_staff, 'Your teacher needs to open a semester')
+        self.assertContains(to_student, 'Your teacher needs to open a semester')
+        self.assertNotContains(to_student, self.REFUSAL_TO_STAFF)
+
+    def test_mark_calculations__does_not_link_to_the_join_page_with_no_open_semester(self):
+        """The marks page tells a student with no course to go and join one. With no semester
+        open that link only leads to a refusal, so it says why in place instead, the same as the
+        quests page and the profile page already do (issue #2506)."""
+        student = User.objects.create_user('markless_student')  # no CourseStudent registration
+        config = SiteConfig.get()
+        config.display_marks_calculation = True  # off by default, and the page 404s a student when off
+        config.save()
+        self._close_active_semester()
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'ask your teacher to open one')
+        self.assertNotContains(response, reverse('courses:create'))
 
     def test_no_open_semester__student_join_button_replaced_by_message(self):
         """A student with no course sees a 'no semester open' note instead of the Join a Course
@@ -936,6 +1084,55 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(self.test_student1.coursestudent_set.count(), 1)
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertFalse(any('added to' in m for m in messages))
+
+
+class RegistrationAddedMessageTests(CourseViewTestData, ByteDeckTenantTestCase):
+    """The notice a student gets when they are added to a course (issue #2179)."""
+
+    def test_registration_added_message__leaves_out_a_group_the_registration_has_not_got(self):
+        """A registration's group is nullable, and a sentence naming a group that is not there
+        reads worse than one that does not mention groups at all."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=None, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('group', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'during the <strong>{self.sem}</strong> semester.',
+        )
+
+    def test_registration_added_message__leaves_out_a_semester_the_registration_has_not_got(self):
+        """A registration's semester is nullable too, and deleting a semester sets it to null
+        rather than deleting the registration, so a registration can outlive its term."""
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=self.course, block=self.block, semester=None,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('semester', message)
+        self.assertEqual(
+            message,
+            f'You have been added to the <strong>{self.course}</strong> course, '
+            f'in the <strong>{self.block}</strong> group.',
+        )
+
+    def test_registration_added_message__escapes_the_names_a_teacher_typed(self):
+        """Messages reach the page through the messages template's `|safe`, so a course named
+        with markup would otherwise be rendered as markup rather than shown as its name."""
+        course = baker.make(Course, title='<script>alert(1)</script>')
+        registration = baker.make(
+            CourseStudent, user=self.test_student1, course=course, block=self.block, semester=self.sem,
+        )
+
+        message = _registration_added_message(registration)
+
+        self.assertNotIn('<script>', message)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', message)
 
 
 class MarkRangeViewTests(ByteDeckTenantTestCase):

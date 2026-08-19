@@ -10,6 +10,8 @@ from django.shortcuts import Http404, HttpResponse, get_object_or_404, redirect,
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 from django.views import View
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
@@ -338,11 +340,56 @@ class SerializedRegistrationMixin:
             return self.form_invalid(form)
 
 
+class NoOpenSemesterMixin:
+    """The refusal a registration view gives while the deck has no semester open (issue #2060).
+
+    Registering anyone in a course needs a semester to register them into. With none open the
+    form's semester field has no choices at all, so rendering it can only produce a submission
+    that fails on `Select a valid choice`, which says nothing about the actual reason or what
+    to do about it.
+
+    Both views that create a registration check this first, before their other guards, and
+    both check it on POST as well as GET: the GET-side check alone would not stop a direct
+    submission to the same URL.
+
+    Attributes:
+        no_open_semester_heading (str): how the refusal page titles itself. The two views are
+            refusing different things, so each names its own.
+    """
+
+    no_open_semester_heading = ''
+
+    @staticmethod
+    def no_open_semester():
+        """Whether there is no semester open to register anyone into.
+
+        Returns:
+            bool: True when the deck has no open semester.
+        """
+        return SiteConfig.get().has_no_open_semester()
+
+    def no_open_semester_response(self, request):
+        """Render the page with the explanation in place of a form that could only fail.
+
+        Args:
+            request: the request being refused.
+
+        Returns:
+            HttpResponse: the registration template, which words the explanation for a student
+            or for staff depending on who is looking.
+        """
+        return render(request, self.template_name, {
+            'heading': self.no_open_semester_heading,
+            'no_open_semester': True,
+        })
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class CourseAddStudent(SerializedRegistrationMixin, NonPublicOnlyViewMixin, CreateView):
+class CourseAddStudent(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Add student to course'
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -364,12 +411,17 @@ class CourseAddStudent(SerializedRegistrationMixin, NonPublicOnlyViewMixin, Crea
         return render(request, self.template_name, {'heading': 'Add student to course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+
         if self._deck_at_capacity_for_target():
             return self._deck_at_capacity_response(request)
         return super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         # block the direct POST too, or the cap could be bypassed by submitting the form URL
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
         if self._deck_at_capacity_for_target():
             return self._deck_at_capacity_response(request)
         return super().post(request, *args, **kwargs)
@@ -409,9 +461,39 @@ class CourseStudentUpdate(NonPublicOnlyViewMixin, UpdateView):
         return reverse('profiles:profile_detail', args=[self.object.user.profile.id])
 
 
+def _registration_added_message(registration):
+    """What a student is told when they have been added to a course.
+
+    Names the group and the semester alongside the course (issue #2179). A deck can run
+    several courses, several groups and several semesters at once, so naming only the course
+    leaves a student unable to tell which group they landed in or which term it counts toward.
+
+    Args:
+        registration (CourseStudent): the registration that was just created.
+
+    Returns:
+        str: the message, HTML-safe. The group and the semester are each left out when the
+        registration has none: both are nullable, and a half-written sentence is worse than a
+        shorter one.
+    """
+    # format_html escapes the names, which a teacher types and which reach the page through
+    # the messages template's `|safe`
+    parts = [format_html('You have been added to the <strong>{}</strong> course', registration.course)]
+    if registration.block:
+        parts.append(format_html(
+            'in the <strong>{}</strong> {}',
+            registration.block, SiteConfig.get().custom_name_for_group.lower(),
+        ))
+    if registration.semester:
+        parts.append(format_html('during the <strong>{}</strong> semester', registration.semester))
+
+    # safe because every name above went through format_html; the joining text is our own
+    return mark_safe(', '.join(parts) + '.')
+
+
 # Student Course Registration View
-class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin,
-                          UserPassesTestMixin, CreateView):
+class CourseStudentCreate(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin,
+                          SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
 
     def test_func(self):
         """Allow the registration view only when the student is not already actively registered
@@ -433,19 +515,23 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
     form_class = CourseStudentForm
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
-    success_message = "You have been added to the %(course)s course"
     template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Join a course'
 
-    @staticmethod
-    def _no_open_semester():
-        """Whether there is no semester open for a student to join a course into (issue #2060)."""
-        return SiteConfig.get().has_no_open_semester()
+    def get_success_message(self, cleaned_data):
+        """The message naming what the student just joined (issue #2179).
 
-    def _no_open_semester_response(self, request):
-        """Render the join page with a message explaining that no semester is open, instead of the
-        registration form, so a student can't join a course when there's nowhere to join (#2060).
+        Built from the saved registration rather than from a `success_message` template, so
+        the deck's own word for a group can be used and the same wording serves the
+        simplified-registration shortcut in get(), which has no form to interpolate.
+
+        Args:
+            cleaned_data (dict): the form's cleaned data, which this does not need.
+
+        Returns:
+            str: the message, HTML-safe.
         """
-        return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
+        return _registration_added_message(self.object)
 
     def _deck_at_capacity(self):
         """Whether the deck's current-student cap blocks this user from registering (#1729 PR 4)."""
@@ -461,8 +547,8 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
         return render(request, self.template_name, {'heading': 'Join a course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
-        if self._no_open_semester():
-            return self._no_open_semester_response(request)
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
 
         if self._deck_at_capacity():
             return self._deck_at_capacity_response(request)
@@ -488,10 +574,10 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
                     course=Course.objects.filter(active=True).first()
             )
 
-            # after object has been created, redirect to normal success url and display normal success message
-            # fstring used instead of self.success_message because form context not available
+            # after object has been created, redirect to normal success url and display the same
+            # message the form path shows, built from the registration rather than form context
             if created:
-                messages.success(request, f"You have been added to the {obj.course} Course")
+                messages.success(request, _registration_added_message(obj))
             return redirect(self.success_url)
         else:
             return super().get(request, *args, **kwargs)
@@ -499,8 +585,8 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
     def post(self, request, *args, **kwargs):
         # Also block the POST: without this a student could still submit a registration into the
         # closed active semester by posting directly (the form's only semester choice) (#2060).
-        if self._no_open_semester():
-            return self._no_open_semester_response(request)
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
         # ...and the same for the capacity cap: the GET-side guard alone wouldn't stop a direct POST
         if self._deck_at_capacity():
             return self._deck_at_capacity_response(request)
