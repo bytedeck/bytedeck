@@ -365,12 +365,12 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
     def in_open_or_no_semester(self):
         """Assertions no finished term owns: what a deck-wide staff view of current work holds.
 
-        Every open semester's, since a deck can run several at once (issue #2157 Phase 3,
-        #1781) and scoping to the deck's default would hide everything the other cohort was
-        granted. Plus the assertions stamped with no semester at all (issue #2413), which is
-        what someone registered in none is granted: a student between terms, or staff trying
-        a badge out. The submission side answers the same question the same way, so a
-        deck-wide view of badges and one of quests cover the same students.
+        Every open semester's assertions, since a deck can run several at once (issue #2157
+        Phase 3, #1781) and scoping to the deck's default would hide everything the other
+        cohort was granted. Plus the assertions stamped with no semester at all (issue
+        #2413), which is what someone registered in no semester is granted: a student between
+        terms, or staff trying a badge out. The submission side answers the same question the
+        same way, so a deck-wide view of badges and one of quests cover the same students.
 
         Returns:
             BadgeAssertionQuerySet: the assertions in an open semester or in none.
