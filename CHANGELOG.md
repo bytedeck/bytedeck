@@ -19,6 +19,7 @@ This file chronologically records all notable changes to this website, including
   - Signing out from the navbar takes one click, instead of a confirmation page in between [#2444](https://github.com/bytedeck/bytedeck/issues/2444)
   - Notification and announcement emails name the deck they came from, in the subject line and as the sender's name, so a teacher on several decks can tell them apart [#2338](https://github.com/bytedeck/bytedeck/issues/2338)
   - The "New user registered" notification is sent for students only. The admin and owner accounts created with a deck, and teacher accounts staff add, no longer produce one [#2320](https://github.com/bytedeck/bytedeck/issues/2320)
+  - The notice a student sees on joining a course also names their group and their semester, using the deck's own word for a group, so on a deck running several of each they can tell where they landed [#2179](https://github.com/bytedeck/bytedeck/issues/2179)
   - Staff on a deck with no semester open see one notice about it rather than two, and none at all on a suspended deck, where the suspension is the thing that matters [#2060](https://github.com/bytedeck/bytedeck/issues/2060) [#2157](https://github.com/bytedeck/bytedeck/issues/2157)
 * Bugfixes:
   - Anyone who could reach a deck's URL could upload a video resource to it without signing in, and a few other pages were missing the check that says who may use them [#2304](https://github.com/bytedeck/bytedeck/issues/2304)
