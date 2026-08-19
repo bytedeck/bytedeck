@@ -109,6 +109,31 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.set_deck(active_user_count=4, trial_end_date=TODAY + timedelta(days=365))
             self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-09')])
 
+    def test_record_and_deliver_payment_failure__muted_by_a_deletion_request(self):
+        """The payment-failure webhook notice honors the deletion-request mute too:
+        it arrives via the webhook path rather than evaluate_deck_notices, so it
+        needs its own guard (#2330 review find). No ledger row, no email."""
+        from tenant.notices import record_and_deliver_payment_failure
+
+        self.set_deck(deletion_requested_on=TODAY, deletion_requested_by='the-owner')
+        summary = record_and_deliver_payment_failure(self.tenant, 'in_test123')
+        self.assertIn('muted', summary)
+        self.assertFalse(DeckNotice.objects.filter(
+            tenant=self.tenant, kind=DeckNotice.KIND_PAYMENT_FAILED).exists())
+
+    def test_evaluate__deletion_request_mutes_all_notices(self):
+        """A deck with a standing deletion request gets no notices at all, not
+        even the suspension notice: asking for deletion is the strongest possible
+        do-not-nag signal (#2330). Withdrawing the request turns the cadence back
+        on exactly where it was."""
+        lapsed = TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)
+        self.set_deck(
+            trial_end_date=lapsed, paid_until=None,
+            deletion_requested_on=TODAY, deletion_requested_by='the-owner')
+        self.assertEqual(self.due(), [])
+        self.set_deck(deletion_requested_on=None, deletion_requested_by='')
+        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(lapsed))])
+
     def test_evaluate__suspended_deck_gets_no_limit_warnings(self):
         """A suspended deck never warns about student seats: students cannot sign
         in there at all, so the warning is wrong, and it would reach an owner who

@@ -57,9 +57,28 @@ def shared_library_enabled_view(f):
     `SiteConfig.get()` returns None on the public schema, which has no deck
     config and so has no Shared Library either: that is treated the same way, so
     this holds on its own rather than relying on running after a non-public check.
+
+    Args:
+        f (callable): the view function to guard.
+
+    Returns:
+        callable: `f` wrapped so it only runs on a deck with the Library enabled.
     """
     @functools.wraps(f)
     def wrapper(request, *args, **kwargs):
+        """Run the wrapped view only if this deck has the Shared Library on.
+
+        Args:
+            request (HttpRequest): the current request.
+            *args: positional arguments for the wrapped view.
+            **kwargs: keyword arguments for the wrapped view.
+
+        Returns:
+            HttpResponse: whatever the wrapped view returns.
+
+        Raises:
+            Http404: if the deck has the Shared Library off, or has no deck config.
+        """
         config = SiteConfig.get()
         if config is None or not config.enable_shared_library:
             raise Http404("The Shared Library is not enabled on this deck.")
@@ -71,9 +90,9 @@ def get_published_library_object(model, import_id):
     """Fetch a published object from the Shared Library by its import ID.
 
     Content lands in the Library unpublished and stays invisible to other decks
-    until a Library admin reviews and publishes it (#1949). That gate used to
-    filter only the listing pages, so a POST straight to an import URL pulled
-    unreviewed content down. Both import paths go through here instead.
+    until a Library admin reviews and publishes it (#1949). Both import paths go
+    through here, so the gate holds against a POST straight to an import URL and
+    not only against what the listing pages choose to show.
 
     Must be called from within the library schema context.
 
@@ -401,7 +420,7 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     an email address (e.g. only the ``deck_ai`` bot user is staff).
 
     Args:
-        content_type (str): "quest" or "campaign" -- used in the subject/body.
+        content_type (str): "quest" or "campaign", used in the subject/body.
         content_name (str): the human-readable name of the shared content.
         exported_obj (Quest | Category): the copy now in the library schema,
             used to build the review/publish link on the Library deck.
@@ -520,10 +539,10 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         Populate context with a page of the shared library's listable quests.
 
-        The Library is read one page at a time: the whole thing used to be loaded into
-        memory and rendered on every request, which does not survive a Library worth
-        browsing (#2379). Searching happens in the database for the same reason, so it
-        covers every quest rather than only the ones already sent to the browser.
+        The Library is read one page at a time, since loading all of it into memory on
+        every request does not survive a Library worth browsing (#2379). Searching
+        happens in the database for the same reason, so it covers every quest rather
+        than only the ones already sent to the browser.
 
         Args:
             **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.

@@ -148,4 +148,53 @@
   </p>
 {% endif %}
 
+<h3>Done with this deck?</h3>
+{# the owner's standing deletion request (#2330): advisory (an operator reviews and acts), #}
+{# blunt about consequences either way, and withdrawable while it stands #}
+{% if deck.deletion_requested_on %}
+  <p><span class="label label-danger">Deletion requested</span>
+    {{ deck.deletion_requested_by }} asked for this deck to be deleted
+    on <strong>{{ deck.deletion_requested_on }}</strong>. Nothing has been deleted yet: all
+    content and student data stay intact until a ByteDeck operator processes the request, and
+    reminder emails about this deck are paused while it stands. Changed your mind?</p>
+  {% if is_deck_owner %}
+    <form method="post" action="{% url 'decks:cancel_deletion_request' %}">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-default"
+        title="Withdraws the deletion request; the deck carries on as before.">
+        <i class="fa fa-undo"></i>&nbsp;Cancel deletion request
+      </button>
+    </form>
+  {% else %}
+    {# disabled controls swallow hover events in some browsers, so the wrapping span carries the popup #}
+    <span title="Only the deck owner, {{ deck_owner_name }}, can cancel the deletion request.">
+      <button type="button" class="btn btn-default" disabled>
+        <i class="fa fa-undo"></i>&nbsp;Cancel deletion request
+      </button>
+    </span>
+  {% endif %}
+{% else %}
+  <p>If you're finished with this deck for good, you can ask for it to be deleted instead of
+    waiting out the deletion countdown. A ByteDeck operator reviews every request before
+    anything happens, your content stays intact until then, and you can cancel the request
+    any time before it's processed. Deletion is permanent: the deck, its content, and its
+    student data are all removed.</p>
+  {% if is_deck_owner %}
+    <form method="post" action="{% url 'decks:request_deletion' %}"
+      onsubmit="return confirm('Request deletion of this deck? An operator will review it; nothing is deleted immediately, and you can cancel the request while it is pending.');">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-danger"
+        title="Asks ByteDeck to delete this deck. An operator reviews the request before anything is removed.">
+        <i class="fa fa-trash"></i>&nbsp;Request deck deletion
+      </button>
+    </form>
+  {% else %}
+    <span title="Only the deck owner, {{ deck_owner_name }}, can request this deck's deletion.">
+      <button type="button" class="btn btn-danger" disabled>
+        <i class="fa fa-trash"></i>&nbsp;Request deck deletion
+      </button>
+    </span>
+  {% endif %}
+{% endif %}
+
 {% endblock %}

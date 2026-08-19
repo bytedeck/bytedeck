@@ -131,6 +131,13 @@ class ContentOrigin(models.Model):
     )
 
     class Meta:
+        """Identity is the (import_id, content_type) pair, not the import_id alone.
+
+        A quest and a campaign can in principle carry the same import_id, so the
+        uniqueness `record` relies on to refresh an attribution, rather than stack a
+        second one beside it, has to name both.
+        """
+
         constraints = [
             models.UniqueConstraint(
                 fields=['import_id', 'content_type'],
