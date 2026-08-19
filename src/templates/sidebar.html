@@ -58,6 +58,9 @@
             <li class="dropdown-header">Quest Setup</li>
             <li><a href="{% url 'tags:list' %}"><i class="fa fa-fw fa-tags"></i>&nbsp;{{ config.custom_name_for_tag }}s</a></li>
             <li><a href="{% url 'quests:categories' %}"><i class="fa fa-fw fa-compass"></i>&nbsp;Campaigns</a></li>
+            {% if config.enable_competencies %}
+              <li><a href="{% url 'competencies:list' %}"><i class="fa fa-fw fa-graduation-cap"></i>&nbsp;Competencies</a></li>
+            {% endif %}
             <li><a href="{% url 'quests:commonquestinfo_list' %}"><i class="fa fa-shield fa-flip-horizontal fa-fw"></i>&nbsp;Common Info</a></li>
           {% else %}
             <li><a href="{% url 'quests:inprogress' %}"><i class="fa fa-shield fa-flip-horizontal fa-fw"></i>&nbsp; In Progress</a></li>

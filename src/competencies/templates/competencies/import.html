@@ -1,0 +1,18 @@
+{% extends "competencies/base.html" %}
+{% load crispy_forms_tags %}
+
+{% block heading_inner %}Import Competencies{% endblock %}
+
+{% block content %}
+    <p>Import a competency set from a bundled curriculum, or upload one as a file.
+       Re-importing a set is safe: existing competencies are updated, not duplicated.</p>
+
+    <form action="" method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+
+        {{ form|crispy }}
+
+        <a href="{% url 'competencies:list' %}" role="button" class="btn btn-danger">Cancel</a>
+        <input type="submit" value="Preview" class="btn btn-success"/>
+    </form>
+{% endblock %}

@@ -60,6 +60,8 @@ urlpatterns += [
 
     re_path(r'^tags/', include('tags.urls', namespace='tags')),
 
+    re_path(r'^competencies/', include('competencies.urls', namespace='competencies')),
+
     # allauth
     re_path(r'^accounts/password/reset/$', views.CustomPasswordResetView.as_view(), name='account_reset_password'),
     re_path(r'^accounts/password/reset/key/(?P<uidb36>[0-9A-Za-z]+)-(?P<key>.+)/$',

@@ -1,0 +1,185 @@
+{
+    "format": "bytedeck-competency-set",
+    "version": 1,
+    "name": "BC ADST 8 Curricular Competencies",
+    "jurisdiction": "BC",
+    "subject": "Applied Design, Skills, and Technologies",
+    "grade": "8",
+    "source_url": "https://curriculum.gov.bc.ca/curriculum/adst/8/core",
+    "entries": [
+        {
+            "source_id": "bc:adst:8:understanding-context-1",
+            "name": "Empathize with potential users to find issues and uncover needs and potential design opportunities",
+            "description": "",
+            "category": "Applied Design: Understanding context"
+        },
+        {
+            "source_id": "bc:adst:8:defining-1",
+            "name": "Choose a design opportunity",
+            "description": "",
+            "category": "Applied Design: Defining"
+        },
+        {
+            "source_id": "bc:adst:8:defining-2",
+            "name": "Identify key features or potential users and their requirements",
+            "description": "",
+            "category": "Applied Design: Defining"
+        },
+        {
+            "source_id": "bc:adst:8:defining-3",
+            "name": "Identify criteria for success and any constraints",
+            "description": "",
+            "category": "Applied Design: Defining"
+        },
+        {
+            "source_id": "bc:adst:8:ideating-1",
+            "name": "Generate potential ideas and add to others' ideas",
+            "description": "",
+            "category": "Applied Design: Ideating"
+        },
+        {
+            "source_id": "bc:adst:8:ideating-2",
+            "name": "Screen ideas against criteria and constraints",
+            "description": "",
+            "category": "Applied Design: Ideating"
+        },
+        {
+            "source_id": "bc:adst:8:ideating-3",
+            "name": "Evaluate personal, social, and environmental impacts and ethical considerations",
+            "description": "",
+            "category": "Applied Design: Ideating"
+        },
+        {
+            "source_id": "bc:adst:8:ideating-4",
+            "name": "Choose an idea to pursue",
+            "description": "",
+            "category": "Applied Design: Ideating"
+        },
+        {
+            "source_id": "bc:adst:8:prototyping-1",
+            "name": "Identify and use sources of information",
+            "description": "",
+            "category": "Applied Design: Prototyping"
+        },
+        {
+            "source_id": "bc:adst:8:prototyping-2",
+            "name": "Develop a plan that identifies key stages and resources",
+            "description": "",
+            "category": "Applied Design: Prototyping"
+        },
+        {
+            "source_id": "bc:adst:8:prototyping-3",
+            "name": "Explore and test a variety of materials for effective use",
+            "description": "",
+            "category": "Applied Design: Prototyping"
+        },
+        {
+            "source_id": "bc:adst:8:prototyping-4",
+            "name": "Construct a first version of the product or a prototype, as appropriate, making changes to tools, materials, and procedures as needed",
+            "description": "",
+            "category": "Applied Design: Prototyping"
+        },
+        {
+            "source_id": "bc:adst:8:prototyping-5",
+            "name": "Record iterations of prototyping",
+            "description": "",
+            "category": "Applied Design: Prototyping"
+        },
+        {
+            "source_id": "bc:adst:8:testing-1",
+            "name": "Identify sources of feedback",
+            "description": "",
+            "category": "Applied Design: Testing"
+        },
+        {
+            "source_id": "bc:adst:8:testing-2",
+            "name": "Develop an appropriate test of the prototype",
+            "description": "",
+            "category": "Applied Design: Testing"
+        },
+        {
+            "source_id": "bc:adst:8:testing-3",
+            "name": "Conduct the test, collect and compile data, evaluate data, and decide on changes",
+            "description": "",
+            "category": "Applied Design: Testing"
+        },
+        {
+            "source_id": "bc:adst:8:testing-4",
+            "name": "Iterate the prototype or abandon the design idea",
+            "description": "",
+            "category": "Applied Design: Testing"
+        },
+        {
+            "source_id": "bc:adst:8:making-1",
+            "name": "Identify and use appropriate tools, technologies, and materials for production",
+            "description": "",
+            "category": "Applied Design: Making"
+        },
+        {
+            "source_id": "bc:adst:8:making-2",
+            "name": "Make a step-by-step plan for production and carry it out, making changes as needed",
+            "description": "",
+            "category": "Applied Design: Making"
+        },
+        {
+            "source_id": "bc:adst:8:making-3",
+            "name": "Use materials in ways that minimize waste",
+            "description": "",
+            "category": "Applied Design: Making"
+        },
+        {
+            "source_id": "bc:adst:8:sharing-1",
+            "name": "Decide on how and with whom to share their product",
+            "description": "",
+            "category": "Applied Design: Sharing"
+        },
+        {
+            "source_id": "bc:adst:8:sharing-2",
+            "name": "Demonstrate their product and describe their process, using appropriate terminology and providing reasons for their selected solution and modifications",
+            "description": "",
+            "category": "Applied Design: Sharing"
+        },
+        {
+            "source_id": "bc:adst:8:sharing-3",
+            "name": "Evaluate their product against their criteria and explain how it contributes to the individual, family, community, and/or environment",
+            "description": "",
+            "category": "Applied Design: Sharing"
+        },
+        {
+            "source_id": "bc:adst:8:sharing-4",
+            "name": "Identify how the skills and knowledge used in the design process could be applied to other design problems",
+            "description": "",
+            "category": "Applied Design: Sharing"
+        },
+        {
+            "source_id": "bc:adst:8:applied-skills-1",
+            "name": "Demonstrate an awareness of precautionary and emergency safety procedures in both physical and digital environments",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:8:applied-skills-2",
+            "name": "Identify and evaluate the skills and skill levels needed, individually or as a group, in relation to a specific task, and develop them as needed",
+            "description": "",
+            "category": "Applied Skills"
+        },
+        {
+            "source_id": "bc:adst:8:applied-technologies-1",
+            "name": "Choose, adapt, and if necessary learn about appropriate tools and technologies to use for tasks",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:8:applied-technologies-2",
+            "name": "Evaluate the personal, social, and environmental impacts, including unintended negative consequences, of the choices they make about technology use",
+            "description": "",
+            "category": "Applied Technologies"
+        },
+        {
+            "source_id": "bc:adst:8:applied-technologies-3",
+            "name": "Evaluate how the land, natural resources, and culture influence the development and use of tools and technologies",
+            "description": "",
+            "category": "Applied Technologies"
+        }
+    ]
+}
