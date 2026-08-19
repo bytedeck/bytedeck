@@ -145,6 +145,18 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         # ensure content type is set correctly
         self.assertEqual(self.image_file_field.content_types, ['image/jpeg', 'image/png'])
 
+    def test_validate_file__accepts_the_types_browsers_send_for_wav_and_m4a(self):
+        """An audio-restricted field takes a .wav or .m4a however the browser labels it (#2492).
+
+        Browsers disagree on these formats' content types: a .wav arrives as `audio/wav` or
+        `audio/x-wav`, and a .m4a as `audio/mp4` or `audio/x-m4a`. A question restricted to
+        Audio must accept all four, or a student's recording is refused for its spelling.
+        """
+        field = RestrictedFileFormField(content_types=FILE_MIME_TYPES["audio"])
+        for content_type in ("audio/wav", "audio/x-wav", "audio/mp4", "audio/x-m4a"):
+            with self.subTest(content_type=content_type):
+                field.validate_file(SimpleNamespace(content_type=content_type, size=1))
+
     def test_validate_file__raises_when_over_max_size(self):
         """validate_file rejects an acceptable-type file whose size exceeds max_upload_size."""
         field = RestrictedFileFormField(content_types=['image/png'], max_upload_size=10)
@@ -240,6 +252,16 @@ class MediaKindOfTest(SimpleTestCase):
     def test_media_kind_of__names_audio(self):
         """Audio is reported as audio: also playable, but with no picture to show."""
         self.assertEqual(media_kind_of("readings/chapter.mp3"), "audio")
+
+    def test_media_kind_of__names_wav_and_m4a_recordings_as_audio(self):
+        """The formats recorders actually produce are audio, whatever alias names them (#2492).
+
+        A Windows or Audacity recording is a .wav, which Python's `mimetypes` reports as
+        `audio/x-wav`, and a phone voice memo is a .m4a, reported as `audio/mp4`. Both must be
+        recognised, or the answer is offered as a bare download link instead of a player.
+        """
+        self.assertEqual(media_kind_of("recordings/interview.wav"), "audio")
+        self.assertEqual(media_kind_of("voice_memo.m4a"), "audio")
 
     def test_media_kind_of__says_nothing_about_other_files(self):
         """A file a browser cannot play is reported as nothing, and is offered as a link.

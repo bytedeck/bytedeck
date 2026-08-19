@@ -39,15 +39,21 @@ VIDEO_MIME_TYPES = [
     'video/x-m4v'  # M4V videos
 ]
 
+# WAV and M4A each go by two names: browsers disagree on the content type they send when
+# one is uploaded, and Python's `mimetypes` (which `media_kind_of` guesses stored files
+# with) uses `audio/x-wav` and `audio/mp4`. Both spellings of each are listed so a
+# recording is accepted and played back whichever authority names it (#2492).
 AUDIO_MIME_TYPES = [
     'audio/mpeg',  # MP3 audio
     'audio/ogg',   # OGG audio
     'audio/wav',   # WAV audio
+    'audio/x-wav',  # WAV audio
     'audio/webm',  # WebM audio
     'audio/aac',   # AAC audio
     'audio/x-aiff',  # AIFF audio
     'audio/x-ms-wma',  # WMA audio
     'audio/x-m4a',  # M4A audio
+    'audio/mp4',   # M4A audio
     'audio/flac',  # FLAC audio
 ]
 
