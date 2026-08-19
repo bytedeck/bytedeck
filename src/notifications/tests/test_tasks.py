@@ -158,7 +158,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         import smtplib
         from unittest.mock import Mock
 
-        student1, _student2 = self._make_two_eligible_recipients()
+        self._make_two_eligible_recipients()
         root_url = f'https://{self.get_test_tenant_domain()}'
 
         connection = Mock()
@@ -180,7 +180,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         from celery.exceptions import Retry
         from unittest.mock import Mock
 
-        student1, student2 = self._make_two_eligible_recipients()
+        student2 = self._make_two_eligible_recipients()[1]
         root_url = f'https://{self.get_test_tenant_domain()}'
 
         connection = Mock()
@@ -204,7 +204,7 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         from celery.exceptions import Retry
         from unittest.mock import Mock
 
-        student1, student2 = self._make_two_eligible_recipients()
+        student1 = self._make_two_eligible_recipients()[0]
         root_url = f'https://{self.get_test_tenant_domain()}'
 
         connection = Mock()
