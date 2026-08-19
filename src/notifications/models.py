@@ -8,6 +8,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.safestring import mark_safe
+
+from comments.sanitize import sanitize_comment_html
 from bs4 import BeautifulSoup, Comment, NavigableString, Tag
 
 from tenant.utils import get_root_url
@@ -217,6 +219,16 @@ class Notification(models.Model):
         return sender
 
     def __str__(self):
+        """Render the notification as the sentence shown to its recipient.
+
+        Built with `format_html`, so every name it mentions is escaped: these are names
+        people choose, and the result is rendered with `|safe` in the notification list,
+        the navbar dropdown and the digest email.
+
+        Returns:
+            SafeString: the notification's HTML. The only markup that survives unescaped
+            is the image preview of the action, which is sanitized first.
+        """
         if self.target_url:
             # an explicit destination always wins over the target object's own page
             target_url = self.target_url
@@ -252,10 +264,14 @@ class Notification(models.Model):
         # and the values are names people choose: a student's own preferred_name reaches
         # it through Profile.__str__, and a quest name through the target.
         #
-        # `action` is the exception, and is marked safe deliberately: it is the output of
-        # html_strip, which keeps <img> on purpose so an image in a comment previews in
-        # the dropdown, and whose input is comment HTML that was sanitized on save.
-        safe_action = mark_safe(context["action"])
+        # `action` is the exception, because html_strip keeps <img> on purpose so an image
+        # in a comment previews in the dropdown, and escaping would show the tag instead.
+        # It is sanitized rather than trusted: the action is not always a comment (the
+        # Library push sends the quest or campaign, and prerequisites/tasks.py sends a
+        # badge assertion), so what html_strip returns can be any model's __str__ with
+        # whatever the person who named it typed. The sanitizer keeps the image and drops
+        # the event handlers, which is the only part that has to go.
+        safe_action = mark_safe(sanitize_comment_html(context["action"]))
 
         url_common_part = format_html(
             "{} {} <a href='{}?next={}'>",

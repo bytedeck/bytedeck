@@ -444,7 +444,15 @@ class NotificationEscapingTest(ByteDeckTenantTestCase):
         cls.student = baker.make(User)
 
     def make_notification(self, **kwargs):
-        """Build a notification sent by the teacher, with the given fields."""
+        """Build a notification sent by the teacher, for use as the subject of a test.
+
+        Args:
+            **kwargs: fields to set on the Notification, overriding or adding to the
+                recipient and sender this sets up.
+
+        Returns:
+            Notification: the saved notification.
+        """
         return baker.make(
             Notification,
             recipient=self.student,
@@ -466,12 +474,27 @@ class NotificationEscapingTest(ByteDeckTenantTestCase):
         profile = self.student.profile
         profile.preferred_name = '<img src=x onerror="alert(1)">'
         profile.save()
+        # as the target, which is how the "New user registered" notice names them,
         notification = self.make_notification(
             verb='registered', target_content_type=ContentType.objects.get_for_model(profile),
             target_object_id=profile.id,
         )
 
         rendered = str(notification)
+
+        self.assertNotIn('<img src=x onerror="alert(1)">', rendered)
+        self.assertIn('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;', rendered)
+
+        # and as the sender, which is the other place a name is interpolated.
+        as_sender = baker.make(
+            Notification,
+            recipient=self.teacher,
+            sender_content_type=ContentType.objects.get_for_model(profile),
+            sender_object_id=profile.id,
+            verb='did something',
+        )
+
+        rendered = str(as_sender)
 
         self.assertNotIn('<img src=x onerror="alert(1)">', rendered)
         self.assertIn('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;', rendered)
@@ -520,6 +543,27 @@ class NotificationEscapingTest(ByteDeckTenantTestCase):
 
         self.assertIn('<img', rendered)
         self.assertNotIn('&lt;img', rendered)
+
+    def test_str__sanitizes_an_action_that_is_not_a_comment(self):
+        """The action keeps its image preview, but never an event handler.
+
+        `action` is the one value rendered as markup, and it is not always comment HTML:
+        the Library push sends the quest or campaign as the action, and a badge assertion
+        arrives the same way, so what it holds is some model's `__str__` and whatever the
+        person who named it typed.
+        """
+        quest = baker.make('quest_manager.Quest', name='<img src=x onerror="alert(1)">')
+        target = baker.make('quest_manager.Quest', name='Target Quest')
+        notification = self.make_notification(
+            verb='shared',
+            target_content_type=ContentType.objects.get_for_model(target), target_object_id=target.id,
+            action_content_type=ContentType.objects.get_for_model(quest), action_object_id=quest.id,
+        )
+
+        rendered = str(notification)
+
+        self.assertNotIn('onerror', rendered)
+        self.assertIn('<img', rendered)
 
     def test_str__is_marked_safe_so_the_templates_can_render_it(self):
         """The result is a safe string: the templates render it with |safe."""
