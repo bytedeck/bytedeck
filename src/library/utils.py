@@ -6,6 +6,16 @@ from django_tenants.utils import schema_context
 
 
 def get_library_schema_name():
+    """Return the name of the tenant schema the Shared Library lives in.
+
+    A function rather than a module-level constant because `apps.get_app_config`
+    needs the app registry to be populated, which it is not while modules are still
+    being imported.
+
+    Returns:
+        str: the Library's schema name, `library` unless the deployment sets
+            `LIBRARY_TENANT_NAME`.
+    """
     return apps.get_app_config('library').TENANT_NAME
 
 
