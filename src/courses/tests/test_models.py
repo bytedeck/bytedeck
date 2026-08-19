@@ -1134,6 +1134,30 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         config.cap_marks_at_100_percent = False
         config.save()
 
+    def test_coursestudent_post_save__refreshes_the_students_cached_xp_and_mark(self):
+        """Saving a registration is what keeps a student's cached XP and mark following their
+        courses. Joining one gives them a mark where they had none, since a mark is a
+        percentage of the XP counting toward a course, and a teacher's manual xp_adjustment
+        counts toward their XP. That is why CourseStudent.xp() is on the write path of every
+        registration save (issue #2486)."""
+        student = baker.make(User)
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+        student.profile.refresh_from_db()
+        self.assertIsNone(student.profile.mark_cached)
+
+        registration = self._register(student, baker.make(Course, xp_for_100_percent=1000))
+
+        student.profile.refresh_from_db()
+        self.assertEqual(student.profile.xp_cached, 40)
+        self.assertIsNotNone(student.profile.mark_cached)
+
+        registration.xp_adjustment = 15
+        registration.save()
+
+        student.profile.refresh_from_db()
+        self.assertEqual(student.profile.xp_cached, 55)
+
     def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
         """Nothing to divide, so their one course carries everything they earned."""
         student = baker.make(User)

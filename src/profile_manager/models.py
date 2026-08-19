@@ -370,11 +370,39 @@ class Profile(models.Model):
     #################################
 
     def xp_invalidate_cache(self):
+        """Work out this student's XP and mark again, and store both on the profile.
+
+        Called whenever something either is worked out from changes: a submission approved,
+        a badge granted, a registration saved. The mark is cached alongside the XP because
+        it is a percentage of it, and the student list sorts and colours by it, so it has to
+        be a column rather than something worked out per row.
+
+        Raises:
+            TypeError: when mark() gives something that is neither a number nor None, which
+                only a test can arrange (see the check below).
+
+        Returns:
+            int: the XP just cached.
+        """
         xp = QuestSubmission.objects.calculate_xp(self.user)
         xp += BadgeAssertion.objects.calculate_xp(self.user)
         xp += CourseStudent.objects.calculate_xp(self.user)
         self.xp_cached = xp
-        self.mark_cached = self.mark()
+
+        mark = self.mark()
+        # Checked before it is stored, because the failure it otherwise causes names the
+        # wrong thing (issue #2486): a MagicMock reaching mark_cached raises "Aggregate
+        # functions are not allowed in this query" from the save below, pointing at the
+        # profile rather than at the patch that produced it.
+        if mark is not None and not isinstance(mark, (int, float)):
+            raise TypeError(
+                f"Profile.mark() gave {mark!r}, which is not a mark. A test patching "
+                "CourseStudent.xp() or CourseStudentManager.xp_across() must have the patch "
+                "in place before it saves a CourseStudent, since saving one asks for the "
+                "mark: use courses.tests.utils.patch_registration_xp()."
+            )
+        self.mark_cached = mark
+
         self.save()
         return xp
 

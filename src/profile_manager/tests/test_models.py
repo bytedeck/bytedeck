@@ -375,6 +375,28 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertEqual(self.profile.xp_cached, 50)
         self.assertEqual(self.profile.mark_cached, 10)
 
+    def test_xp_invalidate_cache__names_the_patch_behind_a_mark_that_is_not_a_number(self):
+        """A mark that is not a number cannot be stored, and the error says why.
+
+        Saving a CourseStudent refreshes the cached mark, and the mark reaches
+        CourseStudent.xp(), so a test that patches the XP split after it has already created
+        a registration puts a MagicMock into mark_cached. What that produces on its own is
+        "FieldError: Aggregate functions are not allowed in this query", raised from
+        Profile.save() and naming nothing that led there (issue #2486). The check names the
+        cause and the helper that avoids it."""
+        with patch('profile_manager.models.Profile.mark', return_value=Mock()):
+            with self.assertRaisesMessage(TypeError, 'patch_registration_xp'):
+                self.profile.xp_invalidate_cache()
+
+    def test_xp_invalidate_cache__stores_a_mark_of_none(self):
+        """None is a mark in its own right, not a failed one: a student in no course has no
+        percentage, and so does one whose every course is run on XP alone (issue #403). The
+        check on the mark has to let it through rather than treating it as a bad value."""
+        self.profile.xp_invalidate_cache()
+
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.mark_cached)
+
     @patch('courses.models.Semester.fraction_complete', return_value=0.5)
     def test_mark__skips_a_course_run_on_xp_alone(self, fraction_complete):
         """A course can be run on XP alone and have no mark at all (issue #403). A student who
