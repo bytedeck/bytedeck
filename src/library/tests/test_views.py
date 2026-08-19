@@ -7,6 +7,7 @@ from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
 from django.http import Http404
+from django.template.loader import get_template
 from django.test import RequestFactory
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_exists
@@ -30,6 +31,7 @@ from prerequisites.models import Prereq
 from quest_manager.models import Category, CommonData, Quest
 from questions.models import Question
 from siteconfig.models import SiteConfig
+from utilities.html import textify
 from tenant.models import Tenant
 from tenant.models import TenantDomain
 
@@ -514,6 +516,49 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
             any('review and publish it' in m for m in sharer_messages),
             f"Expected a pending-review message, got: {sharer_messages}",
         )
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_export_post__review_email_reads_as_paragraphs(self, mock_apply_async):
+        """The review email arrives as separate paragraphs, not one run-on block.
+
+        Its template is rendered into the shared HTML wrapper and sent as the text/html
+        part, with the plain-text part derived from that by `textify`. Bare newlines
+        collapse in both, so the content's name ran straight into the sentence after it,
+        which is the part a reviewer actually needs to read (#2371).
+        """
+        with library_schema_context():
+            User.objects.create_user('librarian', email='librarian@example.com', is_staff=True)
+
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+        self.client.force_login(self.test_teacher)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(reverse('library:export_quest', args=[self.local_quest.import_id]), data=AGREED_LICENCE)
+
+        _, message, _ = mock_apply_async.call_args.kwargs['args']
+
+        # The name stands on its own, so it cannot run into the sentence that follows it.
+        self.assertIn(f'<p><strong>{self.local_quest.name}</strong></p>', message)
+        # and the paragraph after it starts a block of its own rather than continuing the line.
+        self.assertIn('<p>It has been added to the Library', message)
+        # The plain-text part is derived from this HTML, so the breaks have to survive it.
+        self.assertIn(self.local_quest.name, textify(message))
+        self.assertNotIn(f'{self.local_quest.name} It has been added', textify(message))
+
+    def test_export_post__review_email_carries_the_shared_footer(self):
+        """The review email closes with the same footer as every other platform email (#2371)."""
+        message = get_template("library/email/content_pushed.html").render({
+            "sharer": self.test_teacher,
+            "content_type": "quest",
+            "content_name": "A Quest",
+            "review_url": "https://library.test.com/quests/1/",
+            "source_deck_url": "https://tenant.test.com",
+        })
+
+        self.assertIn('contact@bytedeck.com', message)
+        self.assertNotIn('ByteDeck Library</p>', message)
 
     def test_export_post__refused_if_quest_already_exists_in_library(self):
         """A POST to export a quest already in the Library is refused with an explanation.
