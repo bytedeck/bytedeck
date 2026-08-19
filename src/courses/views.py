@@ -340,11 +340,56 @@ class SerializedRegistrationMixin:
             return self.form_invalid(form)
 
 
+class NoOpenSemesterMixin:
+    """The refusal a registration view gives while the deck has no semester open (issue #2060).
+
+    Registering anyone in a course needs a semester to register them into. With none open the
+    form's semester field has no choices at all, so rendering it can only produce a submission
+    that fails on `Select a valid choice`, which says nothing about the actual reason or what
+    to do about it.
+
+    Both views that create a registration check this first, before their other guards, and
+    both check it on POST as well as GET: the GET-side check alone would not stop a direct
+    submission to the same URL.
+
+    Attributes:
+        no_open_semester_heading (str): how the refusal page titles itself. The two views are
+            refusing different things, so each names its own.
+    """
+
+    no_open_semester_heading = ''
+
+    @staticmethod
+    def no_open_semester():
+        """Whether there is no semester open to register anyone into.
+
+        Returns:
+            bool: True when the deck has no open semester.
+        """
+        return SiteConfig.get().has_no_open_semester()
+
+    def no_open_semester_response(self, request):
+        """Render the page with the explanation in place of a form that could only fail.
+
+        Args:
+            request: the request being refused.
+
+        Returns:
+            HttpResponse: the registration template, which words the explanation for a student
+            or for staff depending on who is looking.
+        """
+        return render(request, self.template_name, {
+            'heading': self.no_open_semester_heading,
+            'no_open_semester': True,
+        })
+
+
 @method_decorator(staff_member_required, name='dispatch')
-class CourseAddStudent(SerializedRegistrationMixin, NonPublicOnlyViewMixin, CreateView):
+class CourseAddStudent(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin, CreateView):
     model = CourseStudent
     form_class = CourseStudentForm
     template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Add student to course'
 
     def get_form_kwargs(self):
         kwargs = super().get_form_kwargs()
@@ -366,12 +411,17 @@ class CourseAddStudent(SerializedRegistrationMixin, NonPublicOnlyViewMixin, Crea
         return render(request, self.template_name, {'heading': 'Add student to course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
+
         if self._deck_at_capacity_for_target():
             return self._deck_at_capacity_response(request)
         return super().get(request, *args, **kwargs)
 
     def post(self, request, *args, **kwargs):
         # block the direct POST too, or the cap could be bypassed by submitting the form URL
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
         if self._deck_at_capacity_for_target():
             return self._deck_at_capacity_response(request)
         return super().post(request, *args, **kwargs)
@@ -442,8 +492,8 @@ def _registration_added_message(registration):
 
 
 # Student Course Registration View
-class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, SuccessMessageMixin, LoginRequiredMixin,
-                          UserPassesTestMixin, CreateView):
+class CourseStudentCreate(SerializedRegistrationMixin, NoOpenSemesterMixin, NonPublicOnlyViewMixin,
+                          SuccessMessageMixin, LoginRequiredMixin, UserPassesTestMixin, CreateView):
 
     def test_func(self):
         """Allow the registration view only when the student is not already actively registered
@@ -466,6 +516,7 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
     # fields = ['semester', 'block', 'course', 'grade']
     success_url = reverse_lazy('quests:quests')
     template_name = 'courses/coursestudent_form.html'
+    no_open_semester_heading = 'Join a course'
 
     def get_success_message(self, cleaned_data):
         """The message naming what the student just joined (issue #2179).
@@ -482,17 +533,6 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
         """
         return _registration_added_message(self.object)
 
-    @staticmethod
-    def _no_open_semester():
-        """Whether there is no semester open for a student to join a course into (issue #2060)."""
-        return SiteConfig.get().has_no_open_semester()
-
-    def _no_open_semester_response(self, request):
-        """Render the join page with a message explaining that no semester is open, instead of the
-        registration form, so a student can't join a course when there's nowhere to join (#2060).
-        """
-        return render(request, self.template_name, {'heading': 'Join a course', 'no_open_semester': True})
-
     def _deck_at_capacity(self):
         """Whether the deck's current-student cap blocks this user from registering (#1729 PR 4)."""
         from tenant.limits import can_add_current_student
@@ -507,8 +547,8 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
         return render(request, self.template_name, {'heading': 'Join a course', 'deck_at_capacity': True})
 
     def get(self, request, *args, **kwargs):
-        if self._no_open_semester():
-            return self._no_open_semester_response(request)
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
 
         if self._deck_at_capacity():
             return self._deck_at_capacity_response(request)
@@ -545,8 +585,8 @@ class CourseStudentCreate(SerializedRegistrationMixin, NonPublicOnlyViewMixin, S
     def post(self, request, *args, **kwargs):
         # Also block the POST: without this a student could still submit a registration into the
         # closed active semester by posting directly (the form's only semester choice) (#2060).
-        if self._no_open_semester():
-            return self._no_open_semester_response(request)
+        if self.no_open_semester():
+            return self.no_open_semester_response(request)
         # ...and the same for the capacity cap: the GET-side guard alone wouldn't stop a direct POST
         if self._deck_at_capacity():
             return self._deck_at_capacity_response(request)
