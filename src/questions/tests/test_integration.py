@@ -1,4 +1,5 @@
 import json
+import re
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -91,17 +92,26 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertContains(response, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
 
     def test_submission_page__short_answer_hint_is_the_counter_hook(self):
-        """The short answer's hint renders with the id the live counter finds it by (#2482).
+        """The short answer's input and hint render as the pair the live counter joins (#2482).
 
-        The counter script on the submission page looks up `hint_<input id>` for each
-        input carrying a maxlength, so this pins the two attributes it hangs on. If crispy's
-        hint id or the widget's maxlength ever changes shape, the counter dies silently:
-        this failure is the only thing that would say so.
+        The counter script on the submission page finds each maxlength-carrying input's hint
+        by looking up `hint_<input id>`, so this pins that exact association: the short
+        answer's own input id, the maxlength on that same tag, and a hint whose id is the
+        input's with the `hint_` prefix. If crispy's hint id or the widget's maxlength ever
+        changes shape, the counter dies silently: this failure is the only thing that would
+        say so.
         """
         response = self.assert200("quests:submission", args=[self.submission.id])
+        content = response.content.decode()
 
-        self.assertContains(response, 'id="hint_id_question_submissions-')
-        self.assertContains(response, f'maxlength="{SHORT_ANSWER_MAX_LENGTH}"')
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == self.short_question.id)
+        input_id = f"id_question_submissions-{index}-response_text"
+
+        input_tag = re.search(rf'<input[^>]*\bid="{input_id}"[^>]*>', content)
+        self.assertIsNotNone(input_tag, f"no input with id {input_id} on the page")
+        self.assertIn(f'maxlength="{SHORT_ANSWER_MAX_LENGTH}"', input_tag.group(0))
+        self.assertContains(response, f'id="hint_{input_id}"')
 
     def test_submission_page__summernote_assets_load_once(self):
         """The answer editors ride on the assets the comment box already loads (#2169).
