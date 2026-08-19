@@ -638,9 +638,10 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
 
     def test_CourseStudentUpdate_view__staff_can_update_a_registration_in_an_archived_semester(self):
         """A registration outlives the semester it is in, so a teacher spotting a wrong course
-        on a past one has to be able to correct it. The form offers only open semesters, which
-        left the registration's own value off the list and made the form unsaveable, whatever
-        else was being changed (issue #2507)."""
+        on a past one has to be able to correct it. The staff form has to keep the
+        registration's own archived semester among its choices for that: a field whose current
+        value is not on its list cannot validate, and the form is then unsaveable whatever else
+        is being changed (issue #2507)."""
         archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
         course_student = baker.make(
             CourseStudent, user=self.test_student1, course=self.course, block=self.block,
@@ -919,7 +920,7 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertNotContains(response, 'not one of the available choices')
         self.assertEqual(self.test_student1.coursestudent_set.count(), 0)
 
-    def test_no_open_semester__refusal_is_worded_for_whoever_is_looking(self):
+    def test_NoOpenSemesterMixin__refusal_is_worded_for_whoever_is_looking(self):
         """A student is told to ask their teacher, because that is all they can do about it. The
         teacher is the one who can fix it, so they are told what to fix instead (issue #2506)."""
         self._close_active_semester()
@@ -934,7 +935,7 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertContains(to_student, 'Your teacher needs to open a semester')
         self.assertNotContains(to_student, self.REFUSAL_TO_STAFF)
 
-    def test_no_open_semester__mark_calculations_does_not_send_a_student_to_the_join_page(self):
+    def test_mark_calculations__does_not_link_to_the_join_page_with_no_open_semester(self):
         """The marks page tells a student with no course to go and join one. With no semester
         open that link only leads to a refusal, so it says why in place instead, the same as the
         quests page and the profile page already do (issue #2506)."""
