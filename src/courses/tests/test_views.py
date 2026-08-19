@@ -2618,6 +2618,32 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         # and the course with no mark still gets its row, saying what it is worth in XP
         self.assertContains(response, 'no percentage')
 
+    def test_mark_calculations__does_not_claim_the_other_courses_are_run_on_xp_alone(self):
+        """The page names the course it is about when that is not the one listed first, which
+        happens as soon as an ungraded course sorts ahead of a graded one. It must not say
+        anything about the rest: with two graded courses and one ungraded, "your other courses
+        run on XP alone" would be wrong about one of them (issue #403)."""
+        # ordered by block name, so the XP-only course sorts first and the page is about another
+        for_joy = baker.make(Course, title='For Joy', uses_marks=False)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='A block'), course=for_joy,
+        )
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='C block'), course=baker.make(Course, title='Also Graded'),
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        # "since your other course(s) run on XP alone" was the claim; assert on its lead-in,
+        # since the phrase itself also appears in a javascript comment in the chart template
+        self.assertNotContains(response, 'since your other')
+        self.assertContains(response, 'one of your courses that has a mark')
+        self.assertTrue(response.context['obj'].course.uses_marks)
+
     def test_mark_calculations__drops_the_mark_distribution_chart_with_no_marks_to_distribute(self):
         """The distribution compares a student's mark against their classmates'. A student with
         no mark in any of their courses has nothing to place on it (issue #403)."""

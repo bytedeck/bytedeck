@@ -376,6 +376,43 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertEqual(self.profile.mark_cached, 10)
 
     @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__skips_a_course_run_on_xp_alone(self, fraction_complete):
+        """A course can be run on XP alone and have no mark at all (issue #403). A student who
+        holds one of those and a graded course still has a mark, so the one number reported here
+        comes from the graded one however the two happen to sort."""
+        # ordered by block name, so the XP-only course is the one that sorts first
+        for_joy = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False),
+            block=baker.make('courses.Block', name='A block'),
+        )
+        graded = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', xp_for_100_percent=1000),
+            block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            course=graded.course, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        self.assertEqual(list(self.profile.current_courses())[0], for_joy)
+        self.assertIsNone(for_joy.mark())
+        # 50 XP halfway through the semester projects to 100, out of the graded course's 1000
+        self.assertEqual(self.profile.mark(), 10)
+
+    def test_mark__none_when_every_course_is_run_on_xp_alone(self):
+        """With nothing but ungraded courses there is no mark to report, which is not the same
+        as a mark of zero: the places that show one show nothing instead."""
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False), block=baker.make('courses.Block'),
+        )
+
+        self.assertIsNone(self.profile.mark())
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
     def test_mark__multiple_courses(self, fraction_complete):
         """A student in several courses has a mark in each, so this one number is the first
         registration's, whole. Each registration's XP is already only its own share, so nothing

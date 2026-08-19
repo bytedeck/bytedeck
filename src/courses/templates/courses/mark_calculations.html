@@ -60,9 +60,11 @@ for {{user}}
       <h3>Explanation</h3>
       <p>
         Here is an explanation of how I calculated your mark. If you have any questions about this please ask!
+        {% comment %} Only when the charted course is not the one listed first, which is when a
+           reader would otherwise wonder why. Says nothing about the rest: some of them may use
+           marks too, and the table above already shows which. {% endcomment %}
         {% if num_courses > 1 and obj.course != courses.first.course %}
-          It is about <strong>{{ obj.course }}</strong>, since your other
-          course{{ num_courses|add:"-1"|pluralize }} run on XP alone.
+          It is about <strong>{{ obj.course }}</strong>, one of your courses that has a mark.
         {% endif %}
       </p>
       <div>
