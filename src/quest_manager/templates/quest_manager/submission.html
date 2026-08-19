@@ -245,6 +245,27 @@
                   text_area.append(msg);
             });
 
+            // Live character counter for the short answers (#2482). With JavaScript off the
+            // hint stays the server-rendered "Up to 200 characters."; here that sentence moves
+            // into a screen-reader-only span (a count re-announced on every keystroke is noise
+            // there) and a visible counter follows the student's typing, turning amber as the
+            // limit approaches. The input's maxlength does the actual enforcing either way.
+            $('.question-submission-form input[type=text][maxlength]').each(function () {
+                var input = $(this);
+                var max = parseInt(input.attr('maxlength'), 10);
+                var hint = $('#hint_' + this.id);  // crispy renders each field's help text with this id
+                if (!max || !hint.length) return;
+                hint.wrapInner('<span class="sr-only"></span>');
+                var counter = $('<span aria-hidden="true"></span>').appendTo(hint);
+                var update = function () {
+                    var used = input.val().length;
+                    counter.text(used + ' / ' + max + ' characters');
+                    counter.toggleClass('text-warning', (max - used) / max <= 0.1);
+                };
+                input.on('input', update);
+                update();
+            });
+
             // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading

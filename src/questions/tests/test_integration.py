@@ -90,6 +90,19 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
 
         self.assertContains(response, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
 
+    def test_submission_page__short_answer_hint_is_the_counter_hook(self):
+        """The short answer's hint renders with the id the live counter finds it by (#2482).
+
+        The counter script on the submission page looks up `hint_<input id>` for each
+        input carrying a maxlength, so this pins the two attributes it hangs on. If crispy's
+        hint id or the widget's maxlength ever changes shape, the counter dies silently:
+        this failure is the only thing that would say so.
+        """
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, 'id="hint_id_question_submissions-')
+        self.assertContains(response, f'maxlength="{SHORT_ANSWER_MAX_LENGTH}"')
+
     def test_submission_page__summernote_assets_load_once(self):
         """The answer editors ride on the assets the comment box already loads (#2169).
 
