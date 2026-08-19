@@ -93,6 +93,20 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertIsNone(user.profile.mark_cached)
         self.assertIsNone(MarkRange.objects.get_range_for_user(user))
 
+    def test_get_range_for_user__none_when_the_student_is_in_no_course(self):
+        """A cached mark outlives the registration it was worked out from: archiving a semester
+        leaves it alone until something recalculates it. A range is matched against the courses
+        the student is in, and they are in none, so there is no range for them even though they
+        still carry a number."""
+        user = baker.make(User)
+        profile = user.profile
+        profile.mark_cached = 60.0
+        profile.save()
+
+        # past the "no mark" guard, so it is the missing course that decides this one
+        self.assertIsNotNone(user.profile.mark_cached)
+        self.assertIsNone(MarkRange.objects.get_range_for_user(user))
+
     def test_get_range_for_user__by_cached_mark(self):
         """ Test that `get_mark_range_for_user` returns the correct mark range for a given user.
         """
@@ -1396,6 +1410,18 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         student.profile.xp_invalidate_cache()
 
         self.assertIsNone(registration.mark())
+
+    def test_mark__is_zero_for_a_registration_with_no_course(self):
+        """A registration's course is nullable, and deleting a course leaves the registration
+        behind with none. There is no course to ask whether it uses marks, and nothing to be a
+        percentage of, so the mark is zero."""
+        student = baker.make(User)
+        registration = self._register(student, None)
+        self._approved(student, xp=40)
+        student.profile.xp_invalidate_cache()
+
+        self.assertIsNone(registration.course)
+        self.assertEqual(registration.mark(), 0)
 
     def test_mark__is_still_worked_out_for_the_courses_that_do_use_marks(self):
         """Turning marks off for one course leaves the others alone: a student in both gets a
