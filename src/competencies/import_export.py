@@ -43,6 +43,7 @@ from pathlib import Path
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 
 from .models import Competency
 
@@ -117,12 +118,12 @@ def parse_json_set(raw):
     if isinstance(raw, bytes):
         try:
             raw = raw.decode('utf-8')
-        except UnicodeDecodeError:
-            raise ValidationError("The file is not valid UTF-8 text.")
+        except UnicodeDecodeError as e:
+            raise ValidationError("The file is not valid UTF-8 text.") from e
     try:
         data = json.loads(raw)
     except json.JSONDecodeError as e:
-        raise ValidationError(f"The file is not valid JSON: {e}")
+        raise ValidationError(f"The file is not valid JSON: {e}") from e
     return validate_competency_set(data)
 
 
@@ -135,8 +136,8 @@ def parse_csv_set(raw, name=''):
     if isinstance(raw, bytes):
         try:
             raw = raw.decode('utf-8-sig')  # tolerate an Excel BOM
-        except UnicodeDecodeError:
-            raise ValidationError("The file is not valid UTF-8 text.")
+        except UnicodeDecodeError as e:
+            raise ValidationError("The file is not valid UTF-8 text.") from e
 
     reader = csv.DictReader(io.StringIO(raw))
     header = [h.strip().lower() for h in reader.fieldnames or []]
@@ -196,40 +197,78 @@ def preview_entry_statuses(competency_set):
     """ Returns the set's entries, each annotated with the action an import would
     take: 'update' (a matching competency exists) or 'create'.
     """
+    lookup = _build_existing_lookup(competency_set['entries'])
     entries = []
     for entry in competency_set['entries']:
         entry = dict(entry)
-        entry['status'] = 'update' if _find_existing(entry) else 'create'
+        entry['status'] = 'update' if _find_existing(entry, lookup) else 'create'
         entries.append(entry)
     return entries
 
 
-def _find_existing(entry):
-    """ Find the existing Competency an entry corresponds to, or None.
+def _build_existing_lookup(entries):
+    """ Prefetch every existing Competency the given entries could match, indexed
+    for the in-memory matching _find_existing does. Fetching all candidates in a
+    single query keeps previews and imports of large sets (e.g. a full-subject
+    curriculum) at a constant query count instead of two queries per entry.
+
+    Returns:
+        dict: three indexes over the candidate competencies, resolved in the
+        model's default ordering (first match per key wins):
+        'by_source_id' maps source_id to competency; 'unsourced_by_name' maps
+        lowercased name to competency for competencies without a source_id;
+        'by_name' maps lowercased name to competency regardless of source_id.
+    """
+    source_ids = {entry['source_id'] for entry in entries if entry['source_id']}
+    names_lower = {entry['name'].lower() for entry in entries}
+    candidates = Competency.objects.annotate(name_lower=Lower('name')).filter(
+        models.Q(source_id__in=source_ids) | models.Q(name_lower__in=names_lower)
+    )
+
+    lookup = {'by_source_id': {}, 'unsourced_by_name': {}, 'by_name': {}}
+    for competency in candidates:
+        _register_in_lookup(lookup, competency)
+    return lookup
+
+
+def _register_in_lookup(lookup, competency):
+    """ Index a competency into a _build_existing_lookup dict under each key it can
+    match on. setdefault keeps the first competency registered for a key, so the
+    match for an ambiguous key is the first candidate in the model's default ordering.
+    """
+    if competency.source_id:
+        lookup['by_source_id'].setdefault(competency.source_id, competency)
+    else:
+        lookup['unsourced_by_name'].setdefault(competency.name.lower(), competency)
+    lookup['by_name'].setdefault(competency.name.lower(), competency)
+
+
+def _find_existing(entry, lookup):
+    """ Find the existing Competency an entry corresponds to (in the prefetched
+    lookup from _build_existing_lookup), or None.
 
     An entry with a source_id matches on source_id first, then falls back to a
     case-insensitive name match against competencies *without* a source_id (so a
     curriculum import can adopt hand-typed competencies instead of duplicating
-    them — but never hijacks a competency that belongs to a different taxonomy
+    them, but never hijacks a competency that belongs to a different taxonomy
     entry with the same name, e.g. the same wording in two grades' sets).
 
     An entry without a source_id (e.g. from a teacher-authored CSV) matches on
     name alone, keeping re-imports idempotent.
     """
-    no_source_id = models.Q(source_id__isnull=True) | models.Q(source_id='')
     if entry['source_id']:
         return (
-            Competency.objects.filter(source_id=entry['source_id']).first()
-            or Competency.objects.filter(no_source_id, name__iexact=entry['name']).first()
+            lookup['by_source_id'].get(entry['source_id'])
+            or lookup['unsourced_by_name'].get(entry['name'].lower())
         )
-    return Competency.objects.filter(name__iexact=entry['name']).first()
+    return lookup['by_name'].get(entry['name'].lower())
 
 
 def import_competency_set(competency_set, selected_indexes=None):
     """ Import a validated competency set into the current deck.
 
     Entries matching an existing competency (see _find_existing) are updated in
-    place — never duplicated — so re-importing a set is idempotent. The `active`
+    place (never duplicated) so re-importing a set is idempotent. The `active`
     flag of existing competencies is left alone (deactivation is a deck-level
     decision that a re-import shouldn't quietly reverse).
 
@@ -245,25 +284,31 @@ def import_competency_set(competency_set, selected_indexes=None):
     if selected_indexes is not None:
         entries = [entries[i] for i in selected_indexes if 0 <= i < len(entries)]
 
+    lookup = _build_existing_lookup(entries)
     created = updated = 0
     for entry in entries:
-        existing = _find_existing(entry)
+        existing = _find_existing(entry, lookup)
         if existing:
             existing.name = entry['name']
             existing.description = entry['description']
             existing.category = entry['category']
             if entry['source_id']:
                 existing.source_id = entry['source_id']
+            existing.full_clean()
             existing.save()
             updated += 1
         else:
-            Competency.objects.create(
+            competency = Competency(
                 name=entry['name'],
                 description=entry['description'],
                 category=entry['category'],
                 source_id=entry['source_id'] or None,
             )
+            competency.full_clean()
+            competency.save()
             created += 1
+            # register it so a later entry in this same set matches it instead of duplicating
+            _register_in_lookup(lookup, competency)
     return created, updated
 
 

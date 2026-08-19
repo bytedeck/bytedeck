@@ -137,6 +137,7 @@ class SiteConfigFormTest(TenantTestCase):
         """ Once the feature flag is on, the proficiency scale label fields become editable
         (as advanced fields, so only by the deck owner) """
         self.config.enable_competencies = True
+        self.config.full_clean()
         self.config.save()
 
         form = SiteConfigForm(instance=self.config, is_deck_owner=True)

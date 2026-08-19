@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import ValidationError
 from django.db import models
 
 
@@ -18,8 +19,10 @@ class ProficiencyLevel(models.IntegerChoices):
 
 
 class CompetencyQuerySet(models.QuerySet):
+    """ Custom queryset for Competency, exposing the common filters as chainable methods. """
 
     def active(self):
+        """ Returns the queryset filtered down to active (not soft-deleted) competencies. """
         return self.filter(active=True)
 
 
@@ -60,6 +63,7 @@ class Competency(models.Model):
         verbose_name_plural = 'competencies'
 
     def __str__(self):
+        """ Returns the competency's name. """
         return self.name
 
 
@@ -89,6 +93,7 @@ class QuestCompetency(models.Model):
         verbose_name_plural = 'quest competencies'
 
     def __str__(self):
+        """ Returns "<quest> - <competency>", identifying both ends of the link. """
         return f"{self.quest} - {self.competency}"
 
 
@@ -137,5 +142,27 @@ class CompetencyAssessment(models.Model):
             models.Index(fields=['user', 'competency', 'timestamp'], name='competency_evidence_idx')
         ]
 
+    def clean(self):
+        """ Validates that the generic source FK is set atomically: either both
+        source_content_type and source_object_id are provided (evidence with a source)
+        or neither is (source-less evidence, e.g. a manual teacher assessment).
+
+        This is model-level validation only, deliberately not a database constraint:
+        source_content_type is SET_NULL, so deleting a stale ContentType row (e.g. via
+        remove_stale_contenttypes after an app is removed) legitimately leaves the id
+        half behind at the database level, and a both-or-neither check constraint would
+        turn that cleanup into an IntegrityError.
+
+        Raises:
+            ValidationError: if exactly one half of the source pair is set.
+        """
+        super().clean()
+        if (self.source_content_type is None) != (self.source_object_id is None):
+            raise ValidationError(
+                "The evidence source must be set atomically: provide both "
+                "source_content_type and source_object_id, or neither."
+            )
+
     def __str__(self):
+        """ Returns "<student>: <competency> = <level label>" for admin and debugging output. """
         return f"{self.user}: {self.competency} = {self.get_level_display()}"

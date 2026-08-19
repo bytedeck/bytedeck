@@ -8,8 +8,8 @@
         <strong>{{ competency_set.name|default:"Uploaded competency set" }}</strong>
         {% if competency_set.jurisdiction or competency_set.subject or competency_set.grade %}
             <br><small>
-                {% if competency_set.jurisdiction %}{{ competency_set.jurisdiction }}{% endif %}
-                {% if competency_set.subject %} &mdash; {{ competency_set.subject }}{% endif %}
+                {% if competency_set.jurisdiction %}{{ competency_set.jurisdiction }}{% if competency_set.subject %}:{% endif %}{% endif %}
+                {% if competency_set.subject %}{{ competency_set.subject }}{% endif %}
                 {% if competency_set.grade %} (Grade {{ competency_set.grade }}){% endif %}
             </small>
         {% endif %}

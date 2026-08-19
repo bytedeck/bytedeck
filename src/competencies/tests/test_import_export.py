@@ -37,8 +37,10 @@ def make_valid_set(entries, **metadata):
 
 
 class ParseAndValidateTest(TenantTestCase):
+    """ Tests for the JSON/CSV competency-set parsers and the set validator. """
 
     def test_parse_json_set__happy_path(self):
+        """ A well-formed JSON set parses into normalized metadata and entries """
         raw = json.dumps(make_set(
             [{'source_id': 'x:1', 'name': 'Think', 'description': 'desc', 'category': 'Thinking'}],
             jurisdiction='BC', subject='Math', grade='8', source_url='https://example.com',
@@ -52,30 +54,37 @@ class ParseAndValidateTest(TenantTestCase):
         ])
 
     def test_parse_json_set__malformed_json(self):
+        """ Malformed JSON is rejected with a ValidationError """
         with self.assertRaises(ValidationError):
             parse_json_set("{not valid json")
 
     def test_parse_json_set__not_utf8(self):
+        """ Bytes that aren't UTF-8 text are rejected with a ValidationError """
         with self.assertRaises(ValidationError):
             parse_json_set(b'\xff\xfe\x00broken')
 
     def test_parse_json_set__wrong_format_marker(self):
+        """ JSON without the bytedeck-competency-set format marker is rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps({'format': 'something-else', 'version': 1, 'entries': [{'name': 'x'}]}))
 
     def test_parse_json_set__unsupported_version(self):
+        """ A version newer than this deck supports is rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([{'name': 'x'}], version=99)))
 
     def test_parse_json_set__no_entries(self):
+        """ A set with an empty entries list is rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([])))
 
     def test_parse_json_set__entry_missing_name(self):
+        """ An entry with a blank name is rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([{'source_id': 'x:1', 'name': '  '}])))
 
     def test_parse_json_set__duplicate_source_ids(self):
+        """ Two entries sharing a source_id are rejected """
         with self.assertRaises(ValidationError):
             parse_json_set(json.dumps(make_set([
                 {'source_id': 'x:1', 'name': 'a'},
@@ -83,6 +92,7 @@ class ParseAndValidateTest(TenantTestCase):
             ])))
 
     def test_parse_csv_set__happy_path(self):
+        """ A well-formed CSV parses; missing optional cells become empty strings """
         raw = (
             "name,category,description,source_id\n"
             "Think critically,Thinking,A description,x:1\n"
@@ -99,29 +109,35 @@ class ParseAndValidateTest(TenantTestCase):
         self.assertEqual(competency_set['entries'][1]['source_id'], '')
 
     def test_parse_csv_set__column_order_does_not_matter(self):
+        """ CSV columns are matched by header name, not position """
         competency_set = parse_csv_set("category,name\nThinking,Think\n")
         self.assertEqual(competency_set['entries'][0]['name'], 'Think')
         self.assertEqual(competency_set['entries'][0]['category'], 'Thinking')
 
     def test_parse_csv_set__tolerates_excel_bom_and_blank_lines(self):
+        """ An Excel-style UTF-8 BOM and fully blank rows are tolerated """
         raw = b'\xef\xbb\xbfname,category\r\nThink,Thinking\r\n,\r\n'
         competency_set = parse_csv_set(raw)
         self.assertEqual(len(competency_set['entries']), 1)
 
     def test_parse_csv_set__missing_name_column(self):
+        """ A CSV without a name column is rejected """
         with self.assertRaises(ValidationError):
             parse_csv_set("title,category\nThink,Thinking\n")
 
     def test_parse_csv_set__unknown_column(self):
+        """ A CSV with an unrecognized column is rejected """
         with self.assertRaises(ValidationError):
             parse_csv_set("name,level\nThink,3\n")
 
     def test_parse_csv_set__row_missing_name_value(self):
+        """ A CSV row with an empty name cell is rejected """
         with self.assertRaises(ValidationError):
             parse_csv_set("name,category\n,Thinking\n")
 
 
 class BundledSetsTest(TenantTestCase):
+    """ Tests for the curriculum datasets bundled in the app's data/ directory. """
 
     def test_bundled_sets_exist_and_are_valid(self):
         """ Every dataset bundled in data/ parses and validates """
@@ -139,17 +155,21 @@ class BundledSetsTest(TenantTestCase):
                 self.assertTrue(entry['source_id'], f"{key}: entry {entry['name']} is missing a source_id")
 
     def test_load_bundled_set__unknown_key(self):
+        """ Asking for a bundled set that doesn't exist raises a ValidationError """
         with self.assertRaises(ValidationError):
             load_bundled_set('no-such-set')
 
     def test_load_bundled_set__rejects_path_traversal(self):
+        """ A path-traversal key can't escape the bundled data directory """
         with self.assertRaises(ValidationError):
             load_bundled_set('../secrets')
 
 
 class ImportCompetencySetTest(TenantTestCase):
+    """ Tests for import_competency_set and the entry-matching rules it applies. """
 
     def test_import__happy_path(self):
+        """ Importing a bundled set into an empty deck creates every entry """
         competency_set = load_bundled_set('bc-core-competencies')
         created, updated = import_competency_set(competency_set)
 
@@ -175,6 +195,7 @@ class ImportCompetencySetTest(TenantTestCase):
         self.assertEqual(Competency.objects.count(), count_after_first)
 
     def test_import__reimport_updates_changed_fields(self):
+        """ A re-import with changed fields updates the existing competency in place """
         import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'Old name', 'category': 'Old'}]))
         import_competency_set(make_valid_set([{'source_id': 'x:1', 'name': 'New name', 'category': 'New', 'description': 'd'}]))
 
@@ -218,6 +239,7 @@ class ImportCompetencySetTest(TenantTestCase):
         self.assertEqual(Competency.objects.filter(name='Estimate reasonably').count(), 2)
 
     def test_import__csv_entries_without_source_id_are_idempotent_by_name(self):
+        """ Entries without a source_id match existing competencies by name on re-import """
         competency_set = parse_csv_set("name,category\nThink,Thinking\n")
         import_competency_set(competency_set)
         created, updated = import_competency_set(competency_set)
@@ -226,17 +248,19 @@ class ImportCompetencySetTest(TenantTestCase):
         self.assertEqual(Competency.objects.count(), 1)
 
     def test_import__selected_indexes_only(self):
+        """ Only the selected entry indexes are imported; out-of-range indexes are ignored """
         competency_set = make_valid_set([
             {'source_id': 'x:1', 'name': 'a'},
             {'source_id': 'x:2', 'name': 'b'},
             {'source_id': 'x:3', 'name': 'c'},
         ])
-        created, updated = import_competency_set(competency_set, selected_indexes=[0, 2, 99])
+        created, _updated = import_competency_set(competency_set, selected_indexes=[0, 2, 99])
 
         self.assertEqual(created, 2)
         self.assertEqual(set(Competency.objects.values_list('name', flat=True)), {'a', 'c'})
 
     def test_preview_entry_statuses(self):
+        """ The preview marks entries as update or create depending on whether a match exists """
         baker.make(Competency, name='Existing', source_id='x:1')
         entries = preview_entry_statuses(make_valid_set([
             {'source_id': 'x:1', 'name': 'Existing'},
@@ -246,8 +270,10 @@ class ImportCompetencySetTest(TenantTestCase):
 
 
 class ExportRoundTripTest(TenantTestCase):
+    """ Tests for the exporters and full export-import round trips. """
 
     def test_export__active_competencies_only(self):
+        """ The default export includes active competencies and skips deactivated ones """
         baker.make(Competency, name='Active one', active=True)
         baker.make(Competency, name='Retired one', active=False)
 
@@ -274,6 +300,7 @@ class ExportRoundTripTest(TenantTestCase):
         )
 
     def test_export_import_round_trip__csv(self):
+        """ Export to CSV then import restores the same competencies """
         import_competency_set(load_bundled_set('bc-core-competencies'))
         original = list(Competency.objects.values('source_id', 'name', 'category', 'description'))
 

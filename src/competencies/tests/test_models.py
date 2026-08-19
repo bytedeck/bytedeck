@@ -1,8 +1,11 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
+from django.utils import timezone
 
 from django_tenants.test.cases import TenantTestCase
 from model_bakery import baker
@@ -14,6 +17,7 @@ User = get_user_model()
 
 
 class ProficiencyLevelTest(TenantTestCase):
+    """ Tests for the ProficiencyLevel integer choices. """
 
     def test_level_values(self):
         """ Levels are stored as ints on the BC 4-point scale so aggregation/comparison is trivial """
@@ -24,14 +28,16 @@ class ProficiencyLevelTest(TenantTestCase):
 
 
 class CompetencyModelTest(TenantTestCase):
+    """ Tests for the Competency model: creation, the active flag, and deletion protection. """
 
     def setUp(self):
+        """ Creates the competency the tests operate on. """
         self.competency = baker.make(Competency, name="Communicating")
 
     def make_assessment(self, competency):
         """ baker.make(CompetencyAssessment) would fill the generic FK's content type with a
-        random model — any installed model, even table-less throwaway classes leaked into the
-        app registry by other tests — making the suite randomly flaky.
+        random model (any installed model, even table-less throwaway classes leaked into the
+        app registry by other tests), making the suite randomly flaky.
         Build a deterministic assessment instead. """
         return CompetencyAssessment.objects.create(
             user=baker.make(User),
@@ -40,11 +46,13 @@ class CompetencyModelTest(TenantTestCase):
         )
 
     def test_object_creation(self):
+        """ A Competency can be created, str()s to its name, and defaults to active """
         self.assertIsInstance(self.competency, Competency)
         self.assertEqual(str(self.competency), "Communicating")
         self.assertTrue(self.competency.active)
 
     def test_active_queryset(self):
+        """ Competency.objects.active() includes active competencies and excludes deactivated ones """
         inactive_competency = baker.make(Competency, active=False)
         active_qs = Competency.objects.active()
         self.assertIn(self.competency, active_qs)
@@ -54,6 +62,7 @@ class CompetencyModelTest(TenantTestCase):
         """ Deactivating a competency doesn't remove it or its related objects """
         assessment = self.make_assessment(self.competency)
         self.competency.active = False
+        self.competency.full_clean()
         self.competency.save()
 
         self.assertTrue(Competency.objects.filter(pk=self.competency.pk).exists())
@@ -75,13 +84,16 @@ class CompetencyModelTest(TenantTestCase):
 
 
 class QuestCompetencyModelTest(TenantTestCase):
+    """ Tests for the QuestCompetency through-table linking quests to competencies. """
 
     def setUp(self):
+        """ Creates a quest, a competency, and the link between them. """
         self.quest = baker.make(Quest, name="Test Quest")
         self.competency = baker.make(Competency, name="Creative Thinking")
         self.quest_competency = QuestCompetency.objects.create(quest=self.quest, competency=self.competency)
 
     def test_object_creation(self):
+        """ A QuestCompetency can be created and str()s to "<quest> - <competency>" """
         self.assertIsInstance(self.quest_competency, QuestCompetency)
         self.assertEqual(str(self.quest_competency), "Test Quest - Creative Thinking")
 
@@ -101,14 +113,18 @@ class QuestCompetencyModelTest(TenantTestCase):
         self.assertEqual(QuestCompetency.objects.count(), 2)
 
     def test_quest_delete_removes_link_but_not_competency(self):
+        """ Deleting a quest cascades away its competency links, leaving the competency itself alone """
         self.quest.delete()
         self.assertFalse(QuestCompetency.objects.exists())
         self.assertTrue(Competency.objects.filter(pk=self.competency.pk).exists())
 
 
 class CompetencyAssessmentModelTest(TenantTestCase):
+    """ Tests for the CompetencyAssessment evidence record: creation, validation,
+    the generic source FK, and evidence surviving the deletion of its sources. """
 
     def setUp(self):
+        """ Creates the student, teacher, competency, quest, and submission the assessments reference. """
         self.student = baker.make(User)
         self.teacher = baker.make(User, is_staff=True)
         self.competency = baker.make(Competency)
@@ -116,6 +132,8 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         self.submission = baker.make(QuestSubmission, quest=self.quest, user=self.student)
 
     def make_assessment(self, **kwargs):
+        """ Returns a saved CompetencyAssessment built from the fixture objects,
+        with any field overridable via kwargs. """
         kwargs.setdefault('user', self.student)
         kwargs.setdefault('competency', self.competency)
         kwargs.setdefault('level', ProficiencyLevel.PROFICIENT)
@@ -124,6 +142,8 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         return CompetencyAssessment.objects.create(**kwargs)
 
     def test_object_creation(self):
+        """ An assessment can be created, gets an auto timestamp, and str()s to
+        "<student>: <competency> = <level label>" """
         assessment = self.make_assessment()
         self.assertIsInstance(assessment, CompetencyAssessment)
         self.assertIsNotNone(assessment.timestamp)
@@ -180,9 +200,34 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         self.assertIsNone(assessment.assessed_by)
 
     def test_assessed_by_nullable_for_self_or_system_assessment(self):
+        """ assessed_by may be null, denoting a self- or system-made assessment """
         assessment = self.make_assessment(assessed_by=None)
         assessment.full_clean()
         self.assertIsNone(assessment.assessed_by)
+
+    def test_clean__source_must_be_set_atomically(self):
+        """ Validation rejects an evidence source with only one half of the generic FK
+        pair set: content type without object id, or object id without content type """
+        content_type = ContentType.objects.get_for_model(QuestSubmission)
+
+        assessment = self.make_assessment()
+        assessment.source_content_type = content_type
+        assessment.source_object_id = None
+        with self.assertRaises(ValidationError):
+            assessment.full_clean()
+
+        assessment.source_content_type = None
+        assessment.source_object_id = self.submission.id
+        with self.assertRaises(ValidationError):
+            assessment.full_clean()
+
+    def test_clean__sourceless_evidence_is_valid(self):
+        """ Evidence with neither source field set (e.g. a manual teacher assessment)
+        passes validation """
+        assessment = self.make_assessment(source_object=None)
+        assessment.full_clean()
+        self.assertIsNone(assessment.source_content_type)
+        self.assertIsNone(assessment.source_object_id)
 
     def test_student_deletion_cascades_assessments(self):
         """ Evidence is meaningless without its student """
@@ -191,6 +236,12 @@ class CompetencyAssessmentModelTest(TenantTestCase):
         self.assertFalse(CompetencyAssessment.objects.exists())
 
     def test_ordering_most_recent_first(self):
+        """ The default queryset ordering puts the most recent evidence first """
         first = self.make_assessment(level=ProficiencyLevel.DEVELOPING)
         second = self.make_assessment(level=ProficiencyLevel.PROFICIENT)
+
+        # auto_now_add stamps two back-to-back creates within clock resolution, which
+        # can't be relied on to order them; give the older record a clearly older stamp
+        CompetencyAssessment.objects.filter(pk=first.pk).update(timestamp=timezone.now() - timedelta(minutes=5))
+
         self.assertEqual(list(CompetencyAssessment.objects.all()), [second, first])

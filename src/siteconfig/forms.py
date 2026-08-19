@@ -41,6 +41,18 @@ class SiteConfigForm(forms.ModelForm):
     ]
 
     def __init__(self, *args, **kwargs):
+        """ Builds the form and its crispy-forms layout, adapting the fields to the
+        deck's feature flags and the requesting user.
+
+        The proficiency scale label fields are only included when the competencies
+        feature is enabled (otherwise they're removed entirely); the advanced fields
+        are disabled unless is_deck_owner is True.
+
+        Args:
+            *args, **kwargs: standard ModelForm arguments, plus the keyword-only
+                is_deck_owner (bool, default False): whether the requesting user is
+                this deck's owner and may edit the advanced fields.
+        """
         is_deck_owner = kwargs.pop('is_deck_owner', False)
 
         super().__init__(*args, **kwargs)

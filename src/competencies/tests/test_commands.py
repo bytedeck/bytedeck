@@ -13,8 +13,10 @@ from competencies.models import Competency
 
 
 class ImportCompetenciesCommandTest(TenantTestCase):
+    """ Tests for the import_competencies management command. """
 
     def test_import_bundled_set(self):
+        """ The --set option imports a bundled set, and a re-run is idempotent """
         out = StringIO()
         call_command('import_competencies', '--set', 'bc-core-competencies', stdout=out)
 
@@ -29,6 +31,7 @@ class ImportCompetenciesCommandTest(TenantTestCase):
         self.assertIn('0 created', out.getvalue())
 
     def test_import_json_file(self):
+        """ The --file option imports a .json competency-set file """
         content = {
             'format': 'bytedeck-competency-set',
             'version': 1,
@@ -43,6 +46,7 @@ class ImportCompetenciesCommandTest(TenantTestCase):
         self.assertTrue(Competency.objects.filter(name='From a file').exists())
 
     def test_import_csv_file(self):
+        """ The --file option imports a .csv competency-set file """
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / 'set.csv'
             path.write_text("name,category\nCSV file competency,Strand\n", encoding='utf-8')
@@ -51,14 +55,17 @@ class ImportCompetenciesCommandTest(TenantTestCase):
         self.assertTrue(Competency.objects.filter(name='CSV file competency').exists())
 
     def test_import_unknown_bundled_set(self):
+        """ An unknown --set key fails with a CommandError """
         with self.assertRaises(CommandError):
             call_command('import_competencies', '--set', 'no-such-set', stdout=StringIO())
 
     def test_import_missing_file(self):
+        """ A nonexistent --file path fails with a CommandError """
         with self.assertRaises(CommandError):
             call_command('import_competencies', '--file', '/no/such/file.json', stdout=StringIO())
 
     def test_import_malformed_file(self):
+        """ A file that fails parsing/validation fails with a CommandError """
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / 'broken.json'
             path.write_text('{not json', encoding='utf-8')
@@ -66,17 +73,21 @@ class ImportCompetenciesCommandTest(TenantTestCase):
                 call_command('import_competencies', '--file', str(path), stdout=StringIO())
 
     def test_list_bundled_sets(self):
+        """ The --list option prints the available bundled set keys """
         out = StringIO()
         call_command('import_competencies', '--list', stdout=out)
         self.assertIn('bc-core-competencies', out.getvalue())
 
 
 class ExportCompetenciesCommandTest(TenantTestCase):
+    """ Tests for the export_competencies management command. """
 
     def setUp(self):
+        """ Imports a bundled set so there is something to export. """
         call_command('import_competencies', '--set', 'bc-math-8', stdout=StringIO())
 
     def test_export_json_to_stdout(self):
+        """ The default invocation writes the deck's competencies as JSON to stdout """
         out = StringIO()
         call_command('export_competencies', stdout=out)
         data = json.loads(out.getvalue())
@@ -85,6 +96,7 @@ class ExportCompetenciesCommandTest(TenantTestCase):
         self.assertEqual(len(data['entries']), Competency.objects.count())
 
     def test_export_csv_to_file(self):
+        """ --format csv --output writes a CSV competency set to the given file """
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / 'out.csv'
             call_command('export_competencies', '--format', 'csv', '--output', str(path), stdout=StringIO())

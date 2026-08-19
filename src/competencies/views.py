@@ -35,6 +35,9 @@ def competencies_enabled(f):
 
 @method_decorator([competencies_enabled, staff_member_required], name='dispatch')
 class CompetencyListView(NonPublicOnlyViewMixin, ListView):
+    """ The staff-facing list of this deck's competencies, with links to the
+    import/export tools.
+    """
     model = Competency
     template_name = 'competencies/list.html'
 
@@ -48,6 +51,9 @@ class CompetencyImportView(NonPublicOnlyViewMixin, FormView):
     template_name = 'competencies/import.html'
 
     def form_valid(self, form):
+        """ Stashes the parsed competency set from the valid form in the session and
+        returns a redirect to the preview step.
+        """
         self.request.session[IMPORT_SESSION_KEY] = form.cleaned_data['competency_set']
         return redirect('competencies:import_preview')
 
@@ -60,17 +66,29 @@ class CompetencyImportPreviewView(NonPublicOnlyViewMixin, TemplateView):
     template_name = 'competencies/import_preview.html'
 
     def get(self, request, *args, **kwargs):
+        """ Renders the preview page, or returns a redirect back to the upload step
+        when there's no parsed set in the session (e.g. a direct visit or a reload
+        after importing).
+        """
         if IMPORT_SESSION_KEY not in request.session:
             return redirect('competencies:import')
         return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
+        """ Returns the template context with the session's competency set and its
+        entries annotated with the create/update action an import would take.
+        """
         competency_set = self.request.session[IMPORT_SESSION_KEY]
         kwargs['competency_set'] = competency_set
         kwargs['entries'] = preview_entry_statuses(competency_set)
         return super().get_context_data(**kwargs)
 
     def post(self, request, *args, **kwargs):
+        """ Imports the entries selected on the preview form from the session's
+        competency set, then returns a redirect: to the competency list with a
+        success message, back to the preview when nothing was selected, or back
+        to the upload step when the session holds no set.
+        """
         competency_set = request.session.get(IMPORT_SESSION_KEY)
         if competency_set is None:
             return redirect('competencies:import')
@@ -95,6 +113,12 @@ class CompetencyExportView(NonPublicOnlyViewMixin, TemplateView):
     """
 
     def get(self, request, *args, **kwargs):
+        """ Returns the deck's active competencies as a file-download HttpResponse in
+        the format given by the ?format= query param: 'json' (the default) or 'csv'.
+
+        Raises:
+            Http404: for any other requested format.
+        """
         export_format = request.GET.get('format', 'json')
         filename = f"{slugify(SiteConfig.get().site_name)}-competencies"
         set_name = f"{SiteConfig.get().site_name} Competencies"

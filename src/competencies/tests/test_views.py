@@ -18,12 +18,14 @@ User = get_user_model()
 
 class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
     """ With enable_competencies off (the default), every competencies URL 404s
-    for everyone — students and staff alike see no change or difference. """
+    for everyone: students and staff alike see no change or difference. """
 
     def setUp(self):
+        """ Builds the tenant client. The flag stays at its default (off). """
         self.client = TenantClient(self.tenant)
 
     def test_all_views_404_when_disabled(self):
+        """ Every competencies URL 404s for anonymous, student, and staff users alike """
         self.assertFalse(SiteConfig.get().enable_competencies)
 
         for user in [None, baker.make(User), baker.make(User, is_staff=True)]:
@@ -36,6 +38,7 @@ class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
             self.client.logout()
 
     def test_sidebar_link_hidden_when_disabled(self):
+        """ The sidebar shows no Competencies link to staff while the flag is off """
         staff = baker.make(User, is_staff=True)
         self.client.force_login(staff)
         response = self.client.get(reverse('quests:quests'))
@@ -43,17 +46,21 @@ class CompetencyViewsFeatureFlagTest(ViewTestUtilsMixin, TenantTestCase):
 
 
 class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
+    """ Tests for the competencies views with the feature flag turned on. """
 
     def setUp(self):
+        """ Builds the tenant client, enables the feature flag, and creates a student and a staff user. """
         self.client = TenantClient(self.tenant)
         config = SiteConfig.get()
         config.enable_competencies = True
+        config.full_clean()
         config.save()
 
         self.student = baker.make(User)
         self.staff = baker.make(User, is_staff=True)
 
     def test_all_views_require_staff(self):
+        """ With the flag on, anonymous users are sent to login and students get a 403 """
         # anonymous users are redirected to login
         self.assertRedirectsLogin('competencies:list')
         self.assertRedirectsLogin('competencies:import')
@@ -66,11 +73,13 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assert403('competencies:export')
 
     def test_sidebar_link_shown_to_staff(self):
+        """ With the flag on, staff see the Competencies link in the sidebar """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('quests:quests'))
         self.assertContains(response, reverse('competencies:list'))
 
     def test_list_view(self):
+        """ The list view renders the deck's competencies for staff """
         self.client.force_login(self.staff)
         baker.make(Competency, name='Think critically')
         response = self.assert200('competencies:list')
@@ -114,12 +123,14 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(Competency.objects.count(), num_entries)
 
     def test_import_flow__partial_selection(self):
+        """ Only the entries ticked on the preview are imported """
         self.client.force_login(self.staff)
         self.client.post(reverse('competencies:import'), data={'bundled_set': 'bc-core-competencies'})
         self.client.post(reverse('competencies:import_preview'), data={'entries': ['0', '1']})
         self.assertEqual(Competency.objects.count(), 2)
 
     def test_import_flow__nothing_selected(self):
+        """ Submitting the preview with nothing selected imports nothing and warns """
         self.client.force_login(self.staff)
         self.client.post(reverse('competencies:import'), data={'bundled_set': 'bc-core-competencies'})
         response = self.client.post(reverse('competencies:import_preview'), data={}, follow=True)
@@ -128,6 +139,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(Competency.objects.count(), 0)
 
     def test_import_flow__json_upload(self):
+        """ A .json competency-set upload flows through preview to import """
         self.client.force_login(self.staff)
         content = json.dumps({
             'format': 'bytedeck-competency-set',
@@ -144,6 +156,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertTrue(Competency.objects.filter(name='Uploaded competency').exists())
 
     def test_import_flow__csv_upload(self):
+        """ A .csv upload flows through preview to import, preserving the category """
         self.client.force_login(self.staff)
         upload = SimpleUploadedFile(
             'my-set.csv', b"name,category\nCSV competency,Some strand\n", content_type='text/csv')
@@ -156,6 +169,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(competency.category, 'Some strand')
 
     def test_import_form__malformed_file_shows_error(self):
+        """ A malformed upload re-renders the form with the parser's error """
         self.client.force_login(self.staff)
         upload = SimpleUploadedFile('broken.json', b'{not json', content_type='application/json')
         response = self.client.post(reverse('competencies:import'), data={'file': upload})
@@ -164,6 +178,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertContains(response, 'not valid JSON')
 
     def test_import_form__requires_exactly_one_source(self):
+        """ The form rejects neither/both of bundled set and file upload """
         self.client.force_login(self.staff)
 
         response = self.client.post(reverse('competencies:import'), data={})
@@ -181,6 +196,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertRedirects(self.client.post(reverse('competencies:import_preview')), reverse('competencies:import'))
 
     def test_export__json(self):
+        """ The export view returns the competencies as a JSON attachment by default """
         self.client.force_login(self.staff)
         baker.make(Competency, name='Exportable', category='Cat', source_id='x:1')
 
@@ -194,6 +210,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertEqual(data['entries'][0]['name'], 'Exportable')
 
     def test_export__csv(self):
+        """ The export view returns a CSV attachment when ?format=csv """
         self.client.force_login(self.staff)
         baker.make(Competency, name='Exportable', category='Cat')
 
@@ -205,6 +222,7 @@ class CompetencyViewsEnabledTest(ViewTestUtilsMixin, TenantTestCase):
         self.assertIn('Exportable', content)
 
     def test_export__unknown_format_404s(self):
+        """ An unrecognized ?format= 404s """
         self.client.force_login(self.staff)
         response = self.client.get(reverse('competencies:export') + '?format=xml')
         self.assertEqual(response.status_code, 404)

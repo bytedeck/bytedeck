@@ -360,8 +360,12 @@ class SiteConfig(models.Model):
             return static('img/banner.png')
 
     def get_competency_scale_labels(self):
-        """ Returns a dict mapping each proficiency level int (see competencies.models.ProficiencyLevel)
-        to this deck's custom label for that level.
+        """ The deck's display labels for the proficiency scale.
+
+        Returns:
+            dict: a mapping of each proficiency level int, 1 through 4 (see
+            competencies.models.ProficiencyLevel), to this deck's custom label
+            for that level (str).
         """
         return {
             1: self.competency_label_level_1,

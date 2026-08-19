@@ -27,12 +27,23 @@ class CompetencyImportForm(forms.Form):
     )
 
     def __init__(self, *args, **kwargs):
+        """ Populates the bundled_set choices from the datasets shipped in the app's
+        data/ directory (labelled by each set's name), on top of the standard form
+        args/kwargs.
+        """
         super().__init__(*args, **kwargs)
         self.fields['bundled_set'].choices = [('', '---------')] + [
             (key, load_bundled_set(key)['name'] or key) for key in get_bundled_set_keys()
         ]
 
     def clean(self):
+        """ Validates that exactly one source was provided (a bundled set OR an uploaded
+        file), parses it, and returns cleaned_data with the parsed, normalized set added
+        under the 'competency_set' key.
+
+        Raises:
+            ValidationError: if neither/both sources are given or the file is malformed.
+        """
         cleaned_data = super().clean()
         bundled_key = cleaned_data.get('bundled_set')
         file = cleaned_data.get('file')

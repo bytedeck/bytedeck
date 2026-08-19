@@ -67,21 +67,26 @@ class SiteConfigModelTest(TenantTestCase):
         self.assertEqual(self.config.get_banner_image_dark_url(), static('img/banner.png'))
 
     def test_enable_competencies__defaults_off(self):
-        """ The competencies feature flag must default to False so that
-        nothing changes on existing decks """
+        """ A fresh SiteConfig has enable_competencies False: the competencies feature
+        is opt-in per deck, so nothing changes on existing decks when it ships """
         self.assertFalse(self.config.enable_competencies)
 
     def test_get_competency_scale_labels__defaults(self):
-        """ Scale labels default to BC's official proficiency scale terms """
+        """ get_competency_scale_labels() on an unmodified SiteConfig returns BC's
+        official proficiency scale terms as the label for each of the 4 levels """
         self.assertEqual(
             self.config.get_competency_scale_labels(),
             {1: "Emerging", 2: "Developing", 3: "Proficient", 4: "Extending"}
         )
 
     def test_get_competency_scale_labels__custom(self):
-        """ Decks can customize the displayed labels for each level """
+        """ A custom label saved on a competency_label_level_* field persists and is
+        returned by get_competency_scale_labels() for that level on a fresh read """
         self.config.competency_label_level_4 = "Exceeding"
+        self.config.full_clean()
         self.config.save()
+
+        self.config.refresh_from_db()
         self.assertEqual(self.config.get_competency_scale_labels()[4], "Exceeding")
 
     def test_set_active_semester(self):
