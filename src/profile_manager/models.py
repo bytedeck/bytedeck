@@ -400,18 +400,27 @@ class Profile(models.Model):
         return xp
 
     def mark(self):
-        """This student's mark in the first of their courses, for the places that want one number.
+        """This student's mark in the first of their courses that has one, for the places that
+        want a single number.
 
         Each registration has its own mark now that XP is attributed per course (issue #2440);
-        CourseStudent.mark() is where that lives, and this delegates to it.
+        CourseStudent.mark() is where that lives, and this delegates to it. A course can be run
+        on XP alone and have no mark at all (issue #403), so the first registration is not
+        necessarily one that can answer: a student holding an ungraded course and a graded one
+        has a mark, whichever of the two happens to sort first.
 
         Returns:
-            float or None: the first current registration's mark, None with no course.
+            float or None: that registration's mark, None when they hold no course, or none
+            that uses marks.
         """
-        registration = self.current_courses().first()
+        marked = [
+            registration for registration in self.current_courses()
+            # a registration whose course was deleted still answers, with the zero it always did
+            if registration.course is None or registration.course.uses_marks
+        ]
         # hand over this profile: xp_invalidate_cache() asks for the mark with a new xp_cached
         # it has not saved yet, and the registration would otherwise read the old one back
-        return registration.mark(profile=self) if registration else None
+        return marked[0].mark(profile=self) if marked else None
 
     #################################
     #

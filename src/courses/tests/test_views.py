@@ -2585,6 +2585,90 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         siteconfig.display_marks_calculation = True
         siteconfig.save()
 
+    def test_mark_calculations__shows_xp_instead_of_a_percentage_for_a_course_run_on_xp_alone(self):
+        """A course can be told to skip marks entirely (issue #403). Its row on the marks page
+        says what the student earned rather than a percentage, and the arithmetic that would end
+        in one is dropped: there is no mark to explain."""
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'no percentage')
+        self.assertContains(response, 'runs on XP alone, so')
+        self.assertNotContains(response, 'Here is an explanation of how I calculated your mark')
+
+    def test_mark_calculations__explains_a_graded_course_when_another_is_run_on_xp_alone(self):
+        """A student can hold one of each. The explanation is arithmetic ending in a percentage,
+        so it has to be about the course that has one rather than whichever comes first."""
+        for_joy = baker.make(Course, title='For Joy', uses_marks=False)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=for_joy,
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Here is an explanation of how I calculated your mark')
+        self.assertEqual(response.context['obj'].course, self.course)
+        # and the course with no mark still gets its row, saying what it is worth in XP
+        self.assertContains(response, 'no percentage')
+
+    def test_mark_calculations__does_not_claim_the_other_courses_are_run_on_xp_alone(self):
+        """The page names the course it is about when that is not the one listed first, which
+        happens as soon as an ungraded course sorts ahead of a graded one. It must not say
+        anything about the rest: with two graded courses and one ungraded, "your other courses
+        run on XP alone" would be wrong about one of them (issue #403)."""
+        # ordered by block name, so the XP-only course sorts first and the page is about another
+        for_joy = baker.make(Course, title='For Joy', uses_marks=False)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='A block'), course=for_joy,
+        )
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block, name='C block'), course=baker.make(Course, title='Also Graded'),
+        )
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertEqual(response.status_code, 200)
+        # "since your other course(s) run on XP alone" was the claim; assert on its lead-in,
+        # since the phrase itself also appears in a javascript comment in the chart template
+        self.assertNotContains(response, 'since your other')
+        self.assertContains(response, 'one of your courses that has a mark')
+        self.assertTrue(response.context['obj'].course.uses_marks)
+
+    def test_mark_calculations__drops_the_mark_distribution_chart_with_no_marks_to_distribute(self):
+        """The distribution compares a student's mark against their classmates'. A student with
+        no mark in any of their courses has nothing to place on it (issue #403)."""
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        self.assertNotContains(response, 'Mark Distribution')
+
+    def test_ajax_progress_chart__reports_whether_the_charted_course_uses_marks(self):
+        """The chart draws its mark lines and its percent axis from the course's total. A course
+        run on XP alone has no percentage, so the chart is told to leave both off (issue #403)."""
+        self.client.force_login(self.student)
+        url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
+
+        graded = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+        self.stu_course.course.uses_marks = False
+        self.stu_course.course.save()
+        for_joy = self.client.post(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertTrue(json.loads(graded.content)['uses_marks'])
+        self.assertFalse(json.loads(for_joy.content)['uses_marks'])
+
     def test_mark_calculations__reports_the_shown_courses_own_xp(self):
         """A student in two courses is told which course the page is about and how much of their
         XP counts toward it. Before #2440 the two courses always held the same even share, so
