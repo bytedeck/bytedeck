@@ -500,6 +500,32 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         self.assertNotIn(self.assertion, semester_scoped)
         self.assertIn(self.assertion, BadgeAssertion.objects.get_queryset(active_semester_only=False))
 
+    def test_get_queryset__active_semester_only_covers_every_open_semester_deck_wide(self):
+        """A deck can run two cohorts on different calendars (issue #1781), so a deck-wide
+        view of "this semester's" badges is every open semester's, not the one the deck
+        happens to point at: naming a single semester drops the other cohort's assertions
+        out of sight (issue #2475). The submission side already reads this way."""
+        second_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_cohort = baker.make(BadgeAssertion, user=baker.make(User), semester=second_semester)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotEqual(second_semester, SiteConfig.get().open_semester)
+        self.assertIn(self.assertion, semester_scoped)
+        self.assertIn(other_cohort, semester_scoped)
+
+    def test_get_queryset__active_semester_only_leaves_out_an_archived_semester_deck_wide(self):
+        """Covering every open semester is not the same as covering every semester: a term
+        that has been archived is a finished record, so its assertions are past and stay out
+        of the deck-wide view of current work."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        finished = baker.make(BadgeAssertion, user=self.student, semester=archived)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotIn(finished, semester_scoped)
+        self.assertIn(finished, BadgeAssertion.objects.get_queryset(active_semester_only=False))
+
     def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
         """The granted notification uses the badge type's own fa_icon when it has one, rather
         than the default fa-certificate (the non-default branch of post_save_receiver)."""

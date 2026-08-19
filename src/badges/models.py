@@ -362,6 +362,23 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
         """
         return self.filter(semester=semester)
 
+    def in_open_or_no_semester(self):
+        """Assertions no finished term owns: what a deck-wide staff view of current work holds.
+
+        Every open semester's, since a deck can run several at once (issue #2157 Phase 3,
+        #1781) and scoping to the deck's default would hide everything the other cohort was
+        granted. Plus the assertions stamped with no semester at all (issue #2413), which is
+        what someone registered in none is granted: a student between terms, or staff trying
+        a badge out. The submission side answers the same question the same way, so a
+        deck-wide view of badges and one of quests cover the same students.
+
+        Returns:
+            BadgeAssertionQuerySet: the assertions in an open semester or in none.
+        """
+        from courses.models import Semester  # locally: courses imports this app's models
+
+        return self.filter(Q(semester__status=Semester.Status.OPEN) | Q(semester__isnull=True))
+
     def get_issued_before(self, date):
         return self.filter(timestamp__lte=date)
 
@@ -373,8 +390,11 @@ class BadgeAssertionManager(models.Manager):
         Args:
             active_semester_only (bool): limit to the current semester's assertions.
             user (User): whose semester to limit to. Their registration names it (issue
-                #2157 Phase 3). Without a user this is a deck-wide staff view, which uses
-                the deck's open semester.
+                #2157 Phase 3), and someone holding none is in no semester, so their badges
+                are the ones stamped with none. Without a user this is a deck-wide staff
+                view, which covers every open semester and the unstamped assertions besides:
+                a deck can run two cohorts on different calendars, so naming one semester
+                would drop the other cohort's badges (issue #2475).
 
         Returns:
             BadgeAssertionQuerySet: the matching assertions.
@@ -384,7 +404,7 @@ class BadgeAssertionManager(models.Manager):
         # badge/badge_type are needed almost everywhere assertions are rendered
         qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
-            return qs.get_semester(semester_for(user))
+            return qs.get_semester(semester_for(user)) if user is not None else qs.in_open_or_no_semester()
         else:
             return qs
 
