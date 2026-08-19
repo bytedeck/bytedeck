@@ -707,8 +707,9 @@ class CourseStudentViewTests(CourseViewTestData, ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_CourseStudentCreate_view__message_names_the_course_group_and_semester(self):
-        """A deck can run several courses, groups and semesters at once, so the notice a student
-        gets on joining names all three rather than the course alone (issue #2179)."""
+        """A deck can run several courses, groups and semesters at once, and the registration
+        form asks the student to pick all three, so the notice confirming it names all three
+        (issue #2179)."""
         course = baker.make(Course, title='Digital Art 11')
         block = baker.make(Block, name='Morning Block')
         self.client.force_login(self.test_student1)
