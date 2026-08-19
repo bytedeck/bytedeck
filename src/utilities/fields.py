@@ -67,6 +67,12 @@ FILE_MIME_TYPES = {
     'all': 'All',
 }
 
+# Python's builtin MIME table does not know `.m4a`: platforms fill the gap from
+# /etc/mime.types when that file exists, so the same recording guessed as `audio/mp4` on
+# one machine and as nothing at all on another (CI's container has no such file).
+# Register the mapping so `media_kind_of` answers the same everywhere (#2492).
+mimetypes.add_type('audio/mp4', '.m4a')
+
 # Which browser element can play a stored file, by the MIME types above. The value is the
 # kind of media, so a template can pick between an image, a video player and an audio
 # player without repeating the type lists.
