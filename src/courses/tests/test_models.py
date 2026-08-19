@@ -1525,6 +1525,87 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(maths_registration.final_xp, 60)
         self.assertEqual(art_registration.final_xp, 0)
 
+    def test_calc_semester_grades__records_the_odd_xp_rather_than_dropping_it(self):
+        """Archiving records whole XP that adds up to what the student earned. final_xp is an
+        integer field, so a share of 2.5 rounded on its own drops the odd XP from the record
+        for good: 5 XP shared between two courses has to archive as 2 and 3, not 2 and 2
+        (issue #2490)."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title='Maths')),
+            self._register(student, baker.make(Course, title='Art')),
+        ]
+        self._approved(student, xp=5)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual(sum(registration.final_xp for registration in registrations), 5)
+        self.assertEqual(sorted(registration.final_xp for registration in registrations), [2, 3])
+
+    def test_calc_semester_grades__hands_the_odd_xp_out_a_point_at_a_time(self):
+        """The odd XP goes whole to the share closest to earning it, rather than being split
+        again or dropped: three courses sharing 10 XP archive as 4, 3 and 3, which keeps every
+        course within 1 XP of its exact share and all 10 XP in the record (issue #2490)."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title=title))
+            for title in ('Maths', 'Art', 'Music')
+        ]
+        self._approved(student, xp=10)
+        student.profile.xp_invalidate_cache()
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual(sum(registration.final_xp for registration in registrations), 10)
+        self.assertEqual(sorted(registration.final_xp for registration in registrations), [3, 3, 4])
+
+    def test_calc_semester_grades__records_the_xp_the_student_was_shown_all_term(self):
+        """The division is the same one whoever asks it, so the XP a student is shown against
+        a course during the term is the number recorded against it for good: 7 XP split two
+        ways reads as 4 and 3 on the marks page and archives as 4 and 3."""
+        student = baker.make(User)
+        registrations = [
+            self._register(student, baker.make(Course, title='Maths')),
+            self._register(student, baker.make(Course, title='Art')),
+        ]
+        self._approved(student, xp=7)
+        student.profile.xp_invalidate_cache()
+        shown = [registration.xp() for registration in registrations]
+
+        CourseStudent.objects.calc_semester_grades(SiteConfig.get().active_semester)
+
+        for registration in registrations:
+            registration.refresh_from_db()
+        self.assertEqual([registration.final_xp for registration in registrations], shown)
+        self.assertEqual(shown, [4, 3])
+
+    def test_xp_across__gives_whole_xp_when_a_capped_quest_is_split_between_courses(self):
+        """A repeatable quest taken past its max_xp gives each course the capped total in
+        proportion to what it was assigned uncapped (issue #2440), which is a fraction even
+        with nothing shared between the courses. Those shares are whole XP too, and still add
+        up to the student's total (issue #2490)."""
+        student = baker.make(User)
+        maths = baker.make(Course, title='Maths')
+        art = baker.make(Course, title='Art')
+        registrations = [self._register(student, maths), self._register(student, art)]
+        quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
+        for course in (maths, art):
+            baker.make(
+                QuestSubmission, user=student, quest=quest, course=course,
+                semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+            )
+        student.profile.xp_invalidate_cache()
+
+        shares = [xp for _registration, xp in CourseStudent.objects.xp_across(student, registrations)]
+
+        self.assertEqual(sum(shares), 15)
+        self.assertEqual(sorted(shares), [7, 8])
+
     def test_clean__refuses_a_student_in_two_open_semesters(self):
         """A student belongs to one semester at a time (#1781): they can take several courses
         within it, but being in two open semesters at once would make "which semester did they

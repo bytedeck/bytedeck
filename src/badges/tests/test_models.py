@@ -468,6 +468,24 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
         self.assertIsNone(new_assertion.semester_id)
 
+    def test_create_assertion__a_badge_granted_between_semesters_does_not_follow_the_student(self):
+        """A badge granted between terms recognises what the student did between terms, so it
+        belongs to no term and stays that way when they join a course (issue #2474). Joining
+        adopts the quests they had on the go, which would otherwise be stranded out of both
+        their in-progress list and their available list (issue #2441); an assertion is an
+        award already made, so there is nothing to strand and its XP counts toward no
+        semester, the same rule XP already follows when it resets each term."""
+        from courses.models import Course, CourseStudent
+
+        Semester.objects.complete_semester()
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+
+        new_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=new_semester)
+
+        unstamped.refresh_from_db()
+        self.assertIsNone(unstamped.semester_id)
+
     def test_get_queryset__active_semester_only_holds_the_unstamped_assertions_with_no_open_semester(self):
         """With no semester open, "this semester" is the work that belongs to none: a badge
         granted between terms is stamped with no semester (issue #2413) and is still the
