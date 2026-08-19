@@ -1526,10 +1526,10 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(art_registration.final_xp, 0)
 
     def test_calc_semester_grades__records_the_odd_xp_rather_than_dropping_it(self):
-        """final_xp is a whole number of XP, so a share that is not whole was rounded down on
-        its own and the rest of the student's work vanished from their record for good (issue
-        #2490): 5 XP shared between two courses was archived as 2 and 2. The odd XP now goes
-        to one of them, so what is recorded adds up to what the student earned."""
+        """Archiving records whole XP that adds up to what the student earned. final_xp is an
+        integer field, so a share of 2.5 rounded on its own drops the odd XP from the record
+        for good: 5 XP shared between two courses has to archive as 2 and 3, not 2 and 2
+        (issue #2490)."""
         student = baker.make(User)
         registrations = [
             self._register(student, baker.make(Course, title='Maths')),
@@ -1546,9 +1546,9 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(sorted(registration.final_xp for registration in registrations), [2, 3])
 
     def test_calc_semester_grades__hands_the_odd_xp_out_a_point_at_a_time(self):
-        """Three courses sharing 10 XP are archived as 4, 3 and 3 rather than 3 each: the odd
-        XP goes to the share closest to earning it, so no course ends up more than 1 XP from
-        its exact share and none of the 10 is lost (issue #2490)."""
+        """The odd XP goes whole to the share closest to earning it, rather than being split
+        again or dropped: three courses sharing 10 XP archive as 4, 3 and 3, which keeps every
+        course within 1 XP of its exact share and all 10 XP in the record (issue #2490)."""
         student = baker.make(User)
         registrations = [
             self._register(student, baker.make(Course, title=title))
@@ -1566,8 +1566,8 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
     def test_calc_semester_grades__records_the_xp_the_student_was_shown_all_term(self):
         """The division is the same one whoever asks it, so the XP a student is shown against
-        a course during the term is the number recorded against it for good. Without that,
-        7 XP split two ways would read as 3.5 all term and archive as something else."""
+        a course during the term is the number recorded against it for good: 7 XP split two
+        ways reads as 4 and 3 on the marks page and archives as 4 and 3."""
         student = baker.make(User)
         registrations = [
             self._register(student, baker.make(Course, title='Maths')),

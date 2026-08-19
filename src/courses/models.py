@@ -73,24 +73,27 @@ def whole_xp_shares(registrations, exact_shares):
 
     Two things make a share fractional: the pool nobody assigned is divided evenly between
     the courses, and a repeatable quest taken past its `max_xp` gives each course the capped
-    total in proportion to what it was assigned uncapped (issue #2440). Rounding each share
-    on its own then loses the odd XP, because rounding down is what an integer field does
-    with it: two courses sharing 5 XP came to 2 and 2, and `CourseStudent.final_xp` recorded
-    that permanently when the semester was archived (issue #2490).
+    total in proportion to what it was assigned uncapped (issue #2440). `CourseStudent.final_xp`
+    is an integer field, so a share rounded on its own drops the odd XP from the record
+    archiving writes, permanently: two courses sharing 5 XP have 2.5 each, and 2 and 2 is not
+    what the student earned (issue #2490).
 
-    So the odd XP is handed out a whole point at a time to the shares that came closest to
-    earning it (the largest-remainder method), leaving every course within 1 XP of its exact
-    share and the shares adding up to what the student actually earned. Ties go to the
-    registration made first, so a student is divided the same way however and whenever they
-    are asked about: what they are shown all term is what gets archived.
+    Rounding the shares together is what keeps them honest. Each is rounded down, and the odd
+    XP is handed back a whole point at a time to the shares that came closest to earning it
+    (the largest-remainder method), so every course lands within 1 XP of its exact share and
+    the shares add up to the student's total. Shares owed equally are settled by the lowest
+    CourseStudent.pk, the registration made first: that keeps the division a property of the
+    student rather than of the order the caller holds them in, so what a student is shown all
+    term is what gets archived.
 
     Args:
         registrations (list[CourseStudent]): the registrations the shares belong to, in the
-            same order, for a stable tiebreak.
+            same order as exact_shares, for the tiebreak between equally owed shares.
         exact_shares (list[float]): each registration's exact share.
 
     Returns:
-        list[int]: the same shares in whole XP, adding up to the exact shares' total.
+        list[int]: the same shares in whole XP, in the order given, adding up to the exact
+        shares' total.
     """
     whole = [math.floor(share) for share in exact_shares]
     # what rounding down left over, which is a whole number of XP because the total being
