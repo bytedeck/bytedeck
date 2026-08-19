@@ -28,7 +28,9 @@ for {{user}}
       to my records, the semester is scheduled to start on
       <strong>{{ obj.semester.first_day }}</strong>.</p>
     {% else %}
-      {% if num_courses == 1 %}
+      {% if no_course_uses_marks %}
+        here is what you have earned:
+      {% elif num_courses == 1 %}
         your current mark is:
       {% else %}
         your current marks are:
@@ -40,13 +42,30 @@ for {{user}}
             <td>{{ course.block }} Block</td>
             <td>{{ course.course }}</td>
             {# each registration's own mark: with XP attributed per course they differ (#2440) #}
-            <td><strong>{{ course.mark|floatformat }}%</strong></td>
+            {# a course run on XP alone has no mark at all, rather than a mark of zero (#403) #}
+            {% if course.course.uses_marks %}
+              <td><strong>{{ course.mark|floatformat }}%</strong></td>
+            {% else %}
+              <td><strong>{{ course.xp|floatformat }} XP</strong>, no percentage</td>
+            {% endif %}
           </tr>
         {% endfor %}
       </table>
+      {% if no_course_uses_marks %}
+        <p>
+          {% if num_courses == 1 %}Your course runs{% else %}Your courses run{% endif %} on XP alone, so
+          there is no percentage to work out. Keep earning XP.
+        </p>
+      {% else %}
       <h3>Explanation</h3>
       <p>
         Here is an explanation of how I calculated your mark. If you have any questions about this please ask!
+        {% comment %} Only when the charted course is not the one listed first, which is when a
+           reader would otherwise wonder why. Says nothing about the rest: some of them may use
+           marks too, and the table above already shows which. {% endcomment %}
+        {% if num_courses > 1 and obj.course != courses.first.course %}
+          It is about <strong>{{ obj.course }}</strong>, one of your courses that has a mark.
+        {% endif %}
       </p>
       <div>
         <ul>
@@ -86,14 +105,14 @@ for {{user}}
             by the end of the semester.
           </li>
           <li>
-            Your course is out of {{courses.first.course.xp_for_100_percent}} XP, which means that if you get {{courses.first.course.xp_for_100_percent}} XP, you'll have 100% in the course.
+            Your course is out of {{ obj.course.xp_for_100_percent }} XP, which means that if you get {{ obj.course.xp_for_100_percent }} XP, you'll have 100% in the course.
           </li>
           <li>
             This means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
                data-placement="top" data-html="true"
                data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester,
-               and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
-              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.mark|floatformat }} % </pre>
+               and your course is out of {{ obj.course.xp_for_100_percent }} XP:<br/><br/>
+              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{ obj.course.xp_for_100_percent }} = {{ obj.mark|floatformat }} % </pre>
             ">{{ obj.mark|floatformat }}%</a>
           </li>
         </ul>
@@ -123,6 +142,7 @@ for {{user}}
           by the end of the semester.
         </li>
       </ul>
+      {% endif %}
 
       <h3>Charts</h3>
 
@@ -131,7 +151,10 @@ for {{user}}
 
         <ul class="nav nav-pills" role="tablist">
           <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
-          <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+          {# nothing to distribute when none of their courses has a mark (#403) #}
+          {% if not no_course_uses_marks %}
+            <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+          {% endif %}
           <li role="presentation"><a href="#tag-distribution" role="tab" data-toggle="tab">Tags Distribution</a></li>
         </ul>
 

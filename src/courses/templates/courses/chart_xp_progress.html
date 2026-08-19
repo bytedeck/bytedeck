@@ -2,7 +2,7 @@
 
   /*jshint esversion: 6 */
 
-  var max_xp = {{courses.first.course.xp_for_100_percent}}
+  var max_xp = {{ courses.first.course.xp_for_100_percent }};
 
   var ctx = document.getElementById("myChart");
 
@@ -103,12 +103,14 @@
   });
   {% endfor %}
 
-  var data = {
-      datasets: [
-          XPData,
+  var xp_datasets = [
+      XPData,
 {#          XPDataBar,#}
-          XPTrendData,
-      ].concat(markranges)
+      XPTrendData,
+  ];
+
+  var data = {
+      datasets: xp_datasets.concat(markranges)
   };
 
   // need some starting data for the animation to work it seems..
@@ -292,6 +294,14 @@
           myChart.options.scales.yAxes[0].ticks.max = max_xp;
           myChart.options.scales.yAxes[0].ticks.stepSize = max_xp / 20;
         }
+
+        // a course run on XP alone has no percentage, so its mark lines and the percent axis
+        // they are read against come off the chart entirely, legend included (#403)
+        myChart.data.datasets = data.uses_marks ? xp_datasets.concat(markranges) : xp_datasets;
+        var percentAxis = myChart.options.scales.yAxes.find(function(axis) {
+          return axis.id === "y-axis-percent";
+        });
+        percentAxis.display = data.uses_marks;
 
         generate_trend(data.days_in_semester);
         generate_mark_lines(data.days_in_semester);

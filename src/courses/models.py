@@ -84,7 +84,23 @@ class MarkRangeManager(models.Manager):
         return ranges_qs.last()  # return the highest range that qualifies
 
     def get_range_for_user(self, user):
+        """The mark range this user's cached mark falls in, or None when they have no mark.
+
+        A student can hold a course and still have no mark: a course run on XP alone has none
+        (issue #403), and a mark is only cached once something has recalculated it. Their mark
+        cannot be matched against a range's minimum then, and asking the database to compare
+        against NULL raises rather than matching nothing.
+
+        Args:
+            user: the student whose mark range is wanted.
+
+        Returns:
+            MarkRange or None: the highest range their mark qualifies for.
+        """
         mark = user.profile.mark_cached
+        if mark is None:
+            return None
+
         student_course_ids = user.profile.current_courses().values_list('course', flat=True)
         if student_course_ids:
             courses = Course.objects.filter(id__in=student_course_ids)
@@ -723,6 +739,13 @@ class Course(IsAPrereqMixin, models.Model):
     icon = models.ImageField(upload_to='icons/', null=True, blank=True)
     xp_for_100_percent = models.PositiveIntegerField(default=1000)
     active = models.BooleanField(default=True)
+    uses_marks = models.BooleanField(
+        verbose_name="Use mark percentages", default=True,
+        help_text="Uncheck to run this course on XP alone, with no percentage: students in it see what they have "
+                  "earned but are never shown a mark, and no mark is worked out for them anywhere. Useful for a "
+                  "course that shares a deck with graded ones but isn't itself graded. Only has any effect when "
+                  "\"Use mark percentages\" is on for the deck as a whole."
+    )
 
     def __str__(self):
         return self.title
@@ -1208,8 +1231,13 @@ class CourseStudent(models.Model):
                 xp_cached is newer than the database.
 
         Returns:
-            float: the percentage for this course, capped at 100 when the deck asks for that.
+            float or None: the percentage for this course, capped at 100 when the deck asks for
+            that. None for a course run on XP alone (issue #403), which has no mark at all
+            rather than a mark of zero.
         """
+        if self.course and not self.course.uses_marks:
+            return None
+
         mark = self.calc_mark(self.xp(profile))
         if SiteConfig.get().cap_marks_at_100_percent:
             return min(mark, 100)
