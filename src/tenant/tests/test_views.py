@@ -1452,7 +1452,8 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
         with patch('tenant.billing.stripe.checkout.Session.create',
                    side_effect=stripe_lib.StripeError('boom')):
             response = self.client.post(reverse('decks:subscription'), follow=True)
-        self.assertContains(response, "couldn't be reached")
+        # No apostrophe in the needle: messages are escaped now, so it arrives as an entity.
+        self.assertContains(response, "be reached")
 
     def test_activating_page__renders_for_staff_with_polling_script(self):
         """The post-checkout page renders the activating message and polls the

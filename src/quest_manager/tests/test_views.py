@@ -974,6 +974,99 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNotNone(assertion, 'the badge was not granted')
         self.assertEqual(assertion.course, maths)
 
+    def submit_with_payload(self, quest, extra=None):
+        """Hand in `quest` with an event-handler payload as the comment text.
+
+        Args:
+            quest (Quest): the quest to hand in.
+            extra (dict | None): extra POST data, which decides which submission form
+                the view builds.
+
+        Returns:
+            tuple[str, str]: the stored comment text, and the page a teacher then sees.
+        """
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        data = {'complete': True, 'comment_text': '<img src=x onerror="alert(1)">'}
+        data.update(extra or {})
+
+        self.client.force_login(self.test_student)
+        self.client.post(reverse('quests:complete', args=[submission.id]), data=data, follow=True)
+        stored = Comment.objects.order_by('-id').first()
+
+        self.client.force_login(self.test_teacher)
+        page = self.client.get(reverse('quests:submission', args=[submission.id]), follow=True)
+        return stored.text, page.content.decode()
+
+    def test_complete__strips_an_event_handler_from_a_submission_with_an_attachment(self):
+        """A comment handed in alongside a file cannot carry an event handler.
+
+        Attaching a file puts request.FILES on the POST, which is what makes the view build
+        SubmissionForm rather than the quick-reply form. Comment text is rendered with |safe
+        to the teacher who marks the work, so an `onerror` surviving here runs for them.
+        """
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+
+        stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
+        """The same holds on a quest whose XP the student enters.
+
+        That branch builds SubmissionFormCustomXP, which is the other form the view can
+        choose, and it inherits the sanitizing now that SubmissionForm does it.
+        """
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_xp=10)
+
+        stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
+        """Sanitizing must not cost the rich formatting the editor is there to provide."""
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+        self.client.force_login(self.test_student)
+
+        self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': '<b>bold</b> and <i>italic</i>', 'attachments': upload},
+            follow=True,
+        )
+
+        stored = Comment.objects.order_by('-id').first()
+        self.assertIn('<b>bold</b>', stored.text)
+        self.assertIn('<i>italic</i>', stored.text)
+
+    def test_complete__auto_approved_message_signs_off_on_its_own_line(self):
+        """Handing in an auto-approved quest signs off with a line break, not a literal <br>.
+
+        Messages are escaped unless they are built safely (#2498), and this one carries a break
+        and the deck AI's name, so it has to be built with format_html or the student reads the
+        tag as text.
+        """
+        quest = baker.make(Quest, xp=5, verification_required=False)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done'},
+            follow=True,
+        )
+
+        self.assertContains(response, 'Try refreshing your browser in a few moments.')
+        self.assertContains(response, 'Thanks! <br>')
+        self.assertNotContains(response, '&lt;br&gt;')
+        # The deck AI is a User, so its name reaches the page as an escaped format_html argument.
+        self.assertContains(response, str(SiteConfig.get().deck_ai))
+
     def test_complete__records_the_course_the_student_chose(self):
         """Handing in a quest with a course selected stamps that course on the submission, so the
         XP counts toward it rather than being shared across their courses (issue #2440)."""
@@ -3036,6 +3129,31 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         cls.other_student = User.objects.create_user('other_student')
         cls.quest = baker.make(Quest)
 
+    def test_hide__escapes_markup_in_the_quest_name(self):
+        """A quest name carrying markup reaches the message as text, not as markup.
+
+        Messages are rendered as HTML when they are built safely, so a name interpolated
+        into one has to be escaped on the way in or it becomes part of the page (#2498).
+        """
+        self.quest.name = "<script>alert(1)</script>"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_hide__keeps_the_messages_own_markup(self):
+        """Escaping the name must not also escape the emphasis the message adds."""
+        self.quest.name = "A Quest To Hide"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertContains(response, "<strong>A Quest To Hide</strong>")
+
     def test_hide__adds_the_quest_to_the_students_hidden_list(self):
         """Hiding a quest hides it for that student and sends them back to their quests page."""
         self.client.force_login(self.test_student)
@@ -3739,9 +3857,11 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(before, after)
         self.assertTrue(Category.objects.filter(id=race_campaign.id).exists())
+        # The apostrophe is left out of the needle: messages are escaped now, so it arrives
+        # as an entity. What is asserted is the part that identifies the message.
         self.assertContains(
             response,
-            "You can't delete this campaign because it contains published quests"
+            "delete this campaign because it contains published quests",
         )
 
     def test_CategoryPublish_view__publishes_campaign_and_quests(self):
@@ -3899,6 +4019,32 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertIn(published_quest, displayed_quests)
         self.assertIn(unpublished_quest, displayed_quests)
         self.assertNotIn(archived_quest, displayed_quests)
+
+
+    def test_CategoryPublish__message_links_to_the_published_campaign(self):
+        """The publish message names the campaign as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        campaign = baker.make(Category, title='Robotics', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{campaign.get_absolute_url()}">Robotics</a>')
+
+    def test_CategoryPublish__escapes_markup_in_the_campaigns_title(self):
+        """A campaign whose title contains markup is named as text in the publish message (#2498)."""
+        campaign = baker.make(Category, title='Robotics <script>alert(1)</script>', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
 
 
 class AjaxSubmissionCountTest(ByteDeckTenantTestCase):
@@ -5498,6 +5644,35 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
 
         archived_quest.refresh_from_db()
         self.assertTrue(archived_quest.archived)
+
+    def test_post__message_links_to_the_archived_quest(self):
+        """The archive message names the quest as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        response = self.client.post(reverse('quests:quest_archive', args=[self.quest_b.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{self.quest_b.get_absolute_url()}">Quest B</a>')
+
+    def test_post__escapes_markup_in_the_archived_quests_name(self):
+        """A quest whose name contains markup is named as text in the archive message (#2498)."""
+        quest = baker.make(Quest, name='Quest <script>alert(1)</script>', archived=False, published=True)
+
+        response = self.client.post(reverse('quests:quest_archive', args=[quest.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+
+    def test_unarchive__message_links_to_the_unarchived_quest(self):
+        """The unarchive message names the quest as a working link, for the same reason
+        the archive message does (#2498).
+        """
+        archived_quest = baker.make(Quest, name='Archived Quest', archived=True)
+
+        response = self.client.post(reverse('quests:unarchive', args=[archived_quest.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{archived_quest.get_absolute_url()}">Archived Quest</a>')
 
     def test_unarchive__nonexistent_quest_returns_404(self):
         """Unarchiving a quest id that does not exist 404s cleanly (#1856).
