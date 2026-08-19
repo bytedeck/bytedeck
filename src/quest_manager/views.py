@@ -2,6 +2,7 @@ import json
 import re
 import uuid
 
+from django.utils.html import format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -295,8 +296,10 @@ class CategoryPublish(View):
         """
         category = get_object_or_404(Category, pk=pk)
         category.publish_with_quests()
-        link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
-        messages.success(request, f'Campaign "{link}" and all quests published.')
+        messages.success(request, format_html(
+            'Campaign "<a href="{}">{}</a>" and all quests published.',
+            category.get_absolute_url(), category.title,
+        ))
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
@@ -531,7 +534,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
             )
             return redirect("quests:quest_detail", quest.id)
 
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
         # Archive the quest
         quest.archived = True
@@ -558,7 +561,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
 
         messages.success(
             request,
-            f"Quest '{link}' has been archived and all its submissions have been deleted."
+            format_html("Quest '{}' has been archived and all its submissions have been deleted.", quest_link),
         )
         return redirect("quests:archived")
 
@@ -1511,18 +1514,13 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             self.handle_rank_up_notification()
 
-            messages.success(self.request, (
-                "<a href='"
-                + self.submission.get_absolute_url()
-                + "'>Submission of "
-                + self.submission.quest.name
-                + "</a> "
-                + notification_kwargs["verb"]
-                + " for <a href='"
-                + self.submission.user.profile.get_absolute_url()
-                + "'>"
-                + self.submission.user.username
-                + "</a>"
+            messages.success(self.request, format_html(
+                "<a href='{}'>Submission of {}</a> {} for <a href='{}'>{}</a>",
+                self.submission.get_absolute_url(),
+                self.submission.quest.name,
+                notification_kwargs["verb"],
+                self.submission.user.profile.get_absolute_url(),
+                self.submission.user.username,
             ))
 
             return self.form_valid()
@@ -1709,7 +1707,7 @@ def unarchive(request, quest_id):
     quest = get_object_or_404(Quest.objects.all_including_archived(), id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
-    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+    quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
@@ -1717,7 +1715,7 @@ def unarchive(request, quest_id):
     quest.full_clean()
     quest.save()
 
-    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    messages.success(request, format_html("Quest '{}' has been unarchived and moved to the Drafts tab.", quest_link))
     # Since the quest is sent to the Drafts tab redirect them there
     return redirect("quests:drafts")
 
@@ -1943,8 +1941,12 @@ def complete(request, submission_id):
             note_verb += " (auto-approved quest)"
             msg_text += " and automatically approved."
             msg_text += " Please give me a moment to calculate what new quests this should make available to you."
-            msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-            msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
+            # format_html so the break renders: everything appended above is plain text, which
+            # a message escapes, and the deck AI's name is escaped as an argument.
+            msg_text = format_html(
+                "{} Try refreshing your browser in a few moments. Thanks! <br>{}",
+                msg_text, SiteConfig.get().deck_ai,
+            )
 
         icon = "<i class='fa fa-shield fa-lg'></i>"
 
@@ -2052,8 +2054,11 @@ def start(request, quest_id):
             # instead of starting a new one, and let them know why (issue #57).
             messages.info(
                 request,
-                f"You already have <strong>{quest.name}</strong> in progress — "
-                "finish this one before starting it again.",
+                format_html(
+                    "You already have <strong>{}</strong> in progress: "
+                    "finish this one before starting it again.",
+                    quest.name,
+                ),
             )
             return redirect(sub)
     else:
@@ -2069,9 +2074,7 @@ def hide(request, quest_id):
 
     messages.warning(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been added to your list of hidden quests.",
+        format_html("<strong>{}</strong> has been added to your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:quests")
@@ -2085,9 +2088,7 @@ def unhide(request, quest_id):
 
     messages.success(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been removed from your list of hidden quests.",
+        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:available_all")
@@ -2440,8 +2441,10 @@ def unflag(request, submission_id):
 
     messages.success(
         request,
-        "Submission <a href='%s'>%s by %s</a> has been unflagged."
-        % (sub.get_absolute_url(), sub.quest_name(), sub.user),
+        format_html(
+            "Submission <a href='{}'>{} by {}</a> has been unflagged.",
+            sub.get_absolute_url(), sub.quest_name(), sub.user,
+        ),
     )
 
     return redirect("quests:approvals")

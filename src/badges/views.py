@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
+from django.utils.html import format_html
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -84,13 +85,13 @@ class BadgePrereqsUpdate(ObjectPrereqsFormView):
         if changed and self.object.published:
             badge_name = SiteConfig.get().custom_name_for_badge.lower()
             grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
-            # Messages render with |safe (messages-snippet.html), matching how the rest of the
-            # project builds message links; both values here are trusted (a reversed URL and the
-            # staff-set badge label). Project-wide escaping of message HTML is tracked separately.
             messages.info(
                 self.request,
-                f'Prerequisites changed. '
-                f'<a href="{grant_url}">Check and grant this {badge_name} to qualifying students?</a>'
+                format_html(
+                    'Prerequisites changed. '
+                    '<a href="{}">Check and grant this {} to qualifying students?</a>',
+                    grant_url, badge_name,
+                )
             )
         return response
 
