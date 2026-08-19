@@ -442,7 +442,7 @@ def email_library_staff_of_push(content_type, content_name, exported_obj, sharer
     review_url = f"{library_root_url.rstrip('/')}{exported_obj.get_absolute_url()}"
 
     subject = f"[ByteDeck Library] New {content_type} awaiting review: {content_name}"
-    message = get_template("library/email/content_pushed.txt").render({
+    message = get_template("library/email/content_pushed.html").render({
         "sharer": sharer,
         "content_type": content_type,
         "content_name": content_name,
