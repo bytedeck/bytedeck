@@ -219,6 +219,108 @@ class AdoptUnstampedWorkOnRegistrationTest(ByteDeckTenantTestCase):
         self.assertIsNone(later.semester_id)
 
 
+class AdoptUnstampedWorkOnSemesterOpenTest(ByteDeckTenantTestCase):
+    """Opening a semester brings its students' on-the-go work into it (issue #2476)."""
+
+    def setUp(self):
+        """Create a semester that has not started and a student registered in it, the shape a
+        teacher gets by signing a cohort up ahead of the term through the admin."""
+        self.student = baker.make(User, is_staff=False)
+        self.quest = baker.make(Quest, xp=5, published=True, archived=False, available_outside_course=True)
+        self.semester = baker.make(Semester, status=Semester.Status.UPCOMING)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=self.semester)
+
+    def open_semester(self):
+        """Start the semester under test, the way the admin does."""
+        self.semester.status = Semester.Status.OPEN
+        self.semester.save()
+
+    def test_open__in_progress_work_of_a_registered_student_moves_into_the_semester(self):
+        """A student signed up before their term starts holds no open registration, so they
+        can do the quests marked available outside a course and what they hand in belongs to
+        no semester. Opening their semester is the moment that work gains one. Without it the
+        work is stranded: out of the in-progress list, which is now their semester's, and out
+        of the available list, which drops a quest they already have a submission of."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+        self.assertIsNone(submission.semester_id)
+
+        self.open_semester()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.semester_id, self.semester.id)
+        self.assertIn(submission, QuestSubmission.objects.all_not_completed(user=self.student))
+
+    def test_open__one_students_collision_does_not_hold_back_a_classmates_work(self):
+        """A whole cohort moves at once, so the rule that a student cannot hold two
+        never-completed submissions of one quest in a semester is checked per student. A
+        classmate who already has that quest on the go in this semester keeps their unstamped
+        one where it is, and that says nothing about anybody else's submission of it."""
+        classmate = baker.make(User, is_staff=False)
+        baker.make(CourseStudent, user=classmate, course=baker.make(Course), semester=self.semester)
+        baker.make(
+            QuestSubmission, user=classmate, quest=self.quest, semester=self.semester, is_completed=False,
+        )
+        theirs = baker.make(
+            QuestSubmission, user=classmate, quest=self.quest, semester=None, is_completed=False,
+        )
+        mine = QuestSubmission.objects.create_submission(self.student, self.quest)
+
+        self.open_semester()
+
+        mine.refresh_from_db()
+        theirs.refresh_from_db()
+        self.assertEqual(mine.semester_id, self.semester.id)
+        self.assertIsNone(theirs.semester_id)
+
+    def test_open__completed_work_stays_where_it_was_finished(self):
+        """Only work still in progress moves, the same rule joining a course follows: a quest
+        finished outside a semester was finished there, so its XP belongs to no term rather
+        than to the one about to start."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+        submission.mark_completed()
+
+        self.open_semester()
+
+        submission.refresh_from_db()
+        self.assertIsNone(submission.semester_id)
+
+    def test_open__work_of_a_student_registered_elsewhere_is_left_alone(self):
+        """Opening one semester says nothing about the students who are not in it. A deck can
+        run two cohorts on different calendars (issue #1781), so someone waiting on the other
+        term keeps their work unstamped until that term opens."""
+        outsider = baker.make(User, is_staff=False)
+        theirs = QuestSubmission.objects.create_submission(outsider, self.quest)
+
+        self.open_semester()
+
+        theirs.refresh_from_db()
+        self.assertIsNone(theirs.semester_id)
+
+    def test_set_active_semester__adopts_the_work_of_the_students_it_starts(self):
+        """Starting a semester through the deck's own action is the path a teacher actually
+        takes, so it has to adopt as well as a direct status edit in the admin does."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+
+        SiteConfig.get().set_active_semester(self.semester)
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.semester_id, self.semester.id)
+
+    def test_open__saving_the_semester_again_disturbs_nothing(self):
+        """Adoption runs on any save that leaves the semester open, not only on the one that
+        opens it, because a semester can be started from the admin as well as through the
+        deck's action. Saving an open semester again therefore has to leave the work it
+        already adopted where it is."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+        self.open_semester()
+
+        self.semester.name = 'Renamed after it started'
+        self.semester.save()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.semester_id, self.semester.id)
+
+
 class UnstampedDoubleStartRaceTest(ByteDeckTenantTestCase):
     """The #1345 double-start race, for the submissions that name no semester."""
 

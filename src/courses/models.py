@@ -1339,7 +1339,31 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if created and instance.semester_id is not None and instance.semester.is_open:
-        QuestSubmission.objects.adopt_unstamped_in_progress(instance.user_id, instance.semester_id)
+        QuestSubmission.objects.adopt_unstamped_in_progress([instance.user_id], instance.semester_id)
+
+
+@receiver(post_save, sender=Semester)
+def semester_adopt_unstamped_work_callback(instance, **kwargs):
+    """Bring the work a pre-registered student had on the go into their semester as it opens.
+
+    The receiver on CourseStudent covers a student joining a course in a semester that is
+    already running. This covers the other order (issue #2476): a teacher registers students
+    against a semester that has not started, those students have no open registration so they
+    can do the quests marked available outside a course, and the semester is opened
+    afterwards. Nothing saves their registrations at that moment, so without this their
+    in-progress work stays unstamped, out of the in-progress list that is now their
+    semester's and out of the available list that drops a quest they already started.
+
+    Any save leaving the semester open counts, not just the one that opens it: a semester can
+    be started from the admin as well as through SiteConfig.set_active_semester(), and
+    adopting when there is nothing left to adopt moves no rows.
+    """
+    from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
+
+    if instance.is_open:
+        QuestSubmission.objects.adopt_unstamped_in_progress(
+            CourseStudent.objects.all_for_semester(instance).values('user_id'), instance.pk
+        )
 
 
 @receiver(post_save, sender=Rank)
