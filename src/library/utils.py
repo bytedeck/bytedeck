@@ -108,9 +108,26 @@ def load_library_quests_for_render(quests):
             `prefetch_related_objects` needs the rows to exist.
 
     Returns:
-        list[Quest]: the same list, with `tags`, `question_set` and `campaign` populated.
+        list[Quest]: the same list, with `tags`, `question_set`, `campaign` and
+        prerequisites populated.
     """
+    from prerequisites.models import Prereq
+
     prefetch_related_objects(quests, 'tags', 'question_set', 'campaign')
+
+    # Prerequisites need more than a prefetch. `prefetch_for_parents` fills the cache that
+    # `prereqs()` serves, but each row still reaches its target through a GenericForeignKey,
+    # and `Prereq.__str__` follows that plus the content type to name it. Left lazy, those
+    # lookups run once the schema has switched back and answer with this deck's rows: the
+    # import preview then shows a gate the arriving quest does not have (#2529).
+    Prereq.objects.prefetch_for_parents(quests)
+    for quest in quests:
+        for prereq in quest.prereqs():
+            # Rendering it here is what caches it: `Prereq.__str__` walks the content type
+            # and the generic target (and the OR half, when there is one), which is exactly
+            # what the template asks for, so nothing is left for it to look up later.
+            str(prereq)
+            prereq.get_prereq()  # the template also links to it, via get_absolute_url
 
     return quests
 

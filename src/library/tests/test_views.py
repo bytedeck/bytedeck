@@ -2756,6 +2756,10 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
                 Quest, name="Titration Practice", campaign=cls.library_campaign, published=True,
             )
             cls.library_quest.tags.add("chemistry")
+            # A gate of the Library's own, so the pages can be checked for the right one
+            # rather than only for the absence of the wrong one.
+            cls.library_gate = baker.make(Quest, name="Library Safety Briefing", published=True)
+            Prereq.add_simple_prereq(cls.library_quest, cls.library_gate)
 
         cls.test_teacher = User.objects.create_user('lazy_queryset_teacher', is_staff=True)
 
@@ -2766,7 +2770,11 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         # a lazily-evaluated `quest.tags.all` would find after the schema switches back.
         local = baker.make(Quest, name="A Local Quest")
         Quest.objects.filter(pk=local.pk).update(id=self.library_quest.id)
-        Quest.objects.get(pk=self.library_quest.id).tags.add("local-only")
+        decoy = Quest.objects.get(pk=self.library_quest.id)
+        decoy.tags.add("local-only")
+        # and a prerequisite of its own: prereqs are keyed by the parent's object id, so a
+        # lazily-evaluated `quest.prereqs` finds this one once the schema switches back.
+        Prereq.add_simple_prereq(decoy, baker.make(Quest, name="Local Gate Quest"))
         self.client.force_login(self.test_teacher)
 
     def assertShowsLibraryTags(self, response):
@@ -2782,6 +2790,19 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "chemistry")
         self.assertNotContains(response, "local-only")
+
+    def assertShowsLibraryPrereqs(self, response):
+        """Assert a rendered page shows the Library quest's gate and not this deck's.
+
+        Args:
+            response (HttpResponse): the rendered Library page.
+
+        Raises:
+            AssertionError: if the page did not render, or shows this deck's prerequisite
+                in place of the Library's.
+        """
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Local Gate Quest")
 
     def test_LibraryQuestListView__shows_the_library_quests_own_tags(self):
         """The Library quest list renders tags read from the Library."""
@@ -2808,6 +2829,35 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
+
+    def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):
+        """The quest import preview renders prerequisites read from the Library.
+
+        The preview exists to say what is about to arrive, and this project has decided
+        gating is the importing deck's own business (#2375), so showing them a gate that
+        is really their own, attached to a quest they do not have yet, is the most
+        misleading thing the page could do (#2529).
+        """
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertShowsLibraryPrereqs(response)
+        self.assertContains(response, "Library Safety Briefing")
+
+    def test_ImportCampaignView__shows_the_library_quests_own_prereqs(self):
+        """The campaign import preview renders prerequisites read from the Library (#2529)."""
+        self.assertShowsLibraryPrereqs(
+            self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+        )
+
+    def test_CategoryDetailView__shows_the_library_quests_own_prereqs(self):
+        """The Library campaign detail page renders prerequisites read from the Library (#2529)."""
+        self.assertShowsLibraryPrereqs(
+            self.client.get(reverse('library:category_detail_view', args=[self.library_campaign.import_id]))
+        )
+
+    def test_LibraryQuestListView__shows_the_library_quests_own_prereqs(self):
+        """The Library quest list renders prerequisites read from the Library (#2529)."""
+        self.assertShowsLibraryPrereqs(self.client.get(reverse('library:quest_list')))
 
 
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
