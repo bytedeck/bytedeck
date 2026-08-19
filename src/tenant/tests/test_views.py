@@ -887,6 +887,23 @@ class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
         """POST the deletion request and return the response."""
         return self.client.post(reverse('decks:request_deletion'))
 
+    def test_request_and_cancel__drop_the_cached_deck_row(self):
+        """Both actions write with a queryset update (no post_save signal), so they
+        must drop the hour-long cached row get_current_deck() serves; a cached
+        consumer must never see pre-action state (CodeRabbit find on the #2330
+        PR). The page itself reads the middleware-fresh request.tenant."""
+        from tenant.utils import get_current_deck, deck_cache_key
+
+        with patch("tenant.tasks.send_email_message.apply_async"):
+            get_current_deck()  # populate the cached row (no request standing)
+            self.client.post(reverse('decks:request_deletion'))
+            cached = get_current_deck()  # a fresh cache fill after the action
+            self.assertIsNotNone(cached.deletion_requested_on)
+
+            self.client.post(reverse('decks:cancel_deletion_request'))
+            self.assertIsNone(get_current_deck().deletion_requested_on)
+        cache.delete(deck_cache_key(self.tenant.schema_name))  # leave no cross-test residue
+
     @patch("tenant.tasks.send_email_message.apply_async")
     def test_request__records_the_request_and_emails_the_operators(self, mock_apply_async):
         """The owner's POST stamps who asked and when, queues ONE operator email

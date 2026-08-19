@@ -605,6 +605,7 @@ def request_deck_deletion(request):
         HttpResponse: A redirect back to the subscription page, or 405 for GET.
     """
     from .tasks import send_email_message
+    from .utils import invalidate_current_deck_cache
 
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
@@ -624,6 +625,10 @@ def request_deck_deletion(request):
         messages.info(request, f"This deck's deletion was already requested on {deck.deletion_requested_on}.")
         return redirect('decks:subscription')
     deck.refresh_from_db()
+    # queryset update() skips the post_save signal, so drop the hour-long cached
+    # row get_current_deck() serves (the page itself reads the middleware-fresh
+    # request.tenant, but cached-row consumers must never see pre-request state)
+    invalidate_current_deck_cache(deck.schema_name)
 
     # tell the operators; the deck names itself so the email is actionable alone
     message = render_to_string('tenant/email/deletion_request.html', {
@@ -662,6 +667,8 @@ def cancel_deck_deletion_request(request):
     Returns:
         HttpResponse: A redirect back to the subscription page, or 405 for GET.
     """
+    from .utils import invalidate_current_deck_cache
+
     if request.method != 'POST':
         return HttpResponseNotAllowed(['POST'])
     deck = request.tenant
@@ -674,6 +681,8 @@ def cancel_deck_deletion_request(request):
         messages.info(request, "This deck has no deletion request to cancel.")
         return redirect('decks:subscription')
     type(deck).objects.filter(pk=deck.pk).update(deletion_requested_on=None, deletion_requested_by='')
+    # same cache drop as the request action: update() fires no post_save signal
+    invalidate_current_deck_cache(deck.schema_name)
     messages.success(request, "Deletion request canceled. The deck carries on as before.")
     return redirect('decks:subscription')
 
