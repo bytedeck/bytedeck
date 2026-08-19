@@ -60,11 +60,14 @@ def email_notifications_to_users_on_schema(self, root_url, only_usernames=None):
     it). Failures are sorted by SMTP class: a permanent (5xx) refusal drops
     that user's digest with a log line, while a temporary one (4xx, like
     Gmail's 451 rate-limit rejection, or a dropped connection or timeout)
-    collects the user for a retry of the UNSENT remainder only, with
-    exponential backoff, so nobody already emailed gets a duplicate. If the
-    retries run out, celery surfaces the failure to monitoring, and the
-    affected notifications remain unread, so they roll into the next daily
-    digest rather than being lost.
+    collects the user for a retry of the failed remainder only, with
+    exponential backoff. Delivery contract: a message the server REFUSED with a
+    status (4xx/5xx) cannot duplicate, since refusal is unambiguous; a session
+    that died mid-send (disconnect, timeout) is retried AT-LEAST-ONCE, because
+    SMTP cannot say whether the server accepted first, and for a digest a rare
+    duplicate beats a silently lost day. If the retries run out, celery
+    surfaces the failure to monitoring, and the affected notifications remain
+    unread, so they roll into the next daily digest rather than being lost.
 
     Args:
         root_url: The deck's root URL; names the deck in the subject and sender.
@@ -104,7 +107,9 @@ def email_notifications_to_users_on_schema(self, root_url, only_usernames=None):
                 dropped += 1
                 logger.warning("notification email to %s refused: %s", email.to, e.recipients)
         except (smtplib.SMTPException, ConnectionError, TimeoutError) as e:
-            # the session itself failed (disconnected, timed out): temporary
+            # the session itself failed (disconnected, timed out). The server
+            # may have accepted the message before the connection died, so this
+            # retry is deliberately at-least-once (see the docstring's contract)
             logger.info("notification email to %s hit a transient send failure: %s", email.to, e)
             retry_usernames.append(email.recipient_username)
 

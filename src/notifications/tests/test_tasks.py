@@ -198,7 +198,11 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
     def test_email_task__disconnect_is_retried_as_temporary(self):
         """A dead SMTP session (disconnect mid-batch) counts as temporary: the
-        affected user lands in the retry set rather than losing their digest."""
+        affected user lands in the retry set rather than losing their digest.
+        This path is deliberately at-least-once: the server may have accepted
+        the message before the connection died, and a rare duplicate digest
+        beats a silently lost one (the status-rejection paths cannot
+        duplicate, since a refusal is unambiguous)."""
         import smtplib
 
         from celery.exceptions import Retry
