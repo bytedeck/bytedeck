@@ -8,7 +8,8 @@ from django.contrib import messages
 from django.core.cache import cache
 from django.shortcuts import redirect, render
 from django.db import connection
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseNotAllowed, HttpResponseRedirect, JsonResponse
+from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -583,6 +584,107 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             messages.error(request, "Sorry, Stripe couldn't be reached. Please try again in a few minutes.")
             return redirect('decks:subscription')
         return HttpResponseRedirect(url)
+
+
+@non_public_only_view
+@staff_member_required
+def request_deck_deletion(request):
+    """POST target for the subscription page's "Request deck deletion" button (#2330).
+
+    Records the owner's standing request on the deck (who asked and when), tells
+    the project operators by email, and silences the deck's lifecycle reminder
+    emails while the request stands. Advisory by design: nothing is deleted, and
+    the page's confirmation says so plainly; an operator reviews the request and
+    arms deletion (see ``Tenant.is_deletable``). Only the deck OWNER may ask:
+    other staff get an error, matching the manage-subscription guard.
+
+    Args:
+        request (HttpRequest): The POST; its ``tenant`` is the deck.
+
+    Returns:
+        HttpResponse: A redirect back to the subscription page, or 405 for GET.
+    """
+    from .tasks import send_email_message
+    from .utils import invalidate_current_deck_cache
+
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    deck = request.tenant
+    deck_owner = SiteConfig.get().deck_owner
+    if request.user != deck_owner:
+        messages.error(
+            request, f"Only the deck owner, {deck_owner.get_username()}, can request this deck's deletion.")
+        return redirect('decks:subscription')
+    # conditional update: only the request that transitions the row from
+    # no-request to requested proceeds to notify, so a double submit (or two
+    # concurrent requests) records once and emails the operators once
+    claimed = type(deck).objects.filter(pk=deck.pk, deletion_requested_on__isnull=True).update(
+        deletion_requested_on=timezone.localdate(), deletion_requested_by=request.user.get_username())
+    if not claimed:
+        deck.refresh_from_db()
+        messages.info(request, f"This deck's deletion was already requested on {deck.deletion_requested_on}.")
+        return redirect('decks:subscription')
+    deck.refresh_from_db()
+    # queryset update() skips the post_save signal, so drop the hour-long cached
+    # row get_current_deck() serves (the page itself reads the middleware-fresh
+    # request.tenant, but cached-row consumers must never see pre-request state)
+    invalidate_current_deck_cache(deck.schema_name)
+
+    # tell the operators; the deck names itself so the email is actionable alone
+    message = render_to_string('tenant/email/deletion_request.html', {
+        'deck': deck,
+        'requested_by': request.user.get_username(),
+        'owner_email': deck.get_owner_email_cached(),
+        'status_label': deck.subscription_status_label,
+    })
+    send_email_message.apply_async(
+        kwargs={
+            'subject': f"Deck deletion request: {deck.schema_name}",
+            'message': message,
+            'recipient_list': [settings.SUPPORT_EMAIL],
+        },
+        queue='default',
+    )
+    messages.success(
+        request,
+        "Your deletion request has been received. Nothing is deleted yet: your content stays "
+        "intact until a ByteDeck operator processes the request, and you can cancel it below "
+        "if you change your mind.")
+    return redirect('decks:subscription')
+
+
+@non_public_only_view
+@staff_member_required
+def cancel_deck_deletion_request(request):
+    """POST target for withdrawing the deck's standing deletion request (#2330).
+
+    Clears the request (turning lifecycle reminders back on) and confirms. Only
+    the deck OWNER may withdraw, the same guard as making the request.
+
+    Args:
+        request (HttpRequest): The POST; its ``tenant`` is the deck.
+
+    Returns:
+        HttpResponse: A redirect back to the subscription page, or 405 for GET.
+    """
+    from .utils import invalidate_current_deck_cache
+
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    deck = request.tenant
+    deck_owner = SiteConfig.get().deck_owner
+    if request.user != deck_owner:
+        messages.error(
+            request, f"Only the deck owner, {deck_owner.get_username()}, can cancel this deck's deletion request.")
+        return redirect('decks:subscription')
+    if deck.deletion_requested_on is None:
+        messages.info(request, "This deck has no deletion request to cancel.")
+        return redirect('decks:subscription')
+    type(deck).objects.filter(pk=deck.pk).update(deletion_requested_on=None, deletion_requested_by='')
+    # same cache drop as the request action: update() fires no post_save signal
+    invalidate_current_deck_cache(deck.schema_name)
+    messages.success(request, "Deletion request canceled. The deck carries on as before.")
+    return redirect('decks:subscription')
 
 
 class SubscriptionActivating(NonPublicOnlyViewMixin, TemplateView):
