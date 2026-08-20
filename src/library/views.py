@@ -349,27 +349,30 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
 
 
 def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=()):
-    """Tell the sharer which gating did not travel with the content they just shared.
+    """Tell the sharer which prerequisites did not travel with the content they just shared.
 
     A prerequisite only crosses if the thing it points at is in the Library too. A rank or
     a course can never be, and a quest outside what is being pushed is simply not there
-    yet, so those gates are dropped at this end and the copy in the Library is ungated.
+    yet, so those prerequisites are dropped at this end and the copy in the Library
+    arrives without them.
 
-    A lost OR alternative is the opposite loss, warned about separately (#2549): the gate
-    itself survives, so the copy arrives *stricter* than written, with one of the routes
-    through it gone. The two need different fixes from the teacher (an open quest needs
-    re-gating on the far side; a narrowed one needs the alternative shared alongside it),
-    so telling them "ungated" for a narrowed quest would point them at the wrong one.
+    A lost OR alternative is the opposite loss, warned about separately (#2549): the
+    prerequisite itself survives, so the copy arrives *stricter* than written, with one
+    of the ways to meet it gone. The two need different fixes from the teacher (a quest
+    that arrives without its prerequisite needs one re-added on the far side; a narrowed
+    one needs the alternative shared alongside it), so telling them the copy has no
+    prerequisite when it is narrowed would point them at the wrong one.
 
     Nobody downstream can tell either way, because the Library row simply carries less
     than the original: the teacher who imports it later has nothing to be warned about.
 
     That makes this the only place the losses are visible, and the sharer is also the one
-    who can act on them, by widening what they share or by re-gating it (#2399, #2450).
+    who can act on them, by widening what they share or by re-adding the prerequisite on
+    the far side (#2399, #2450).
 
     Args:
         request (HttpRequest): the current request, for the message framework.
-        unmet_prereqs (list[str]): names of the gate targets that did not travel.
+        unmet_prereqs (list[str]): names of the prerequisite targets that did not travel.
         unmet_alternates (list[str]): names of the OR alternatives that did not travel.
 
     Returns:
@@ -383,10 +386,11 @@ def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=())
         messages.warning(
             request,
             format_html(
-                "One thing did not travel: this content was gated on {}, which is not in the "
-                "Library, so the copy there is not gated on it and anyone importing it will get it "
-                "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
-                "grade, block or course cannot be shared at all.",
+                "One thing did not travel: this content has {} as a prerequisite, which is not in "
+                "the Library, so the copy there is missing that prerequisite and anyone importing "
+                "the content will get it without that requirement. Sharing the whole campaign "
+                "carries prerequisites between its own quests; a rank, grade, block or course "
+                "cannot be shared at all.",
                 names,
             )
         )
@@ -395,17 +399,19 @@ def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=())
         names = format_html_join(', ', "'{}'", ((name,) for name in unmet_alternates))
         if len(unmet_alternates) == 1:
             template = (
-                "A gate kept its requirement but lost an alternative: {} is not in the "
-                "Library, so where the gating offered it as another way through, the copy no "
-                "longer does. Anyone importing this gets the stricter version. Share the "
-                "alternative too if both routes should be available."
+                "A prerequisite kept its main requirement but lost its OR alternative: {} is "
+                "not in the Library, so where the prerequisite offered a second way for the "
+                "content to become available, the copy no longer does. Anyone importing it "
+                "gets the stricter version. Share the alternative too if both options should "
+                "remain open."
             )
         else:
             template = (
-                "Some gates kept their requirement but lost an alternative: {} are not in the "
-                "Library, so where the gating offered them as another way through, the copy no "
-                "longer does. Anyone importing this gets the stricter version. Share the "
-                "alternatives too if all routes should be available."
+                "Some prerequisites kept their main requirement but lost an OR alternative: {} "
+                "are not in the Library, so where those prerequisites offered a second way for "
+                "the content to become available, the copy no longer does. Anyone importing it "
+                "gets the stricter version. Share the alternatives too if all options should "
+                "remain open."
             )
         messages.warning(request, format_html(template, names))
 
