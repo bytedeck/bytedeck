@@ -63,6 +63,7 @@
             title="Archive this quest" >
             <i class="fa fa-fw fa-archive"></i>
           </a>
+          {% can_export_to_library as can_export %}
           {% if can_export %}
             <a class="btn btn-default" href="{% url 'library:export_quest' q.import_id %}" role="button"
               title="Export this quest to the Library">

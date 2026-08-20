@@ -118,19 +118,17 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
             dict: the template context, with
                 - available_tab_active (bool): the Available tab is the one being shown.
                 - inactive_tab_active (bool): the Inactive tab is the one being shown.
-                - can_export (bool): this user may push a campaign to the Shared Library,
-                    so the export action is offered.
                 - is_library_view (bool): False. The campaign table is shared with the
                     Library's campaign list, and this is the deck's own copy, so it shows
                     the local actions rather than the Library's import action.
+
+        The export action's flag is not set here: the template asks the
+        `can_export_to_library` tag itself.
         """
         context_data = super().get_context_data(*args, **kwargs)
 
-        can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
-
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
-        context_data['can_export'] = can_export
         # these are the deck's own campaigns, so the shared campaign table shows the
         # local actions (edit, publish, export, delete) rather than the Library's import action
         context_data['is_library_view'] = False
@@ -157,7 +155,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
         Returns:
             dict: Context info containing the appropriate quests for the user to view,
-            including "category_displayed_quests" and "can_export".
+            including "category_displayed_quests".
         """
         if self.request.user.is_staff:
             quests = Quest.objects.filter(campaign=self.object)
@@ -179,7 +177,6 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         )
 
         kwargs['category_displayed_quests'] = quests
-        kwargs['can_export'] = SiteConfig.get().can_user_export_to_library(self.request.user)
 
         return super().get_context_data(**kwargs)
 
@@ -983,7 +980,6 @@ def ajax_quest_info(request, quest_id=None):
 
         with library_schema_if_requested(request):
             is_library_view = is_library_schema_requested(request)
-            can_export = SiteConfig.get().can_user_export_to_library(request.user)
 
             if quest_id:
                 if request.user.is_staff:
@@ -991,8 +987,11 @@ def ajax_quest_info(request, quest_id=None):
                 else:
                     quest = get_object_or_404(Quest, pk=quest_id)
 
+                # The export button's can_export_to_library tag runs during this render,
+                # so it still answers for the schema selected above: on a Library preview
+                # it sees the Library schema and offers no export button.
                 quest_info_html = render_to_string(template,
-                                                   {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                   {'q': quest, 'is_library_view': is_library_view},
                                                    request=request)
 
                 data = {'quest_info_html': quest_info_html}
@@ -1092,14 +1091,11 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
-    can_export = SiteConfig.get().can_user_export_to_library(request.user)
-
     context = {
         "heading": q.name,
         "q": q,
         "available": available,
         "maps": CytoScape.objects.get_related_maps(q),
-        "can_export": can_export,
     }
 
     return render(request, "quest_manager/detail.html", context)

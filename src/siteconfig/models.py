@@ -425,7 +425,10 @@ class SiteConfig(models.Model):
         if current_schema == get_library_schema_name():
             return False
 
-        if user == self.deck_owner:
+        # Compared by id (a local column) rather than fetching the owner: the export
+        # buttons ask this per rendered page, and a cached SiteConfig instance would
+        # otherwise run a query for the owner on every call.
+        if user.pk == self.deck_owner_id:
             return True
 
         return self.allow_staff_export and user.is_staff
