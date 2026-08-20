@@ -47,9 +47,11 @@ class TransferResult(NamedTuple):
     they share, or decide the gap is fine. The views turn these into a warning on the push.
 
     `unmet_prereqs` names gating that did not travel, which fails open: the copy in the
-    Library ends up less gated than its author wrote. `skipped_quests` names quests that
-    were left out of a shared campaign altogether. `dropped_common_data` names the shared
-    General Info blocks the copy arrives without.
+    Library ends up less gated than its author wrote. `unmet_alternates` is the milder
+    version of that: the gate itself survived, but an alternative way of satisfying it did
+    not, so the copy is gated more tightly than its author wrote rather than less.
+    `skipped_quests` names quests that were left out of a shared campaign altogether.
+    `dropped_common_data` names the shared General Info blocks the copy arrives without.
 
     `renamed_quests` is the odd one out: nothing was lost, but a name was changed to get
     the copy in, so it is reported to whoever is standing in front of it (#2364).
@@ -57,6 +59,7 @@ class TransferResult(NamedTuple):
 
     quests: list
     unmet_prereqs: list
+    unmet_alternates: list = ()
     skipped_quests: list = ()
     dropped_common_data: list = ()
     renamed_quests: list = ()
@@ -418,12 +421,14 @@ def _write_prereqs(quest, prereqs):
         prereqs (list[dict]): `{'main', 'alternate'}` entries from `_snapshot_prereqs`.
 
     Returns:
-        list[str]: the names of the prerequisite targets this deck does not have. An
-        alternate half whose target is missing is named too: the requirement survives
-        without it, but with one fewer way to satisfy it.
+        tuple[list[str], list[str]]: the names of the prerequisite targets this deck does
+        not have, and separately the names of alternate halves it does not have. They are
+        reported apart because they are different losses: the first leaves the quest
+        ungated, the second leaves it gated with one fewer way through.
     """
     already_required = {_prereq_signature(p) for p in quest.prereqs()}
     unmet = []
+    unmet_alternates = []
 
     for prereq in prereqs:
         main = _find_prereq_target(prereq['main'])
@@ -433,6 +438,8 @@ def _write_prereqs(quest, prereqs):
             # and naming it is what tells the teacher (#2450, #2399).
             unmet.append(prereq['main']['name'])
             if prereq['alternate'] is not None:
+                # The whole requirement went, so its alternative went with it: that is a
+                # missing gate, not a gate missing an option.
                 unmet.append(prereq['alternate']['name'])
             continue
 
@@ -440,7 +447,7 @@ def _write_prereqs(quest, prereqs):
         if prereq['alternate'] is not None:
             alternate = _find_prereq_target(prereq['alternate'])
             if alternate is None:
-                unmet.append(prereq['alternate']['name'])
+                unmet_alternates.append(prereq['alternate']['name'])
 
         new_prereq = Prereq(
             parent_content_type=ContentType.objects.get_for_model(quest),
@@ -462,7 +469,7 @@ def _write_prereqs(quest, prereqs):
             new_prereq.save()
             already_required.add(signature)
 
-    return unmet
+    return unmet, unmet_alternates
 
 
 def _write_questions(quest, questions):
@@ -551,8 +558,11 @@ def write_quests(writes, *, with_campaign):
         # Second pass, so a prerequisite between two quests of this batch is linked
         # whichever order they were written in.
         unmet = []
+        unmet_alternates = []
         for (snapshot, _, _), quest in zip(writes, written):
-            unmet.extend(_write_prereqs(quest, snapshot['prereqs']))
+            missing, missing_alternates = _write_prereqs(quest, snapshot['prereqs'])
+            unmet.extend(missing)
+            unmet_alternates.extend(missing_alternates)
 
     dropped_common_data = sorted({
         snapshot['common_data_title'] for snapshot, _, _ in writes if snapshot['common_data_title']
@@ -561,6 +571,7 @@ def write_quests(writes, *, with_campaign):
     return TransferResult(
         quests=written,
         unmet_prereqs=sorted(set(unmet)),
+        unmet_alternates=sorted(set(unmet_alternates) - set(unmet)),
         dropped_common_data=dropped_common_data,
     )
 

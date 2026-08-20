@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
@@ -2385,6 +2386,36 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertTrue(
             any("Digital Novice" in text for text in self._message_texts(response)),
             f"expected the sharer to be told, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_an_OR_alternative_could_not_travel(self):
+        """Sharing a quest whose gate offers an alternative says the copy lost that route.
+
+        A separate warning from the ungated one, because it is the opposite problem: the
+        gate survived, so the Library copy is stricter than its author wrote rather than
+        open to everyone, and the fix is to share the alternative too (#2535).
+        """
+        gate = baker.make(Quest, name="The Main Route", published=True)
+        alternative = baker.make(Quest, name="The Other Route", published=True)
+        local = baker.make(Quest, name="Quest With Two Routes In", published=True)
+        prereq = Prereq.add_simple_prereq(local, gate)
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(Quest)
+        prereq.or_prereq_object_id = alternative.pk
+        prereq.save()
+        # The gate is already there, so only the alternative is missing on the far side.
+        with library_schema_context():
+            baker.make(Quest, name="The Main Route", import_id=gate.import_id, published=True)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("The Other Route" in text and "lost an alternative" in text for text in texts),
+            f"expected the sharer to be told the alternative did not travel, got {texts}",
         )
 
     def test_export_quest__stays_quiet_when_the_gate_is_already_in_the_library(self):

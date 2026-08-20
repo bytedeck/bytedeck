@@ -378,6 +378,36 @@ def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
     )
 
 
+def warn_sharer_about_unmet_alternates(request, unmet_alternates):
+    """Tell the sharer which OR alternatives did not travel with the content they shared.
+
+    Separate from `warn_sharer_about_unmet_prereqs` because it is the opposite kind of
+    loss. A gate whose target did not travel is dropped, and the copy arrives open to
+    everyone. A gate that merely lost the alternative half of an OR still gates the quest:
+    it just no longer accepts the second route its author offered, so the copy arrives
+    *stricter* than intended and some students cannot reach it at all.
+
+    Telling the sharer which is which matters, because the fix differs: an ungated quest
+    needs re-gating on the far side, while a narrowed one needs the alternative shared
+    alongside it (#2535).
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        unmet_alternates (list[str]): names of the alternatives that did not travel.
+    """
+    if not unmet_alternates:
+        return
+
+    names = ', '.join(f"'{name}'" for name in unmet_alternates)
+    messages.warning(
+        request,
+        f"A gate kept its requirement but lost an alternative: {names} is not in the "
+        "Library, so where the gating offered it as another way through, the copy no "
+        "longer does. Anyone importing this gets the stricter version. Share the "
+        "alternative too if both routes should be available."
+    )
+
+
 def record_push_origin(content_type, import_ids, request, source_deck_url):
     """Record which deck and which user shared this content to the Library (#2377).
 
@@ -1050,6 +1080,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_alternates(request, shared.unmet_alternates)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
@@ -1202,6 +1233,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             )
         )
         warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_alternates(request, shared.unmet_alternates)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')

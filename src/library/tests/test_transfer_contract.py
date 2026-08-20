@@ -536,13 +536,41 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 
         # The loss happens on the way out, which is where it can still be acted on: the
         # sharer is the only one who can widen what they share to include the alternative.
-        self.assertIn("Alternative Nobody Else Has", pushed.unmet_prereqs)
+        # Reported apart from `unmet_prereqs` because the gate survived: the copy is
+        # stricter than the author wrote, not open to everyone.
+        self.assertEqual(pushed.unmet_alternates, ["Alternative Nobody Else Has"])
+        self.assertEqual(pushed.unmet_prereqs, [])
 
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             in_library = list(library_quest.prereqs())
             self.assertEqual([p.get_prereq().name for p in in_library], ["Prereq Inside Campaign"])
             self.assertIsNone(in_library[0].get_or_prereq())
+
+    def test_export_campaign__a_gate_that_cannot_travel_takes_its_alternative_with_it(self):
+        """When the main half cannot cross, the whole requirement goes, alternative included.
+
+        Both names are reported as missing gating rather than as a lost alternative: what
+        arrives is a quest with no gate at all, not a gate that lost one of its routes, so
+        the sharer is told the stronger of the two things (#2535).
+        """
+        campaign, quest, prereq = self._gated_quest()
+        # A rank has no import_id, so this half can never cross (#2450).
+        prereq.prereq_content_type = ContentType.objects.get_for_model(Rank)
+        prereq.prereq_object_id = baker.make(Rank, name="Digital Novice").pk
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(Quest)
+        prereq.or_prereq_object_id = Quest.objects.get(name="Prereq Inside Campaign").pk
+        prereq.save()
+
+        pushed = export_campaign_and_copy_quests(
+            source_schema=connection.schema_name, campaign_import_id=campaign.import_id,
+        )
+
+        self.assertEqual(pushed.unmet_prereqs, ["Digital Novice", "Prereq Inside Campaign"])
+        self.assertEqual(pushed.unmet_alternates, [])
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            self.assertEqual(list(library_quest.prereqs()), [])
 
     def test_import_twice__does_not_stack_a_second_copy_of_the_same_gate(self):
         """Importing the same gated quest again leaves one prerequisite, not two.
