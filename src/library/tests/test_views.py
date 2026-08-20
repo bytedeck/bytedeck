@@ -756,8 +756,10 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         for quest in library_quests[1:]:
             self.assertNotIn(quest.import_id, local_ids)
 
-        # Check the warning text appears in the rendered content
-        self.assertContains(response, "One or more quests in this campaign already exist")
+        # Check the notice appears in the rendered content, now offering the choice of
+        # keeping this deck's own version rather than only warning about the overwrite (#1845)
+        self.assertContains(response, "Your deck already has this quest")
+        self.assertContains(response, "Keep my version of")
 
     def test_campaigns_tab__shows_correct_badge_count(self):
         """
@@ -2845,6 +2847,150 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Library Safety Briefing")
         self.assertNotContains(response, "Local Gate Quest")
+
+
+class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
+    """A campaign import can keep the deck's own version of a quest it already has.
+
+    Without this the only options were to take the Library's version and lose local edits,
+    or not import the campaign at all (#1845).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to import with."""
+        cls.test_teacher = User.objects.create_user('preserve_teacher', is_staff=True)
+
+    def setUp(self):
+        """Publish a two-quest campaign in the Library and sign the teacher in."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            self.library_campaign = baker.make(Category, title="Web Basics", published=True)
+            self.shared = baker.make(
+                Quest, name="Semantic HTML", campaign=self.library_campaign,
+                published=True, instructions="<p>The Library's wording.</p>",
+            )
+            self.untouched = baker.make(
+                Quest, name="Flexbox Basics", campaign=self.library_campaign, published=True,
+            )
+
+    def _local_copy_of_the_shared_quest(self, **overrides):
+        """Give this deck its own edited copy of the Library's quest, matched by import_id.
+
+        Args:
+            **overrides: field values for the local quest.
+
+        Returns:
+            Quest: the local copy.
+        """
+        fields = {
+            'name': "Semantic HTML",
+            'import_id': self.shared.import_id,
+            'published': True,
+            'instructions': "<p>My own wording, rewritten for my class.</p>",
+        }
+        fields.update(overrides)
+        quest = baker.make(Quest, **fields)
+        Quest.objects.filter(pk=quest.pk).update(published=fields['published'])
+        return Quest.objects.get(pk=quest.pk)
+
+    def _import(self, preserve=()):
+        """Import the Library campaign, optionally preserving some quests.
+
+        Args:
+            preserve (Iterable): import_ids to tick "keep my version" for.
+
+        Returns:
+            HttpResponse: the followed response.
+        """
+        data = {'preserve': [str(import_id) for import_id in preserve]}
+        return self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), data, follow=True,
+        )
+
+    def test_import_campaign__the_page_offers_to_keep_each_quest_the_deck_already_has(self):
+        """The confirmation page lists a tick box per quest the deck already holds."""
+        self._local_copy_of_the_shared_quest()
+
+        response = self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Keep my version of")
+        self.assertContains(response, f'value="{self.shared.import_id}"')
+        # Only the quest this deck actually has, not every quest in the campaign.
+        self.assertNotContains(response, f'value="{self.untouched.import_id}"')
+
+    def test_import_campaign__a_preserved_quest_keeps_its_own_wording(self):
+        """Ticking a quest leaves this deck's version of it untouched (#1845)."""
+        local = self._local_copy_of_the_shared_quest()
+
+        self._import(preserve=[self.shared.import_id])
+
+        local.refresh_from_db()
+        self.assertIn("My own wording", local.instructions)
+
+    def test_import_campaign__a_preserved_quest_joins_the_campaign(self):
+        """A preserved quest is put into the arriving campaign rather than left out.
+
+        The decision recorded on #1845: the campaign should be whole. A quest that stayed
+        outside it would leave a gap in the campaign and on the quest map.
+        """
+        local = self._local_copy_of_the_shared_quest(campaign=None)
+
+        self._import(preserve=[self.shared.import_id])
+
+        local.refresh_from_db()
+        self.assertIsNotNone(local.campaign)
+        self.assertEqual(local.campaign.import_id, self.library_campaign.import_id)
+        # Joined the campaign without being replaced on the way: an ordinary import also
+        # ends with the quest in the campaign, but only after overwriting it.
+        self.assertIn("My own wording", local.instructions)
+
+    def test_import_campaign__quests_left_unticked_are_still_overwritten(self):
+        """Not ticking a quest keeps the old behaviour: the Library's version wins."""
+        local = self._local_copy_of_the_shared_quest()
+
+        self._import()
+
+        local.refresh_from_db()
+        self.assertIn("The Library's wording", local.instructions)
+
+    def test_import_campaign__preserving_every_quest_still_creates_the_campaign(self):
+        """The campaign arrives even when no quest is written.
+
+        The campaign row is normally created from the arriving quests' snapshots, so
+        preserving all of them would otherwise leave nothing for them to join.
+        """
+        first = self._local_copy_of_the_shared_quest(campaign=None)
+        second = baker.make(
+            Quest, name="Flexbox Basics", import_id=self.untouched.import_id, published=True,
+            campaign=None, instructions="<p>My own second wording.</p>",
+        )
+
+        self._import(preserve=[self.shared.import_id, self.untouched.import_id])
+
+        campaign = Category.objects.filter(import_id=self.library_campaign.import_id).first()
+        self.assertIsNotNone(campaign, "the campaign should exist even with every quest preserved")
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.campaign, campaign)
+        self.assertEqual(second.campaign, campaign)
+        # And nothing was written over them on the way in.
+        self.assertIn("My own wording", first.instructions)
+        self.assertIn("My own second wording", second.instructions)
+
+    def test_import_campaign__a_preserve_value_this_deck_does_not_have_is_ignored(self):
+        """A hand-made POST naming something else cannot change what is imported."""
+        local = self._local_copy_of_the_shared_quest()
+
+        response = self._import(preserve=[uuid.uuid4(), 'not-a-uuid'])
+
+        self.assertEqual(response.status_code, 200)
+        local.refresh_from_db()
+        # Nothing was preserved, so the import behaved normally.
+        self.assertIn("The Library's wording", local.instructions)
 
 
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
