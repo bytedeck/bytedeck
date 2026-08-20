@@ -977,7 +977,8 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         # As with a single quest: the campaign and its quests arrive unpublished and
         # unreachable, so the import is only half the job (#2377). Both remaining steps are
         # on the campaign's own page: the publish button there is the one that publishes
-        # the quests too, and the quests are listed there for the one that needs gating.
+        # the quests too, and the quests are listed there for the one that needs a
+        # prerequisite.
         # The edit form is deliberately not linked: ticking Published on it publishes the
         # campaign alone, leaving every quest a draft and students still seeing nothing.
         messages.success(

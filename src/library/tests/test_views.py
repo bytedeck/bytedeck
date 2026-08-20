@@ -1926,7 +1926,8 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
         imported = Category.objects.get(import_id=self.library_campaign.import_id)
         message = str(list(response.context['messages'])[0])
         # Both steps live on the campaign's own page: the publish button there is the one
-        # that publishes the quests too, and the quests are listed there for gating (#2533)
+        # that publishes the quests too, and the quests are listed there so the first can
+        # be given a prerequisite (#2533)
         self.assertIn(f'href="{imported.get_absolute_url()}">publish the campaign</a>', message)
         self.assertIn(f'href="{imported.get_absolute_url()}">prerequisite</a>', message)
 
