@@ -15,7 +15,6 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
@@ -2336,27 +2335,24 @@ def ajax_save_draft(request):
                     request.POST, request.FILES,
                     instance=sub, queryset=sync_draft_question_submissions(sub),
                 )
-                # a POST built by hand can omit the management form, which raises when the
-                # formset validates; text (above) still saves, the files leg just skips.
-                try:
-                    question_formset.is_valid()
-                except ValidationError:
-                    question_formset = None
-
-                if question_formset is not None:
-                    save_draft_file_answers(question_formset, request.FILES)
-                    for answer_form in question_formset.forms:
-                        field_name = answer_form.add_prefix("response_file")
-                        if field_name not in request.FILES:
-                            continue
-                        # errors first: a row that already holds a file from an earlier save
-                        # keeps it when a replacement is rejected, and reporting that stored
-                        # file as "saved" would present the rejection as a success
-                        if answer_form.errors.get("response_file"):
-                            file_errors[field_name] = " ".join(answer_form.errors["response_file"])
-                        elif answer_form.instance.pk and answer_form.instance.response_file:
-                            # the bare file name: the stored value is a whole media path
-                            saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
+                # Validate so the per-form errors below are populated. A hand-built POST
+                # that omits the management form does not raise here: Django records a
+                # non-form error and the formset has no forms, so the loop below does
+                # nothing and the text answers (above) still save.
+                question_formset.is_valid()
+                save_draft_file_answers(question_formset, request.FILES)
+                for answer_form in question_formset.forms:
+                    field_name = answer_form.add_prefix("response_file")
+                    if field_name not in request.FILES:
+                        continue
+                    # errors first: a row that already holds a file from an earlier save
+                    # keeps it when a replacement is rejected, and reporting that stored
+                    # file as "saved" would present the rejection as a success
+                    if answer_form.errors.get("response_file"):
+                        file_errors[field_name] = " ".join(answer_form.errors["response_file"])
+                    elif answer_form.instance.pk and answer_form.instance.response_file:
+                        # the bare file name: the stored value is a whole media path
+                        saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
 
             if request.FILES.getlist("attachments"):
                 # the same form the submit builds, so the same size and count rules apply
