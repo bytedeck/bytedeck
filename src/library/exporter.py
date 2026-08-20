@@ -259,6 +259,7 @@ def _push_campaign(source_schema, campaign_import_id):
     return TransferResult(
         quests=exported.quests + cloned.quests,
         unmet_prereqs=sorted(set(exported.unmet_prereqs) | set(cloned.unmet_prereqs)),
+        unmet_alternates=sorted(set(exported.unmet_alternates) | set(cloned.unmet_alternates)),
         skipped_quests=skipped_quests,
         dropped_common_data=sorted(set(exported.dropped_common_data) | set(cloned.dropped_common_data)),
     )

@@ -156,31 +156,40 @@ def load_library_quest_prereqs_for_render(quests):
     return quests
 
 
-def get_colliding_quest_names(library_quests):
-    """The names among `library_quests` that a different quest on this deck already uses.
+def get_colliding_quest_names(arriving_quests):
+    """The names among `arriving_quests` that a different quest in *this* schema already uses.
 
-    A name clash is what the importing teacher cannot see for themselves: the Library page
-    shows what is on offer, not what is already on their own deck, so without this the
-    first they hear of it is after clicking Import. The import handles the clash by
-    renaming the arriving copy, and naming the clash up front is what makes that a choice
-    rather than a surprise (#2364, #2397).
+    A name clash is the thing neither side can see for itself: each page shows what is on
+    offer, not what is already on the other deck, so without this the first anyone hears of
+    it is after they have committed. Naming the clash up front is what makes it a choice
+    rather than a surprise (#2364, #2397, #2531).
 
-    Matching is on name and *not* import_id: a quest this deck already holds under the same
-    import_id is the same quest arriving again, which is an overwrite rather than a clash.
+    The two directions then do different things with the answer, because a quest name is
+    unique per schema and only one of them can rename its way out:
 
-    Must be called from within the destination (local) schema context.
+    * importing renames the arriving copy and says so, so the clash is a note;
+    * sharing cannot rename the sharer's own quest on their behalf, so the clash is a
+      refusal, and this is what lets it be refused before the licence is agreed to rather
+      than by an exception afterwards (#2531).
+
+    Matching is on name and *not* import_id: a quest the destination already holds under
+    the same import_id is the same quest arriving again, which is an overwrite or a
+    refusal-to-reshare rather than a clash.
+
+    Must be called from within the destination schema context, whichever direction that is:
+    the local deck when importing, the Library when sharing.
 
     Args:
-        library_quests (Iterable[Quest]): the quests being offered for import, read from
-            the Library schema.
+        arriving_quests (Iterable[Quest]): the quests about to be written, read from the
+            source schema.
 
     Returns:
-        list[str]: the clashing names, sorted, empty when nothing on this deck collides.
+        list[str]: the clashing names, sorted, empty when nothing in this schema collides.
     """
     from quest_manager.models import Quest
 
-    wanted_names = [quest.name for quest in library_quests]
-    arriving_ids = [quest.import_id for quest in library_quests]
+    wanted_names = [quest.name for quest in arriving_quests]
+    arriving_ids = [quest.import_id for quest in arriving_quests]
 
     return sorted(
         Quest.objects.all_including_archived()
