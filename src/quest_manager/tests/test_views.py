@@ -2192,10 +2192,9 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
     def test_quest_user_status__export_button_shown_when_user_can_export(self):
         """A user who may export to the Shared Library gets the export button on the status page.
 
-        This page includes the same quest button bar as the detail page, but its view set
-        no export flag, so the button was silently missing here even with the feature
-        fully enabled (issue #2536). The bar now asks the `can_export_to_library` tag
-        itself, so it is consistent wherever it appears.
+        This page includes the same quest button bar as the detail page, and the bar
+        asks the `can_export_to_library` tag itself, so the export button appears here
+        exactly as it does everywhere else the bar renders (issue #2536).
         """
         site_config = SiteConfig.get()
         site_config.allow_staff_export = True
@@ -4036,8 +4035,8 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         """The campaign list renders each campaign's Library export button only for a user
         who may export.
 
-        The templates ask the `can_export_to_library` tag themselves rather than reading
-        a per-view context flag (issue #2536), so this guards the campaign table's copy.
+        The campaign table asks the `can_export_to_library` tag itself (issue #2536),
+        and this guards the table's copy of the button.
         """
         campaign = baker.make(Category, published=True)
         baker.make(Quest, campaign=campaign, published=True)
@@ -4062,7 +4061,7 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
     def test_CategoryDetail_view__export_button_follows_export_permission(self):
         """The campaign detail page renders its Library export button only for a user who
-        may export (issue #2536, same tag as the campaign list)."""
+        may export, via the same `can_export_to_library` tag as the campaign list (issue #2536)."""
         campaign = baker.make(Category, published=True)
         baker.make(Quest, campaign=campaign, published=True)
         self.client.force_login(self.test_teacher)
@@ -4736,9 +4735,8 @@ class DetailViewTest(ByteDeckTenantTestCase):
         """The detail page renders the Library export button for a user who may export,
         and not for one who may not.
 
-        The button bar asks the `can_export_to_library` template tag itself rather than
-        reading a per-view context flag (issue #2536), so this exercises the tag through
-        a full page render.
+        The button bar asks the `can_export_to_library` template tag itself (issue
+        #2536), so this exercises the tag through a full page render.
         """
         # Make a staff user
         self.client.force_login(self.test_teacher)

@@ -22,10 +22,9 @@ def is_hidden(quest, user):
 def can_export_to_library(context):
     """Whether the current user may export quests/campaigns to the Shared Library.
 
-    Single source of truth for the export buttons: the templates that render one ask
-    this tag themselves, so every page that includes a button bar offers the button
-    correctly by default, with nothing for its view to pass. A per-view context flag
-    is exactly what silently hid the button on the quest status page (issue #2536).
+    Single source of truth for the export buttons (issue #2536): the templates that
+    render one ask this tag themselves, so every page that includes a button bar
+    offers the button correctly by default, with nothing for its view to pass.
 
     Args:
         context (django.template.Context): the rendering context; the request is
