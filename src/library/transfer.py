@@ -559,9 +559,9 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False, rename
             conflict-copy path to give a copy its own `import_id` and name).
         with_campaign (bool): whether to attach (and if needed create) each quest's
             campaign.
-        refresh_matched_prereqs (bool): update the condition of gates the destination
-            already has on the same target (the Library push does; a deck import does
-            not, see `_write_prereqs`).
+        refresh_matched_prereqs (bool): update the condition of prerequisites the
+            destination already has on the same target (the Library push does; a deck
+            import does not, see `_write_prereqs`).
         rename_campaign_on_clash (bool): give an arriving campaign a free title when the
             destination has a different campaign under that one (a deck import does; the
             Library push does not, see `_write_campaign`).
