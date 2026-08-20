@@ -1037,6 +1037,14 @@ def ajax_approval_info(request, submission_id=None):
 @non_public_only_view
 @login_required
 def ajax_submission_info(request, submission_id=None):
+    """Render the preview panel for one submission, requested over AJAX from a submission tab.
+
+    Three legs pick the queryset by URL: /past/ and /completed/ scope to the requester's own
+    finished submissions, while the default (in-progress) leg previews any submission for staff
+    and TAs (the copy-a-started-quest feature, #141) but only the requester's own for a regular
+    student, so one student cannot read another's answers or comment thread (#2558). Only an
+    AJAX POST is served; anything else is a 404.
+    """
     if request.method == "POST":
         # past means previous semester that is now closed
         past = "/past/" in request.path_info
