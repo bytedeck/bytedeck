@@ -46,12 +46,13 @@ class TransferResult(NamedTuple):
     copy could not carry is the *sharer's* business: they are the one who can widen what
     they share, or decide the gap is fine. The views turn these into a warning on the push.
 
-    `unmet_prereqs` names gating that did not travel, which fails open: the copy in the
-    Library ends up less gated than its author wrote. `unmet_alternates` names OR
-    alternatives that did not travel, the opposite loss: the gate itself survives, so the
-    copy ends up *stricter* than written, with one route through it gone (#2549). They
-    are separate lists because the teacher's fix differs: an open quest needs re-gating
-    on the far side, a narrowed one needs the alternative shared alongside it.
+    `unmet_prereqs` names prerequisites that did not travel, which fails open: the copy
+    in the Library ends up with fewer requirements than its author wrote.
+    `unmet_alternates` names OR alternatives that did not travel, the opposite loss: the
+    prerequisite itself survives, so the copy ends up *stricter* than written, with one
+    way to meet it gone (#2549). They are separate lists because the teacher's fix
+    differs: a quest that arrives without a prerequisite needs one re-added on the far
+    side, a narrowed one needs the alternative shared alongside it.
     `skipped_quests` names quests that were left out of a shared campaign altogether.
     `dropped_common_data` names the shared General Info blocks the copy arrives without.
 
@@ -201,7 +202,7 @@ def snapshot_quest(quest):
 
     Returns:
         dict: with keys `fields` (the quest's own values), `tags` (tag names), `campaign`
-        (a campaign snapshot or None), `prereqs` (the conditions gating it, each a target
+        (a campaign snapshot or None), `prereqs` (its prerequisite conditions, each a target
         with its NOT/count flags and optional OR half), `questions` (its submission
         questions) and `common_data_title` (the General Info block it uses, which does
         not travel).
@@ -277,7 +278,7 @@ def _snapshot_prereqs(quest):
 
     The whole condition travels, not just the target: the NOT flag, the required count,
     and the alternate OR half (with its own flags) are part of what the author wrote, and
-    a gate stripped of its NOT would mean the opposite of what it said (#2535).
+    a prerequisite stripped of its NOT would mean the opposite of what it said (#2535).
 
     Must be called from within the source schema context.
 
@@ -346,29 +347,31 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
 
     A prerequisite can only point at a row that is actually here, so one whose target the
     deck does not have cannot be rebuilt. Rather than dropping it in silence, the name is
-    returned so the caller can tell the teacher what gating did not come with the quest.
-    That matters because the loss fails *open*: a quest that arrives with its gate missing
-    is more available than its author intended, not less (#2399).
+    returned so the caller can tell the teacher which prerequisite did not come with the
+    quest. That matters because the loss fails *open*: a quest that arrives with a
+    prerequisite missing is more available than its author intended, not less (#2399).
 
     This never deletes. It deliberately does not reconcile the destination's prerequisites
     with the source's, because they are not a copy of each other: once a quest is on a
-    deck, the teacher gates it into their own map with prerequisites that exist only there
-    and appear in no snapshot. Removing whatever is absent from the source would delete
-    exactly those, silently. The cost is that a prerequisite removed upstream lingers
-    here, which leaves the quest more gated than intended: that fails closed and the
-    teacher can undo it, where deleting their own gating would not.
+    deck, the teacher works it into their own map with prerequisites that exist only
+    there and appear in no snapshot. Removing whatever is absent from the source would
+    delete exactly those, silently. The cost is that a prerequisite removed upstream
+    lingers here, which leaves the quest with more requirements than intended: that fails
+    closed and the teacher can undo it, where deleting their own prerequisites would
+    not.
 
     The whole condition is rebuilt, not just the link: the NOT flag, the required count,
     and the alternate OR half travel with the row (#2535). The OR half needs a target of
     its own here, under the same rule as the main one. When that target is missing, the
-    row is written without its alternate, which fails *closed* (the gate is stricter than
-    written, not looser), and the alternate is named in its own list so the caller can
-    describe that loss for what it is rather than as a dropped gate (#2549). When the
+    row is written without its alternate, which fails *closed* (the prerequisite is
+    stricter than written, not looser), and the alternate is named in its own list so the
+    caller can describe that loss for what it is rather than as a dropped prerequisite
+    (#2549). When the
     main target is missing, the whole condition is unbuildable and only the main target
     is named: the row it identifies never arrives, alternate and all.
 
-    `refresh_matched` decides what happens to a gate the destination already has on the
-    same target. The push into the Library refreshes it, so re-sharing updates the
+    `refresh_matched` decides what happens to a prerequisite the destination already has
+    on the same target. The push into the Library refreshes it, so re-sharing updates the
     condition's flags the way it already updates the quest's own fields. An import into a
     deck leaves it alone: that copy is the teacher's to adjust, and their adjustments
     must survive a campaign re-import.
@@ -378,13 +381,14 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
     Args:
         quest (Quest): the freshly written quest.
         prereqs (list[dict]): condition entries from `_snapshot_prereqs`.
-        refresh_matched (bool): update the condition of an existing gate on the same
-            target, rather than leaving it as the destination has it.
+        refresh_matched (bool): update the condition of an existing prerequisite on the
+            same target, rather than leaving it as the destination has it.
 
     Returns:
-        tuple[list[str], list[str]]: the names of the gate targets this deck does not
-        have (the gate is dropped, failing open), and the names of the OR alternatives
-        it does not have (the gate survives without them, failing closed).
+        tuple[list[str], list[str]]: the names of the prerequisite targets this deck
+        does not have (the prerequisite is dropped, failing open), and the names of the
+        OR alternatives it does not have (the prerequisite survives without them,
+        failing closed).
     """
     existing_by_target = {p.get_prereq(): p for p in quest.prereqs()}
     unmet = []
@@ -393,7 +397,7 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
     for prereq in prereqs:
         if prereq['import_id'] is None:
             # Stripped on the way out because its target cannot cross at all (a rank, a
-            # course). Still worth naming: the gate is gone either way (#2450).
+            # course). Still worth naming: the prerequisite is gone either way (#2450).
             unmet.append(prereq['name'])
             continue
 
@@ -404,7 +408,7 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
 
         row = existing_by_target.get(target)
         if row is not None and not refresh_matched:
-            # the destination's own copy of this gate stays as the teacher has it
+            # the destination's own copy of this prerequisite stays as the teacher has it
             continue
 
         alternate = prereq['alternate']
@@ -535,8 +539,8 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
             not, see `_write_prereqs`).
 
     Returns:
-        TransferResult: the written quests, the names of any gate targets and OR
-        alternatives the destination does not have, and the General Info blocks that
+        TransferResult: the written quests, the names of any prerequisite targets and
+        OR alternatives the destination does not have, and the General Info blocks that
         did not come with them.
 
     Raises:
