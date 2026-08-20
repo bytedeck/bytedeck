@@ -15,6 +15,7 @@ or a regression, and the failure is where the decision gets recorded.
 import datetime
 from unittest.mock import patch
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 from model_bakery import baker
@@ -387,6 +388,183 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             self.assertEqual(list(library_quest.prereqs()), [])
+
+
+    def _gated_quest(self, **prereq_kwargs):
+        """Create a campaign whose second quest is gated on its first.
+
+        Gating between quests of the same campaign is the case that survives a transfer,
+        so it is the one that can show what the gate looks like on arrival.
+
+        Args:
+            **prereq_kwargs: field values for the `Prereq`, e.g. `prereq_invert=True`.
+
+        Returns:
+            tuple[Category, Quest, Prereq]: the campaign, the gated quest, and the
+            prerequisite gating it.
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        for field, value in prereq_kwargs.items():
+            setattr(prereq, field, value)
+        prereq.save()
+
+        return campaign, quest, prereq
+
+    def _push_and_pull(self, campaign, quest):
+        """Push a campaign to the Library, publish it there, then pull it back.
+
+        The local copies are deleted in between, so the pull takes the path a deck seeing
+        the campaign for the first time would.
+
+        Args:
+            campaign (Category): the campaign to push.
+            quest (Quest): the quest within it whose prerequisites are being checked.
+
+        Returns:
+            Quest: that quest as it exists on this deck after being imported back.
+        """
+        local_schema = connection.schema_name
+        export_campaign_and_copy_quests(source_schema=local_schema, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            Quest.objects.all_including_archived().update(published=True)
+            Category.objects.filter(import_id=campaign.import_id).update(published=True)
+
+        Quest.objects.all_including_archived().filter(campaign=campaign).delete()
+        Category.objects.filter(import_id=campaign.import_id).delete()
+        self._import_campaign(local_schema, campaign)
+
+        return Quest.objects.all_including_archived().get(import_id=quest.import_id)
+
+    def _import_campaign(self, destination_schema, campaign):
+        """Import every quest the Library holds for a campaign, as the import view does.
+
+        Args:
+            destination_schema (str): the deck to import into.
+            campaign (Category): the campaign, identified across schemas by its import_id.
+
+        Returns:
+            TransferResult: what arrived, and what could not be rebuilt.
+        """
+        with library_schema_context():
+            library_campaign = Category.objects.get(import_id=campaign.import_id)
+            quest_import_ids = list(
+                Quest.objects.all_including_archived()
+                .filter(campaign=library_campaign)
+                .values_list('import_id', flat=True)
+            )
+
+        return import_campaign_to(
+            destination_schema=destination_schema,
+            quest_import_ids=quest_import_ids,
+            campaign_import_id=campaign.import_id,
+        )
+
+    def test_push_and_pull__a_NOT_prereq_arrives_still_inverted(self):
+        """A NOT gate keeps its inversion across the Library (#2535).
+
+        This is the one loss that changes a rule rather than weakening it. "Available
+        unless you have done the placement test" and "available once you have done the
+        placement test" admit opposite sets of students, so an inverted gate that arrived
+        positive would quietly show the quest to exactly the students it was written to
+        keep away from it.
+        """
+        campaign, quest, _ = self._gated_quest(prereq_invert=True)
+
+        imported = self._push_and_pull(campaign, quest)
+
+        arrived = list(imported.prereqs())
+        self.assertEqual([p.get_prereq().name for p in arrived], ["Prereq Inside Campaign"])
+        self.assertTrue(arrived[0].prereq_invert)
+
+    def test_push_and_pull__a_repeat_count_arrives_intact(self):
+        """A gate requiring the target several times keeps its count (#2535).
+
+        A count of 3 arriving as 1 opens the quest after a third of the work its author
+        asked for, and the page reads as though that was always the requirement.
+        """
+        campaign, quest, _ = self._gated_quest(prereq_count=3)
+
+        imported = self._push_and_pull(campaign, quest)
+
+        arrived = list(imported.prereqs())
+        self.assertEqual([p.prereq_count for p in arrived], [3])
+
+    def test_push_and_pull__an_OR_alternative_arrives_intact(self):
+        """The alternate half of an OR gate travels with the requirement (#2535).
+
+        Losing it removes a way to satisfy the gate, so students who took the route the
+        author offered second find the quest closed to them.
+        """
+        campaign, quest, prereq = self._gated_quest()
+        alternate = Quest.objects.create(name="Prior Experience Form", xp=5, campaign=campaign)
+        Quest.objects.filter(pk=alternate.pk).update(published=True)
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(Quest)
+        prereq.or_prereq_object_id = alternate.pk
+        prereq.or_prereq_count = 2
+        prereq.or_prereq_invert = True
+        prereq.save()
+
+        imported = self._push_and_pull(campaign, quest)
+
+        arrived = list(imported.prereqs())
+        self.assertEqual(len(arrived), 1)
+        self.assertEqual(arrived[0].get_or_prereq().name, "Prior Experience Form")
+        self.assertEqual(arrived[0].or_prereq_count, 2)
+        self.assertTrue(arrived[0].or_prereq_invert)
+
+    def test_push_and_pull__an_OR_alternative_this_deck_lacks_is_dropped_and_named(self):
+        """An alternate half whose target is missing is reported, and the gate survives.
+
+        The requirement is still expressible without its alternative, just with one fewer
+        way to satisfy it, so it is kept rather than discarded: that leaves the quest more
+        gated than its author wrote, which the teacher can loosen, rather than less.
+        """
+        campaign, quest, prereq = self._gated_quest()
+        # Outside the campaign, so the push leaves it behind and the far side has nothing
+        # to point the OR half at.
+        alternate = Quest.objects.create(name="Alternative Nobody Else Has", xp=5)
+        Quest.objects.filter(pk=alternate.pk).update(published=True)
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(Quest)
+        prereq.or_prereq_object_id = alternate.pk
+        prereq.save()
+
+        local_schema = connection.schema_name
+        pushed = export_campaign_and_copy_quests(source_schema=local_schema, campaign_import_id=campaign.import_id)
+
+        # The loss happens on the way out, which is where it can still be acted on: the
+        # sharer is the only one who can widen what they share to include the alternative.
+        self.assertIn("Alternative Nobody Else Has", pushed.unmet_prereqs)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            in_library = list(library_quest.prereqs())
+            self.assertEqual([p.get_prereq().name for p in in_library], ["Prereq Inside Campaign"])
+            self.assertIsNone(in_library[0].get_or_prereq())
+
+    def test_import_twice__does_not_stack_a_second_copy_of_the_same_gate(self):
+        """Importing the same gated quest again leaves one prerequisite, not two.
+
+        De-duplication compares the whole requirement, both halves included, so a repeat
+        import recognises the gate it wrote last time instead of adding a duplicate.
+        """
+        campaign, quest, _ = self._gated_quest(prereq_invert=True, prereq_count=2)
+        local_schema = connection.schema_name
+        export_campaign_and_copy_quests(source_schema=local_schema, campaign_import_id=campaign.import_id)
+        with library_schema_context():
+            Quest.objects.all_including_archived().update(published=True)
+            Category.objects.filter(import_id=campaign.import_id).update(published=True)
+
+        self._import_campaign(local_schema, campaign)
+        self._import_campaign(local_schema, campaign)
+
+        imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+        arrived = list(imported.prereqs())
+        self.assertEqual(len(arrived), 1)
+        self.assertTrue(arrived[0].prereq_invert)
+        self.assertEqual(arrived[0].prereq_count, 2)
 
 
 class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):

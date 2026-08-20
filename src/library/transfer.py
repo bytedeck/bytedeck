@@ -27,6 +27,7 @@ Two rules hold everywhere below:
 
 from typing import NamedTuple
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
@@ -234,14 +235,45 @@ def _snapshot_questions(quest):
     return [{name: _read_field(question, name) for name in copied} for question in quest.question_set.all()]
 
 
-def _snapshot_prereqs(quest):
-    """The shareable prerequisites of a quest, as portable ids with readable names.
+def _snapshot_prereq_half(target, count, invert):
+    """One side of a prerequisite, as a portable id with its readable name and modifiers.
 
     A prerequisite is a generic foreign key, so it can point at any prerequisite model.
     Only those marked with `IsLibraryContentMixin` (quests, campaigns and badges) have an
     identity that survives the crossing; the rest describe the deck rather than the
     content, and a rank or a course on another deck is not the same rank or course. Those
     are stripped, because there is nothing on the far side for them to point at (#2450).
+
+    Must be called from within the source schema context.
+
+    Args:
+        target (IsAPrereqMixin): what this side of the prerequisite points at.
+        count (int): how many times it must be met.
+        invert (bool): whether meeting it is what *disqualifies* the student.
+
+    Returns:
+        dict: `{'import_id': UUID | None, 'name': str, 'count': int, 'invert': bool}`. A
+        `None` import_id marks a target that can never travel, so the destination reports
+        it as missing rather than looking for something that was never sent.
+    """
+    shareable = IsLibraryContentMixin.is_shareable_model(type(target))
+
+    return {
+        'import_id': target.import_id if shareable else None,
+        'name': str(target),
+        'count': count,
+        'invert': invert,
+    }
+
+
+def _snapshot_prereqs(quest):
+    """The shareable prerequisites of a quest, as portable ids with readable names.
+
+    Each prerequisite travels with its `count` and `invert` flags, and with its alternate
+    "OR" half when it has one, because those are the requirement, not decoration on it.
+    Sending only the target inverts the meaning of a NOT gate: "available unless you have
+    done X" arrives as "available once you have done X", which is the opposite rule about
+    who may see the quest, and nothing on either deck says so (#2535).
 
     Every prerequisite is listed either way, because the name is what lets the destination
     say which requirement it ended up without: one it cannot express (#2450) and one it
@@ -253,17 +285,18 @@ def _snapshot_prereqs(quest):
         quest (Quest): the quest whose prerequisites to read.
 
     Returns:
-        list[dict]: one `{'import_id': UUID | None, 'name': str}` per prerequisite. A
-        `None` import_id marks one that can never travel, so the destination reports it
-        as missing rather than looking for something that was never sent.
+        list[dict]: one entry per prerequisite, each `{'main': half, 'alternate': half |
+        None}`, where a half is as described by `_snapshot_prereq_half`.
     """
     prereqs = []
     for prereq in quest.prereqs():
-        target = prereq.get_prereq()
-        shareable = IsLibraryContentMixin.is_shareable_model(type(target))
+        alternate = prereq.get_or_prereq()
         prereqs.append({
-            'import_id': target.import_id if shareable else None,
-            'name': str(target),
+            'main': _snapshot_prereq_half(prereq.get_prereq(), prereq.prereq_count, prereq.prereq_invert),
+            'alternate': (
+                _snapshot_prereq_half(alternate, prereq.or_prereq_count, prereq.or_prereq_invert)
+                if alternate is not None else None
+            ),
         })
 
     return prereqs
@@ -306,6 +339,56 @@ def _write_campaign(snapshot):
     return campaign
 
 
+def _find_prereq_target(half):
+    """This deck's copy of what one side of a prerequisite points at, or None.
+
+    Matched by `import_id`, the only identity a row keeps across schemas. Archived quests
+    count: a gate on one is still a gate, and the arriving quest should not quietly lose
+    it because the target is put away.
+
+    Must be called from within the destination schema context.
+
+    Args:
+        half (dict): a `{'import_id', 'name', 'count', 'invert'}` entry.
+
+    Returns:
+        Quest | Category | Badge | None: the target on this deck, or None when the
+        prerequisite was stripped on the way out or this deck simply does not have it.
+    """
+    from badges.models import Badge
+
+    if half['import_id'] is None:
+        return None
+
+    for model in (Quest.objects.all_including_archived(), Category.objects, Badge.objects):
+        target = model.filter(import_id=half['import_id']).first()
+        if target is not None:
+            return target
+
+    return None
+
+
+def _prereq_signature(prereq):
+    """What makes two prerequisites the same requirement, for de-duplication.
+
+    Both halves, in full: "X" and "NOT X" gate a quest for opposite sets of students, and
+    "X x3" is not "X", so the target alone cannot say whether a requirement is already
+    there (#2535).
+
+    Args:
+        prereq (Prereq): a saved or unsaved prerequisite.
+
+    Returns:
+        tuple: comparable across instances, using content type ids rather than the generic
+        objects so an unsaved prerequisite compares equal to a stored one.
+    """
+    return (
+        prereq.prereq_content_type_id, prereq.prereq_object_id, prereq.prereq_count, prereq.prereq_invert,
+        prereq.or_prereq_content_type_id, prereq.or_prereq_object_id,
+        prereq.or_prereq_count, prereq.or_prereq_invert,
+    )
+
+
 def _write_prereqs(quest, prereqs):
     """Rebuild the prerequisites whose targets exist on this deck, and report the rest.
 
@@ -323,38 +406,61 @@ def _write_prereqs(quest, prereqs):
     upstream lingers here, which leaves the quest more gated than intended: that fails
     closed and the teacher can undo it, where deleting their own gating would not.
 
+    A prerequisite's `count` and `invert` flags travel with it, and so does its alternate
+    "OR" half. Rebuilding the target alone would change what the gate means rather than
+    weaken it: a NOT gate would arrive as a plain requirement and admit exactly the
+    students it was written to keep out (#2535).
+
     Must be called from within the destination schema context.
 
     Args:
         quest (Quest): the freshly written quest.
-        prereqs (list[dict]): `{'import_id', 'name'}` entries from `_snapshot_prereqs`.
+        prereqs (list[dict]): `{'main', 'alternate'}` entries from `_snapshot_prereqs`.
 
     Returns:
-        list[str]: the names of the prerequisites this deck does not have.
+        list[str]: the names of the prerequisite targets this deck does not have. An
+        alternate half whose target is missing is named too: the requirement survives
+        without it, but with one fewer way to satisfy it.
     """
-    from badges.models import Badge
-
-    already_required = {p.get_prereq() for p in quest.prereqs()}
+    already_required = {_prereq_signature(p) for p in quest.prereqs()}
     unmet = []
 
     for prereq in prereqs:
-        if prereq['import_id'] is None:
-            # Stripped on the way out because its target cannot cross at all (a rank, a
-            # course). Still worth naming: the gate is gone either way (#2450).
-            unmet.append(prereq['name'])
+        main = _find_prereq_target(prereq['main'])
+        if main is None:
+            # Either stripped on the way out because its target cannot cross at all (a
+            # rank, a course), or simply not on this deck. Either way the gate is gone,
+            # and naming it is what tells the teacher (#2450, #2399).
+            unmet.append(prereq['main']['name'])
+            if prereq['alternate'] is not None:
+                unmet.append(prereq['alternate']['name'])
             continue
 
-        target = Quest.objects.all_including_archived().filter(import_id=prereq['import_id']).first()
-        if target is None:
-            target = Category.objects.filter(import_id=prereq['import_id']).first()
-        if target is None:
-            target = Badge.objects.filter(import_id=prereq['import_id']).first()
+        alternate = None
+        if prereq['alternate'] is not None:
+            alternate = _find_prereq_target(prereq['alternate'])
+            if alternate is None:
+                unmet.append(prereq['alternate']['name'])
 
-        if target is None:
-            unmet.append(prereq['name'])
-        elif target not in already_required:
-            Prereq.add_simple_prereq(quest, target)
-            already_required.add(target)
+        new_prereq = Prereq(
+            parent_content_type=ContentType.objects.get_for_model(quest),
+            parent_object_id=quest.id,
+            prereq_content_type=ContentType.objects.get_for_model(main),
+            prereq_object_id=main.id,
+            prereq_count=prereq['main']['count'],
+            prereq_invert=prereq['main']['invert'],
+        )
+        if alternate is not None:
+            new_prereq.or_prereq_content_type = ContentType.objects.get_for_model(alternate)
+            new_prereq.or_prereq_object_id = alternate.id
+            new_prereq.or_prereq_count = prereq['alternate']['count']
+            new_prereq.or_prereq_invert = prereq['alternate']['invert']
+
+        signature = _prereq_signature(new_prereq)
+        if signature not in already_required:
+            new_prereq.full_clean()
+            new_prereq.save()
+            already_required.add(signature)
 
     return unmet
 
