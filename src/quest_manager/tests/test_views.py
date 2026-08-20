@@ -4610,14 +4610,12 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
 
     def test_ajax_submission_info__student_cannot_fetch_another_students_submission(self):
-        """A regular student POSTing another student's in-progress submission id gets a 404, not that
-        student's answers and comment thread (#2558).
+        """A regular student requesting another student's in-progress submission gets a 404 (#2558).
 
-        The in-progress leg used an unscoped QuestSubmission.objects.all(), so any logged-in student could
-        read any other student's submission preview by iterating submission ids. It is now scoped to the
-        requester unless they are staff or a TA.
+        The in-progress preview is scoped to the requester unless they are staff or a TA, so a regular
+        student cannot read another student's answers and comment thread by posting someone else's id.
         """
-        # setUp logs in test_student; self.submission belongs to a different student
+        # setUp logs in test_student (a regular, non-TA student); other_submission belongs to a different student
         other_student = User.objects.create_user('other_student')
         other_submission = baker.make(QuestSubmission, user=other_student)
 
