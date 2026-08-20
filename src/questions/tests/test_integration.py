@@ -746,12 +746,12 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(self.submission.is_completed)
 
     def test_complete__questions_changed_keeps_comment_attachment(self):
-        """An attachment on a POST bounced by the questions-changed guard is kept (#2428).
+        """The questions-changed bounce keeps an attachment that validates (#2428).
 
-        The redirect rebuilds the page with an empty file input, so before this the upload
-        was silently gone: the same loss #2427 fixed on the validation-failure path, reached
-        through the earlier guard instead. The file lands on the draft comment, where a
-        successful completion publishes it from, and the student is told it was kept.
+        The redirect rebuilds the page with an empty file input, so the upload survives on
+        the draft comment instead: the same place the validation-failure path keeps it
+        (#2427), and the place a successful completion publishes it from. The student is
+        told it was kept.
         """
         stale_data = self.formset_data(short_text="my title")
         baker.make(Question, quest=self.quest, ordinal=3, type="short_answer", required=True)
@@ -773,10 +773,11 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         )
 
     def test_complete__questions_changed_keeps_file_answer(self):
-        """A file answer on a POST bounced by the questions-changed guard is kept (#2428).
+        """The questions-changed bounce keeps a file answer that validates (#2428).
 
-        The answer stays on its own draft row, unpublished, exactly as #2165 keeps it on the
-        validation-failure path, so the rebuilt page shows it as already attached.
+        The answer stays on its own draft row, unpublished, the same place the
+        validation-failure path keeps it (#2165), so the rebuilt page shows it as already
+        attached and a later completion publishes it.
         """
         file_question = baker.make(
             Question, quest=self.quest, ordinal=3, type="file_upload",
