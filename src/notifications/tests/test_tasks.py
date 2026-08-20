@@ -222,6 +222,49 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
             mock_retry.call_args.kwargs['kwargs'],
             {'root_url': root_url, 'only_usernames': [student1.username]})
 
+    def test_email_task__recipient_refused_4xx_is_retried(self):
+        """A per-recipient 4xx refusal (SMTPRecipientsRefused) counts as temporary:
+        the refused user lands in the retry set, like the one-code 4xx rejection."""
+        import smtplib
+
+        from celery.exceptions import Retry
+        from unittest.mock import Mock
+
+        student2 = self._make_two_eligible_recipients()[1]
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        connection = Mock()
+        connection.send_messages.side_effect = [
+            1, smtplib.SMTPRecipientsRefused({student2.email: (450, b'4.2.1 mailbox busy')})]
+        task = tasks.email_notifications_to_users_on_schema
+        with patch('notifications.tasks.mail.get_connection', return_value=connection), \
+                patch.object(task, 'retry', side_effect=Retry('retry scheduled')) as mock_retry:
+            task_result = task.apply(kwargs={'root_url': root_url})
+        self.assertFalse(task_result.successful())
+        self.assertEqual(
+            mock_retry.call_args.kwargs['kwargs'],
+            {'root_url': root_url, 'only_usernames': [student2.username]})
+
+    def test_email_task__recipient_refused_5xx_drops_only_that_user(self):
+        """A per-recipient 5xx refusal (SMTPRecipientsRefused) is permanent: that
+        user's digest is logged and dropped, the rest of the batch still sends,
+        and nothing is retried."""
+        import smtplib
+        from unittest.mock import Mock
+
+        self._make_two_eligible_recipients()
+        root_url = f'https://{self.get_test_tenant_domain()}'
+
+        connection = Mock()
+        connection.send_messages.side_effect = [
+            smtplib.SMTPRecipientsRefused({self.test_student1.email: (550, b'5.1.1 user unknown')}), 1]
+        with patch('notifications.tasks.mail.get_connection', return_value=connection):
+            task_result = tasks.email_notifications_to_users_on_schema.apply(
+                kwargs={'root_url': root_url})
+        self.assertTrue(task_result.successful())
+        self.assertEqual(task_result.result, 'Sent 1 notification emails, dropped 1 permanently refused')
+        self.assertEqual(connection.send_messages.call_count, 2)
+
     def test_email_notification_to_users_on_all_schemas__runs_successfully(self):
         """The all-schemas email task completes successfully when applied."""
         task_result = tasks.email_notification_to_users_on_all_schemas.apply()
