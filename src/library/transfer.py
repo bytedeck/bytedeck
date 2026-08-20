@@ -27,6 +27,7 @@ Two rules hold everywhere below:
 
 from typing import NamedTuple
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
@@ -195,9 +196,10 @@ def snapshot_quest(quest):
 
     Returns:
         dict: with keys `fields` (the quest's own values), `tags` (tag names), `campaign`
-        (a campaign snapshot or None), `prereqs` (the shareable things it requires, each as
-        an import_id and a name), `questions` (its submission questions) and
-        `common_data_title` (the General Info block it uses, which does not travel).
+        (a campaign snapshot or None), `prereqs` (the conditions gating it, each a target
+        with its NOT/count flags and optional OR half), `questions` (its submission
+        questions) and `common_data_title` (the General Info block it uses, which does
+        not travel).
     """
     return {
         'fields': {name: _read_field(quest, name) for name in _copied_field_names(Quest, QUEST_FIELDS_NOT_COPIED)},
@@ -234,8 +236,29 @@ def _snapshot_questions(quest):
     return [{name: _read_field(question, name) for name in copied} for question in quest.question_set.all()]
 
 
+def _snapshot_target(target, invert, count):
+    """One side of a prerequisite condition, as a portable id with its own flags.
+
+    Args:
+        target: the model instance this side of the condition points at.
+        invert (bool): the side's NOT flag.
+        count (int): how many times the target must be met.
+
+    Returns:
+        dict: `import_id` (UUID, or None for a target that can never travel), `name`,
+        `invert` and `count`.
+    """
+    shareable = IsLibraryContentMixin.is_shareable_model(type(target))
+    return {
+        'import_id': target.import_id if shareable else None,
+        'name': str(target),
+        'invert': invert,
+        'count': count,
+    }
+
+
 def _snapshot_prereqs(quest):
-    """The shareable prerequisites of a quest, as portable ids with readable names.
+    """The shareable prerequisites of a quest, as portable conditions with readable names.
 
     A prerequisite is a generic foreign key, so it can point at any prerequisite model.
     Only those marked with `IsLibraryContentMixin` (quests, campaigns and badges) have an
@@ -247,24 +270,31 @@ def _snapshot_prereqs(quest):
     say which requirement it ended up without: one it cannot express (#2450) and one it
     simply does not have (#2399) are the same loss from the teacher's side.
 
+    The whole condition travels, not just the target: the NOT flag, the required count,
+    and the alternate OR half (with its own flags) are part of what the author wrote, and
+    a gate stripped of its NOT would mean the opposite of what it said (#2535).
+
     Must be called from within the source schema context.
 
     Args:
         quest (Quest): the quest whose prerequisites to read.
 
     Returns:
-        list[dict]: one `{'import_id': UUID | None, 'name': str}` per prerequisite. A
-        `None` import_id marks one that can never travel, so the destination reports it
-        as missing rather than looking for something that was never sent.
+        list[dict]: one entry per prerequisite: `import_id` (UUID | None), `name`,
+        `invert`, `count`, and `alternate` (None, or those same four keys for the OR
+        half). A `None` import_id marks a target that can never travel, so the
+        destination reports it as missing rather than looking for something that was
+        never sent.
     """
     prereqs = []
     for prereq in quest.prereqs():
-        target = prereq.get_prereq()
-        shareable = IsLibraryContentMixin.is_shareable_model(type(target))
-        prereqs.append({
-            'import_id': target.import_id if shareable else None,
-            'name': str(target),
-        })
+        entry = _snapshot_target(prereq.get_prereq(), prereq.prereq_invert, prereq.prereq_count)
+        or_target = prereq.get_or_prereq()
+        entry['alternate'] = (
+            _snapshot_target(or_target, prereq.or_prereq_invert, prereq.or_prereq_count)
+            if or_target is not None else None
+        )
+        prereqs.append(entry)
 
     return prereqs
 
@@ -323,17 +353,23 @@ def _write_prereqs(quest, prereqs):
     upstream lingers here, which leaves the quest more gated than intended: that fails
     closed and the teacher can undo it, where deleting their own gating would not.
 
+    The whole condition is rebuilt, not just the link: the NOT flag, the required count,
+    and the alternate OR half travel with the row (#2535). The OR half needs a target of
+    its own here, under the same rule as the main one. When that target is missing, the
+    row is written without its alternate, which fails *closed* (the gate is stricter than
+    written, not looser), and the alternate is named with the rest so the loss is still
+    visible. When the main target is missing, the whole condition is unbuildable and only
+    the main target is named: the row it identifies never arrives, alternate and all.
+
     Must be called from within the destination schema context.
 
     Args:
         quest (Quest): the freshly written quest.
-        prereqs (list[dict]): `{'import_id', 'name'}` entries from `_snapshot_prereqs`.
+        prereqs (list[dict]): condition entries from `_snapshot_prereqs`.
 
     Returns:
-        list[str]: the names of the prerequisites this deck does not have.
+        list[str]: the names of the prerequisite targets this deck does not have.
     """
-    from badges.models import Badge
-
     already_required = {p.get_prereq() for p in quest.prereqs()}
     unmet = []
 
@@ -344,19 +380,59 @@ def _write_prereqs(quest, prereqs):
             unmet.append(prereq['name'])
             continue
 
-        target = Quest.objects.all_including_archived().filter(import_id=prereq['import_id']).first()
-        if target is None:
-            target = Category.objects.filter(import_id=prereq['import_id']).first()
-        if target is None:
-            target = Badge.objects.filter(import_id=prereq['import_id']).first()
-
+        target = _find_prereq_target(prereq['import_id'])
         if target is None:
             unmet.append(prereq['name'])
-        elif target not in already_required:
-            Prereq.add_simple_prereq(quest, target)
-            already_required.add(target)
+            continue
+        if target in already_required:
+            continue
+
+        alternate = prereq['alternate']
+        or_target = None
+        if alternate is not None:
+            if alternate['import_id'] is not None:
+                or_target = _find_prereq_target(alternate['import_id'])
+            if or_target is None:
+                unmet.append(alternate['name'])
+
+        new_prereq = Prereq(
+            parent_content_type=ContentType.objects.get_for_model(quest),
+            parent_object_id=quest.id,
+            prereq_content_type=ContentType.objects.get_for_model(target),
+            prereq_object_id=target.id,
+            prereq_invert=prereq['invert'],
+            prereq_count=prereq['count'],
+        )
+        if or_target is not None:
+            new_prereq.or_prereq_content_type = ContentType.objects.get_for_model(or_target)
+            new_prereq.or_prereq_object_id = or_target.id
+            new_prereq.or_prereq_invert = alternate['invert']
+            new_prereq.or_prereq_count = alternate['count']
+        new_prereq.full_clean()
+        new_prereq.save()
+        already_required.add(target)
 
     return unmet
+
+
+def _find_prereq_target(import_id):
+    """The destination's row for a prerequisite target, whichever shareable model it is.
+
+    Args:
+        import_id (UUID): the target's cross-schema identity.
+
+    Returns:
+        Quest | Category | Badge | None: the local row, or None when this deck does not
+        have it.
+    """
+    from badges.models import Badge
+
+    target = Quest.objects.all_including_archived().filter(import_id=import_id).first()
+    if target is None:
+        target = Category.objects.filter(import_id=import_id).first()
+    if target is None:
+        target = Badge.objects.filter(import_id=import_id).first()
+    return target
 
 
 def _write_questions(quest, questions):
