@@ -27,7 +27,7 @@ from taggit.models import Tag
 from library.exporter import export_campaign_and_copy_quests, export_quest_to_library
 from library.importer import import_campaign_to, import_quest_to
 from library.models import IsLibraryContentMixin
-from library.transfer import LibraryTransferError, _describe
+from library.transfer import LibraryTransferError, describe_validation_error
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.tests.test_views import LibraryTenantTestCaseMixin
 from library.utils import library_schema_context
@@ -789,12 +789,12 @@ class LibraryTransferErrorMessageTests(SimpleTestCase):
         `full_clean` reports per-field errors, so this covers the other shape a
         `ValidationError` can take, raised with a bare message and no field mapping.
         """
-        self.assertEqual(_describe(ValidationError("Something was wrong.")), "Something was wrong.")
+        self.assertEqual(describe_validation_error(ValidationError("Something was wrong.")), "Something was wrong.")
 
     def test_describe__renders_a_field_error_with_its_field_name(self):
         """A per-field error names the field, which is what makes a clash readable."""
         self.assertEqual(
-            _describe(ValidationError({'name': ["Quest with this Name already exists."]})),
+            describe_validation_error(ValidationError({'name': ["Quest with this Name already exists."]})),
             "name: Quest with this Name already exists.",
         )
 
