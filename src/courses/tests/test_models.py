@@ -1134,12 +1134,17 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         config.cap_marks_at_100_percent = False
         config.save()
 
-    def test_coursestudent_post_save__refreshes_the_students_cached_xp_and_mark(self):
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_coursestudent_post_save__refreshes_the_students_cached_xp_and_mark(self, fraction_complete):
         """Saving a registration is what keeps a student's cached XP and mark following their
         courses. Joining one gives them a mark where they had none, since a mark is a
         percentage of the XP counting toward a course, and a teacher's manual xp_adjustment
         counts toward their XP. That is why CourseStudent.xp() is on the write path of every
-        registration save (issue #2486)."""
+        registration save (issue #2486).
+
+        Both cached values are asserted at both saves: refreshing the XP and leaving the mark
+        behind would be the same bug from the student list's point of view, since that is the
+        column it sorts and colours by."""
         student = baker.make(User)
         self._approved(student, xp=40)
         student.profile.xp_invalidate_cache()
@@ -1148,15 +1153,17 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
         registration = self._register(student, baker.make(Course, xp_for_100_percent=1000))
 
+        # halfway through the semester, 40 XP projects to 80, out of the course's 1000
         student.profile.refresh_from_db()
         self.assertEqual(student.profile.xp_cached, 40)
-        self.assertIsNotNone(student.profile.mark_cached)
+        self.assertEqual(student.profile.mark_cached, 8)
 
         registration.xp_adjustment = 15
         registration.save()
 
         student.profile.refresh_from_db()
         self.assertEqual(student.profile.xp_cached, 55)
+        self.assertEqual(student.profile.mark_cached, 11)
 
     def test_xp__is_the_whole_total_for_a_student_with_one_course(self):
         """Nothing to divide, so their one course carries everything they earned."""
