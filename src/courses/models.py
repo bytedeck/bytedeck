@@ -1335,11 +1335,48 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     and joining a course is the moment it gains one. Without this it would be stranded: out
     of their in-progress list, which is their new semester's, and out of their available
     list, which drops a quest they already have a submission of.
+
+    Deserializing a fixture is sat out: Django sends raw=True for those saves, and the
+    submissions this moves are read from the database, which is only part loaded then.
     """
+    if kwargs.get('raw'):
+        return
+
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if created and instance.semester_id is not None and instance.semester.is_open:
-        QuestSubmission.objects.adopt_unstamped_in_progress(instance.user_id, instance.semester_id)
+        QuestSubmission.objects.adopt_unstamped_in_progress([instance.user_id], instance.semester_id)
+
+
+@receiver(post_save, sender=Semester)
+def semester_adopt_unstamped_work_callback(instance, **kwargs):
+    """Bring the work a pre-registered student had on the go into their semester as it opens.
+
+    The receiver on CourseStudent covers a student joining a course in a semester that is
+    already running. This covers the other order (issue #2476): a teacher registers students
+    against a semester that has not started, those students have no open registration so they
+    can do the quests marked available outside a course, and the semester is opened
+    afterwards. Nothing saves their registrations at that moment, so without this their
+    in-progress work stays unstamped, out of the in-progress list that is now their
+    semester's and out of the available list that drops a quest they already started.
+
+    Any save leaving the semester open counts, not just the one that opens it: a semester can
+    be started from the admin as well as through SiteConfig.set_active_semester(), and
+    adopting when there is nothing left to adopt moves no rows.
+
+    Deserializing a fixture is sat out, the same as its counterpart above: Django sends
+    raw=True for those saves, and both the registrations this reads and the submissions it
+    moves come from a database that is only part loaded then.
+    """
+    if kwargs.get('raw'):
+        return
+
+    from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
+
+    if instance.is_open:
+        QuestSubmission.objects.adopt_unstamped_in_progress(
+            CourseStudent.objects.all_for_semester(instance).values('user_id'), instance.pk
+        )
 
 
 @receiver(post_save, sender=Rank)

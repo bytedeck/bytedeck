@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Count, DateTimeField, ExpressionWrapper, F, Max, Q, Sum
+from django.db.models import Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
@@ -1360,24 +1360,30 @@ class QuestSubmissionManager(models.Manager):
 
         return series
 
-    def adopt_unstamped_in_progress(self, user, semester):
-        """Move the work `user` has on the go that belongs to no semester into `semester`.
+    def adopt_unstamped_in_progress(self, users, semester):
+        """Move the work `users` have on the go that belongs to no semester into `semester`.
 
         Someone registered in no semester hands work in stamped with none (issue #2441): the
         welcome quest a new student does before joining a course, or a quest marked available
-        outside a course, done between terms. Once they join a course, that work is in
+        outside a course, done between terms. Once that work belongs to a semester, it is in
         neither their in-progress list (which is now their new semester's) nor their
         available list (which drops a quest they already have a submission of), so it would
         sit where nobody can reach it. Re-attaching it is what mark_returned() already does
         for a submission returned in a later semester (issue #1231).
+
+        Both orders reach this. A student joining a course that is already running arrives
+        one at a time, from the receiver on CourseStudent. A semester opening around students
+        already registered in it arrives as the whole cohort at once, from the receiver on
+        Semester (issue #2476).
 
         Only work still in progress moves. What they finished outside a semester was
         finished there, and its XP belongs to no term rather than to the one they are
         starting.
 
         Args:
-            user: the student who just registered, or their id.
-            semester: the Semester they registered in, or its id.
+            users: the students whose work should move: Users, their ids, or a queryset of
+                either.
+            semester: the Semester the work should belong to, or its id.
 
         Returns:
             int: how many submissions were moved.
@@ -1385,15 +1391,18 @@ class QuestSubmissionManager(models.Manager):
         # the base manager throughout: a submission of a quest since archived or unpublished
         # is still theirs to finish, and the default manager would leave it behind
         already_in_semester = self.model._base_manager.filter(
-            user=user, semester=semester, is_completed=False, first_time_completed__isnull=True,
-        ).values('quest_id')
+            user_id=OuterRef('user_id'), quest_id=OuterRef('quest_id'),
+            semester=semester, is_completed=False, first_time_completed__isnull=True,
+        )
         return self.model._base_manager.filter(
-            user=user, semester__isnull=True, is_completed=False,
+            user__in=users, semester__isnull=True, is_completed=False,
         ).exclude(
             # a never-completed submission can't join one already in that semester: the
             # partial unique constraint holds one per (user, quest, semester), and it is the
-            # rule this would be breaking rather than an accident to work around
-            Q(first_time_completed__isnull=True) & Q(quest_id__in=already_in_semester),
+            # rule this would be breaking rather than an accident to work around. Correlated
+            # on the user as well as the quest, since a whole cohort moves at once: one
+            # student's clash must not hold back another's submission of the same quest.
+            Q(first_time_completed__isnull=True) & Q(Exists(already_in_semester)),
         ).update(semester=semester)
 
     def remove_in_progress(self, semester=None):
