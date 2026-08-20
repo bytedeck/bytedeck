@@ -451,11 +451,13 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertEqual(arrived[0].or_prereq_count, 2)
 
     def test_export_campaign_and_copy_quests__drops_only_the_or_half_when_its_target_stays_behind(self):
-        """An OR half whose target is outside the push is dropped alone, and named.
+        """An OR half whose target is outside the push is dropped alone, and named as an alternative.
 
         The main half still arrives with its own flags, so the copy is gated more
-        strictly than written rather than less, and the sharer's warning names the
-        alternate that stayed behind (issue #2535).
+        strictly than written rather than less (issue #2535). The lost alternative is
+        reported in `unmet_alternates`, not in `unmet_prereqs`: the gate survived, so
+        listing it with the dropped gates would tell the sharer the quest arrives
+        ungated when it actually arrives narrower (issue #2549).
         """
         campaign, quest, inside = self._campaign_with_two_quests()
         outside = Quest.objects.create(name="Alternate Outside Campaign", xp=1)
@@ -467,7 +469,8 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 
         result = export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
 
-        self.assertIn(str(outside), result.unmet_prereqs)
+        self.assertIn(str(outside), result.unmet_alternates)
+        self.assertNotIn(str(outside), result.unmet_prereqs)
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             arrived = list(library_quest.prereqs())
@@ -547,7 +550,8 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 
         result = export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
 
-        self.assertIn(str(rank), result.unmet_prereqs)
+        self.assertIn(str(rank), result.unmet_alternates)
+        self.assertNotIn(str(rank), result.unmet_prereqs)
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             arrived = list(library_quest.prereqs())
