@@ -754,6 +754,26 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         self.assertNotContains(response, '<img class="question-media"')
         self.assertContains(response, f'<a href="{answer.response_file.url}" target="_blank">')
 
+    def test_display__portfolio_type_file_answer_offers_add_to_portfolio(self):
+        """An image file answer offers the Add to Portfolio action the identical file
+        attached to a comment already gets (#2573)."""
+        answer = self.publish_file_answer("gallery_piece.png")
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, reverse("portfolios:art_add_answer", args=[answer.id]))
+        self.assertContains(response, "Add to Portfolio")
+
+    def test_display__non_portfolio_file_answer_offers_no_portfolio_action(self):
+        """A file answer portfolios cannot hold (a PDF here) gets no Add to Portfolio button."""
+        answer = self.publish_file_answer("my_report.pdf")
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertNotContains(response, reverse("portfolios:art_add_answer", args=[answer.id]))
+
     def test_display__a_solution_image_is_shown_to_staff(self):
         """The teacher's example answer is shown too, beside the answers it is compared with."""
         self.short_question.solution_file = SimpleUploadedFile("the_solution.png", b"pretend image")

@@ -1,3 +1,5 @@
+import os
+
 from django.db import models
 from django.urls import reverse
 
@@ -205,3 +207,20 @@ class QuestionSubmission(models.Model):
     def is_published(self):
         """Whether this answer has been published with a completion comment (vs still a draft)."""
         return self.comment_id is not None
+
+    def is_valid_portfolio_type(self):
+        """Whether the stored file answer is an image or video a portfolio can hold.
+
+        The same check the comment-attachment "Add to Portfolio" button uses
+        (`Document.is_valid_portfolio_type`), so a file answer offers the button exactly
+        when the identical file attached to a comment would (#2573).
+
+        Returns:
+            bool: True when there is a file and its type is portfolio-acceptable.
+        """
+        # import here to prevent circular imports, as comments.Document does
+        from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
+        if not self.response_file:
+            return False
+        filename = os.path.basename(self.response_file.name)
+        return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)

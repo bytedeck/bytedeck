@@ -11,6 +11,7 @@ from django.views.generic import ListView, CreateView, DetailView, UpdateView, D
 
 from comments.models import Document
 from portfolios.models import Portfolio, Artwork
+from questions.models import QuestionSubmission
 from tenant.views import non_public_only_view, NonPublicOnlyViewMixin
 from portfolios.forms import PortfolioForm, ArtworkForm
 
@@ -207,6 +208,58 @@ def art_add(request, doc_id):
             video_file=video_file,
             portfolio=portfolio,
             date=doc.comment.timestamp.date(),
+        )
+        return redirect('portfolios:detail', pk=portfolio.pk)
+    else:
+        raise Http404("I don't think you're supposed to be here....")
+
+
+@non_public_only_view
+@login_required
+def art_add_answer(request, submission_id):
+    """Add a student's image or video file answer to their portfolio (#2573).
+
+    The same flow as `art_add` gives a comment attachment, for the file answering a
+    file-upload question: the artwork lands in the answering student's portfolio, dated
+    by the completion comment the answer was published with. Only published answers
+    qualify (a draft's file is not final and has no comment to date the artwork by), and
+    only the student or staff may trigger it.
+
+    Args:
+        request (HttpRequest): the current request; decides who may add the artwork.
+        submission_id (int): primary key of the published QuestionSubmission whose
+            `response_file` becomes the artwork.
+
+    Returns:
+        HttpResponseRedirect: to the student's portfolio.
+
+    Raises:
+        Http404: for an unpublished or missing answer, a caller who is neither the
+            answering student nor staff, or a file type portfolios do not hold.
+    """
+    answer = get_object_or_404(QuestionSubmission, id=submission_id, comment__isnull=False)
+    answer_user = answer.quest_submission.user
+    if request.user.is_staff or answer_user == request.user:
+        filename = os.path.basename(answer.response_file.name) if answer.response_file else ''
+
+        if is_acceptable_image_type(filename):
+            image_file = answer.response_file
+            video_file = None
+        elif is_acceptable_vid_type(filename):
+            image_file = None
+            video_file = answer.response_file
+        else:
+            raise Http404("Unsupported image or video format.  See your teacher if"
+                          " you think this format should be supported.")
+
+        portfolio, created = Portfolio.objects.get_or_create(user=answer_user)
+
+        Artwork.create(
+            title=os.path.splitext(filename)[0][:50],
+            image_file=image_file,
+            video_file=video_file,
+            portfolio=portfolio,
+            date=answer.comment.timestamp.date(),
         )
         return redirect('portfolios:detail', pk=portfolio.pk)
     else:

@@ -289,3 +289,92 @@ class PortfolioViewTests(ByteDeckTenantTestCase):
         )
 
         self.assert404('portfolios:art_add', args=[text_doc.pk])
+
+    def _published_answer(self, filename, content_type, user=None):
+        """A published file answer (comment set) owned by `user`, ready for art_add_answer.
+
+        Args:
+            filename (str): the uploaded file's name; its extension decides the media type.
+            content_type (str): the upload's MIME type.
+            user (User): the answering student; defaults to the class's test student.
+
+        Returns:
+            QuestionSubmission: a published answer holding the file.
+        """
+        user = user or self.test_student
+        return baker.make(
+            'questions.QuestionSubmission',
+            quest_submission=baker.make('quest_manager.QuestSubmission', user=user),
+            response_file=SimpleUploadedFile(filename, b"file_content", content_type=content_type),
+            comment=baker.make('comments.Comment', user=user),
+        )
+
+    def test_art_add_answer__anonymous_redirects_to_login(self):
+        """Adding an answer to a portfolio requires being logged in."""
+        answer = self._published_answer("anon-sketch.png", "image/png")
+        self.assertRedirectsLogin('portfolios:art_add_answer', args=[answer.pk])
+
+    def test_art_add_answer__own_image_answer_creates_artwork(self):
+        """A student's published image file answer lands in their portfolio, like the same
+        file attached to a comment would (#2573)."""
+        self.client.force_login(self.test_student)
+        answer = self._published_answer("own-sketch.png", "image/png")
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        artwork = Artwork.objects.get(title="own-sketch")
+        self.assertTrue(artwork.image_file)
+        self.assertFalse(artwork.video_file)
+        self.assertEqual(artwork.portfolio, self.portfolio)
+        self.assertEqual(artwork.date, answer.comment.timestamp.date())
+
+    def test_art_add_answer__video_answer_creates_video_artwork(self):
+        """A video file answer becomes a video artwork (not an image one)."""
+        self.client.force_login(self.test_student)
+        answer = self._published_answer("screencast.mp4", "video/mp4")
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        artwork = Artwork.objects.get(title="screencast")
+        self.assertTrue(artwork.video_file)
+        self.assertFalse(artwork.image_file)
+
+    def test_art_add_answer__staff_adds_to_the_students_portfolio(self):
+        """Staff may trigger the add, and the artwork still lands in the student's portfolio."""
+        staff = baker.make(User, is_staff=True)
+        self.client.force_login(staff)
+        answer = self._published_answer("staff-added.png", "image/png")
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        self.assertEqual(Artwork.objects.get(title="staff-added").portfolio, self.portfolio)
+
+    def test_art_add_answer__another_students_answer_returns_404(self):
+        """A student cannot add someone else's answer to a portfolio."""
+        other = baker.make(User)
+        self.client.force_login(other)
+        answer = self._published_answer("not-yours.png", "image/png")
+
+        self.assert404('portfolios:art_add_answer', args=[answer.pk])
+
+    def test_art_add_answer__draft_answer_returns_404(self):
+        """An unpublished (draft) answer cannot be added: its file is not final and it has
+        no completion comment to date the artwork by."""
+        self.client.force_login(self.test_student)
+        draft = baker.make(
+            'questions.QuestionSubmission',
+            quest_submission=baker.make('quest_manager.QuestSubmission', user=self.test_student),
+            response_file=SimpleUploadedFile("draft-sketch.png", b"file_content", content_type="image/png"),
+        )
+
+        self.assert404('portfolios:art_add_answer', args=[draft.pk])
+
+    def test_art_add_answer__unsupported_format_returns_404(self):
+        """A file answer that is neither an image nor a video is rejected (404)."""
+        self.client.force_login(self.test_student)
+        answer = self._published_answer("answer-notes.txt", "text/plain")
+
+        self.assert404('portfolios:art_add_answer', args=[answer.pk])

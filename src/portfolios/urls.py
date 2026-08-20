@@ -16,6 +16,7 @@ urlpatterns = [
 
     # adding art from a file in a quest comment
     re_path(r'^art/create/(?P<doc_id>[0-9]+)$', views.art_add, name='art_add'),
+    re_path(r'^art/create/answer/(?P<submission_id>[0-9]+)$', views.art_add_answer, name='art_add_answer'),
     re_path(r'^art/(?P<pk>[0-9]+)/delete/$', views.ArtworkDelete.as_view(), name='art_delete'),
     re_path(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
 ]

@@ -352,3 +352,20 @@ class QuestionSubmissionModelTest(ByteDeckTenantTestCase):
         other_submission.delete()
         self.assertEqual(QuestionSubmission.objects.count(), old_count - 2)
         self.assertFalse(QuestionSubmission.objects.filter(quest_submission_id=other_submission.id).exists())
+
+    def test_is_valid_portfolio_type__by_file_kind(self):
+        """The portfolio check answers by the stored file's type, and False with no file.
+
+        It mirrors the comment-attachment check, so a file answer offers Add to Portfolio
+        exactly when the identical file attached to a comment would (#2573).
+        """
+        answer = baker.make(QuestionSubmission, quest_submission=self.submission, question=self.question)
+        self.assertFalse(answer.is_valid_portfolio_type())
+
+        answer.response_file = SimpleUploadedFile("piece.png", b"file_content", content_type="image/png")
+        answer.save()
+        self.assertTrue(answer.is_valid_portfolio_type())
+
+        answer.response_file = SimpleUploadedFile("essay.txt", b"file_content", content_type="text/plain")
+        answer.save()
+        self.assertFalse(answer.is_valid_portfolio_type())
