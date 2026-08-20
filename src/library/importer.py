@@ -4,7 +4,7 @@ from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 
-from .transfer import build_available_quest_name, snapshot_quest, write_quests
+from .transfer import build_available_name, snapshot_quest, write_quests
 from .utils import library_schema_context
 
 
@@ -46,7 +46,7 @@ def resolve_name_collisions(snapshots):
         if wanted not in taken_names:
             continue
 
-        given = build_available_quest_name(wanted, taken_names, suffix)
+        given = build_available_name(wanted, taken_names, suffix, Quest._meta.get_field('name').max_length or 50)
         taken_names.add(given)
         overrides[snapshot['fields']['import_id']] = {'name': given}
         renames.append((wanted, given))
@@ -106,6 +106,7 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
                     for snapshot in snapshots
                 ],
                 with_campaign=True,
+                rename_campaign_on_clash=True,
             )
 
             category = Category.objects.filter(import_id=campaign_import_id).first()

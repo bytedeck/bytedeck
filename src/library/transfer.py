@@ -25,6 +25,7 @@ Two rules hold everywhere below:
   successful one (#2397, #2364).
 """
 
+from datetime import date
 from typing import NamedTuple
 
 from django.contrib.contenttypes.models import ContentType
@@ -58,6 +59,7 @@ class TransferResult(NamedTuple):
 
     `renamed_quests` is the odd one out: nothing was lost, but a name was changed to get
     the copy in, so it is reported to whoever is standing in front of it (#2364).
+    `renamed_campaign` is the same thing for the campaign's own title (#2532).
     """
 
     quests: list
@@ -66,6 +68,7 @@ class TransferResult(NamedTuple):
     skipped_quests: list = ()
     dropped_common_data: list = ()
     renamed_quests: list = ()
+    renamed_campaign: tuple = None
 
 
 class LibraryTransferError(Exception):
@@ -107,13 +110,14 @@ QUESTION_FIELDS_NOT_COPIED = {
 }
 
 
-def build_available_quest_name(name, taken_names, suffix):
-    """Return a version of `name` that no quest in the destination schema is using.
+def build_available_name(name, taken_names, suffix, max_len):
+    """Return a version of `name` that nothing in the destination schema is using.
 
-    `Quest.name` is unique per schema, so a copy whose name is already spoken for cannot be
-    written at all. Both directions of the transfer hit this: pushing a second copy of a
-    quest that is already in the Library, and pulling a quest onto a deck that happens to
-    have written its own quest of the same name. Both answer it the same way, by giving the
+    `Quest.name` and `Category.title` are both unique per schema, so a copy whose name is
+    already spoken for cannot be written at all. Every direction of the transfer hits this:
+    pushing a second copy of a quest already in the Library, pulling a quest onto a deck
+    that wrote its own quest of the same name, and pulling a campaign onto a deck that has
+    an unrelated campaign of that title (#2532). They answer it the same way, by giving the
     copy a name of its own and saying so, rather than refusing the transfer.
 
     Args:
@@ -123,12 +127,11 @@ def build_available_quest_name(name, taken_names, suffix):
             constraint even though the default manager hides them.
         suffix (str): what to append to distinguish the copy, e.g. " (Imported on
             2026-08-17)". Numbered when even the suffixed name is taken.
+        max_len (int): the destination field's max_length, to truncate to.
 
     Returns:
-        str: a name not in `taken_names`, truncated to fit the field's max_length.
+        str: a name not in `taken_names`, truncated to fit `max_len`.
     """
-    max_len = Quest._meta.get_field('name').max_length or 50
-
     candidate = name[:max_len - len(suffix)] + suffix
     counter = 1
     while candidate in taken_names:
@@ -305,19 +308,21 @@ def _snapshot_prereqs(quest):
     return prereqs
 
 
-def _write_campaign(snapshot):
+def _write_campaign(snapshot, *, rename_on_clash=False):
     """Find or create the destination's copy of a campaign.
 
-    Matched by `import_id` first, then by title. The title fallback is there because
-    `Category.title` is unique per deck: without it, importing a campaign whose title the
-    destination already uses could not create a second one, it would fail validation and
-    reject the whole import. So the choice is to attach to the campaign of that name, or
-    to block the import until the teacher renames their own campaign.
+    Matched by `import_id`, the only identity a campaign keeps across schemas. A campaign
+    the destination already holds under that id is returned as it is.
 
-    The cost is that two unrelated campaigns sharing a title are treated as one, and the
-    imported quests land in the campaign the teacher already had. That is visible and
-    recoverable (the quests are there, and can be moved), where a blocked import is
-    neither, which is why it is the behaviour chosen here.
+    `Category.title` is unique per schema, so a campaign whose title the destination has
+    given to some *other* campaign cannot be written under it. `rename_on_clash` decides
+    what happens then, because the two directions want opposite answers (#2532):
+
+    * Importing onto a deck renames the arriving copy, exactly as a clashing quest name is
+      renamed, so the teacher's own campaign is left alone and both survive.
+    * Pushing to the Library does not, so the write raises and the sharing view refuses
+      with a message. A name the sharer chose should not be changed on the way out and
+      published to every other deck under something they did not pick (#2531, #2534).
 
     A campaign created here arrives unpublished, like the quests inside it.
 
@@ -325,21 +330,41 @@ def _write_campaign(snapshot):
 
     Args:
         snapshot (dict): a campaign snapshot from `snapshot_campaign`.
+        rename_on_clash (bool): give the arriving copy a free title when the destination
+            has a different campaign under this one.
 
     Returns:
-        Category: the destination's campaign.
+        tuple[Category, tuple[str, str] | None]: the destination's campaign, and the
+        `(wanted, given)` titles when it had to be renamed to get in.
     """
     existing = Category.objects.filter(import_id=snapshot['import_id']).first()
-    if existing is None:
-        existing = Category.objects.filter(title=snapshot['title']).first()
     if existing is not None:
-        return existing
+        return existing, None
 
-    campaign = Category(published=False, **snapshot)
+    wanted = snapshot['title']
+    taken_titles = set(Category.objects.values_list('title', flat=True))
+    renamed = None
+
+    if wanted in taken_titles:
+        if not rename_on_clash:
+            # Left to fail validation, which the sharing view turns into a refusal naming
+            # the clash. Renaming here would publish the campaign under a title its author
+            # did not choose.
+            given = wanted
+        else:
+            given = build_available_name(
+                wanted, taken_titles, f" (Imported on {date.today()})",
+                Category._meta.get_field('title').max_length or 50,
+            )
+            renamed = (wanted, given)
+    else:
+        given = wanted
+
+    campaign = Category(published=False, **{**snapshot, 'title': given})
     campaign.full_clean()
     campaign.save()
 
-    return campaign
+    return campaign, renamed
 
 
 def _write_prereqs(quest, prereqs, *, refresh_matched=False):
@@ -517,7 +542,7 @@ def _write_questions(quest, questions):
     Question.objects.filter(pk__in=[question.pk for question in superseded.values()]).delete()
 
 
-def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
+def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False, rename_campaign_on_clash=False):
     """Write several snapshotted quests into the current schema, then link them up.
 
     Prerequisites are linked in a second pass, once every quest in the batch exists. A
@@ -537,6 +562,9 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
         refresh_matched_prereqs (bool): update the condition of gates the destination
             already has on the same target (the Library push does; a deck import does
             not, see `_write_prereqs`).
+        rename_campaign_on_clash (bool): give an arriving campaign a free title when the
+            destination has a different campaign under that one (a deck import does; the
+            Library push does not, see `_write_campaign`).
 
     Returns:
         TransferResult: the written quests, the names of any prerequisite targets and
@@ -549,10 +577,17 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
     # All of the batch or none of it: a half-written campaign would leave the deck holding
     # some quests of a set whose prerequisites reference the ones that never arrived.
     with transaction.atomic():
-        written = [
-            _write_quest_row(snapshot, published=published, with_campaign=with_campaign, field_overrides=overrides)
-            for snapshot, published, overrides in writes
-        ]
+        written = []
+        renamed_campaign = None
+        for snapshot, published, overrides in writes:
+            quest, campaign_rename = _write_quest_row(
+                snapshot, published=published, with_campaign=with_campaign, field_overrides=overrides,
+                rename_campaign_on_clash=rename_campaign_on_clash,
+            )
+            written.append(quest)
+            # Every quest of a batch carries the same campaign, so the first rename is the
+            # rename: recording each would report the same one once per quest.
+            renamed_campaign = renamed_campaign or campaign_rename
 
         # Second pass, so a prerequisite between two quests of this batch is linked
         # whichever order they were written in.
@@ -573,10 +608,11 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
         unmet_prereqs=sorted(set(unmet)),
         unmet_alternates=sorted(set(unmet_alternates)),
         dropped_common_data=dropped_common_data,
+        renamed_campaign=renamed_campaign,
     )
 
 
-def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None):
+def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None, rename_campaign_on_clash=False):
     """Write a quest's own fields, campaign, tags and questions, leaving prerequisites to the caller.
 
     An existing row with the same `import_id` is updated rather than duplicated, which is
@@ -589,9 +625,11 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
         published (bool): the published state to give the written quest.
         with_campaign (bool): whether to attach (and if needed create) the campaign.
         field_overrides (dict | None): field values to replace on the way in.
+        rename_campaign_on_clash (bool): passed to `_write_campaign`.
 
     Returns:
-        Quest: the written quest, without its prerequisites yet.
+        tuple[Quest, tuple[str, str] | None]: the written quest, without its prerequisites
+        yet, and the `(wanted, given)` titles when its campaign had to be renamed.
 
     Raises:
         LibraryTransferError: if the quest cannot be written.
@@ -604,8 +642,10 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
         setattr(quest, name, value)
     quest.published = published
 
+    renamed_campaign = None
     if with_campaign and snapshot['campaign'] is not None:
-        quest.campaign = _write_campaign(snapshot['campaign'])
+        quest.campaign, renamed_campaign = _write_campaign(
+            snapshot['campaign'], rename_on_clash=rename_campaign_on_clash)
 
     try:
         with transaction.atomic():
@@ -619,7 +659,7 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
     quest.tags.set(snapshot['tags'])
     _write_questions(quest, snapshot['questions'])
 
-    return quest
+    return quest, renamed_campaign
 
 
 def describe_validation_error(error):
