@@ -443,6 +443,150 @@ class AnswerAutosaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(row.datetime_last_edit, last_edit)
 
 
+class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
+    """Saving a draft stores the files chosen on the page, not only the text (#1459)."""
+
+    def save_draft(self, extra=None):
+        """POST an ajax draft save carrying the answer formset's fields, as the Save Draft
+        button does now that it sends the whole form as FormData.
+
+        Args:
+            extra: a dict merged over the default payload, adding or overriding fields
+                (how a test attaches its files).
+
+        Returns:
+            The view's response, whose JSON body is the draft-save contract.
+        """
+        data = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+        }
+        data.update(extra or {})
+        return self.client.post(
+            reverse("quests:ajax_save_draft"), data=data,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_save_draft__stores_a_file_answer(self):
+        """A file chosen on a file-upload question is stored on its draft row by Save Draft,
+        unpublished, and the response names it so the page can show it was kept."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(file_question)
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("sketch.png", b"file_content", content_type="image/png")})
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertIn("sketch", row.response_file.name)
+        self.assertIsNone(row.comment_id, "a draft-saved answer must not be published")
+        self.assertIn("sketch", payload["saved_answer_files"][field_name])
+
+    def test_save_draft__stores_comment_attachments(self):
+        """A file chosen in the comment's Attach files field is stored on the draft comment
+        by Save Draft, where completing the quest publishes it from."""
+        response = self.save_draft(
+            {"attachments": SimpleUploadedFile("notes.pdf", b"file_content", content_type="application/pdf")})
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        documents = list(self.submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1)
+        self.assertIn("notes", documents[0].docfile.name)
+        self.assertEqual(payload["saved_attachments"], ["notes.pdf"])
+
+    def test_save_draft__rejects_a_file_the_question_does_not_accept(self):
+        """A file whose type the question refuses is not stored, and the response carries
+        the field's own error so the page can say why."""
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="image",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(image_question)
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")})
+
+        payload = json.loads(response.content)
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=image_question)
+        self.assertFalse(row.response_file, "a rejected file must not be stored")
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+
+    def test_save_draft__rejected_replacement_reports_the_error_not_the_kept_file(self):
+        """Rejecting a replacement upload reports the rejection, while the earlier file stays.
+
+        The row keeps the file an earlier draft save stored, so the response must not
+        present that kept file as this save's success: the student chose a new file and
+        needs to hear why it was refused.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="image",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(image_question)
+        self.save_draft(
+            {field_name: SimpleUploadedFile("first.png", b"file_content", content_type="image/png")})
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("replacement.txt", b"file_content", content_type="text/plain")})
+
+        payload = json.loads(response.content)
+        self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=image_question)
+        self.assertIn("first", row.response_file.name, "the earlier draft-saved file must survive")
+
+    def test_save_draft__file_on_a_text_answer_row_is_ignored(self):
+        """A file crafted onto a text question's row is ignored: the form for a text row
+        has no file field, so nothing is stored and nothing is reported saved."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == self.short_question.id)
+        field_name = f"question_submissions-{index}-response_file"
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("sneak.png", b"file_content", content_type="image/png")})
+
+        payload = json.loads(response.content)
+        short_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=self.short_question)
+        self.assertFalse(short_row.response_file)
+        self.assertEqual(payload["saved_answer_files"], {})
+
+    def test_save_draft__file_without_management_form_saves_text_only(self):
+        """A hand-built POST that sends a file without the formset's management form does
+        not error: the text answers and comment still save, the files leg reports nothing."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={
+                "comment": "<p>still saves</p>",
+                "submission_id": self.submission.id,
+                "answers": json.dumps({
+                    "question_submissions-0-id": str(rows[0].id),
+                    "question_submissions-0-response_text": "still saves",
+                }),
+                "question_submissions-0-response_file":
+                    SimpleUploadedFile("orphan.png", b"file_content", content_type="image/png"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        self.assertEqual(payload["saved_answer_files"], {})
+        self.submission.draft_comment.refresh_from_db()
+        self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
+
+
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
     """Published answers display with their comment for students and markers."""
 

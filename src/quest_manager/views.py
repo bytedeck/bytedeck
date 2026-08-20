@@ -1,4 +1,5 @@
 import json
+import posixpath
 import re
 import uuid
 
@@ -14,6 +15,7 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.core.exceptions import ValidationError
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
@@ -30,7 +32,7 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
-from comments.utils import save_draft_attachments
+from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
@@ -2224,11 +2226,21 @@ def skipped(request, quest_id):
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
-    """Autosave the requesting student's own draft comment and draft question answers.
+    """Autosave the requesting student's own draft comment, answers, and chosen files.
 
     Scoped to the submission's owner: a draft is the student's own work in progress, and
     the draft form is only ever rendered for them (staff get the marking form instead), so
     any other user's submission id is a 404.
+
+    The POST carries `submission_id`, the comment HTML as `comment`, text answers as an
+    `answers` JSON object of the formset's field names, and, when files were chosen, the
+    formset's own fields (management form, row ids, files) plus the comment's
+    `attachments`, as the page sends the whole form as FormData (#1459).
+
+    Returns a JSON object: `result` ("Draft saved" or "No changes"), and, when the POST
+    carried files, `saved_answer_files` (file field name to the stored file's bare name),
+    `saved_attachments` (the accepted upload names), and `file_errors` (field name to the
+    validation message for a rejected file).
     """
     if request.POST:
         response_data = {
@@ -2257,9 +2269,9 @@ def ajax_save_draft(request):
             response_data["result"] = "Draft saved"
             draft_comment.save()
 
-        # Autosave draft answers to the quest's questions (text answers only; file answers
-        # upload when the quest is submitted). Sent as a JSON object of the formset's field
-        # names, pairing each row's hidden id with its response_text.
+        # Autosave draft answers to the quest's questions. Text answers arrive as a JSON
+        # object of the formset's field names, pairing each row's hidden id with its
+        # response_text; file answers arrive in request.FILES and are handled below.
         answers_json = request.POST.get("answers")
         if answers_json and sub.quest.question_set.exists():
             try:
@@ -2306,6 +2318,60 @@ def ajax_save_draft(request):
                     row.full_clean()
                     row.save()
                     response_data["result"] = "Draft saved"
+
+        # Draft-save any files in the POST (#1459). The Save Draft button posts the whole
+        # form as FormData, so a chosen comment attachment or file answer arrives here just
+        # as it would on submit, is validated by the same forms, and is stored by the same
+        # helpers in the same places (the draft comment, the draft rows): a draft-saved
+        # file and one kept from a failed submit are indistinguishable, and both publish
+        # with the completion. The response names what was saved and what was rejected, so
+        # the page can clear those inputs and show the outcome without a reload.
+        if request.FILES:
+            saved_answer_files = {}
+            saved_attachments = []
+            file_errors = {}
+
+            if sub.quest.question_set.exists():
+                question_formset = QuestionSubmissionFormsetFactory(
+                    request.POST, request.FILES,
+                    instance=sub, queryset=sync_draft_question_submissions(sub),
+                )
+                # a POST built by hand can omit the management form, which raises when the
+                # formset validates; text (above) still saves, the files leg just skips.
+                try:
+                    question_formset.is_valid()
+                except ValidationError:
+                    question_formset = None
+
+                if question_formset is not None:
+                    save_draft_file_answers(question_formset, request.FILES)
+                    for answer_form in question_formset.forms:
+                        field_name = answer_form.add_prefix("response_file")
+                        if field_name not in request.FILES:
+                            continue
+                        # errors first: a row that already holds a file from an earlier save
+                        # keeps it when a replacement is rejected, and reporting that stored
+                        # file as "saved" would present the rejection as a success
+                        if answer_form.errors.get("response_file"):
+                            file_errors[field_name] = " ".join(answer_form.errors["response_file"])
+                        elif answer_form.instance.pk and answer_form.instance.response_file:
+                            # the bare file name: the stored value is a whole media path
+                            saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
+
+            if request.FILES.getlist("attachments"):
+                # the same form the submit builds, so the same size and count rules apply
+                form = SubmissionForm(request.POST, request.FILES, student=request.user)
+                form.is_valid()
+                saved_attachments = [upload.name for upload in accepted_attachments(form)]
+                save_draft_attachments(form, draft_comment)
+                if form.errors.get("attachments"):
+                    file_errors["attachments"] = " ".join(form.errors["attachments"])
+
+            if saved_answer_files or saved_attachments:
+                response_data["result"] = "Draft saved"
+            response_data["saved_answer_files"] = saved_answer_files
+            response_data["saved_attachments"] = saved_attachments
+            response_data["file_errors"] = file_errors
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
