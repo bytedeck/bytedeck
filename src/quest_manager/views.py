@@ -1047,7 +1047,13 @@ def ajax_submission_info(request, submission_id=None):
         elif completed:
             qs = QuestSubmission.objects.all_completed(request.user)
         else:
+            # The in-progress preview is unscoped for staff and TAs (a TA previews another
+            # student's started quest to copy it, #141), but a regular student may only see
+            # their own submission: otherwise any logged-in student could POST another
+            # student's submission id and read their answers and comment thread.
             qs = QuestSubmission.objects.all()
+            if not is_staff_or_TA(request.user):
+                qs = qs.get_user(request.user)
 
         sub = get_object_or_404(qs, pk=submission_id)
 
