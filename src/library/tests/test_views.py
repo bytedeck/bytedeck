@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
@@ -2407,6 +2408,40 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertFalse(
             any("did not travel" in text for text in self._message_texts(response)),
             f"expected no warning, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_an_or_alternative_could_not_travel(self):
+        """Losing only a gate's OR alternative gets its own warning, not the ungated one.
+
+        The gate itself survives, so the copy arrives stricter than written, with one of
+        the routes through it gone. Saying "anyone importing it will get it ungated" for
+        that case would point the teacher at the wrong problem, so the alternative gets a
+        message of its own instead (#2549).
+        """
+        gate = baker.make(Quest, name="Shareable Gate", published=True)
+        local = baker.make(Quest, name="Quest With A Narrower Copy", published=True)
+        prereq = Prereq.add_simple_prereq(local, gate)
+        rank = baker.make(Rank, name="Digital Novice")
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+        prereq.or_prereq_object_id = rank.id
+        prereq.full_clean()
+        prereq.save()
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("lost an alternative" in text and "Digital Novice" in text for text in texts),
+            f"expected the alternative to be named in its own warning, got {texts}",
+        )
+        self.assertFalse(
+            any("ungated" in text for text in texts),
+            f"expected no ungated warning when only the alternative was lost, got {texts}",
         )
 
     def test_export_quest__warns_the_sharer_that_the_general_info_block_stays_behind(self):

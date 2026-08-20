@@ -348,34 +348,49 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
     )
 
 
-def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
+def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=()):
     """Tell the sharer which gating did not travel with the content they just shared.
 
     A prerequisite only crosses if the thing it points at is in the Library too. A rank or
     a course can never be, and a quest outside what is being pushed is simply not there
     yet, so those gates are dropped at this end and the copy in the Library is ungated.
 
-    Nobody downstream can tell, because the Library row simply has no prerequisite: the
-    teacher who imports it later has nothing to be warned about.
+    A lost OR alternative is the opposite loss, warned about separately (#2549): the gate
+    itself survives, so the copy arrives *stricter* than written, with one of the routes
+    through it gone. The two need different fixes from the teacher (an open quest needs
+    re-gating on the far side; a narrowed one needs the alternative shared alongside it),
+    so telling them "ungated" for a narrowed quest would point them at the wrong one.
 
-    That makes this the only place the loss is visible, and the sharer is also the one who
-    can act on it, by widening what they share or by re-gating it (#2399, #2450).
+    Nobody downstream can tell either way, because the Library row simply carries less
+    than the original: the teacher who imports it later has nothing to be warned about.
+
+    That makes this the only place the losses are visible, and the sharer is also the one
+    who can act on them, by widening what they share or by re-gating it (#2399, #2450).
 
     Args:
         request (HttpRequest): the current request, for the message framework.
-        unmet_prereqs (list[str]): names of the prerequisites that did not travel.
+        unmet_prereqs (list[str]): names of the gate targets that did not travel.
+        unmet_alternates (list[str]): names of the OR alternatives that did not travel.
     """
-    if not unmet_prereqs:
-        return
+    if unmet_prereqs:
+        names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+        messages.warning(
+            request,
+            f"One thing did not travel: this content was gated on {names}, which is not in the "
+            "Library, so the copy there is not gated on it and anyone importing it will get it "
+            "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
+            "grade, block or course cannot be shared at all."
+        )
 
-    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
-    messages.warning(
-        request,
-        f"One thing did not travel: this content was gated on {names}, which is not in the "
-        "Library, so the copy there is not gated on it and anyone importing it will get it "
-        "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
-        "grade, block or course cannot be shared at all."
-    )
+    if unmet_alternates:
+        names = ', '.join(f"'{name}'" for name in unmet_alternates)
+        messages.warning(
+            request,
+            f"A gate kept its requirement but lost an alternative: {names} is not in the "
+            "Library, so where the gating offered it as another way through, the copy no "
+            "longer does. Anyone importing this gets the stricter version. Share the "
+            "alternative too if both routes should be available."
+        )
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -1049,7 +1064,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 quest.get_absolute_url(), quest.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
@@ -1201,7 +1216,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 campaign.get_absolute_url(), campaign.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')
