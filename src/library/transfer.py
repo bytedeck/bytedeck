@@ -503,7 +503,7 @@ def _write_questions(quest, questions):
                 question.save()
         except ValidationError as error:
             raise LibraryTransferError(
-                f"'{quest.name}' could not be copied: question {fields['ordinal']}: {_describe(error)}"
+                f"'{quest.name}' could not be copied: question {fields['ordinal']}: {describe_validation_error(error)}"
             ) from error
         except IntegrityError as error:
             raise LibraryTransferError(
@@ -608,7 +608,7 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
             quest.full_clean(exclude=['campaign'])
             quest.save()
     except ValidationError as error:
-        raise LibraryTransferError(f"'{fields['name']}' could not be copied: {_describe(error)}") from error
+        raise LibraryTransferError(f"'{fields['name']}' could not be copied: {describe_validation_error(error)}") from error
     except IntegrityError as error:
         raise LibraryTransferError(f"'{fields['name']}' could not be copied: {error}") from error
 
@@ -618,7 +618,7 @@ def _write_quest_row(snapshot, *, published, with_campaign, field_overrides=None
     return quest
 
 
-def _describe(error):
+def describe_validation_error(error):
     """Render a ValidationError as one readable sentence.
 
     Args:

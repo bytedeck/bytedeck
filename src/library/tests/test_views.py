@@ -2348,6 +2348,194 @@ class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
         )
 
 
+class LibraryShareRefusalTests(LibraryTenantTestCaseMixin):
+    """A share the Library would reject is refused with a reason, not a 500.
+
+    A quest name and a campaign title are unique per schema, so content whose name is
+    already taken in the Library cannot be written there. The sharer cannot see that from
+    their own deck: the Library is another schema, and their own deck's pages say nothing
+    about what is in it. Refusing with a reason is the only thing standing between them
+    and a failure they cannot interpret, after they have agreed to the licence (#2531).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to share content from this deck."""
+        cls.test_teacher = User.objects.create_user('share_refusal_teacher', is_staff=True)
+
+    def setUp(self):
+        """Let any staff user share, and sign the teacher in."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+    def _take_the_name_in_the_library(self, name):
+        """Put an unrelated quest into the Library under `name`.
+
+        A different quest, not the one being shared: same name, its own import_id, which
+        is what makes it a clash rather than the same content arriving again.
+
+        Args:
+            name (str): the quest name to occupy.
+        """
+        with library_schema_context():
+            baker.make(Quest, name=name, published=True)
+
+    def test_export_quest__get_warns_that_the_name_is_taken(self):
+        """The share confirmation page names the clash before the licence is agreed to.
+
+        Refusing at this point costs the teacher a rename; refusing after the POST costs
+        them the same rename plus a server error page they cannot interpret (#2531).
+        """
+        local = baker.make(Quest, name="Photoshop Basics", published=True)
+        self._take_the_name_in_the_library("Photoshop Basics")
+
+        response = self.client.get(reverse('library:export_quest', args=[local.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already has a different quest called")
+        # No licence form on a page that cannot go through.
+        self.assertNotContains(response, 'id="export-form"')
+
+    def test_export_quest__post_is_refused_with_a_message(self):
+        """Submitting a share whose name is taken redirects with the reason (#2531).
+
+        Nothing reaches the Library, and the message names the quest so the teacher knows
+        which one to rename.
+        """
+        local = baker.make(Quest, name="Photoshop Basics", published=True)
+        self._take_the_name_in_the_library("Photoshop Basics")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Photoshop Basics" in text and "could not be completed" in text for text in texts),
+            f"expected a refusal naming the quest, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Quest.objects.filter(import_id=local.import_id).exists())
+
+    def test_export_quest__a_clash_arriving_mid_push_is_still_refused(self):
+        """A failure the pre-check could not have seen is refused, not raised (#2531).
+
+        The guard runs before the write, so between the two another deck can take the name.
+        Patching the push to raise is how that race is reached deterministically: the point
+        is that the exception is turned into a message rather than escaping as a 500.
+        """
+        local = baker.make(Quest, name="Racing The Library", published=True)
+
+        with patch(
+            'library.views.export_quest_to_library',
+            side_effect=LibraryTransferError("'Racing The Library' could not be copied: name: already exists."),
+        ):
+            response = self.client.post(
+                reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Racing The Library" in text and "could not be completed" in text for text in texts),
+            f"expected the raised failure to be reported, got {texts}",
+        )
+
+    def test_export_quest__the_refusal_escapes_markup_in_the_clashing_name(self):
+        """A clashing name carrying HTML is escaped in the refusal message.
+
+        The name in this message comes from the *Library*, so it was written on a deck
+        other than the one reading it. That makes it the one part of the message its
+        reader has no control over, and worth pinning: messages are rendered through
+        `_message_body.html`, which escapes a plain string and only lets markup through
+        when it was built with `format_html` (#2498).
+        """
+        local = baker.make(Quest, name="Clean Quest Name", published=True)
+        self._take_the_name_in_the_library("Clean Quest Name")
+        with library_schema_context():
+            Quest.objects.filter(name="Clean Quest Name").update(name="<img src=x onerror=alert(1)>")
+        Quest.objects.filter(pk=local.pk).update(name="<img src=x onerror=alert(1)>")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertNotContains(response, "<img src=x onerror=alert(1)>")
+        self.assertContains(response, "&lt;img src=x onerror=alert(1)&gt;")
+
+    def test_export_campaign__post_is_refused_when_the_title_is_taken(self):
+        """A campaign whose title the Library already uses is refused, not 500 (#2534).
+
+        The clash is on `Category.title`, which is unique per schema, so `full_clean`
+        rejects the write and the refusal has to come from the view rather than the page.
+        """
+        campaign = baker.make(Category, title="Digital Citizenship", published=True)
+        quest = baker.make(Quest, name="A Quest Of Its Own", campaign=campaign, published=True)
+        with library_schema_context():
+            baker.make(Category, title="Digital Citizenship", published=True)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Digital Citizenship" in text and "could not be completed" in text for text in texts),
+            f"expected a refusal naming the campaign, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+            self.assertFalse(Quest.objects.filter(import_id=quest.import_id).exists())
+
+    def test_export_campaign__post_is_refused_when_a_quest_name_is_taken(self):
+        """A campaign carrying a quest whose name is taken is refused as a whole (#2534).
+
+        The push is atomic, so a clash on one quest stops the campaign: better to say which
+        name is in the way than to leave half of it in the Library.
+        """
+        campaign = baker.make(Category, title="Soldering Skills", published=True)
+        baker.make(Quest, name="Tin Your Iron", campaign=campaign, published=True)
+        self._take_the_name_in_the_library("Tin Your Iron")
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Tin Your Iron" in text for text in texts),
+            f"expected a refusal naming the quest, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
+    def test_export_campaign__post_with_no_published_quests_is_refused(self):
+        """POSTing a share for a campaign with nothing publishable is refused (#2534).
+
+        The button for this is disabled in the UI, but the URL is not, so a stale tab or a
+        resubmit reached the exporter and raised. Nothing about a disabled button stops a
+        POST.
+        """
+        campaign = baker.make(Category, title="Empty Campaign", published=True)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("could not be completed" in text for text in texts),
+            f"expected a refusal rather than a server error, got {texts}",
+        )
+
+
 class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
     """What the Library tells the sharer it could not carry.
 
