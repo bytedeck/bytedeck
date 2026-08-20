@@ -2,6 +2,7 @@ import json
 import re
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -743,6 +744,60 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertRedirects(response, self.submission.get_absolute_url())
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
+
+    def test_complete__questions_changed_keeps_comment_attachment(self):
+        """The questions-changed bounce keeps an attachment that validates (#2428).
+
+        The redirect rebuilds the page with an empty file input, so the upload survives on
+        the draft comment instead: the same place the validation-failure path keeps it
+        (#2427), and the place a successful completion publishes it from. The student is
+        told it was kept.
+        """
+        stale_data = self.formset_data(short_text="my title")
+        baker.make(Question, quest=self.quest, ordinal=3, type="short_answer", required=True)
+        upload = SimpleUploadedFile("evidence.png", b"file_content", content_type="image/png")
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", "attachments": upload, **stale_data})
+
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        documents = list(self.submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1, "the attachment was dropped on the redirect")
+        self.assertIn("evidence", documents[0].docfile.name)
+        self.assertIn(
+            "Your attached file was saved, so you don't need to choose it again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__questions_changed_keeps_file_answer(self):
+        """The questions-changed bounce keeps a file answer that validates (#2428).
+
+        The answer stays on its own draft row, unpublished, the same place the
+        validation-failure path keeps it (#2165), so the rebuilt page shows it as already
+        attached and a later completion publishes it.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        rows = list(sync_draft_question_submissions(self.submission))
+        stale_data = self.formset_data(short_text="my title")
+        upload = SimpleUploadedFile("my-recording.png", b"file_content", content_type="image/png")
+        stale_data[self.file_field_name(file_question)] = upload
+        baker.make(Question, quest=self.quest, ordinal=4, type="short_answer", required=True)
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **stale_data})
+
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertIn("my-recording", row.response_file.name, "the file answer was dropped on the redirect")
+        self.assertIsNone(row.comment_id, "a kept draft answer must not be published")
+        self.assertEqual(len(rows), 3)
 
     def test_complete__optional_blank_answers_still_require_comment_when_verification_required(self):
         """A verification-required quest whose only questions are optional and left blank
