@@ -47,9 +47,13 @@ class TransferResult(NamedTuple):
     they share, or decide the gap is fine. The views turn these into a warning on the push.
 
     `unmet_prereqs` names gating that did not travel, which fails open: the copy in the
-    Library ends up less gated than its author wrote. `skipped_quests` names quests that
-    were left out of a shared campaign altogether. `dropped_common_data` names the shared
-    General Info blocks the copy arrives without.
+    Library ends up less gated than its author wrote. `unmet_alternates` names OR
+    alternatives that did not travel, the opposite loss: the gate itself survives, so the
+    copy ends up *stricter* than written, with one route through it gone (#2549). They
+    are separate lists because the teacher's fix differs: an open quest needs re-gating
+    on the far side, a narrowed one needs the alternative shared alongside it.
+    `skipped_quests` names quests that were left out of a shared campaign altogether.
+    `dropped_common_data` names the shared General Info blocks the copy arrives without.
 
     `renamed_quests` is the odd one out: nothing was lost, but a name was changed to get
     the copy in, so it is reported to whoever is standing in front of it (#2364).
@@ -57,6 +61,7 @@ class TransferResult(NamedTuple):
 
     quests: list
     unmet_prereqs: list
+    unmet_alternates: list = ()
     skipped_quests: list = ()
     dropped_common_data: list = ()
     renamed_quests: list = ()
@@ -357,9 +362,10 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
     and the alternate OR half travel with the row (#2535). The OR half needs a target of
     its own here, under the same rule as the main one. When that target is missing, the
     row is written without its alternate, which fails *closed* (the gate is stricter than
-    written, not looser), and the alternate is named with the rest so the loss is still
-    visible. When the main target is missing, the whole condition is unbuildable and only
-    the main target is named: the row it identifies never arrives, alternate and all.
+    written, not looser), and the alternate is named in its own list so the caller can
+    describe that loss for what it is rather than as a dropped gate (#2549). When the
+    main target is missing, the whole condition is unbuildable and only the main target
+    is named: the row it identifies never arrives, alternate and all.
 
     `refresh_matched` decides what happens to a gate the destination already has on the
     same target. The push into the Library refreshes it, so re-sharing updates the
@@ -376,10 +382,13 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
             target, rather than leaving it as the destination has it.
 
     Returns:
-        list[str]: the names of the prerequisite targets this deck does not have.
+        tuple[list[str], list[str]]: the names of the gate targets this deck does not
+        have (the gate is dropped, failing open), and the names of the OR alternatives
+        it does not have (the gate survives without them, failing closed).
     """
     existing_by_target = {p.get_prereq(): p for p in quest.prereqs()}
     unmet = []
+    unmet_alternates = []
 
     for prereq in prereqs:
         if prereq['import_id'] is None:
@@ -404,7 +413,7 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
             if alternate['import_id'] is not None:
                 or_target = _find_prereq_target(alternate['import_id'])
             if or_target is None:
-                unmet.append(alternate['name'])
+                unmet_alternates.append(alternate['name'])
 
         if row is None:
             row = Prereq(
@@ -431,7 +440,7 @@ def _write_prereqs(quest, prereqs, *, refresh_matched=False):
         row.save()
         existing_by_target[target] = row
 
-    return unmet
+    return unmet, unmet_alternates
 
 
 def _find_prereq_target(import_id):
@@ -526,8 +535,9 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
             not, see `_write_prereqs`).
 
     Returns:
-        TransferResult: the written quests, the names of any prerequisites the destination
-        does not have, and the General Info blocks that did not come with them.
+        TransferResult: the written quests, the names of any gate targets and OR
+        alternatives the destination does not have, and the General Info blocks that
+        did not come with them.
 
     Raises:
         LibraryTransferError: if any quest cannot be written.
@@ -543,8 +553,12 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
         # Second pass, so a prerequisite between two quests of this batch is linked
         # whichever order they were written in.
         unmet = []
+        unmet_alternates = []
         for (snapshot, _, _), quest in zip(writes, written):
-            unmet.extend(_write_prereqs(quest, snapshot['prereqs'], refresh_matched=refresh_matched_prereqs))
+            quest_unmet, quest_alternates = _write_prereqs(
+                quest, snapshot['prereqs'], refresh_matched=refresh_matched_prereqs)
+            unmet.extend(quest_unmet)
+            unmet_alternates.extend(quest_alternates)
 
     dropped_common_data = sorted({
         snapshot['common_data_title'] for snapshot, _, _ in writes if snapshot['common_data_title']
@@ -553,6 +567,7 @@ def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
     return TransferResult(
         quests=written,
         unmet_prereqs=sorted(set(unmet)),
+        unmet_alternates=sorted(set(unmet_alternates)),
         dropped_common_data=dropped_common_data,
     )
 

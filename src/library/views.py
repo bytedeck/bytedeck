@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
@@ -400,34 +400,66 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
     )
 
 
-def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
+def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=()):
     """Tell the sharer which gating did not travel with the content they just shared.
 
     A prerequisite only crosses if the thing it points at is in the Library too. A rank or
     a course can never be, and a quest outside what is being pushed is simply not there
     yet, so those gates are dropped at this end and the copy in the Library is ungated.
 
-    Nobody downstream can tell, because the Library row simply has no prerequisite: the
-    teacher who imports it later has nothing to be warned about.
+    A lost OR alternative is the opposite loss, warned about separately (#2549): the gate
+    itself survives, so the copy arrives *stricter* than written, with one of the routes
+    through it gone. The two need different fixes from the teacher (an open quest needs
+    re-gating on the far side; a narrowed one needs the alternative shared alongside it),
+    so telling them "ungated" for a narrowed quest would point them at the wrong one.
 
-    That makes this the only place the loss is visible, and the sharer is also the one who
-    can act on it, by widening what they share or by re-gating it (#2399, #2450).
+    Nobody downstream can tell either way, because the Library row simply carries less
+    than the original: the teacher who imports it later has nothing to be warned about.
+
+    That makes this the only place the losses are visible, and the sharer is also the one
+    who can act on them, by widening what they share or by re-gating it (#2399, #2450).
 
     Args:
         request (HttpRequest): the current request, for the message framework.
-        unmet_prereqs (list[str]): names of the prerequisites that did not travel.
-    """
-    if not unmet_prereqs:
-        return
+        unmet_prereqs (list[str]): names of the gate targets that did not travel.
+        unmet_alternates (list[str]): names of the OR alternatives that did not travel.
 
-    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
-    messages.warning(
-        request,
-        f"One thing did not travel: this content was gated on {names}, which is not in the "
-        "Library, so the copy there is not gated on it and anyone importing it will get it "
-        "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
-        "grade, block or course cannot be shared at all."
-    )
+    Returns:
+        None: the outcome is zero, one or two warnings queued on the message
+        framework, one per kind of loss that actually happened.
+    """
+    # format_html(_join), not f-strings: every message is rendered through `|safe`,
+    # so a markup-bearing quest or rank name must arrive pre-escaped.
+    if unmet_prereqs:
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_prereqs))
+        messages.warning(
+            request,
+            format_html(
+                "One thing did not travel: this content was gated on {}, which is not in the "
+                "Library, so the copy there is not gated on it and anyone importing it will get it "
+                "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
+                "grade, block or course cannot be shared at all.",
+                names,
+            )
+        )
+
+    if unmet_alternates:
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_alternates))
+        if len(unmet_alternates) == 1:
+            template = (
+                "A gate kept its requirement but lost an alternative: {} is not in the "
+                "Library, so where the gating offered it as another way through, the copy no "
+                "longer does. Anyone importing this gets the stricter version. Share the "
+                "alternative too if both routes should be available."
+            )
+        else:
+            template = (
+                "Some gates kept their requirement but lost an alternative: {} are not in the "
+                "Library, so where the gating offered them as another way through, the copy no "
+                "longer does. Anyone importing this gets the stricter version. Share the "
+                "alternatives too if all routes should be available."
+            )
+        messages.warning(request, format_html(template, names))
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -1121,7 +1153,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 quest.get_absolute_url(), quest.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
@@ -1322,7 +1354,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 campaign.get_absolute_url(), campaign.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')

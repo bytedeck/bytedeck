@@ -108,6 +108,20 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, "—")
         self.assertNotContains(response, "&mdash;")
 
+    def test_list__help_text_says_files_save_with_the_draft(self):
+        """The page's copy matches how draft saving works (#2551).
+
+        Files save with the student's draft (#1459), so the sentence explaining answers to
+        teachers must not claim a file waits for the submit: a teacher reading that would
+        tell students their files are not safe until they submit.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, "any chosen files too")
+        self.assertNotContains(response, "upload when the quest is submitted")
+
     def test_list__an_image_solution_shows_as_a_thumbnail(self):
         """A picture used as a solution is shown in the table, not just named (#2172).
 

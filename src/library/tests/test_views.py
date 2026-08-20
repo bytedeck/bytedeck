@@ -3,6 +3,7 @@ from copy import deepcopy
 from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
@@ -2575,6 +2576,80 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
             f"expected the sharer to be told, got {self._message_texts(response)}",
         )
 
+    def test_export_quest__escapes_markup_in_a_lost_gates_name(self):
+        """A markup-bearing name reaches the sharer's warning as text, not as markup.
+
+        The messages block renders through `|safe`, so the warning must pre-escape the
+        names it interpolates; otherwise a rank or quest named with a tag would run as
+        HTML for whoever shares content gated on it.
+        """
+        rank = baker.make(Rank, name="<b>Sneaky Rank</b>")
+        local = baker.make(Quest, name="Quest Gated On Markup", published=True)
+        Prereq.add_simple_prereq(local, rank)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(any("&lt;b&gt;Sneaky Rank&lt;/b&gt;" in text for text in texts), texts)
+        self.assertFalse(any("<b>Sneaky Rank</b>" in text for text in texts), texts)
+
+    def test_export_quest__escapes_markup_in_a_lost_alternatives_name(self):
+        """The lost-alternative warning pre-escapes names the same way (issue #2549)."""
+        gate = baker.make(Quest, name="Shareable Main Gate", published=True)
+        rank = baker.make(Rank, name="<i>Sneaky Alternative</i>")
+        local = baker.make(Quest, name="Quest With Markup Alternative", published=True)
+        prereq = Prereq.add_simple_prereq(local, gate)
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+        prereq.or_prereq_object_id = rank.id
+        prereq.full_clean()
+        prereq.save()
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(any("&lt;i&gt;Sneaky Alternative&lt;/i&gt;" in text for text in texts), texts)
+        self.assertFalse(any("<i>Sneaky Alternative</i>" in text for text in texts), texts)
+
+    def test_export_quest__pluralises_the_lost_alternatives_warning(self):
+        """Two gates each losing their alternative get plural wording, one warning.
+
+        A single lost alternative reads "A gate kept its requirement"; with several the
+        message switches to "Some gates" and "alternatives", so the grammar matches
+        however many names it lists.
+        """
+        gate1 = baker.make(Quest, name="First Main Gate", published=True)
+        gate2 = baker.make(Quest, name="Second Main Gate", published=True)
+        local = baker.make(Quest, name="Quest With Two Narrowed Gates", published=True)
+        for gate, rank_name in ((gate1, "First Lost Route"), (gate2, "Second Lost Route")):
+            rank = baker.make(Rank, name=rank_name)
+            prereq = Prereq.add_simple_prereq(local, gate)
+            prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+            prereq.or_prereq_object_id = rank.id
+            prereq.full_clean()
+            prereq.save()
+            export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        plural = [text for text in texts if "Some gates kept their requirement" in text]
+        self.assertEqual(len(plural), 1, texts)
+        self.assertIn("'First Lost Route', 'Second Lost Route'", plural[0])
+        self.assertIn("alternatives too", plural[0])
+
     def test_export_quest__stays_quiet_when_the_gate_is_already_in_the_library(self):
         """No warning when the Library already holds the quest this one is gated on.
 
@@ -2595,6 +2670,40 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertFalse(
             any("did not travel" in text for text in self._message_texts(response)),
             f"expected no warning, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_an_or_alternative_could_not_travel(self):
+        """Losing only a gate's OR alternative gets its own warning, not the ungated one.
+
+        The gate itself survives, so the copy arrives stricter than written, with one of
+        the routes through it gone. Saying "anyone importing it will get it ungated" for
+        that case would point the teacher at the wrong problem, so the alternative gets a
+        message of its own instead (#2549).
+        """
+        gate = baker.make(Quest, name="Shareable Gate", published=True)
+        local = baker.make(Quest, name="Quest With A Narrower Copy", published=True)
+        prereq = Prereq.add_simple_prereq(local, gate)
+        rank = baker.make(Rank, name="Digital Novice")
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+        prereq.or_prereq_object_id = rank.id
+        prereq.full_clean()
+        prereq.save()
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("lost an alternative" in text and "Digital Novice" in text for text in texts),
+            f"expected the alternative to be named in its own warning, got {texts}",
+        )
+        self.assertFalse(
+            any("ungated" in text for text in texts),
+            f"expected no ungated warning when only the alternative was lost, got {texts}",
         )
 
     def test_export_quest__warns_the_sharer_that_the_general_info_block_stays_behind(self):
