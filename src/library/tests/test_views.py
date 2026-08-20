@@ -2749,24 +2749,43 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
 
     @classmethod
     def setUpTestData(cls):
-        """Publish a tagged quest and campaign in the Library, and a staff user to view them."""
+        """Publish a tagged, gated quest and its campaign in the Library, plus a staff viewer.
+
+        The Library quest carries a tag and a prerequisite on a second Library quest, so a
+        page can be checked for the Library's own values rather than only for the absence
+        of this deck's.
+        """
         with library_schema_context():
             cls.library_campaign = baker.make(Category, title="Chemistry Basics", published=True)
             cls.library_quest = baker.make(
                 Quest, name="Titration Practice", campaign=cls.library_campaign, published=True,
             )
             cls.library_quest.tags.add("chemistry")
+            # A gate of the Library's own, so the pages can be checked for the right one
+            # rather than only for the absence of the wrong one.
+            cls.library_gate = baker.make(Quest, name="Library Safety Briefing", published=True)
+            Prereq.add_simple_prereq(cls.library_quest, cls.library_gate)
 
         cls.test_teacher = User.objects.create_user('lazy_queryset_teacher', is_staff=True)
 
     def setUp(self):
-        """Give this deck a quest at the same id, tagged differently, and sign the teacher in."""
+        """Put decoys on this deck at the Library quest's id, and sign the teacher in.
+
+        Both tags and prerequisites are keyed by the object id of the quest they belong to,
+        so a local quest forced to the Library quest's id supplies exactly the wrong answer
+        to anything evaluated after the schema switches back: a tag of `local-only` and a
+        prerequisite on `Local Gate Quest`.
+        """
         super().setUp()
         # taggit keys tags by object id, so a local quest at the Library quest's id is what
         # a lazily-evaluated `quest.tags.all` would find after the schema switches back.
         local = baker.make(Quest, name="A Local Quest")
         Quest.objects.filter(pk=local.pk).update(id=self.library_quest.id)
-        Quest.objects.get(pk=self.library_quest.id).tags.add("local-only")
+        decoy = Quest.objects.get(pk=self.library_quest.id)
+        decoy.tags.add("local-only")
+        # and a prerequisite of its own: prereqs are keyed by the parent's object id, so a
+        # lazily-evaluated `quest.prereqs` finds this one once the schema switches back.
+        Prereq.add_simple_prereq(decoy, baker.make(Quest, name="Local Gate Quest"))
         self.client.force_login(self.test_teacher)
 
     def assertShowsLibraryTags(self, response):
@@ -2808,6 +2827,24 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertShowsLibraryTags(
             self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
         )
+
+    def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):
+        """The quest import preview names the Library quest's gate, not this deck's (#2529).
+
+        The preview exists to say what is about to arrive, and this project has decided
+        gating is the importing deck's own business (#2375), so showing them a gate that
+        is really their own, attached to a quest they do not have yet, is the most
+        misleading thing the page could do.
+
+        This is the only Library page that renders prerequisites server-side. The list and
+        campaign pages show a quest's details through a later AJAX request, which renders
+        inside its own schema context and so was never exposed to this.
+        """
+        response = self.client.get(reverse('library:import_quest', args=[self.library_quest.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Library Safety Briefing")
+        self.assertNotContains(response, "Local Gate Quest")
 
 
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):

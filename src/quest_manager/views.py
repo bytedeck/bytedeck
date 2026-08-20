@@ -1721,6 +1721,47 @@ def unarchive(request, quest_id):
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
+def _keep_posted_uploads(request, form, question_formset, submission, followup=""):
+    """Save the POST's uploads that pass their own validation, and tell the student.
+
+    A browser never repopulates a file input, so any response that sends the student back to
+    the submission page (the re-render with validation errors, or the questions-changed
+    redirect) arrives with every file input empty: without this their uploads are gone with
+    nothing to say so (#2165, #2427, #2428). Comment attachments are kept on the draft
+    comment and file answers on their draft rows, the same places a successful completion
+    publishes them from.
+
+    Validation is run here, because the questions-changed guard calls this before the view
+    has validated anything (`is_valid` caches, so it costs nothing where it already ran),
+    and only uploads that pass are kept: a file rejected for type or size is dropped so its
+    error still applies on the retry.
+
+    Args:
+        request: the request, for its FILES and as the messages target.
+        form: the bound submission form. Forms without an attachments field keep nothing.
+        question_formset: the bound answer formset, or None when the POST involves none.
+        submission: the QuestSubmission whose draft comment holds kept attachments.
+        followup: an extra sentence for the notice. The re-render path points at its
+            inline errors with it; the redirect path passes nothing, since its own error
+            message already says what to do next.
+
+    Returns:
+        int: how many files were kept.
+    """
+    form.is_valid()
+    kept_files = save_draft_attachments(form, submission.draft_comment)
+    if question_formset is not None:
+        question_formset.is_valid()
+        kept_files += save_draft_file_answers(question_formset, request.FILES)
+    if kept_files:
+        noun, verb, pronoun = ("file", "was", "it") if kept_files == 1 else ("files", "were", "them")
+        messages.info(
+            request,
+            f"Your attached {noun} {verb} saved, so you don't need to choose {pronoun} again.{followup}",
+        )
+    return kept_files
+
+
 @non_public_only_view
 @login_required
 def complete(request, submission_id):
@@ -1805,6 +1846,9 @@ def complete(request, submission_id):
                 "This quest's questions have changed since you opened this page. "
                 "Please review and answer them, then submit again.",
             )
+            # The redirect rebuilds the page with empty file inputs, so keep the uploads
+            # that validate, just as the validation-failure path below does (#2428).
+            _keep_posted_uploads(request, form, question_formset, submission)
             return redirect(origin_path)
 
     if not form.is_valid() or (question_formset and not question_formset.is_valid()):
@@ -1815,16 +1859,10 @@ def complete(request, submission_id):
         # Keep the uploads that did validate, both the comment's attachments and the file
         # answers, since the re-rendered file inputs come back empty and the student would
         # otherwise lose them with no warning (#2165, #2427).
-        kept_files = save_draft_attachments(form, submission.draft_comment)
-        if question_formset:
-            kept_files += save_draft_file_answers(question_formset, request.FILES)
-        if kept_files:
-            noun, verb, pronoun = ("file", "was", "it") if kept_files == 1 else ("files", "were", "them")
-            messages.info(
-                request,
-                f"Your attached {noun} {verb} saved, so you don't need to choose {pronoun} again. "
-                "Fix the problems below and submit the quest again.",
-            )
+        _keep_posted_uploads(
+            request, form, question_formset, submission,
+            followup=" Fix the problems below and submit the quest again.",
+        )
 
         context = {
             "heading": submission.quest.name,
