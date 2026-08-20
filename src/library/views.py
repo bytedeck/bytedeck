@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
@@ -371,26 +371,43 @@ def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=())
         request (HttpRequest): the current request, for the message framework.
         unmet_prereqs (list[str]): names of the gate targets that did not travel.
         unmet_alternates (list[str]): names of the OR alternatives that did not travel.
+
+    Returns:
+        None: the outcome is zero, one or two warnings queued on the message
+        framework, one per kind of loss that actually happened.
     """
+    # format_html(_join), not f-strings: every message is rendered through `|safe`,
+    # so a markup-bearing quest or rank name must arrive pre-escaped.
     if unmet_prereqs:
-        names = ', '.join(f"'{name}'" for name in unmet_prereqs)
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_prereqs))
         messages.warning(
             request,
-            f"One thing did not travel: this content was gated on {names}, which is not in the "
-            "Library, so the copy there is not gated on it and anyone importing it will get it "
-            "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
-            "grade, block or course cannot be shared at all."
+            format_html(
+                "One thing did not travel: this content was gated on {}, which is not in the "
+                "Library, so the copy there is not gated on it and anyone importing it will get it "
+                "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
+                "grade, block or course cannot be shared at all.",
+                names,
+            )
         )
 
     if unmet_alternates:
-        names = ', '.join(f"'{name}'" for name in unmet_alternates)
-        messages.warning(
-            request,
-            f"A gate kept its requirement but lost an alternative: {names} is not in the "
-            "Library, so where the gating offered it as another way through, the copy no "
-            "longer does. Anyone importing this gets the stricter version. Share the "
-            "alternative too if both routes should be available."
-        )
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_alternates))
+        if len(unmet_alternates) == 1:
+            template = (
+                "A gate kept its requirement but lost an alternative: {} is not in the "
+                "Library, so where the gating offered it as another way through, the copy no "
+                "longer does. Anyone importing this gets the stricter version. Share the "
+                "alternative too if both routes should be available."
+            )
+        else:
+            template = (
+                "Some gates kept their requirement but lost an alternative: {} are not in the "
+                "Library, so where the gating offered them as another way through, the copy no "
+                "longer does. Anyone importing this gets the stricter version. Share the "
+                "alternatives too if all routes should be available."
+            )
+        messages.warning(request, format_html(template, names))
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
