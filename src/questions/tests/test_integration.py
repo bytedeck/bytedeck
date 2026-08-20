@@ -561,6 +561,52 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(short_row.response_file)
         self.assertEqual(payload["saved_answer_files"], {})
 
+    def test_save_draft__stores_comment_attachments_on_a_quest_without_questions(self):
+        """A comment attachment draft-saves on a quest that asks no questions at all.
+
+        The files leg only builds the answer formset when the quest has questions, so
+        this pins the other side of that branch: with none, the attachment path still
+        runs and stores the file on the draft comment.
+        """
+        plain_quest = baker.make(Quest, name="Plain Quest", verification_required=True)
+        submission = baker.make(QuestSubmission, quest=plain_quest, user=self.test_student)
+        self.client.get(reverse("quests:submission", args=[submission.id]))
+        submission.refresh_from_db()
+
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={
+                "comment": "<p>no questions here</p>",
+                "submission_id": submission.id,
+                "attachments": SimpleUploadedFile("notes.pdf", b"file_content", content_type="application/pdf"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        self.assertEqual(payload["saved_attachments"], ["notes.pdf"])
+        documents = list(submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1)
+        self.assertIn("notes", documents[0].docfile.name)
+
+    def test_save_draft__reports_a_rejected_comment_attachment(self):
+        """An attachment the form refuses is not stored, and the response carries the
+        field's own error so the page can say why.
+
+        The attachments field caps each file at 16 MiB, so a file one byte over makes
+        the form error; nothing may be stored and nothing reported saved.
+        """
+        oversized = SimpleUploadedFile(
+            "huge.pdf", b"x" * (16777216 + 1), content_type="application/pdf")
+
+        response = self.save_draft({"attachments": oversized})
+
+        payload = json.loads(response.content)
+        self.assertIn("Max filesize", payload["file_errors"]["attachments"])
+        self.assertEqual(payload["saved_attachments"], [])
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 0)
+
     def test_save_draft__file_without_management_form_saves_text_only(self):
         """A hand-built POST that sends a file without the formset's management form does
         not error: the text answers and comment still save, the files leg reports nothing."""
