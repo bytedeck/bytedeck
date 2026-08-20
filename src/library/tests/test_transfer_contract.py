@@ -15,6 +15,7 @@ or a regression, and the failure is where the decision gets recorded.
 import datetime
 from unittest.mock import patch
 
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 from model_bakery import baker
@@ -315,7 +316,8 @@ class LibraryTransferContractTests(LibraryTenantTestCaseMixin):
 
 
 class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
-    """Pin which prerequisites survive a transfer and which are silently discarded."""
+    """Pin which prerequisite conditions survive a transfer, and which targets are
+    dropped and named in the sharer's warning."""
 
     def _campaign_with_two_quests(self):
         """Create a published campaign holding a quest and a second quest to depend on.
@@ -344,14 +346,12 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         self.assertEqual(names, ["Prereq Inside Campaign"])
 
     def test_export_campaign_and_copy_quests__discards_a_prereq_whose_target_is_outside_the_campaign(self):
-        """A prerequisite pointing outside the pushed campaign is destroyed on the push (#2399).
+        """A prerequisite pointing outside the pushed campaign is dropped on the push (#2399).
 
         The Library never receives the target, so the link cannot be rebuilt there, and a
         deck pulling this campaign cannot recover it either. The quest arrives with weaker
-        gating than its author wrote and nothing reports the loss, even when the importing
-        deck happens to have the prerequisite quest itself.
-
-        When this is fixed the sharer should be told which prerequisites will not travel.
+        gating than its author wrote; the sharer's warning names the target that stayed
+        behind, which is the only place the loss is visible.
         """
         campaign, quest, _ = self._campaign_with_two_quests()
         outside = Quest.objects.create(name="Prereq Outside Campaign", xp=1)
@@ -387,6 +387,172 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
             self.assertEqual(list(library_quest.prereqs()), [])
+
+    def _attach_alternate(self, prereq, alternate, *, invert=False, count=1):
+        """Give a prerequisite an OR half pointing at `alternate`, with its own flags.
+
+        Args:
+            prereq (Prereq): the row to extend.
+            alternate: the model instance the OR half points at.
+            invert (bool): the OR half's NOT flag.
+            count (int): the OR half's required count.
+        """
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(alternate)
+        prereq.or_prereq_object_id = alternate.id
+        prereq.or_prereq_invert = invert
+        prereq.or_prereq_count = count
+        prereq.full_clean()
+        prereq.save()
+
+    def test_export_campaign_and_copy_quests__carries_the_not_flag_and_count(self):
+        """A gate's NOT flag and required count arrive exactly as the author wrote them.
+
+        The invert flag is the load-bearing one (issue #2535): a quest gated on
+        "NOT Placement Test" is for students who have not done the placement test, and a
+        copy whose gate lost its NOT would admit exactly the opposite students.
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        prereq.prereq_invert = True
+        prereq.prereq_count = 3
+        prereq.full_clean()
+        prereq.save()
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertTrue(arrived[0].prereq_invert)
+            self.assertEqual(arrived[0].prereq_count, 3)
+
+    def test_export_campaign_and_copy_quests__carries_the_or_half_when_its_target_travels(self):
+        """A condition's OR half travels when its target is in the pushed campaign too.
+
+        The alternate is a second generic target on the same row, so it crosses under the
+        same rule as the main one, keeping its own NOT flag and count (issue #2535).
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        alternate = Quest.objects.create(name="Alternate Inside Campaign", xp=1, campaign=campaign)
+        Quest.objects.filter(pk=alternate.pk).update(published=True)
+        alternate = Quest.objects.get(pk=alternate.pk)
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        self._attach_alternate(prereq, alternate, invert=True, count=2)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertEqual(arrived[0].get_or_prereq().import_id, alternate.import_id)
+            self.assertTrue(arrived[0].or_prereq_invert)
+            self.assertEqual(arrived[0].or_prereq_count, 2)
+
+    def test_export_campaign_and_copy_quests__drops_only_the_or_half_when_its_target_stays_behind(self):
+        """An OR half whose target is outside the push is dropped alone, and named.
+
+        The main half still arrives with its own flags, so the copy is gated more
+        strictly than written rather than less, and the sharer's warning names the
+        alternate that stayed behind (issue #2535).
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        outside = Quest.objects.create(name="Alternate Outside Campaign", xp=1)
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        prereq.prereq_invert = True
+        prereq.full_clean()
+        prereq.save()
+        self._attach_alternate(prereq, outside)
+
+        result = export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        self.assertIn(str(outside), result.unmet_prereqs)
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertTrue(arrived[0].prereq_invert)
+            self.assertIsNone(arrived[0].get_or_prereq())
+
+    def test_export_quest_to_library__resharing_refreshes_a_changed_condition(self):
+        """Re-sharing a quest carries a corrected condition onto the Library's existing gate.
+
+        The single-quest push updates the Library's copy in place, and it refreshes a
+        matched gate's flags the way it already refreshes the quest's own fields, so an
+        author who fixes a wrong NOT or count and shares again is not left with a stale
+        Library copy (#2535). (A campaign re-push is different: it clones conflicting
+        quests rather than touching the Library's existing rows.)
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        prereq = Prereq.add_simple_prereq(quest, inside)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        prereq.prereq_invert = True
+        prereq.prereq_count = 2
+        prereq.full_clean()
+        prereq.save()
+
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertTrue(arrived[0].prereq_invert)
+            self.assertEqual(arrived[0].prereq_count, 2)
+
+    def test_import_campaign_to__keeps_the_decks_own_adjustment_to_a_gate(self):
+        """A campaign re-import leaves the deck's adjusted copy of a gate alone.
+
+        The imported copy is the teacher's to adjust, so the import side stays add-only:
+        only the Library push refreshes matched gates. Without this split, re-importing
+        for upstream updates would silently undo the teacher's own gating changes.
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        prereq.prereq_invert = True
+        prereq.full_clean()
+        prereq.save()
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        # the teacher decides their deck's copy should not be inverted after all
+        prereq.prereq_invert = False
+        prereq.prereq_count = 5
+        prereq.full_clean()
+        prereq.save()
+
+        import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[quest.import_id, inside.import_id],
+            campaign_import_id=campaign.import_id,
+        )
+
+        adjusted = Prereq.objects.get(pk=prereq.pk)
+        self.assertFalse(adjusted.prereq_invert)
+        self.assertEqual(adjusted.prereq_count, 5)
+
+    def test_export_campaign_and_copy_quests__drops_the_or_half_that_is_not_shareable_content(self):
+        """An OR half pointing at a rank is dropped alone, like a main gate on one (#2450).
+
+        A rank has no identity on another schema, so the alternate cannot be expressed on
+        the far side; the main half still arrives, and the rank is named in the warning.
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        rank = baker.make(Rank, name="Digital Novice")
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        self._attach_alternate(prereq, rank)
+
+        result = export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        self.assertIn(str(rank), result.unmet_prereqs)
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertIsNone(arrived[0].get_or_prereq())
 
 
 class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):

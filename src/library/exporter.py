@@ -66,7 +66,7 @@ def clone_quests_into_library(*, source_schema, quests):
             taken_names.add(name)
             writes.append((snapshot, False, {'import_id': uuid4(), 'name': name}))
 
-        return write_quests(writes, with_campaign=True)
+        return write_quests(writes, with_campaign=True, refresh_matched_prereqs=True)
 
 
 def export_quest_to_library(*, source_schema, quest_import_id):
@@ -97,7 +97,7 @@ def export_quest_to_library(*, source_schema, quest_import_id):
         snapshot = snapshot_quest(quest)
 
     with library_schema_context():
-        return write_quests([(snapshot, False, None)], with_campaign=False)
+        return write_quests([(snapshot, False, None)], with_campaign=False, refresh_matched_prereqs=True)
 
 
 def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import_ids=None):
@@ -147,7 +147,7 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
         snapshots = [snapshot_quest(quest) for quest in quests]
 
     with library_schema_context():
-        exported = write_quests([(snapshot, False, None) for snapshot in snapshots], with_campaign=True)
+        exported = write_quests([(snapshot, False, None) for snapshot in snapshots], with_campaign=True, refresh_matched_prereqs=True)
 
         # The campaign is only created unpublished; force it back to draft in case the
         # Library already holds a published copy under this import_id.
