@@ -383,17 +383,23 @@ def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=())
     # so a markup-bearing quest or rank name must arrive pre-escaped.
     if unmet_prereqs:
         names = format_html_join(', ', "'{}'", ((name,) for name in unmet_prereqs))
-        messages.warning(
-            request,
-            format_html(
+        if len(unmet_prereqs) == 1:
+            template = (
                 "One thing did not travel: this content has {} as a prerequisite, which is not in "
                 "the Library, so the copy there is missing that prerequisite and anyone importing "
                 "the content will get it without that requirement. Sharing the whole campaign "
                 "carries prerequisites between its own quests; a rank, grade, block or course "
-                "cannot be shared at all.",
-                names,
+                "cannot be shared at all."
             )
-        )
+        else:
+            template = (
+                "Some things did not travel: this content has {} as prerequisites, which are not "
+                "in the Library, so the copy there is missing those prerequisites and anyone "
+                "importing the content will get it without those requirements. Sharing the whole "
+                "campaign carries prerequisites between its own quests; a rank, grade, block or "
+                "course cannot be shared at all."
+            )
+        messages.warning(request, format_html(template, names))
 
     if unmet_alternates:
         names = format_html_join(', ', "'{}'", ((name,) for name in unmet_alternates))

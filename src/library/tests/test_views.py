@@ -2431,6 +2431,29 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertTrue(any("&lt;i&gt;Sneaky Alternative&lt;/i&gt;" in text for text in texts), texts)
         self.assertFalse(any("<i>Sneaky Alternative</i>" in text for text in texts), texts)
 
+    def test_export_quest__pluralises_the_missing_prerequisites_warning(self):
+        """Two prerequisites that cannot travel get plural wording, one warning.
+
+        A single missing prerequisite reads "One thing did not travel"; with several the
+        message switches to "Some things" and "prerequisites", so the grammar matches
+        however many names it lists.
+        """
+        local = baker.make(Quest, name="Quest With Two Rank Prereqs", published=True)
+        for rank_name in ("First Missing Rank", "Second Missing Rank"):
+            Prereq.add_simple_prereq(local, baker.make(Rank, name=rank_name))
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        plural = [text for text in texts if "Some things did not travel" in text]
+        self.assertEqual(len(plural), 1, texts)
+        self.assertIn("'First Missing Rank', 'Second Missing Rank'", plural[0])
+        self.assertIn("as prerequisites", plural[0])
+
     def test_export_quest__pluralises_the_lost_alternatives_warning(self):
         """Two prerequisites each losing their alternative get plural wording, one warning.
 
