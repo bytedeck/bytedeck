@@ -2352,9 +2352,9 @@ class LibraryShareRefusalTests(LibraryTenantTestCaseMixin):
 
     A quest name and a campaign title are unique per schema, so content whose name is
     already taken in the Library cannot be written there. The sharer cannot see that from
-    their own deck, and until #2531 nothing told them: the write raised, the exception
-    escaped the view, and they met a server error page after reading and agreeing to the
-    Creative Commons licence.
+    their own deck: the Library is another schema, and their own deck's pages say nothing
+    about what is in it. Refusing with a reason is the only thing standing between them
+    and a failure they cannot interpret, after they have agreed to the licence (#2531).
     """
 
     @classmethod
@@ -2444,11 +2444,33 @@ class LibraryShareRefusalTests(LibraryTenantTestCaseMixin):
             f"expected the raised failure to be reported, got {texts}",
         )
 
+    def test_export_quest__the_refusal_escapes_markup_in_the_clashing_name(self):
+        """A clashing name carrying HTML is escaped in the refusal message.
+
+        The name in this message comes from the *Library*, so it was written on a deck
+        other than the one reading it. That makes it the one part of the message its
+        reader has no control over, and worth pinning: messages are rendered through
+        `_message_body.html`, which escapes a plain string and only lets markup through
+        when it was built with `format_html` (#2498).
+        """
+        local = baker.make(Quest, name="Clean Quest Name", published=True)
+        self._take_the_name_in_the_library("Clean Quest Name")
+        with library_schema_context():
+            Quest.objects.filter(name="Clean Quest Name").update(name="<img src=x onerror=alert(1)>")
+        Quest.objects.filter(pk=local.pk).update(name="<img src=x onerror=alert(1)>")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertNotContains(response, "<img src=x onerror=alert(1)>")
+        self.assertContains(response, "&lt;img src=x onerror=alert(1)&gt;")
+
     def test_export_campaign__post_is_refused_when_the_title_is_taken(self):
         """A campaign whose title the Library already uses is refused, not 500 (#2534).
 
-        The clash is on `Category.title`, which `full_clean` rejects, so before this the
-        push raised a bare ValidationError out of the view.
+        The clash is on `Category.title`, which is unique per schema, so `full_clean`
+        rejects the write and the refusal has to come from the view rather than the page.
         """
         campaign = baker.make(Category, title="Digital Citizenship", published=True)
         quest = baker.make(Quest, name="A Quest Of Its Own", campaign=campaign, published=True)

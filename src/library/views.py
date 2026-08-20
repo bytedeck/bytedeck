@@ -1106,9 +1106,10 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                     record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
         except (LibraryTransferError, ValidationError) as error:
             # The guard above catches the clash this is usually raised for, so reaching here
-            # means something the confirmation page could not have known: a name taken
-            # between the two requests, or a field the Library rejects. Refusing with the
-            # reason beats the 500 the sharer used to get after agreeing to the licence.
+            # means something neither the confirmation page nor that guard could know: a
+            # name taken between the two requests, or a field the Library rejects. The
+            # sharer has already agreed to the licence by this point, so the failure is
+            # worth a reason they can act on.
             return redirect_failed_export(request, _describe_transfer_failure(error), 'quests:quests')
 
         # Success message displayed on local deck

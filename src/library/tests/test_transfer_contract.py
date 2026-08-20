@@ -783,7 +783,7 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
 class LibraryTransferErrorMessageTests(SimpleTestCase):
     """How a failed copy is described to the caller."""
 
-    def test_describe__renders_a_validation_error_without_a_field(self):
+    def test_describe_validation_error__renders_a_validation_error_without_a_field(self):
         """An error not tied to a field still reads as a sentence.
 
         `full_clean` reports per-field errors, so this covers the other shape a
@@ -791,7 +791,7 @@ class LibraryTransferErrorMessageTests(SimpleTestCase):
         """
         self.assertEqual(describe_validation_error(ValidationError("Something was wrong.")), "Something was wrong.")
 
-    def test_describe__renders_a_field_error_with_its_field_name(self):
+    def test_describe_validation_error__renders_a_field_error_with_its_field_name(self):
         """A per-field error names the field, which is what makes a clash readable."""
         self.assertEqual(
             describe_validation_error(ValidationError({'name': ["Quest with this Name already exists."]})),
