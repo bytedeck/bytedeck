@@ -164,6 +164,44 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         with self.assertRaises(ValidationError):
             field.validate_file(oversized)
 
+    def test_validate_file__accepts_a_normal_image(self):
+        """A plain raster image is unaffected by the script-file block (#2559)."""
+        field = RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"])
+        field.validate_file(SimpleNamespace(content_type="image/png", size=1, name="photo.png"))
+
+    def test_validate_file__rejects_svg_uploaded_as_an_image(self):
+        """An SVG is refused even by an image-restricted field: an SVG can carry a <script>
+        that runs when the file is served inline, so it is a stored-XSS vector, not a safe
+        image (#2559)."""
+        field = RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"])
+        svg = SimpleNamespace(content_type="image/svg+xml", size=1, name="drawing.svg")
+        with self.assertRaises(ValidationError):
+            field.validate_file(svg)
+
+    def test_validate_file__rejects_html_even_when_all_types_are_allowed(self):
+        """A default ('All') field still refuses an HTML upload, which would run its script
+        inline as stored XSS (#2559)."""
+        field = RestrictedFileFormField()  # content_types == "All"
+        html = SimpleNamespace(content_type="text/html", size=1, name="page.html")
+        with self.assertRaises(ValidationError):
+            field.validate_file(html)
+
+    def test_validate_file__rejects_a_dangerous_extension_despite_a_spoofed_content_type(self):
+        """The browser-declared content type is spoofable, so a .svg file is refused even when
+        it claims to be a PNG: the extension is checked independently (#2559)."""
+        field = RestrictedFileFormField()
+        spoofed = SimpleNamespace(content_type="image/png", size=1, name="payload.svg")
+        with self.assertRaises(ValidationError):
+            field.validate_file(spoofed)
+
+    def test_validate_file__rejects_a_stored_file_with_a_dangerous_extension_and_no_content_type(self):
+        """A kept draft file is a stored FieldFile with no content_type; a dangerous extension
+        is still caught from its name, so an SVG cannot slip through on resubmit (#2559)."""
+        field = RestrictedFileFormField()
+        stored = SimpleNamespace(size=1, name="uploads/payload.svg")  # no content_type attribute
+        with self.assertRaises(ValidationError):
+            field.validate_file(stored)
+
 
 class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
     """Regression tests for AllowedGFKChoiceField rebuilding its choices on copy.

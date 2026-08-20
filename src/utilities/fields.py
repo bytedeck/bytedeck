@@ -1,4 +1,5 @@
 import mimetypes
+import os
 
 from django import forms
 from django.contrib.contenttypes.models import ContentType
@@ -22,7 +23,9 @@ IMAGE_MIME_TYPES = [
     'image/webp',  # WEBP images
     'image/tiff',  # TIFF images
     'image/bmp',   # BMP images
-    'image/svg+xml'  # SVG vector images
+    # SVG is deliberately absent: it is an XML document that can carry a <script>, so served
+    # inline from the app's own origin it is a stored-XSS vector, not a safe raster image.
+    # UNSAFE_UPLOAD_* below refuses it (and other script-capable files) from every upload (#2559).
 ]
 
 VIDEO_MIME_TYPES = [
@@ -66,6 +69,21 @@ FILE_MIME_TYPES = {
     'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
     'all': 'All',
 }
+
+# Files that can carry a script a browser will run when it renders them inline from the app's
+# own origin (the default, non-CDN media setup). An SVG or HTML upload with an embedded
+# <script> runs in the viewer's session when someone opens it (a marker opening a student's
+# file answer, typically): stored XSS. RestrictedFileFormField.validate_file refuses these
+# from every upload, by extension and by declared type, regardless of the field's allowed
+# content types, so no allowed_file_type setting (not even "all") lets one through (#2559).
+UNSAFE_UPLOAD_EXTENSIONS = frozenset({
+    '.svg', '.svgz', '.html', '.htm', '.xhtml', '.xht', '.shtml',
+    '.xml', '.xsl', '.xslt', '.mhtml', '.mht',
+})
+UNSAFE_UPLOAD_MIME_TYPES = frozenset({
+    'image/svg+xml', 'text/html', 'application/xhtml+xml',
+    'application/xml', 'text/xml', 'text/xsl', 'application/xslt+xml',
+})
 
 # Python's builtin MIME table does not know `.m4a`: platforms fill the gap from
 # /etc/mime.types when that file exists, so the same recording guessed as `audio/mp4` on
@@ -321,23 +339,38 @@ class RestrictedFileFormField(forms.FileField):
         super().__init__(*args, **kwargs)
 
     def validate_file(self, file):
+        # Refuse script-capable files (SVG, HTML, XML, ...) up front, before and regardless of
+        # the content_types allow-list: served inline from the app's own origin they run their
+        # embedded script in the viewer's session (stored XSS, #2559). file.name is present on a
+        # fresh upload and on a stored FieldFile, so a dangerous extension is caught even when the
+        # browser declares a harmless content type or (for a kept draft file) sends none.
+        name = getattr(file, "name", "") or ""
+        if os.path.splitext(name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS:
+            raise ValidationError("For security reasons, this type of file cannot be uploaded.")
+
         try:
             content_type = file.content_type
-            if self.content_types == "All" or content_type in self.content_types:
-                if file.size > self.max_upload_size:
-                    raise ValidationError(
-                        "Max filesize is {}. Current filesize {}".format(
-                            filesizeformat(self.max_upload_size),
-                            filesizeformat(file.size),
-                        )
-                    )
-            else:
-                raise ValidationError(
-                    "Filetype not supported. Acceptable filetypes are: %s"
-                    % (str(self.content_types))
-                )
         except AttributeError:
-            pass
+            # A stored FieldFile has no content_type; its extension was checked above, and its
+            # type and size were validated when it was first uploaded.
+            return
+
+        if content_type in UNSAFE_UPLOAD_MIME_TYPES:
+            raise ValidationError("For security reasons, this type of file cannot be uploaded.")
+
+        if self.content_types == "All" or content_type in self.content_types:
+            if file.size > self.max_upload_size:
+                raise ValidationError(
+                    "Max filesize is {}. Current filesize {}".format(
+                        filesizeformat(self.max_upload_size),
+                        filesizeformat(file.size),
+                    )
+                )
+        else:
+            raise ValidationError(
+                "Filetype not supported. Acceptable filetypes are: %s"
+                % (str(self.content_types))
+            )
 
     def clean(self, data, initial=None):
         single_file_clean = super().clean

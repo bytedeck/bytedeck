@@ -520,6 +520,28 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertNotIn(field_name, payload["saved_answer_files"])
         self.assertIn("Filetype not supported", payload["file_errors"][field_name])
 
+    def test_save_draft__rejects_an_svg_file_answer_as_a_security_risk(self):
+        """An SVG answer is refused even on a question that accepts any file type: an SVG can
+        carry a <script> that runs when a marker opens the file inline (stored XSS), so it is
+        not stored and the response carries the security error (#2559)."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(file_question)
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile(
+                "pwn.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+                content_type="image/svg+xml")})
+
+        payload = json.loads(response.content)
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertFalse(row.response_file, "a rejected SVG must not be stored")
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        self.assertIn("security", payload["file_errors"][field_name].lower())
+
     def test_save_draft__rejected_replacement_reports_the_error_not_the_kept_file(self):
         """Rejecting a replacement upload reports the rejection, while the earlier file stays.
 
