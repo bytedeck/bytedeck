@@ -2230,11 +2230,21 @@ def skipped(request, quest_id):
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
-    """Autosave the requesting student's own draft comment and draft question answers.
+    """Autosave the requesting student's own draft comment, answers, and chosen files.
 
     Scoped to the submission's owner: a draft is the student's own work in progress, and
     the draft form is only ever rendered for them (staff get the marking form instead), so
     any other user's submission id is a 404.
+
+    The POST carries `submission_id`, the comment HTML as `comment`, text answers as an
+    `answers` JSON object of the formset's field names, and, when files were chosen, the
+    formset's own fields (management form, row ids, files) plus the comment's
+    `attachments`, as the page sends the whole form as FormData (#1459).
+
+    Returns a JSON object: `result` ("Draft saved" or "No changes"), and, when the POST
+    carried files, `saved_answer_files` (file field name to the stored file's bare name),
+    `saved_attachments` (the accepted upload names), and `file_errors` (field name to the
+    validation message for a rejected file).
     """
     if request.POST:
         response_data = {
@@ -2343,11 +2353,14 @@ def ajax_save_draft(request):
                         field_name = answer_form.add_prefix("response_file")
                         if field_name not in request.FILES:
                             continue
-                        if answer_form.instance.pk and answer_form.instance.response_file:
+                        # errors first: a row that already holds a file from an earlier save
+                        # keeps it when a replacement is rejected, and reporting that stored
+                        # file as "saved" would present the rejection as a success
+                        if answer_form.errors.get("response_file"):
+                            file_errors[field_name] = " ".join(answer_form.errors["response_file"])
+                        elif answer_form.instance.pk and answer_form.instance.response_file:
                             # the bare file name: the stored value is a whole media path
                             saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
-                        elif answer_form.errors.get("response_file"):
-                            file_errors[field_name] = " ".join(answer_form.errors["response_file"])
 
             if request.FILES.getlist("attachments"):
                 # the same form the submit builds, so the same size and count rules apply

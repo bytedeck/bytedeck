@@ -448,7 +448,15 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
 
     def save_draft(self, extra=None):
         """POST an ajax draft save carrying the answer formset's fields, as the Save Draft
-        button does now that it sends the whole form as FormData."""
+        button does now that it sends the whole form as FormData.
+
+        Args:
+            extra: a dict merged over the default payload, adding or overriding fields
+                (how a test attaches its files).
+
+        Returns:
+            The view's response, whose JSON body is the draft-save contract.
+        """
         data = {
             "comment": "<p>draft words</p>",
             "submission_id": self.submission.id,
@@ -511,6 +519,31 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(row.response_file, "a rejected file must not be stored")
         self.assertNotIn(field_name, payload["saved_answer_files"])
         self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+
+    def test_save_draft__rejected_replacement_reports_the_error_not_the_kept_file(self):
+        """Rejecting a replacement upload reports the rejection, while the earlier file stays.
+
+        The row keeps the file an earlier draft save stored, so the response must not
+        present that kept file as this save's success: the student chose a new file and
+        needs to hear why it was refused.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="image",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(image_question)
+        self.save_draft(
+            {field_name: SimpleUploadedFile("first.png", b"file_content", content_type="image/png")})
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("replacement.txt", b"file_content", content_type="text/plain")})
+
+        payload = json.loads(response.content)
+        self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=image_question)
+        self.assertIn("first", row.response_file.name, "the earlier draft-saved file must survive")
 
     def test_save_draft__file_on_a_text_answer_row_is_ignored(self):
         """A file crafted onto a text question's row is ignored: the form for a text row
