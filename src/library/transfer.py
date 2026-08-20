@@ -336,7 +336,7 @@ def _write_campaign(snapshot):
     return campaign
 
 
-def _write_prereqs(quest, prereqs):
+def _write_prereqs(quest, prereqs, *, refresh_matched=False):
     """Rebuild the prerequisites whose targets exist on this deck, and report the rest.
 
     A prerequisite can only point at a row that is actually here, so one whose target the
@@ -345,13 +345,13 @@ def _write_prereqs(quest, prereqs):
     That matters because the loss fails *open*: a quest that arrives with its gate missing
     is more available than its author intended, not less (#2399).
 
-    This only ever adds. It deliberately does not reconcile the destination's prerequisites
+    This never deletes. It deliberately does not reconcile the destination's prerequisites
     with the source's, because they are not a copy of each other: once a quest is on a
     deck, the teacher gates it into their own map with prerequisites that exist only there
     and appear in no snapshot. Removing whatever is absent from the source would delete
-    exactly those, silently. The cost of adding only is that a prerequisite removed
-    upstream lingers here, which leaves the quest more gated than intended: that fails
-    closed and the teacher can undo it, where deleting their own gating would not.
+    exactly those, silently. The cost is that a prerequisite removed upstream lingers
+    here, which leaves the quest more gated than intended: that fails closed and the
+    teacher can undo it, where deleting their own gating would not.
 
     The whole condition is rebuilt, not just the link: the NOT flag, the required count,
     and the alternate OR half travel with the row (#2535). The OR half needs a target of
@@ -361,16 +361,24 @@ def _write_prereqs(quest, prereqs):
     visible. When the main target is missing, the whole condition is unbuildable and only
     the main target is named: the row it identifies never arrives, alternate and all.
 
+    `refresh_matched` decides what happens to a gate the destination already has on the
+    same target. The push into the Library refreshes it, so re-sharing updates the
+    condition's flags the way it already updates the quest's own fields. An import into a
+    deck leaves it alone: that copy is the teacher's to adjust, and their adjustments
+    must survive a campaign re-import.
+
     Must be called from within the destination schema context.
 
     Args:
         quest (Quest): the freshly written quest.
         prereqs (list[dict]): condition entries from `_snapshot_prereqs`.
+        refresh_matched (bool): update the condition of an existing gate on the same
+            target, rather than leaving it as the destination has it.
 
     Returns:
         list[str]: the names of the prerequisite targets this deck does not have.
     """
-    already_required = {p.get_prereq() for p in quest.prereqs()}
+    existing_by_target = {p.get_prereq(): p for p in quest.prereqs()}
     unmet = []
 
     for prereq in prereqs:
@@ -384,7 +392,10 @@ def _write_prereqs(quest, prereqs):
         if target is None:
             unmet.append(prereq['name'])
             continue
-        if target in already_required:
+
+        row = existing_by_target.get(target)
+        if row is not None and not refresh_matched:
+            # the destination's own copy of this gate stays as the teacher has it
             continue
 
         alternate = prereq['alternate']
@@ -395,22 +406,30 @@ def _write_prereqs(quest, prereqs):
             if or_target is None:
                 unmet.append(alternate['name'])
 
-        new_prereq = Prereq(
-            parent_content_type=ContentType.objects.get_for_model(quest),
-            parent_object_id=quest.id,
-            prereq_content_type=ContentType.objects.get_for_model(target),
-            prereq_object_id=target.id,
-            prereq_invert=prereq['invert'],
-            prereq_count=prereq['count'],
-        )
+        if row is None:
+            row = Prereq(
+                parent_content_type=ContentType.objects.get_for_model(quest),
+                parent_object_id=quest.id,
+                prereq_content_type=ContentType.objects.get_for_model(target),
+                prereq_object_id=target.id,
+            )
+        row.prereq_invert = prereq['invert']
+        row.prereq_count = prereq['count']
         if or_target is not None:
-            new_prereq.or_prereq_content_type = ContentType.objects.get_for_model(or_target)
-            new_prereq.or_prereq_object_id = or_target.id
-            new_prereq.or_prereq_invert = alternate['invert']
-            new_prereq.or_prereq_count = alternate['count']
-        new_prereq.full_clean()
-        new_prereq.save()
-        already_required.add(target)
+            row.or_prereq_content_type = ContentType.objects.get_for_model(or_target)
+            row.or_prereq_object_id = or_target.id
+            row.or_prereq_invert = alternate['invert']
+            row.or_prereq_count = alternate['count']
+        else:
+            # the condition has no (buildable) alternate, so a refreshed row sheds any
+            # stale one and a new row gets the fields' defaults
+            row.or_prereq_content_type = None
+            row.or_prereq_object_id = None
+            row.or_prereq_invert = False
+            row.or_prereq_count = 1
+        row.full_clean()
+        row.save()
+        existing_by_target[target] = row
 
     return unmet
 
@@ -485,7 +504,7 @@ def _write_questions(quest, questions):
     Question.objects.filter(pk__in=[question.pk for question in superseded.values()]).delete()
 
 
-def write_quests(writes, *, with_campaign):
+def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
     """Write several snapshotted quests into the current schema, then link them up.
 
     Prerequisites are linked in a second pass, once every quest in the batch exists. A
@@ -502,6 +521,9 @@ def write_quests(writes, *, with_campaign):
             conflict-copy path to give a copy its own `import_id` and name).
         with_campaign (bool): whether to attach (and if needed create) each quest's
             campaign.
+        refresh_matched_prereqs (bool): update the condition of gates the destination
+            already has on the same target (the Library push does; a deck import does
+            not, see `_write_prereqs`).
 
     Returns:
         TransferResult: the written quests, the names of any prerequisites the destination
@@ -522,7 +544,7 @@ def write_quests(writes, *, with_campaign):
         # whichever order they were written in.
         unmet = []
         for (snapshot, _, _), quest in zip(writes, written):
-            unmet.extend(_write_prereqs(quest, snapshot['prereqs']))
+            unmet.extend(_write_prereqs(quest, snapshot['prereqs'], refresh_matched=refresh_matched_prereqs))
 
     dropped_common_data = sorted({
         snapshot['common_data_title'] for snapshot, _, _ in writes if snapshot['common_data_title']

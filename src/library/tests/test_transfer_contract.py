@@ -475,6 +475,65 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertTrue(arrived[0].prereq_invert)
             self.assertIsNone(arrived[0].get_or_prereq())
 
+    def test_export_quest_to_library__resharing_refreshes_a_changed_condition(self):
+        """Re-sharing a quest carries a corrected condition onto the Library's existing gate.
+
+        The single-quest push updates the Library's copy in place, and it refreshes a
+        matched gate's flags the way it already refreshes the quest's own fields, so an
+        author who fixes a wrong NOT or count and shares again is not left with a stale
+        Library copy (#2535). (A campaign re-push is different: it clones conflicting
+        quests rather than touching the Library's existing rows.)
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        prereq = Prereq.add_simple_prereq(quest, inside)
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        prereq.prereq_invert = True
+        prereq.prereq_count = 2
+        prereq.full_clean()
+        prereq.save()
+
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        with library_schema_context():
+            library_quest = Quest.objects.all_including_archived().get(import_id=quest.import_id)
+            arrived = list(library_quest.prereqs())
+            self.assertEqual(len(arrived), 1)
+            self.assertTrue(arrived[0].prereq_invert)
+            self.assertEqual(arrived[0].prereq_count, 2)
+
+    def test_import_campaign_to__keeps_the_decks_own_adjustment_to_a_gate(self):
+        """A campaign re-import leaves the deck's adjusted copy of a gate alone.
+
+        The imported copy is the teacher's to adjust, so the import side stays add-only:
+        only the Library push refreshes matched gates. Without this split, re-importing
+        for upstream updates would silently undo the teacher's own gating changes.
+        """
+        campaign, quest, inside = self._campaign_with_two_quests()
+        prereq = Prereq.add_simple_prereq(quest, inside)
+        prereq.prereq_invert = True
+        prereq.full_clean()
+        prereq.save()
+
+        export_campaign_and_copy_quests(source_schema=connection.schema_name, campaign_import_id=campaign.import_id)
+
+        # the teacher decides their deck's copy should not be inverted after all
+        prereq.prereq_invert = False
+        prereq.prereq_count = 5
+        prereq.full_clean()
+        prereq.save()
+
+        import_campaign_to(
+            destination_schema=connection.schema_name,
+            quest_import_ids=[quest.import_id, inside.import_id],
+            campaign_import_id=campaign.import_id,
+        )
+
+        adjusted = Prereq.objects.get(pk=prereq.pk)
+        self.assertFalse(adjusted.prereq_invert)
+        self.assertEqual(adjusted.prereq_count, 5)
+
     def test_export_campaign_and_copy_quests__drops_the_or_half_that_is_not_shareable_content(self):
         """An OR half pointing at a rank is dropped alone, like a main gate on one (#2450).
 
