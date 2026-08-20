@@ -1308,9 +1308,21 @@ class CourseStudent(models.Model):
 
 @receiver(post_save, sender=CourseStudent)
 def coursestudent_post_save_callback(instance, **kwargs):
-    """
-    This model's objects are edited by teachers using the admin menu.
-    If they make a manual XP adjustment we need to invalidate the user's xp_cache to recalculate xp
+    """Work out the student's cached XP and mark again, because their registrations decide both.
+
+    Teachers edit these rows in the admin, and a manual xp_adjustment there counts toward the
+    student's XP, so the cache has to follow. Joining or leaving a course moves the mark as
+    well: it is a percentage of the XP counting toward one course, so a student with no
+    registration has no mark at all.
+
+    That makes CourseStudent.xp() part of what saving a CourseStudent does, through
+    Profile.mark(). A test patching the XP split therefore has to patch before it saves a
+    registration, not just before the thing it is testing (issue #2486);
+    courses.tests.utils.patch_registration_xp() is the seam to use.
+
+    Archiving does not come through here. calc_semester_grades() writes its registrations
+    with bulk_update, which fires no post_save, and invalidates once per student afterwards
+    rather than once per registration (issue #2459).
     """
     instance.user.profile.xp_invalidate_cache()
 
