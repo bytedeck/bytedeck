@@ -1210,8 +1210,11 @@ def ajax_progress_chart(request, user_id=0):
         # course to chart comes from the request, defaulting to the first of their courses.
         registrations, charted = _registrations_to_chart(user, request.POST.get('course'))
 
-        if charted is None:
-            # in no course at all, so there is nothing of theirs to plot
+        if charted is None:  # pragma: no cover
+            # Defensive race guard, not reachable by a plain request: semester_for() just
+            # found an open-semester registration for this user, and _registrations_to_chart
+            # reads the same registrations, so charted only comes back None if the
+            # registration is deleted between the two reads. Chart zeros rather than crash.
             xp_series = [0] * len(datelist)
             today_xp = 0
         else:
