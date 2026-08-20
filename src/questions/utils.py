@@ -2,14 +2,15 @@ from .models import QuestionSubmission
 
 
 def save_draft_file_answers(question_formset, uploaded_files):
-    """Persist the file answers of an invalid formset onto their draft rows, and return how
-    many were saved.
+    """Persist a bound formset's file answers onto their draft rows, and return how many
+    were saved.
 
-    A browser never repopulates a file input, so when the answer formset fails validation the
-    re-rendered page comes back with every file field empty. Without this the student's upload
-    is gone with nothing to say so: a required file question demands a file they did attach,
-    and an optional one publishes empty (#2165). Keeping the upload on the draft row means it
-    survives the round trip, exactly as autosaved text answers already do.
+    A browser never repopulates a file input, so any response that rebuilds the page comes
+    back with every file field empty. Without this the student's upload is gone with nothing
+    to say so: a required file question demands a file they did attach, and an optional one
+    publishes empty (#2165). Keeping the upload on the draft row means it survives the round
+    trip, exactly as autosaved text answers do; the Save Draft flow stores files through the
+    same helper (#1459), so a draft-saved answer and a kept one are the same thing.
 
     Only rows whose own file validated are saved: a file rejected for type or size never
     reaches ``cleaned_data``, so its error stands and nothing is stored. Rows the student did
@@ -17,7 +18,7 @@ def save_draft_file_answers(question_formset, uploaded_files):
     re-submit that left the field alone.
 
     Args:
-        question_formset: the bound, invalid answer formset.
+        question_formset: the bound answer formset, with validation already run.
         uploaded_files: the request's ``FILES``, used to tell a fresh upload from an untouched
             field (the field is absent from ``FILES`` when nothing new was chosen).
 
