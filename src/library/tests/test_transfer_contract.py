@@ -350,7 +350,7 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 
         The Library never receives the target, so the link cannot be rebuilt there, and a
         deck pulling this campaign cannot recover it either. The quest arrives with weaker
-        gating than its author wrote; the sharer's warning names the target that stayed
+        requirements than its author wrote; the sharer's warning names the target that stayed
         behind, which is the only place the loss is visible.
         """
         campaign, quest, _ = self._campaign_with_two_quests()
@@ -365,17 +365,17 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
 
 
     def test_export_campaign_and_copy_quests__discards_a_prereq_that_is_not_shareable_content(self):
-        """A quest gated on a rank, grade, block or course arrives ungated (#2450).
+        """A quest requiring a rank, grade, block or course arrives without that prerequisite (#2450).
 
         Those models are all valid prerequisites, and none of them carries an `import_id`,
         which is the only identifier that means the same thing in another deck's schema. So
-        a gate of that kind cannot be expressed on the far side and is dropped, exactly as a
-        prerequisite pointing outside the campaign is (#2399). A quest that its author gated
-        on reaching Rank 3 arrives available to everyone, and nothing says so.
+        a prerequisite of that kind cannot be expressed on the far side and is dropped, exactly as a
+        prerequisite pointing outside the campaign is (#2399). A quest its author reserved for
+        students at Rank 3 arrives available to everyone, and nothing says so.
 
-        The gate is stripped rather than travelling broken, and the importing deck is told
-        it was, so the loss is visible rather than silent. When #2450 is fixed this should
-        assert the gate survives, presumably matched by name.
+        The prerequisite is stripped rather than travelling broken, and the importing deck is
+        told it was, so the loss is visible rather than silent. When #2450 is fixed this
+        should assert the prerequisite survives, presumably matched by name.
         """
         campaign, quest, _ = self._campaign_with_two_quests()
         rank = baker.make(Rank, name="Digital Novice")
@@ -405,11 +405,11 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         prereq.save()
 
     def test_export_campaign_and_copy_quests__carries_the_not_flag_and_count(self):
-        """A gate's NOT flag and required count arrive exactly as the author wrote them.
+        """A prerequisite's NOT flag and required count arrive exactly as the author wrote them.
 
-        The invert flag is the load-bearing one (issue #2535): a quest gated on
-        "NOT Placement Test" is for students who have not done the placement test, and a
-        copy whose gate lost its NOT would admit exactly the opposite students.
+        The invert flag is the load-bearing one (issue #2535): a quest whose prerequisite
+        is "NOT Placement Test" is for students who have not done the placement test, and
+        a copy whose prerequisite lost its NOT would admit exactly the opposite students.
         """
         campaign, quest, inside = self._campaign_with_two_quests()
         prereq = Prereq.add_simple_prereq(quest, inside)
@@ -453,11 +453,11 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
     def test_export_campaign_and_copy_quests__drops_only_the_or_half_when_its_target_stays_behind(self):
         """An OR half whose target is outside the push is dropped alone, and named as an alternative.
 
-        The main half still arrives with its own flags, so the copy is gated more
-        strictly than written rather than less (issue #2535). The lost alternative is
-        reported in `unmet_alternates`, not in `unmet_prereqs`: the gate survived, so
-        listing it with the dropped gates would tell the sharer the quest arrives
-        ungated when it actually arrives narrower (issue #2549).
+        The main half still arrives with its own flags, so the copy requires more than
+        written rather than less (issue #2535). The lost alternative is reported in
+        `unmet_alternates`, not in `unmet_prereqs`: the prerequisite survived, so listing
+        it with the dropped ones would tell the sharer the quest arrives with no
+        prerequisite when it actually arrives narrower (issue #2549).
         """
         campaign, quest, inside = self._campaign_with_two_quests()
         outside = Quest.objects.create(name="Alternate Outside Campaign", xp=1)
@@ -479,10 +479,10 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertIsNone(arrived[0].get_or_prereq())
 
     def test_export_quest_to_library__resharing_refreshes_a_changed_condition(self):
-        """Re-sharing a quest carries a corrected condition onto the Library's existing gate.
+        """Re-sharing a quest carries a corrected condition onto the Library's existing prerequisite.
 
         The single-quest push updates the Library's copy in place, and it refreshes a
-        matched gate's flags the way it already refreshes the quest's own fields, so an
+        matched prerequisite's flags the way it already refreshes the quest's own fields, so an
         author who fixes a wrong NOT or count and shares again is not left with a stale
         Library copy (#2535). (A campaign re-push is different: it clones conflicting
         quests rather than touching the Library's existing rows.)
@@ -506,12 +506,13 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
             self.assertTrue(arrived[0].prereq_invert)
             self.assertEqual(arrived[0].prereq_count, 2)
 
-    def test_import_campaign_to__keeps_the_decks_own_adjustment_to_a_gate(self):
-        """A campaign re-import leaves the deck's adjusted copy of a gate alone.
+    def test_import_campaign_to__keeps_the_decks_own_adjustment_to_a_prerequisite(self):
+        """A campaign re-import leaves the deck's adjusted copy of a prerequisite alone.
 
         The imported copy is the teacher's to adjust, so the import side stays add-only:
-        only the Library push refreshes matched gates. Without this split, re-importing
-        for upstream updates would silently undo the teacher's own gating changes.
+        only the Library push refreshes matched prerequisites. Without this split,
+        re-importing for upstream updates would silently undo the teacher's own
+        prerequisite changes.
         """
         campaign, quest, inside = self._campaign_with_two_quests()
         prereq = Prereq.add_simple_prereq(quest, inside)
@@ -538,7 +539,7 @@ class LibraryTransferPrereqContractTests(LibraryTenantTestCaseMixin):
         self.assertEqual(adjusted.prereq_count, 5)
 
     def test_export_campaign_and_copy_quests__drops_the_or_half_that_is_not_shareable_content(self):
-        """An OR half pointing at a rank is dropped alone, like a main gate on one (#2450).
+        """An OR half pointing at a rank is dropped alone, like a main prerequisite on one (#2450).
 
         A rank has no identity on another schema, so the alternate cannot be expressed on
         the far side; the main half still arrives, and the rank is named in the warning.
@@ -1053,7 +1054,7 @@ class LibraryContentRegistrationTests(ByteDeckTenantTestCase):
         """A rank, grade, block or course describes the deck, so it cannot be shared.
 
         These are all valid prerequisites, which is exactly why the question has to be
-        asked: a quest can be gated on any of them, and none of them means the same thing
+        asked: a quest can have any of them as a prerequisite, and none of them means the same thing
         on another deck.
         """
         for model in (Rank, Grade, Block, Course):
