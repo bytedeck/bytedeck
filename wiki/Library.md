@@ -221,7 +221,6 @@ Sharing a **new** campaign that happens to contain quests already in the Library
 The Shared Library is marked EXPERIMENTAL for a reason. Things worth knowing before you rely on it:
 
 * **Updates do not flow.** Nothing is shared or imported twice, in either direction, so a fix made on one deck does not reach decks that already imported the quest.
-* **Prerequisites are simplified on the way across.** A gate that says "NOT this quest", "this quest 3 times", or "this quest OR that quest" arrives as a plain single requirement. Check the gating on anything you import before you publish it.
 * **Badges are local.** They never travel in either direction. Building badges on top of imported content is deck work.
 * **Sharing something whose name is already taken in the Library fails with a server error** rather than a helpful message ([#2531](https://github.com/bytedeck/bytedeck/issues/2531)). Renaming your quest and sharing again works around it.
 
