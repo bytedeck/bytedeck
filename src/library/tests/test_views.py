@@ -1,3 +1,4 @@
+import re
 import uuid
 from copy import deepcopy
 from datetime import date
@@ -3184,12 +3185,17 @@ class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
         cls.test_teacher = User.objects.create_user('publish_link_teacher', is_staff=True)
 
     def setUp(self):
-        """Publish a one-quest campaign in the Library and sign the teacher in."""
+        """Publish a two-quest campaign in the Library and sign the teacher in.
+
+        Two quests rather than one, so "and all its Quests" is asserted against a set the
+        publish has to walk, and an assertion about every quest cannot pass on an empty one.
+        """
         super().setUp()
         self.client.force_login(self.test_teacher)
         with library_schema_context():
             self.library_campaign = baker.make(Category, title="Digital Citizenship", published=True)
             baker.make(Quest, name="Your Digital Footprint", campaign=self.library_campaign, published=True)
+            baker.make(Quest, name="Reading The Terms", campaign=self.library_campaign, published=True)
 
     def _import_and_read_the_message(self):
         """Import the Library campaign and return the success message's HTML.
@@ -3203,39 +3209,52 @@ class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
         messages = [str(message) for message in response.context['messages']]
         return next(message for message in messages if "Successfully imported" in message)
 
-    def test_import_campaign__the_publish_link_goes_to_the_campaign_page(self):
-        """The "publish the campaign" link points at the campaign, not its edit form."""
+    def _publish_link_target(self, message):
+        """Return the URL that the message's "publish the campaign" link points at.
+
+        Args:
+            message (str): the rendered success message.
+
+        Returns:
+            str: the link's href.
+        """
+        return re.search(r'<a href="([^"]+)">publish the campaign</a>', message).group(1)
+
+    def test_ImportCampaignView__the_publish_link_goes_to_the_campaign_page(self):
+        """The "publish the campaign" link points at the campaign, not at its edit form."""
         message = self._import_and_read_the_message()
         campaign = Category.objects.get(import_id=self.library_campaign.import_id)
 
-        self.assertIn(f'<a href="{campaign.get_absolute_url()}">publish the campaign</a>', message)
+        self.assertEqual(self._publish_link_target(message), campaign.get_absolute_url())
         self.assertNotIn(reverse('quests:category_update', args=[campaign.id]), message)
 
-    def test_import_campaign__the_page_the_publish_link_reaches_publishes_the_quests(self):
-        """That page carries the control that publishes the campaign and its quests.
+    def test_ImportCampaignView__the_page_the_publish_link_reaches_publishes_the_quests(self):
+        """The page that link reaches carries the control publishing the campaign and its quests.
 
-        Asserted by following the link rather than by naming a URL, so the test fails if
-        the button moves or stops being offered, not merely if the link string changes.
+        The href is read out of the message and requested, so this fails if the button moves
+        off the page the message points at, not merely if the link string changes.
         """
-        self._import_and_read_the_message()
+        message = self._import_and_read_the_message()
         campaign = Category.objects.get(import_id=self.library_campaign.import_id)
 
-        response = self.client.get(campaign.get_absolute_url())
+        response = self.client.get(self._publish_link_target(message))
 
         self.assertContains(response, reverse('quests:category_publish', args=[campaign.id]))
         self.assertContains(response, "Publish Campaign and all its Quests")
 
-    def test_category_publish__publishes_the_campaign_and_its_quests(self):
+    def test_CategoryPublish__publishes_the_campaign_and_its_quests(self):
         """The linked-to control does publish both, which is what the message promises."""
         self._import_and_read_the_message()
         campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+        quests = Quest.objects.filter(campaign=campaign)
         self.assertFalse(campaign.published)
+        self.assertEqual(quests.filter(published=False).count(), 2)
 
         self.client.post(reverse('quests:category_publish', args=[campaign.id]))
 
         campaign.refresh_from_db()
         self.assertTrue(campaign.published)
-        self.assertTrue(all(quest.published for quest in Quest.objects.filter(campaign=campaign)))
+        self.assertEqual(quests.filter(published=True).count(), 2)
 
 
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
