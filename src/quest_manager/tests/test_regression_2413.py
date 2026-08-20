@@ -19,6 +19,7 @@ from unittest import mock
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
+from django.db.models.signals import post_save
 from django.utils import timezone
 
 from model_bakery import baker
@@ -218,6 +219,20 @@ class AdoptUnstampedWorkOnRegistrationTest(ByteDeckTenantTestCase):
         later.refresh_from_db()
         self.assertIsNone(later.semester_id)
 
+    def test_register__a_fixture_load_adopts_nothing(self):
+        """Django sends raw=True while deserializing a fixture, when the submissions this
+        would move are read from a database that is only part loaded. Adoption sits that
+        save out and waits for a real one."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+        registration = CourseStudent(
+            user=self.student, course=baker.make(Course), semester=self.semester,
+        )
+
+        post_save.send(sender=CourseStudent, instance=registration, created=True, raw=True)
+
+        submission.refresh_from_db()
+        self.assertIsNone(submission.semester_id)
+
 
 class AdoptUnstampedWorkOnSemesterOpenTest(ByteDeckTenantTestCase):
     """Opening a semester brings its students' on-the-go work into it (issue #2476)."""
@@ -319,6 +334,18 @@ class AdoptUnstampedWorkOnSemesterOpenTest(ByteDeckTenantTestCase):
 
         submission.refresh_from_db()
         self.assertEqual(submission.semester_id, self.semester.id)
+
+    def test_open__a_fixture_load_adopts_nothing(self):
+        """The same rule as the receiver on CourseStudent: a raw save is a fixture being
+        deserialized, and the registrations this reads may not be loaded yet, so it adopts
+        nothing and leaves the work for a real save to pick up."""
+        submission = QuestSubmission.objects.create_submission(self.student, self.quest)
+        self.semester.status = Semester.Status.OPEN
+
+        post_save.send(sender=Semester, instance=self.semester, created=False, raw=True)
+
+        submission.refresh_from_db()
+        self.assertIsNone(submission.semester_id)
 
 
 class UnstampedDoubleStartRaceTest(ByteDeckTenantTestCase):

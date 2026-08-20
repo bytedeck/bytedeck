@@ -1335,7 +1335,13 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     and joining a course is the moment it gains one. Without this it would be stranded: out
     of their in-progress list, which is their new semester's, and out of their available
     list, which drops a quest they already have a submission of.
+
+    Deserializing a fixture is sat out: Django sends raw=True for those saves, and the
+    submissions this moves are read from the database, which is only part loaded then.
     """
+    if kwargs.get('raw'):
+        return
+
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if created and instance.semester_id is not None and instance.semester.is_open:
@@ -1357,7 +1363,14 @@ def semester_adopt_unstamped_work_callback(instance, **kwargs):
     Any save leaving the semester open counts, not just the one that opens it: a semester can
     be started from the admin as well as through SiteConfig.set_active_semester(), and
     adopting when there is nothing left to adopt moves no rows.
+
+    Deserializing a fixture is sat out, the same as its counterpart above: Django sends
+    raw=True for those saves, and both the registrations this reads and the submissions it
+    moves come from a database that is only part loaded then.
     """
+    if kwargs.get('raw'):
+        return
+
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if instance.is_open:
