@@ -2189,6 +2189,35 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['scope'], 'active')
 
+    def test_quest_user_status__export_button_shown_when_user_can_export(self):
+        """A user who may export to the Shared Library gets the export button on the status page.
+
+        This page includes the same quest button bar as the detail page, and the bar
+        asks the `can_export_to_library` tag itself, so the export button appears here
+        exactly as it does everywhere else the bar renders (issue #2536).
+        """
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertContains(response, 'Export this quest to the Library')
+
+    def test_quest_user_status__export_button_hidden_when_library_disabled(self):
+        """With the Shared Library turned off, the status page offers no export button."""
+        site_config = SiteConfig.get()
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Export this quest to the Library')
+
 
 class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     """ Tests for:
@@ -4002,6 +4031,58 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'Import this Campaign into your Deck')
         self.assertNotContains(response, 'EXPERIMENTAL!')
 
+    def test_CategoryList_view__export_button_follows_export_permission(self):
+        """The campaign list renders each campaign's Library export button only for a user
+        who may export.
+
+        The campaign table asks the `can_export_to_library` tag itself (issue #2536),
+        and this guards the table's copy of the button.
+        """
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertContains(response, 'Export this Campaign to the Library')
+
+        # with the Shared Library off nobody may export, so the button goes away
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertNotContains(response, 'Export this Campaign to the Library')
+
+    def test_CategoryDetail_view__export_button_follows_export_permission(self):
+        """The campaign detail page renders its Library export button only for a user who
+        may export, via the same `can_export_to_library` tag as the campaign list (issue #2536)."""
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertContains(response, 'Export this Campaign to the Library')
+
+        # with the Shared Library off nobody may export, so the button goes away
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertNotContains(response, 'Export this Campaign to the Library')
+
     def test_CategoryDetail_view__staff_see_unpublished_quests_of_unpublished_campaign(self):
         """Staff must see a campaign's unpublished quests on the campaign detail page
         regardless of whether the campaign itself is published; only archived quests
@@ -4650,10 +4731,12 @@ class DetailViewTest(ByteDeckTenantTestCase):
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
 
-    def test_detail__can_export_context(self):
-        """
-        Verify 'can_export' context variable is correctly set in quest detail view
-        for staff and students, and that it is disabled in the library schema.
+    def test_detail__export_button_follows_export_permission(self):
+        """The detail page renders the Library export button for a user who may export,
+        and not for one who may not.
+
+        The button bar asks the `can_export_to_library` template tag itself (issue
+        #2536), so this exercises the tag through a full page render.
         """
         # Make a staff user
         self.client.force_login(self.test_teacher)
@@ -4664,19 +4747,14 @@ class DetailViewTest(ByteDeckTenantTestCase):
         site_config.full_clean()
         site_config.save()
 
-        # Staff user in a normal tenant schema
+        # Staff user in a normal tenant schema, with staff export allowed
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
+        self.assertContains(response, 'Export this quest to the Library')
 
-        # Should be in the context
-        self.assertIn('can_export', response.context)
-
-        # Since staff and export allowed, should be True
-        self.assertTrue(response.context['can_export'])
-
-        # Now test as normal student
+        # A student may not export, so they get no export button
         self.client.force_login(self.test_student)
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
-        self.assertFalse(response.context['can_export'])
+        self.assertNotContains(response, 'Export this quest to the Library')
 
 
 class ApproveViewTest(ByteDeckTenantTestCase):
