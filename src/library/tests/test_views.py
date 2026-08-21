@@ -3211,7 +3211,11 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
 
     def test_ImportCampaignView__the_decks_own_campaign_is_left_alone(self):
-        """The teacher's campaign keeps its title, its quests and its published state."""
+        """The teacher's campaign keeps its title, its published state and only its own quests.
+
+        The last of those is the one that matters: a campaign that quietly gains somebody
+        else's quests has not been left alone, however unchanged its own fields are.
+        """
         mine = baker.make(Category, title="Studio Habits", published=True)
         my_quest = baker.make(Quest, name="My Own Welcome", campaign=mine)
 
@@ -3222,6 +3226,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         self.assertEqual(mine.title, "Studio Habits")
         self.assertTrue(mine.published)
         self.assertEqual(my_quest.campaign, mine)
+        self.assertEqual(list(Quest.objects.all_including_archived().filter(campaign=mine)), [my_quest])
 
     def test_ImportCampaignView__the_arriving_quests_go_into_the_arriving_campaign(self):
         """The imported quests land in the new campaign, not the teacher's."""
