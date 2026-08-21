@@ -975,9 +975,12 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         # As with a single quest: the campaign and its quests arrive unpublished and
-        # unreachable, so the import is only half the job (#2377). Publishing is on the
-        # campaign's own edit form; the prerequisite belongs to one of its quests, so that
-        # step links to the campaign, where they are listed.
+        # unreachable, so the import is only half the job (#2377). Both remaining steps are
+        # on the campaign's own page: the publish button there is the one that publishes
+        # the quests too, and the quests are listed there for the one that needs a
+        # prerequisite.
+        # The edit form is deliberately not linked: ticking Published on it publishes the
+        # campaign alone, leaving every quest a draft and students still seeing nothing.
         messages.success(
             request,
             format_html(
@@ -987,7 +990,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
                 '<strong><a href="{}">prerequisite</a></strong> so the campaign is reachable on the '
                 "quest map.",
                 category.get_absolute_url(), category.name,
-                reverse("quests:category_update", args=[category.id]),
+                category.get_absolute_url(),
                 category.get_absolute_url(),
             )
         )
