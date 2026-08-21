@@ -27,4 +27,12 @@
 {% else %}
   {% querystring sort=column page=None as sort_url %}
 {% endif %}
-<a href="{{ sort_url }}" title="{% if sort_column == column and not sort_descending %}Reverse this sort{% else %}Sort the whole list by {{ label }}{% endif %}">{{ label }}{% if sort_column == column %}<i class="fa fa-fw fa-sort-{% if sort_descending %}desc{% else %}asc{% endif %}"></i>{% else %}<i class="fa fa-fw fa-sort text-muted"></i>{% endif %}</a>
+<a href="{{ sort_url }}"
+   title="{% if sort_column == column and not sort_descending %}Reverse this sort{% else %}Sort the whole list by {{ label }}{% endif %}">{{ label }}
+  {% comment %} The glyph repeats what the link's title says, so it is hidden from screen readers. {% endcomment %}
+  {% if sort_column == column %}
+    <i class="fa fa-fw fa-sort-{% if sort_descending %}desc{% else %}asc{% endif %}" aria-hidden="true"></i>
+  {% else %}
+    <i class="fa fa-fw fa-sort text-muted" aria-hidden="true"></i>
+  {% endif %}
+</a>
