@@ -3199,7 +3199,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
             reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
         )
 
-    def test_import_campaign__a_clashing_title_arrives_renamed(self):
+    def test_ImportCampaignView__a_clashing_title_arrives_renamed(self):
         """The arriving campaign gets a title of its own rather than 404ing (#2532)."""
         mine = baker.make(Category, title="Studio Habits")
 
@@ -3210,7 +3210,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         self.assertNotEqual(arrived.pk, mine.pk)
         self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
 
-    def test_import_campaign__the_decks_own_campaign_is_left_alone(self):
+    def test_ImportCampaignView__the_decks_own_campaign_is_left_alone(self):
         """The teacher's campaign keeps its title, its quests and its published state."""
         mine = baker.make(Category, title="Studio Habits", published=True)
         my_quest = baker.make(Quest, name="My Own Welcome", campaign=mine)
@@ -3223,7 +3223,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         self.assertTrue(mine.published)
         self.assertEqual(my_quest.campaign, mine)
 
-    def test_import_campaign__the_arriving_quests_go_into_the_arriving_campaign(self):
+    def test_ImportCampaignView__the_arriving_quests_go_into_the_arriving_campaign(self):
         """The imported quests land in the new campaign, not the teacher's."""
         mine = baker.make(Category, title="Studio Habits")
 
@@ -3234,7 +3234,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         self.assertEqual(imported_quest.campaign, arrived)
         self.assertNotEqual(imported_quest.campaign, mine)
 
-    def test_import_campaign__the_teacher_is_told_the_campaign_was_renamed(self):
+    def test_ImportCampaignView__the_teacher_is_told_the_campaign_was_renamed(self):
         """The rename is announced, since the teacher is looking for the Library's title."""
         baker.make(Category, title="Studio Habits")
 
@@ -3246,7 +3246,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
             f"expected the rename to be announced, got {texts}",
         )
 
-    def test_import_campaign__an_unclashing_title_is_untouched(self):
+    def test_ImportCampaignView__an_unclashing_title_is_untouched(self):
         """A campaign whose title is free keeps it, and nothing is announced."""
         response = self._import()
 
@@ -3255,7 +3255,7 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         texts = [str(message) for message in response.context['messages']]
         self.assertFalse(any("cannot share a title" in text for text in texts))
 
-    def test_import_campaign__a_second_clashing_import_is_numbered(self):
+    def test_ImportCampaignView__a_second_clashing_import_is_numbered(self):
         """A second arrival on the same day does not collide with the first rename."""
         baker.make(Category, title="Studio Habits")
         baker.make(Category, title=f"Studio Habits (Imported on {date.today()})")
