@@ -1,0 +1,30 @@
+{% comment %}
+  #2410: a column heading that sorts the whole list, for a table paginated by the server.
+
+  Sorting in the browser only reaches the rows the browser holds, which on a paginated
+  table is one page: clicking "XP" would reorder those rows rather than answering which
+  quests in the whole list are worth the most. So the heading is a link that asks the
+  view for an order, and the database does the sorting.
+
+  Include it inside the <th>, so the cell keeps its own layout classes, and leave
+  data-sortable off that column or bootstrap-table will sort the page underneath it:
+
+    <th class="col-sm-1 text-right" data-field="xp">
+      {% include "snippets/sortable_column_heading.html" with column="xp" label="XP" %}
+    </th>
+
+  Takes `column` (the ?sort= value the view accepts for it) and `label` (what the heading
+  reads). Expects `sort_column` and `sort_descending` in the context, describing the order
+  the view actually applied, so the arrow shows the real order rather than the asked-for one.
+
+  The link asks for this column ascending, unless the list is already sorted by it that
+  way, in which case it asks for the reverse. It drops ?page=, because page 3 of one order
+  has nothing to do with page 3 of another, and keeps every other parameter, so a sort does
+  not throw away a search.
+{% endcomment %}
+{% if sort_column == column and not sort_descending %}
+  {% querystring sort="-"|add:column page=None as sort_url %}
+{% else %}
+  {% querystring sort=column page=None as sort_url %}
+{% endif %}
+<a href="{{ sort_url }}" title="{% if sort_column == column and not sort_descending %}Reverse this sort{% else %}Sort the whole list by {{ label }}{% endif %}">{{ label }}{% if sort_column == column %}<i class="fa fa-fw fa-sort-{% if sort_descending %}desc{% else %}asc{% endif %}"></i>{% else %}<i class="fa fa-fw fa-sort text-muted"></i>{% endif %}</a>

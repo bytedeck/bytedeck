@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -569,6 +569,22 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     #: Quests per page, matching the campaigns tab.
     paginate_by = 15
 
+    #: What each sortable column sorts by, ascending, most significant field first.
+    #:
+    #: The browser only holds one page of a paginated Library, so a sort done there
+    #: reorders those 15 rows rather than answering "which quests in the Library are
+    #: worth the most XP" (#2410). The ordering therefore happens in the database, and
+    #: this maps the `?sort=` values a link may ask for onto the fields allowed to
+    #: satisfy them, so a hand-edited URL cannot order by anything else.
+    #:
+    #: Every column ends in `name`, which is unique, so a page boundary never falls in
+    #: the middle of a run of equal values and shows a quest twice or not at all.
+    SORT_COLUMNS = {
+        'name': ('name',),
+        'xp': ('xp', 'name'),
+        'campaign': ('campaign__title', 'name'),
+    }
+
     def get_search_term(self):
         """The search term the user typed, from the `q` query parameter.
 
@@ -596,6 +612,50 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             return max(int(requested), 1)
         except (TypeError, ValueError):
             return requested
+
+    def get_sort(self):
+        """The column the reader asked to sort by, from the `sort` query parameter.
+
+        A leading minus asks for the reverse, the way Django's own `order_by` spells it,
+        so `?sort=-xp` is the most expensive quest first.
+
+        A value naming no sortable column is ignored rather than refused: the parameter
+        arrives from a link, and a stale or hand-edited one is better answered with the
+        list in its usual order than with an error page.
+
+        Returns:
+            tuple[str | None, bool]: the column key, or None to leave the default order
+            alone, and whether it was asked for in reverse.
+        """
+        requested = self.request.GET.get('sort', '')
+        column = requested.removeprefix('-')
+
+        if column not in self.SORT_COLUMNS:
+            return None, False
+
+        return column, requested.startswith('-')
+
+    def sort_library_quests(self, quests, column, descending):
+        """Order the quests by a sortable column, ties broken by quest name.
+
+        Only the column itself reverses. The tie-breaks stay ascending, so a run of quests
+        worth the same XP reads alphabetically whichever way the XP column is pointing.
+
+        `nulls_last` keeps quests with nothing in that column (a quest in no campaign) at
+        the bottom in both directions, rather than having them lead the descending page.
+
+        Args:
+            quests (QuerySet[Quest]): the quests to order.
+            column (str): a key of `SORT_COLUMNS`.
+            descending (bool): whether to reverse the column.
+
+        Returns:
+            QuerySet[Quest]: the same quests, ordered.
+        """
+        first, *tie_breaks = self.SORT_COLUMNS[column]
+        primary = F(first).desc(nulls_last=True) if descending else F(first).asc(nulls_last=True)
+
+        return quests.order_by(primary, *tie_breaks)
 
     def get_library_quests(self, search_term):
         """The listable Library quests, narrowed by the search term.
@@ -637,9 +697,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         Populate context with a page of the shared library's listable quests.
 
         The Library is read one page at a time, since loading all of it into memory on
-        every request does not survive a Library worth browsing (#2379). Searching
-        happens in the database for the same reason, so it covers every quest rather
-        than only the ones already sent to the browser.
+        every request does not survive a Library worth browsing (#2379). Searching and
+        sorting happen in the database for the same reason, so both cover every quest
+        rather than only the ones already sent to the browser (#2410).
 
         Args:
             **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
@@ -652,6 +712,10 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
                     related Campaign and tags prefetched.
                 - page_obj (Page): The current page, for the pagination controls.
                 - search_term (str): What the user searched for, to keep the box filled in.
+                - sort_column (str | None): Which column the list is sorted by, or None
+                    for the default order, so the heading can show which one it is.
+                - sort_descending (bool): Which way that column points, so the heading can
+                    show the arrow and link to the opposite.
                 - num_matching_quests (int): How many quests the search matched, across
                     every page.
                 - num_quests (int): Number of listable quests in the Library, used for the UI
@@ -665,9 +729,14 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         context = super().get_context_data(**kwargs)
         search_term = self.get_search_term()
+        sort_column, sort_descending = self.get_sort()
 
         with library_schema_context():
             quests = self.get_library_quests(search_term)
+
+            if sort_column:
+                quests = self.sort_library_quests(quests, sort_column, sort_descending)
+
             paginator = Paginator(quests, self.paginate_by)
             # get_page (rather than page) turns a junk or out-of-range ?page= into the
             # nearest real page instead of raising
@@ -695,6 +764,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             'library_quests': page_quests,
             'page_obj': page,
             'search_term': search_term,
+            'sort_column': sort_column,
+            'sort_descending': sort_descending,
             'viewer_is_library_staff': viewer_is_library_staff(self.request),
             'num_matching_quests': paginator.count,
             'num_quests': num_quests,

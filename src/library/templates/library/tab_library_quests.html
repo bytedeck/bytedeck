@@ -10,6 +10,13 @@
     this page. Submitting drops any ?page=, so a new search starts at its own first page.
   {% endcomment %}
   <form class="form-inline list-search-form" method="get" action="{% url 'library:quest_list' %}">
+    {% if sort_column %}
+      {% comment %}
+        The chosen order is carried into the search, since searching narrows the list
+        rather than reordering it, and a form GET would otherwise drop the parameter.
+      {% endcomment %}
+      <input type="hidden" name="sort" value="{% if sort_descending %}-{% endif %}{{ sort_column }}">
+    {% endif %}
     <div class="form-group">
       <label class="sr-only" for="library-quest-search">Search the Library</label>
       <div class="input-group">
@@ -46,10 +53,26 @@
     <thead>
       <tr class="panel-heading">
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
-        <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
-        <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
-        <th class="col-sm-2 text-right hidden-xs" data-field="campaign" data-sortable="true">Campaign</th>
-        <th class="col-sm-1 text-center hidden-xs" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+        {% comment %}
+          The headings sort in the database, not in the browser, so they order the whole
+          Library rather than the fifteen quests on this page (#2410). data-sortable is
+          therefore off: leaving it on would sort the page underneath the link.
+
+          {{ config.custom_name_for_tag }}s is not sortable at all. A quest carries any
+          number of them, so there is no one value to sort it by, and what the column is
+          really for is finding the quests that carry a given one: the search box above
+          matches tags, and covers the whole Library while it does it.
+        {% endcomment %}
+        <th class="col-sm-5 col-xs-8" data-field="name">
+          {% include "snippets/sortable_column_heading.html" with column="name" label="Quest" %}
+        </th>
+        <th class="col-sm-1 text-right col-xs-2" data-field="xp">
+          {% include "snippets/sortable_column_heading.html" with column="xp" label="XP" %}
+        </th>
+        <th class="col-sm-2 text-right hidden-xs" data-field="campaign">
+          {% include "snippets/sortable_column_heading.html" with column="campaign" label="Campaign" %}
+        </th>
+        <th class="col-sm-1 text-center hidden-xs" data-field="tags">{{ config.custom_name_for_tag }}s</th>
         <th class="col-sm-2 hidden-xs" data-field="status_icons"></th>
       </tr>
     </thead>
