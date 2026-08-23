@@ -6,6 +6,20 @@
 {% endblock %}
 
 {% block content %}
+  {% comment %} Attribution: content travels under CC BY-SA, which asks for it (#2377) {% endcomment %}
+  {% comment %}
+    The deck name only links for the Library's own staff: another deck is closed to
+    everyone else, so for them the link would be a dead end.
+  {% endcomment %}
+  {% if origin %}
+    <p class="text-muted">
+      Shared by {{ origin.shared_by }} of
+      {% if viewer_is_library_staff %}
+        <a href="{{ origin.deck_url }}">{{ origin.deck_name }}</a>
+      {% else %}{{ origin.deck_name }}{% endif %}
+      on {{ origin.shared_on|date:"j M Y" }}.
+    </p>
+  {% endif %}
   {% with object=category %}
     {% include "quest_manager/category_detail_content.html" %}
   {% endwith %}

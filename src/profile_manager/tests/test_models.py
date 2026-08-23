@@ -142,6 +142,38 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertIsInstance(self.user.profile, Profile)
         self.assertEqual(str(self.user.profile), self.user.username)
 
+    def _new_user_notifications_for(self, user):
+        """Return the 'New user registered' notifications whose target is this user's profile.
+
+        Args:
+            user: the User whose profile is the notification target to filter on.
+
+        Returns:
+            A lazy Notification QuerySet of the matching 'New user registered' notifications.
+        """
+        return Notification.objects.filter(
+            verb__icontains="New user registered",
+            target_content_type=ContentType.objects.get_for_model(Profile),
+            target_object_id=user.profile.id,
+        )
+
+    def test_create_profile__notifies_staff_when_a_student_registers(self):
+        """Creating a student (non-staff) user fires the 'New user registered' notification to staff."""
+        student = baker.make(User)  # non-staff, non-superuser by default
+        self.assertTrue(self._new_user_notifications_for(student).exists())
+
+    def test_create_profile__notifies_staff_when_a_teacher_is_added(self):
+        """A staff (teacher) account is created administratively, but it still fires the
+        'New user registered' notification: only the superuser system account is suppressed (#2320)."""
+        teacher = baker.make(User, is_staff=True)
+        self.assertTrue(self._new_user_notifications_for(teacher).exists())
+
+    def test_create_profile__no_notification_for_superuser_account(self):
+        """A superuser account (the deck's system admin, created automatically at deck creation) does
+        not fire the 'New user registered' notification, since it is not a real registration (#2320)."""
+        admin = baker.make(User, is_superuser=True)
+        self.assertFalse(self._new_user_notifications_for(admin).exists())
+
     def test_profile_deletion__cascades_to_user(self):
         """When a profile is deleted, via queryset (admin) or directly, the user should be deleted too. """
         Profile.objects.filter(pk=self.profile.pk).delete()
@@ -276,54 +308,159 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         default_starting_rank = "Digital Noob"
         self.assertEqual(self.profile.rank().name, default_starting_rank)
 
+    def test_course_ranks__is_empty_without_a_second_course(self):
+        """One course holds all of a student's XP, so its rank is the rank they already have.
+        There is nothing to list, and the navbar keeps its single icon (issue #2453)."""
+        self.assertEqual(self.profile.course_ranks(), [])
+
+        self.create_active_course_registration()
+
+        self.assertEqual(self.profile.course_ranks(), [])
+
+    def test_course_ranks__gives_each_course_its_own_rank_highest_first(self):
+        """A student in two courses has different XP in each, so they are at a different rank
+        in each. The list leads with the highest, which is the one the navbar shows closed."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.user, course=course,
+                       block=baker.make('courses.Block'), semester=self.active_sem)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=60),
+            course=maths, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        course_ranks = self.profile.course_ranks()
+
+        # 60 XP all against Maths reaches the deck's second rank there, while Art, holding
+        # none of it, is still at the starting rank
+        self.assertEqual([course for course, rank in course_ranks], [maths, art])
+        self.assertEqual([rank.name for course, rank in course_ranks], ['Digital Novice', 'Digital Noob'])
+
     def test_mark__no_courses(self):
         """A student not in any current courses should return None"""
         # the test profile shouldn't be in any courses yet, but sanity check here
         self.assertFalse(self.profile.current_courses().exists())
         self.assertIsNone(self.profile.mark())
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__single_course(self, mock_current_courses):
-        """mark() returns the single course's calculated mark."""
-        mock_coursestudent = Mock()
-        mock_coursestudent.calc_mark.return_value = 125
-        mock_current_courses.return_value = [mock_coursestudent]
-        self.assertEqual(self.profile.mark(), 125)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__single_course(self, fraction_complete):
+        """mark() works the student's XP into a percentage of what their course is out of."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__multiple_courses(self, mock_current_courses):
-        """mark() divides the first course's mark by the number of courses."""
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 87
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 87 / 2)
+        # 50 XP halfway through the semester projects to 100, out of the course's 1000
+        self.assertEqual(self.profile.mark(), 10)
 
-    @patch('profile_manager.models.Profile.current_courses')
-    def test_mark__cap_100(self, mock_current_courses):
-        """Test that mark() caps at 100 if that SiteConfig option is set"""
-        config = SiteConfig.get()
-        config.cap_marks_at_100_percent = True
-        config.save()
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_xp_invalidate_cache__stores_a_mark_worked_out_from_the_new_total(self, fraction_complete):
+        """mark_cached has to be the mark for the XP just counted, not the one before it.
 
-        mock_coursestudent1 = Mock()
-        mock_coursestudent1.calc_mark.return_value = 125
+        The mark now comes from the student's registration, which reads xp_cached back out of
+        the database, so the new total has to be saved before the mark is asked for."""
+        self.create_active_course_registration().course.__class__.objects.update(xp_for_100_percent=1000)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            semester=self.active_sem, is_completed=True, is_approved=True,
+        )
 
-        # The mark() method currently only checks the length of the list, and only uses the first course
-        mock_current_courses.return_value = [mock_coursestudent1]
-        self.assertEqual(self.profile.mark(), 100)
+        self.profile.xp_invalidate_cache()
 
-        # Add a second course, should not be capped anymore
-        mock_current_courses.return_value = [mock_coursestudent1, "Another Course"]
-        self.assertEqual(self.profile.mark(), 125 / 2)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.xp_cached, 50)
+        self.assertEqual(self.profile.mark_cached, 10)
 
-        # What if both are over 100?
-        mock_coursestudent1.calc_mark.return_value = 225
-        self.assertEqual(self.profile.mark(), 100)
+    def test_xp_invalidate_cache__names_the_patch_behind_a_mark_that_is_not_a_number(self):
+        """A mark that is not a number cannot be stored, and the error says why.
 
-        # NEED TO RETURN SiteConfig object back to original state for other tests!
-        config.cap_marks_at_100_percent = False
-        config.save()
+        Saving a CourseStudent refreshes the cached mark, and the mark reaches
+        CourseStudent.xp(), so a test that patches the XP split after it has already created
+        a registration puts a MagicMock into mark_cached. What that produces on its own is
+        "FieldError: Aggregate functions are not allowed in this query", raised from
+        Profile.save() and naming nothing that led there (issue #2486). The check names the
+        cause and the helper that avoids it."""
+        with patch('profile_manager.models.Profile.mark', return_value=Mock()):
+            with self.assertRaisesMessage(TypeError, 'patch_registration_xp'):
+                self.profile.xp_invalidate_cache()
+
+    def test_xp_invalidate_cache__stores_a_mark_of_none(self):
+        """None is a mark in its own right, not a failed one: a student in no course has no
+        percentage, and so does one whose every course is run on XP alone (issue #403). The
+        check on the mark has to let it through rather than treating it as a bad value."""
+        self.profile.xp_invalidate_cache()
+
+        self.profile.refresh_from_db()
+        self.assertIsNone(self.profile.mark_cached)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__skips_a_course_run_on_xp_alone(self, fraction_complete):
+        """A course can be run on XP alone and have no mark at all (issue #403). A student who
+        holds one of those and a graded course still has a mark, so the one number reported here
+        comes from the graded one however the two happen to sort."""
+        # ordered by block name, so the XP-only course is the one that sorts first
+        for_joy = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False),
+            block=baker.make('courses.Block', name='A block'),
+        )
+        graded = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', xp_for_100_percent=1000),
+            block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            course=graded.course, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+
+        self.assertEqual(list(self.profile.current_courses())[0], for_joy)
+        self.assertIsNone(for_joy.mark())
+        # 50 XP halfway through the semester projects to 100, out of the graded course's 1000
+        self.assertEqual(self.profile.mark(), 10)
+
+    def test_mark__none_when_every_course_is_run_on_xp_alone(self):
+        """With nothing but ungraded courses there is no mark to report, which is not the same
+        as a mark of zero: the places that show one show nothing instead."""
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course', uses_marks=False), block=baker.make('courses.Block'),
+        )
+
+        self.assertIsNone(self.profile.mark())
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark__multiple_courses(self, fraction_complete):
+        """A student in several courses has a mark in each, so this one number is the first
+        registration's, whole. Each registration's XP is already only its own share, so nothing
+        is divided a second time here (issue #2440 moved the split from the mark into the XP)."""
+        # distinct blocks: registrations are ordered by block name, and two rows with the same
+        # ordering key can come back in either order, which would make this test flaky
+        first_registration = baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='A block'),
+        )
+        baker.make(
+            'courses.CourseStudent', user=self.user, semester=self.active_sem,
+            course=baker.make('courses.Course'), block=baker.make('courses.Block', name='B block'),
+        )
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.user, quest=baker.make('quest_manager.Quest', xp=50),
+            course=first_registration.course, semester=self.active_sem, is_completed=True, is_approved=True,
+        )
+        self.profile.xp_invalidate_cache()
+        registrations = list(self.profile.current_courses())
+
+        self.assertEqual(registrations[0], first_registration)
+        self.assertEqual(self.profile.mark(), registrations[0].mark())
+        # the courses really do differ, so returning the first one's mark is a choice and not a
+        # coincidence of both being the same number
+        self.assertNotEqual(registrations[0].mark(), registrations[1].mark())
 
 
 class SmartListTests(SimpleTestCase):

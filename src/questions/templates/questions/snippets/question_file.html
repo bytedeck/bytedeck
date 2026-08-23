@@ -1,0 +1,36 @@
+{% load comment_tags question_tags %}
+{% comment %}
+  One of a question's stored files (a student's file answer, or the teacher's solution file),
+  shown as the browser can show it: an image, a video player or an audio player, and a link
+  to open it either way (#2172). A file of any other kind is the link alone.
+
+  Expects `file` (a file field's value). Pass `thumb=True` in a narrow space, such as a table
+  cell: there only images embed, as a small thumbnail standing in for the link, since a video
+  or audio player has no useful size there.
+{% endcomment %}
+{% with kind=file|media_kind %}
+  {% if kind == 'image' %}
+    <a href="{{ file.url }}" target="_blank">
+      {# alt is the file's own name: it is the only description of the picture anyone has entered #}
+      <img class="{% if thumb %}question-media-thumb{% else %}question-media{% endif %}"
+           src="{{ file.url }}" alt="{{ file|filename|striptags }}">
+    </a>
+    {% if not thumb %}<br><a href="{{ file.url }}" target="_blank">{{ file|filename }}</a>{% endif %}
+  {% elif kind == 'video' and not thumb %}
+    <video class="question-media" controls preload="metadata">
+      <source src="{{ file.url }}">
+      Your browser cannot play this video.
+    </video>
+    <br><a href="{{ file.url }}" target="_blank">{{ file|filename }}</a>
+  {% elif kind == 'audio' and not thumb %}
+    <audio class="question-media" controls preload="metadata">
+      <source src="{{ file.url }}">
+      Your browser cannot play this audio.
+    </audio>
+    <br><a href="{{ file.url }}" target="_blank">{{ file|filename }}</a>
+  {% else %}
+    {# in a table cell the name is cut short, so one long file name cannot stretch the column #}
+    <a href="{{ file.url }}" target="_blank">
+      {% if thumb %}{{ file|filename|default:"Unnamed File"|truncatechars:20 }}{% else %}{{ file|filename }}{% endif %}</a>
+  {% endif %}
+{% endwith %}

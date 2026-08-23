@@ -2,10 +2,11 @@
 {% load static %}
 {% load crispy_forms_tags %}
 {% load question_tags %}
+{% load comment_tags %}
 
 {% block head %}
+    {# the comment box is a summernote editor too, so its media covers the answer editors #}
     {{ submission_form.media }}
-    {% if question_formset %}{{ question_formset.media }}{% endif %}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
@@ -97,7 +98,7 @@
       {% if request.user.is_staff %}
         <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}">
       {% else %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}">
+        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}">
       {% endif %}
 
         {% csrf_token %}
@@ -123,6 +124,16 @@
                 {{ form.question.instructions|unwrap_p }}
               </div>
               {% crispy form %}
+              {% comment %} A file kept from an earlier submit that failed validation: the file input
+                 above always renders empty (browsers never repopulate it), so without this the
+                 student has no way to tell their upload survived, and would re-attach it (#2165). {% endcomment %}
+              {% if form.instance.response_file %}
+                <p class="help-block">
+                  <i class="fa fa-paperclip fa-fw"></i> Attached:
+                  <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  <small>(already saved: only choose a file above if you want to replace it)</small>
+                </p>
+              {% endif %}
             </div>
           {% endfor %}
           </div>
@@ -135,6 +146,23 @@
         {% endif %}
         <div id="main-comment-form">
           {{ submission_form | crispy }}
+          {% comment %} Files kept from an earlier submit that failed validation: the "Attach files"
+             input above always renders empty (browsers never repopulate it), so without this the
+             student has no way to tell their uploads survived, and would choose them again (#2427).
+             Only the student sees it: these are their pending attachments, and staff post this form
+             to the approve view, where their own files are handled separately. {% endcomment %}
+          {% if request.user == submission.user %}
+            {% with submission.draft_comment.document_set.all as draft_documents %}
+              {% if draft_documents %}
+                <p class="help-block">
+                  <i class="fa fa-paperclip fa-fw"></i> Attached:
+                  {% for document in draft_documents %}<a href="{{ document.docfile.url }}"
+                     target="_blank">{{ document.docfile|filename }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+                  <small>(already saved: only choose files above if you want to attach more)</small>
+                </p>
+              {% endif %}
+            {% endwith %}
+          {% endif %}
         </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
@@ -147,7 +175,7 @@
         {% else %}
           {% if submission.quest.published %}
             <a id='save-draft-btn' class='btn btn-default'
-               title="Your draft autosaves about every minute, but you can force a save now with this button. Note: attached files are NOT saved in a draft.">
+               title="Your draft autosaves about every minute, but you can force a save now with this button. Chosen files are saved with it too.">
               <span id="draft-text">Save Draft</span>
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
@@ -181,7 +209,6 @@
 {% block js %}
     <script>
         $(document).ready(function() {
-            $('[data-toggle="tooltip"]').tooltip();
 
 
             {% if anchor %}
@@ -210,11 +237,33 @@
                 // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
                 var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
                 var msg = '<p>' + escaped + '<br></p>';
-                var text_area = $('div.note-editable');
+                // scoped to the main comment form: question answers add their own editors
+                var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
                   text_area.html(msg)
                 else
                   text_area.append(msg);
+            });
+
+            // Live character counter for the short answers (#2482). With JavaScript off the
+            // hint stays the server-rendered "Up to 200 characters."; here that sentence moves
+            // into a screen-reader-only span (a count re-announced on every keystroke is noise
+            // there) and a visible counter follows the student's typing, turning amber as the
+            // limit approaches. The input's maxlength does the actual enforcing either way.
+            $('.question-submission-form input[type=text][maxlength]').each(function () {
+                var input = $(this);
+                var max = parseInt(input.attr('maxlength'), 10);
+                var hint = $('#hint_' + this.id);  // crispy renders each field's help text with this id
+                if (!max || !hint.length) return;
+                hint.wrapInner('<span class="sr-only"></span>');
+                var counter = $('<span aria-hidden="true"></span>').appendTo(hint);
+                var update = function () {
+                    var used = input.val().length;
+                    counter.text(used + ' / ' + max + ' characters');
+                    counter.toggleClass('text-warning', (max - used) / max <= 0.1);
+                };
+                input.on('input', update);
+                update();
             });
 
             // Save drafts via Ajax when button pressed
@@ -235,20 +284,17 @@
             draftComment = $summernoteEditor.html()
             xpRequested = $('#id_xp_requested').val()
 
-            // Collect draft answers to the quest's questions (text answers only; files
-            // upload on submit). Pairs each row's hidden id with its response text.
+            // Collect draft answers to the quest's questions. Pairs each row's hidden id
+            // with its response text; chosen files ride along in the FormData below (#1459).
             var answers = {};
             $('.question-submission-form [name^="question_submissions-"]').each(function() {
                 var name = $(this).attr('name');
                 if (/-id$/.test(name)) {
                     answers[name] = $(this).val();
                 } else if (/-response_text$/.test(name)) {
-                    // summernote-backed textareas need the API to get current content
-                    if ($(this).next('.note-editor').length) {
-                        answers[name] = $(this).summernote('code');
-                    } else {
-                        answers[name] = $(this).val();
-                    }
+                    // summernote keeps the textarea in sync as the student types, so its
+                    // value is current for long answers as well as short ones
+                    answers[name] = $(this).val();
                 }
             });
 
@@ -268,19 +314,28 @@
                 $draftText.hide(0) // no delay
                 $draftSpin.show()
 
+                // The whole form goes as FormData so any files chosen on the page (comment
+                // attachments and file answers) are saved with the draft too (#1459). The
+                // named keys below are what the server reads; the rest (the formset's
+                // management form, row ids and files) come from the form itself.
+                var mainForm = document.getElementById('submission-main-form');
+                var formData = mainForm ? new FormData(mainForm) : new FormData();
+                formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
+                formData.set('comment', draftComment);
+                formData.set('submission_id', '{{ submission.id }}');
+                formData.set('xp_requested', xpRequested || '');
+                formData.set('answers', JSON.stringify(answers));
+
                 $.ajax({
                     url : "{% url 'quests:ajax_save_draft' %}",
                     type : "POST", // http method
-                    data : {
-                      csrfmiddlewaretoken: "{{ csrf_token }}",
-                      comment: draftComment,
-                      submission_id: {{ submission.id }},
-                      xp_requested: xpRequested,
-                      answers: JSON.stringify(answers)
-                    }, // data sent with the post request
+                    data : formData,
+                    processData : false, // hand jQuery the FormData as-is
+                    contentType : false, // let the browser set the multipart boundary
 
                     // handle a successful response
                     success : function(json) {
+                      show_saved_files(json);
                       hide_check_show_text();
                     },
 
@@ -294,6 +349,39 @@
                 });
             }
 
+        }
+
+        function show_saved_files(json) {
+            // A saved file is stored with the draft, so its input is cleared: the file no
+            // longer needs re-choosing, and the next autosave must not upload it again. A
+            // note under the input says where it went. A rejected file is cleared too, with
+            // the validation error in its place, so the student re-chooses knowing why.
+            $.each(json.saved_answer_files || {}, function(field_name, file_name) {
+                file_note($('[name="' + field_name + '"]'),
+                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
+                    ' <small>(saved with your draft)</small>');
+            });
+            if ((json.saved_attachments || []).length) {
+                var names = json.saved_attachments.map(function(name) { return $('<i>').text(name).html(); });
+                file_note($('#submission-main-form input[name="attachments"]'),
+                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + names.join(', ') +
+                    ' <small>(saved with your draft)</small>');
+            }
+            $.each(json.file_errors || {}, function(field_name, error_text) {
+                file_note($('[name="' + field_name + '"]'),
+                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>');
+            });
+        }
+
+        function file_note(input, html) {
+            if (!input.length) return;
+            input.val('');
+            var note = input.closest('.form-group').find('.draft-file-note');
+            if (!note.length) {
+                note = $('<p class="help-block draft-file-note"></p>');
+                input.closest('.form-group').append(note);
+            }
+            note.html(html);
         }
 
         function hide_check_show_text() {

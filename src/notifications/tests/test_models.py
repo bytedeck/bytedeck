@@ -429,3 +429,144 @@ class NotificationModel_html_strip_Test(TestCase):
         test_case = 'ab <img src="x.png"> cd'
         # char_limit=1 is consumed by "a"; everything after is dropped.
         self.assertEqual(Notification.html_strip(test_case, char_limit=1), "a...")
+
+class NotificationEscapingTest(ByteDeckTenantTestCase):
+    """A notification's text is rendered with |safe, so it has to build itself safely.
+
+    The values it interpolates are names people choose: a student's own preferred name
+    reaches it through `Profile.__str__`, and a quest's name through the target object.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher and a student (a teacher must exist first or student creation fails)."""
+        cls.teacher = Recipe(User, is_staff=True).make()
+        cls.student = baker.make(User)
+
+    def make_notification(self, **kwargs):
+        """Build a notification sent by the teacher, for use as the subject of a test.
+
+        Args:
+            **kwargs: fields to set on the Notification, overriding or adding to the
+                recipient and sender this sets up.
+
+        Returns:
+            Notification: the saved notification.
+        """
+        return baker.make(
+            Notification,
+            recipient=self.student,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher),
+            sender_object_id=self.teacher.id,
+            **kwargs,
+        )
+
+    def test_str__escapes_the_actors_name(self):
+        """A student's own profile name is escaped, wherever they are named.
+
+        `preferred_name` is student-editable and lands in `Profile.__str__`, which is what
+        the staff "New user registered" notice names, so it reaches every teacher's
+        notification list.
+        """
+        self.student.first_name = 'Sam'
+        self.student.last_name = 'Jones'
+        self.student.save()
+        profile = self.student.profile
+        profile.preferred_name = '<img src=x onerror="alert(1)">'
+        profile.save()
+        # as the target, which is how the "New user registered" notice names them,
+        notification = self.make_notification(
+            verb='registered', target_content_type=ContentType.objects.get_for_model(profile),
+            target_object_id=profile.id,
+        )
+
+        rendered = str(notification)
+
+        self.assertNotIn('<img src=x onerror="alert(1)">', rendered)
+        self.assertIn('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;', rendered)
+
+        # and as the sender, which is the other place a name is interpolated.
+        as_sender = baker.make(
+            Notification,
+            recipient=self.teacher,
+            sender_content_type=ContentType.objects.get_for_model(profile),
+            sender_object_id=profile.id,
+            verb='did something',
+        )
+
+        rendered = str(as_sender)
+
+        self.assertNotIn('<img src=x onerror="alert(1)">', rendered)
+        self.assertIn('&lt;img src=x onerror=&quot;alert(1)&quot;&gt;', rendered)
+
+    def test_str__escapes_the_target_objects_name(self):
+        """A quest named with markup is named as text, not rendered."""
+        quest = baker.make('quest_manager.Quest', name='Quest <script>alert(1)</script>')
+        notification = self.make_notification(
+            verb='commented on', target_content_type=ContentType.objects.get_for_model(quest),
+            target_object_id=quest.id,
+        )
+
+        rendered = str(notification)
+
+        self.assertNotIn('<script>alert(1)</script>', rendered)
+        self.assertIn('&lt;script&gt;alert(1)&lt;/script&gt;', rendered)
+
+    def test_str__escapes_the_verb_and_the_link_text(self):
+        """The verb and link text are plain fields, so they are escaped too."""
+        notification = self.make_notification(
+            verb='did <b>something</b>', target_url='/quests/', target_link_text='<b>here</b>',
+        )
+
+        rendered = str(notification)
+
+        self.assertNotIn('<b>something</b>', rendered)
+        self.assertNotIn('<b>here</b>', rendered)
+        self.assertIn('&lt;b&gt;here&lt;/b&gt;', rendered)
+
+    def test_str__keeps_the_image_preview_of_a_comment(self):
+        """An image in the previewed comment survives, which is the point of html_strip.
+
+        The action is the one value that stays live: `html_strip` keeps `<img>` on purpose
+        so an image in a comment shows in the notification dropdown, and what it is given
+        is comment HTML that was sanitized when it was saved.
+        """
+        comment = baker.make('comments.Comment', text='<img src="/media/pic.png">')
+        quest = baker.make('quest_manager.Quest', name='A Quest')
+        notification = self.make_notification(
+            verb='commented on',
+            target_content_type=ContentType.objects.get_for_model(quest), target_object_id=quest.id,
+            action_content_type=ContentType.objects.get_for_model(comment), action_object_id=comment.id,
+        )
+
+        rendered = str(notification)
+
+        self.assertIn('<img', rendered)
+        self.assertNotIn('&lt;img', rendered)
+
+    def test_str__sanitizes_an_action_that_is_not_a_comment(self):
+        """The action keeps its image preview, but never an event handler.
+
+        `action` is the one value rendered as markup, and it is not always comment HTML:
+        the Library push sends the quest or campaign as the action, and a badge assertion
+        arrives the same way, so what it holds is some model's `__str__` and whatever the
+        person who named it typed.
+        """
+        quest = baker.make('quest_manager.Quest', name='<img src=x onerror="alert(1)">')
+        target = baker.make('quest_manager.Quest', name='Target Quest')
+        notification = self.make_notification(
+            verb='shared',
+            target_content_type=ContentType.objects.get_for_model(target), target_object_id=target.id,
+            action_content_type=ContentType.objects.get_for_model(quest), action_object_id=quest.id,
+        )
+
+        rendered = str(notification)
+
+        self.assertNotIn('onerror', rendered)
+        self.assertIn('<img', rendered)
+
+    def test_str__is_marked_safe_so_the_templates_can_render_it(self):
+        """The result is a safe string: the templates render it with |safe."""
+        notification = self.make_notification(verb='did something')
+
+        self.assertTrue(hasattr(str(notification), '__html__'))

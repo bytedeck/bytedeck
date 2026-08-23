@@ -1,12 +1,16 @@
 import json
+import re
 
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
+from questions.forms import SHORT_ANSWER_MAX_LENGTH
 from questions.models import Question, QuestionSubmission
 from questions.utils import sync_draft_question_submissions
 
@@ -58,6 +62,13 @@ class QuestionSubmissionFlowTestBase(ByteDeckTenantTestCase):
             data[f"question_submissions-{i}-response_text"] = texts.get(row.question_id, "")
         return data
 
+    def file_field_name(self, question):
+        """The formset field name of the given question's file input, found by the question's
+        position among the submission's draft rows (the order the formset is built in)."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == question.id)
+        return f"question_submissions-{index}-response_file"
+
 
 class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     """The submission page renders the answer formset in the right situations only."""
@@ -65,12 +76,53 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     def test_submission_page__student_sees_question_formset(self):
         """A student working a quest with questions sees one answer form per question,
         including each question's instructions."""
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         formset = response.context["question_formset"]
         self.assertEqual(len(formset.forms), 2)
         self.assertContains(response, "What is your website URL?")
         self.assertContains(response, "Describe your process.")
+
+    def test_submission_page__short_answer_tells_the_student_its_limit(self):
+        """A short answer says how long it may be, where the student is typing it (#2401).
+
+        The input itself enforces the limit silently, by refusing further keystrokes, so the
+        sentence under it is the only thing that tells a student the rule before they hit it.
+        """
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
+
+    def test_submission_page__short_answer_hint_is_the_counter_hook(self):
+        """The short answer's input and hint render as the pair the live counter joins (#2482).
+
+        The counter script on the submission page finds each maxlength-carrying input's hint
+        by looking up `hint_<input id>`, so this pins that exact association: the short
+        answer's own input id, the maxlength on that same tag, and a hint whose id is the
+        input's with the `hint_` prefix. If crispy's hint id or the widget's maxlength ever
+        changes shape, the counter dies silently: this failure is the only thing that would
+        say so.
+        """
+        response = self.assert200("quests:submission", args=[self.submission.id])
+        content = response.content.decode()
+
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == self.short_question.id)
+        input_id = f"id_question_submissions-{index}-response_text"
+
+        input_tag = re.search(rf'<input[^>]*\bid="{input_id}"[^>]*>', content)
+        self.assertIsNotNone(input_tag, f"no input with id {input_id} on the page")
+        self.assertIn(f'maxlength="{SHORT_ANSWER_MAX_LENGTH}"', input_tag.group(0))
+        self.assertContains(response, f'id="hint_{input_id}"')
+
+    def test_submission_page__summernote_assets_load_once(self):
+        """The answer editors ride on the assets the comment box already loads (#2169).
+
+        Crispy renders a form's media alongside the form, so a long-answer question repeats the
+        whole summernote asset set in the middle of the page on top of the copy in the head.
+        """
+        content = self.assert200("quests:submission", args=[self.submission.id]).content.decode()
+
+        self.assertEqual(content.count("summernote.min.js"), 1)
 
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
@@ -100,8 +152,7 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
     def test_submission_page__question_deleted_mid_draft_excluded(self):
         """Deleting a question mid-draft removes its form without crashing the page."""
         self.short_question.delete()
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         formset = response.context["question_formset"]
         self.assertEqual(len(formset.forms), 1)
         self.assertEqual(formset.forms[0].question, self.long_question)
@@ -145,6 +196,87 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(self.submission.is_completed)
         self.assertFalse(QuestionSubmission.objects.filter(
             quest_submission=self.submission, comment__isnull=False).exists())
+
+    def test_complete__uploaded_file_survives_a_failed_submit(self):
+        """A file attached alongside a blank required answer is kept, not silently dropped (#2165).
+
+        Browsers never repopulate a file input, so without saving the upload the student's file
+        would vanish on the re-render with no notice: the required file error would reappear
+        even though they did attach one, or an optional answer would publish as empty.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach your work.</p>", allowed_file_type="image",
+        )
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        # short answer left blank, so the formset is invalid and the page re-renders
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        data[self.file_field_name(file_question)] = upload
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertTrue(file_row.response_file, "the attached file was dropped on re-render")
+        self.assertIn("my-work", file_row.response_file.name)
+        # and the re-rendered page shows it, so the student can see it was kept
+        self.assertContains(response, "my-work")
+
+    def test_complete__rejected_file_is_not_saved(self):
+        """A file rejected for its type is not kept, so its error still applies on the retry (#2165).
+
+        Only uploads that pass the question's own file-type check are worth keeping; storing a
+        rejected one would let the student submit again without fixing it.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach an image.</p>", allowed_file_type="image",
+        )
+        not_an_image = SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")
+
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()}
+        data[self.file_field_name(file_question)] = not_an_image
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertFalse(file_row.response_file)
+
+    def test_complete__file_field_left_alone_keeps_the_saved_file(self):
+        """Re-submitting without re-choosing a file keeps the one already saved (#2165).
+
+        The student's second attempt only fixes the text answer, leaving the file input empty
+        as browsers force them to; that must not wipe the file kept from the first attempt.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="<p>Attach your work.</p>", allowed_file_type="image",
+        )
+
+        # first attempt: file attached, required text answer blank, so it bounces back
+        first = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        first[self.file_field_name(file_question)] = SimpleUploadedFile(
+            "my-work.png", b"file_content", content_type="image/png")
+        self.client.post(self.complete_url(), data=first)
+
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        kept_name = file_row.response_file.name
+        self.assertTrue(kept_name)
+
+        # second attempt: text answer fixed, file input left empty
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()})
+        self.assertRedirects(response, reverse("quests:quests"))
+
+        file_row.refresh_from_db()
+        self.assertEqual(file_row.response_file.name, kept_name)
+        # and it published with the completion, rather than as an empty answer
+        self.assertIsNotNone(file_row.comment_id)
 
     def test_complete__quest_without_questions_unchanged(self):
         """A quest with no questions completes exactly as before when a comment is left."""
@@ -311,6 +443,196 @@ class AnswerAutosaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(row.datetime_last_edit, last_edit)
 
 
+class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
+    """Saving a draft stores the files chosen on the page, not only the text (#1459)."""
+
+    def save_draft(self, extra=None):
+        """POST an ajax draft save carrying the answer formset's fields, as the Save Draft
+        button does now that it sends the whole form as FormData.
+
+        Args:
+            extra: a dict merged over the default payload, adding or overriding fields
+                (how a test attaches its files).
+
+        Returns:
+            The view's response, whose JSON body is the draft-save contract.
+        """
+        data = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+        }
+        data.update(extra or {})
+        return self.client.post(
+            reverse("quests:ajax_save_draft"), data=data,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_save_draft__stores_a_file_answer(self):
+        """A file chosen on a file-upload question is stored on its draft row by Save Draft,
+        unpublished, and the response names it so the page can show it was kept."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(file_question)
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("sketch.png", b"file_content", content_type="image/png")})
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertIn("sketch", row.response_file.name)
+        self.assertIsNone(row.comment_id, "a draft-saved answer must not be published")
+        self.assertIn("sketch", payload["saved_answer_files"][field_name])
+
+    def test_save_draft__stores_comment_attachments(self):
+        """A file chosen in the comment's Attach files field is stored on the draft comment
+        by Save Draft, where completing the quest publishes it from."""
+        response = self.save_draft(
+            {"attachments": SimpleUploadedFile("notes.pdf", b"file_content", content_type="application/pdf")})
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        documents = list(self.submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1)
+        self.assertIn("notes", documents[0].docfile.name)
+        self.assertEqual(payload["saved_attachments"], ["notes.pdf"])
+
+    def test_save_draft__rejects_a_file_the_question_does_not_accept(self):
+        """A file whose type the question refuses is not stored, and the response carries
+        the field's own error so the page can say why."""
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="image",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(image_question)
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")})
+
+        payload = json.loads(response.content)
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=image_question)
+        self.assertFalse(row.response_file, "a rejected file must not be stored")
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+
+    def test_save_draft__rejected_replacement_reports_the_error_not_the_kept_file(self):
+        """Rejecting a replacement upload reports the rejection, while the earlier file stays.
+
+        The row keeps the file an earlier draft save stored, so the response must not
+        present that kept file as this save's success: the student chose a new file and
+        needs to hear why it was refused.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="image",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(image_question)
+        self.save_draft(
+            {field_name: SimpleUploadedFile("first.png", b"file_content", content_type="image/png")})
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("replacement.txt", b"file_content", content_type="text/plain")})
+
+        payload = json.loads(response.content)
+        self.assertIn("Filetype not supported", payload["file_errors"][field_name])
+        self.assertNotIn(field_name, payload["saved_answer_files"])
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=image_question)
+        self.assertIn("first", row.response_file.name, "the earlier draft-saved file must survive")
+
+    def test_save_draft__file_on_a_text_answer_row_is_ignored(self):
+        """A file crafted onto a text question's row is ignored: the form for a text row
+        has no file field, so nothing is stored and nothing is reported saved."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        index = next(i for i, row in enumerate(rows) if row.question_id == self.short_question.id)
+        field_name = f"question_submissions-{index}-response_file"
+
+        response = self.save_draft(
+            {field_name: SimpleUploadedFile("sneak.png", b"file_content", content_type="image/png")})
+
+        payload = json.loads(response.content)
+        short_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=self.short_question)
+        self.assertFalse(short_row.response_file)
+        self.assertEqual(payload["saved_answer_files"], {})
+
+    def test_save_draft__stores_comment_attachments_on_a_quest_without_questions(self):
+        """A comment attachment draft-saves on a quest that asks no questions at all.
+
+        The files leg only builds the answer formset when the quest has questions, so
+        this pins the other side of that branch: with none, the attachment path still
+        runs and stores the file on the draft comment.
+        """
+        plain_quest = baker.make(Quest, name="Plain Quest", verification_required=True)
+        submission = baker.make(QuestSubmission, quest=plain_quest, user=self.test_student)
+        self.client.get(reverse("quests:submission", args=[submission.id]))
+        submission.refresh_from_db()
+
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={
+                "comment": "<p>no questions here</p>",
+                "submission_id": submission.id,
+                "attachments": SimpleUploadedFile("notes.pdf", b"file_content", content_type="application/pdf"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        self.assertEqual(payload["saved_attachments"], ["notes.pdf"])
+        documents = list(submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1)
+        self.assertIn("notes", documents[0].docfile.name)
+
+    def test_save_draft__reports_a_rejected_comment_attachment(self):
+        """An attachment the form refuses is not stored, and the response carries the
+        field's own error so the page can say why.
+
+        The attachments field caps each file at 16 MiB, so a file one byte over makes
+        the form error; nothing may be stored and nothing reported saved.
+        """
+        oversized = SimpleUploadedFile(
+            "huge.pdf", b"x" * (16777216 + 1), content_type="application/pdf")
+
+        response = self.save_draft({"attachments": oversized})
+
+        payload = json.loads(response.content)
+        self.assertIn("Max filesize", payload["file_errors"]["attachments"])
+        self.assertEqual(payload["saved_attachments"], [])
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 0)
+
+    def test_save_draft__file_without_management_form_saves_text_only(self):
+        """A hand-built POST that sends a file without the formset's management form does
+        not error: the text answers and comment still save, the files leg reports nothing."""
+        rows = list(sync_draft_question_submissions(self.submission))
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"),
+            data={
+                "comment": "<p>still saves</p>",
+                "submission_id": self.submission.id,
+                "answers": json.dumps({
+                    "question_submissions-0-id": str(rows[0].id),
+                    "question_submissions-0-response_text": "still saves",
+                }),
+                "question_submissions-0-response_file":
+                    SimpleUploadedFile("orphan.png", b"file_content", content_type="image/png"),
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertEqual(payload["result"], "Draft saved")
+        self.assertEqual(payload["saved_answer_files"], {})
+        self.submission.draft_comment.refresh_from_db()
+        self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
+
+
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
     """Published answers display with their comment for students and markers."""
 
@@ -368,6 +690,84 @@ class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
         # multi-paragraph notes keep their tags (rather than being flattened or escaped)
         self.assertContains(response, "<p>First note.</p><p>Second note.</p>")
 
+    def publish_file_answer(self, file_name, content=b"pretend media"):
+        """Give the submission a published file answer, as if the student had uploaded one.
+
+        Args:
+            file_name (str): the name to store the file under, whose extension decides how
+                the page shows it.
+            content (bytes): the file's contents, which nothing here reads.
+
+        Returns:
+            QuestionSubmission: the published answer, with the file attached.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Upload your work.</p>",
+        )
+        self.complete_with_answers()
+        answer = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        answer.response_file = SimpleUploadedFile(file_name, content)
+        answer.save()
+
+        return answer
+
+    def test_display__an_image_answer_is_shown_on_the_page(self):
+        """A picture a student uploaded is displayed where it is read (#2172).
+
+        A marker working through a set of answers reads the image itself; the link stays for
+        opening or saving the original.
+        """
+        answer = self.publish_file_answer("my_drawing.png")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<img class="question-media"')
+        self.assertContains(response, answer.response_file.url)
+
+    def test_display__a_video_answer_gets_a_player(self):
+        """A video answer is playable on the page, where the marker is reading it."""
+        self.publish_file_answer("my_clip.mp4")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<video class="question-media" controls preload="metadata">')
+
+    def test_display__an_audio_answer_gets_a_player(self):
+        """An audio answer is playable on the page, the same as a video one."""
+        self.publish_file_answer("my_reading.mp3")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertContains(response, '<audio class="question-media" controls preload="metadata">')
+
+    def test_display__any_other_answer_file_is_offered_as_a_link(self):
+        """A file the page cannot embed is offered as a link to open or save."""
+        answer = self.publish_file_answer("my_notes.pdf")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.assertNotContains(response, '<img class="question-media"')
+        self.assertContains(response, f'<a href="{answer.response_file.url}" target="_blank">')
+
+    def test_display__a_solution_image_is_shown_to_staff(self):
+        """The teacher's example answer is shown too, beside the answers it is compared with."""
+        self.short_question.solution_file = SimpleUploadedFile("the_solution.png", b"pretend image")
+        self.short_question.save()
+        self.complete_with_answers()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
+
+        self.short_question.refresh_from_db()
+        self.assertContains(response, "<b>Solution file:</b>")
+        self.assertContains(response, self.short_question.solution_file.url)
+        self.assertContains(response, '<img class="question-media"')
+
     def test_display__student_does_not_see_marker_notes(self):
         """Solutions and marker notes stay staff-only in the answers display."""
         self.short_question.solution_text = "SECRET SOLUTION"
@@ -391,9 +791,41 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
     def test_quest_detail__student_sees_no_manage_button(self):
         """Students don't see the staff questions panel (checked on the submission page,
         which embeds the same quest detail content and renders for the owning student)."""
-        response = self.client.get(reverse("quests:submission", args=[self.submission.id]))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("quests:submission", args=[self.submission.id])
         self.assertNotContains(response, "Manage Questions")
+
+    def test_quest_detail__tooltip_shows_the_characters_the_teacher_typed(self):
+        """An ampersand in a question's instructions reads as one in the table and its tooltip.
+
+        Summernote stores it as an entity; stripping tags alone leaves that entity in place, and
+        escaping it again on the way out would show the reader "Tom &amp;amp; Jerry" (#2169).
+        """
+        self.short_question.instructions = "<p>Compare <b>Tom &amp; Jerry</b></p>"
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        # the page source escapes it once, so the reader sees "Tom & Jerry"
+        self.assertContains(response, "Tom &amp; Jerry")
+        self.assertNotContains(response, "&amp;amp;")
+
+    def test_quest_detail__marker_notes_popover_is_initialized(self):
+        """The marker-notes popover in the question table is activated on this page (#2166).
+
+        A bootstrap popover does nothing until something initializes it: without the site-wide
+        initializer this icon offers only its native "Marker Notes" title, leaving the notes
+        themselves unreadable on the page a teacher marks from.
+        """
+        self.short_question.marker_notes = "<p>Accept any working URL.</p>"
+        self.short_question.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        self.assertContains(response, "Accept any working URL.")
+        self.assertContains(response, 'data-toggle="popover"')
+        self.assertContains(response, """$('[data-toggle="popover"]').popover();""")
 
 
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
@@ -503,6 +935,60 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
 
+    def test_complete__questions_changed_keeps_comment_attachment(self):
+        """The questions-changed bounce keeps an attachment that validates (#2428).
+
+        The redirect rebuilds the page with an empty file input, so the upload survives on
+        the draft comment instead: the same place the validation-failure path keeps it
+        (#2427), and the place a successful completion publishes it from. The student is
+        told it was kept.
+        """
+        stale_data = self.formset_data(short_text="my title")
+        baker.make(Question, quest=self.quest, ordinal=3, type="short_answer", required=True)
+        upload = SimpleUploadedFile("evidence.png", b"file_content", content_type="image/png")
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", "attachments": upload, **stale_data})
+
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        documents = list(self.submission.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1, "the attachment was dropped on the redirect")
+        self.assertIn("evidence", documents[0].docfile.name)
+        self.assertIn(
+            "Your attached file was saved, so you don't need to choose it again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__questions_changed_keeps_file_answer(self):
+        """The questions-changed bounce keeps a file answer that validates (#2428).
+
+        The answer stays on its own draft row, unpublished, the same place the
+        validation-failure path keeps it (#2165), so the rebuilt page shows it as already
+        attached and a later completion publishes it.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        rows = list(sync_draft_question_submissions(self.submission))
+        stale_data = self.formset_data(short_text="my title")
+        upload = SimpleUploadedFile("my-recording.png", b"file_content", content_type="image/png")
+        stale_data[self.file_field_name(file_question)] = upload
+        baker.make(Question, quest=self.quest, ordinal=4, type="short_answer", required=True)
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **stale_data})
+
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertIn("my-recording", row.response_file.name, "the file answer was dropped on the redirect")
+        self.assertIsNone(row.comment_id, "a kept draft answer must not be published")
+        self.assertEqual(len(rows), 3)
+
     def test_complete__optional_blank_answers_still_require_comment_when_verification_required(self):
         """A verification-required quest whose only questions are optional and left blank
         still demands a comment or attachment — answers-that-aren't-answers aren't content."""
@@ -527,3 +1013,83 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertRedirects(response, self.submission.get_absolute_url())
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
+
+
+class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
+    """Skipping a submission clears the answers the student drafted but never submitted (#2164)."""
+
+    def draft_some_answers(self):
+        """Put content in the submission's draft answer rows, as autosaving a draft would.
+
+        Returns:
+            list: the draft rows, each now carrying answer text.
+        """
+        rows = list(sync_draft_question_submissions(self.submission))
+        for row in rows:
+            row.response_text = "drafted but never submitted"
+            row.save()
+        return rows
+
+    def draft_rows(self):
+        """The submission's unpublished draft answers.
+
+        Returns:
+            QuerySet: the submission's answer rows that have no comment, so the ones a skip
+            should discard.
+        """
+        return QuestionSubmission.objects.filter(quest_submission=self.submission, comment__isnull=True)
+
+    def test_skip__discards_the_students_draft_answers(self):
+        """A student who is not earning XP skips their own in-progress submission, and their
+        drafted answers go with it.
+
+        Nothing renders unpublished answers, and a skipped submission is approved for good, so
+        rows left behind here would be permanently invisible data.
+        """
+        self.draft_some_answers()
+        self.assertEqual(self.draft_rows().count(), 2)
+        profile = self.test_student.profile
+        profile.not_earning_xp = True
+        profile.save()
+
+        response = self.client.post(reverse("quests:skip", args=[self.submission.id]))
+
+        self.assertRedirects(response, reverse("quests:quests"), fetch_redirect_response=False)
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_approved)
+        self.assertFalse(self.draft_rows().exists())
+
+    def test_skip__leaves_already_published_answers_alone(self):
+        """A teacher skipping a submission the student did complete keeps the published answers.
+
+        Those answers are part of the record of what was handed in, and they still display with
+        their comment; only unpublished drafts are discarded.
+        """
+        self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **self.formset_data()})
+        published = QuestionSubmission.objects.filter(quest_submission=self.submission, comment__isnull=False)
+        self.assertEqual(published.count(), 2)
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse("quests:skip", args=[self.submission.id]))
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.do_not_grant_xp)
+        self.assertEqual(published.count(), 2)
+
+    def test_ApproveView__skip_button_discards_the_students_draft_answers(self):
+        """A teacher skipping from the submission page discards the drafts too, so both skip
+        paths leave the same state behind."""
+        self.draft_some_answers()
+        self.assertEqual(self.draft_rows().count(), 2)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse("quests:approve", args=[self.submission.id]),
+            data={"skip_button": True, "comment_text": ""})
+
+        self.assertRedirects(response, reverse("quests:approvals"), fetch_redirect_response=False)
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.do_not_grant_xp)
+        self.assertFalse(self.draft_rows().exists())

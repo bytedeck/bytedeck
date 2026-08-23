@@ -1,9 +1,12 @@
+import html
 import re
 
 from django import template
+from django.utils.html import strip_tags
 from django.utils.safestring import mark_safe
 
 from questions.models import QuestionType
+from utilities.fields import media_kind_of
 
 register = template.Library()
 
@@ -21,6 +24,46 @@ _TYPE_ICONS = {
 def question_type_icon(question_type):
     """Return the Font Awesome icon class for a question's ``type`` (empty string if unknown)."""
     return _TYPE_ICONS.get(question_type, "")
+
+
+@register.filter
+def media_kind(value):
+    """Return how a question's stored file can be shown: 'image', 'video', 'audio' or ''.
+
+    A marker reading a set of answers should see the picture, not a filename to download and
+    open (#2172), so the answer display asks each file what it is and embeds it accordingly.
+    Anything else, and anything with no file, answers with the empty string and is offered
+    as a link.
+
+    Args:
+        value: a file field's value (a `FieldFile`), or None/empty when nothing was uploaded.
+
+    Returns:
+        str: the kind of media, or '' when it is not one this page can embed.
+    """
+    if not value:
+        return ''
+
+    return media_kind_of(value.name)
+
+
+@register.filter
+def plain_text(value):
+    """Reduce summernote-authored HTML to the text a teacher actually typed.
+
+    Stripping tags on its own leaves the entities behind, so a question about "Tom & Jerry"
+    becomes ``Tom &amp; Jerry``, and autoescaping where it lands turns that into a visible
+    ``Tom &amp;amp; Jerry`` (#2169). Decoding after stripping gives back the characters
+    themselves. The result is deliberately left unsafe, so the template escapes it once, which
+    is what keeps it from breaking out of a title attribute.
+
+    Args:
+        value: summernote-authored HTML, or None for a field that was never filled in.
+
+    Returns:
+        str: the decoded text, unmarked, for the template to escape once where it lands.
+    """
+    return html.unescape(strip_tags(value or ""))
 
 # Matches content that is a single wrapping <p>...</p> (optionally with attributes and
 # surrounding whitespace). The inner group is only unwrapped when it contains no further

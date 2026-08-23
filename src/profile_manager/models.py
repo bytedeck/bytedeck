@@ -20,10 +20,9 @@ from django_resized import ResizedImageField
 from django_tenants.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Rank
+from courses.models import CourseStudent, Rank, Semester
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
-from siteconfig.models import SiteConfig
 from utilities.models import RestrictedFileField
 
 from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
@@ -55,9 +54,16 @@ class ProfileManager(models.Manager):
     def all_students(self):
         return self.get_queryset().students_only()
 
-    def all_for_active_semester(self):
-        """:return: a queryset of student profiles with a course this semester"""
-        courses_user_list = CourseStudent.objects.all_users_for_active_semester()
+    def all_in_open_semesters(self):
+        """Student profiles for everyone currently taking a course.
+
+        Returns:
+            QuerySet[Profile]: the profiles of active students registered in any semester
+            that is open right now, across all of them when several are.
+        """
+        # the roster is unfiltered because all_students() already drops staff and test
+        # accounts; asking the roster for them as well would only add a join (issue #2434)
+        courses_user_list = CourseStudent.objects.all_users_in_open_semesters()
         qs = self.all_students().filter(user__in=courses_user_list, user__is_active=True)
         return qs
 
@@ -68,10 +74,24 @@ class ProfileManager(models.Manager):
         for_announcement_email=False,
         for_notification_email=False,
     ):
-        """
+        """The users a deck's email should go to: everyone enrolled, plus its teachers.
+
+        Whether a given account receives mail is the account's own choice, not something the
+        roster decides: `get_announcements_by_email` and `get_notifications_by_email` both
+        default to False, and only take effect once the address is verified. So the roster
+        here is deliberately unfiltered, test accounts included (issue #2434): a test account
+        whose address was verified and whose owner turned the option on has asked for this
+        mail, usually so a teacher can see what a student receives, and a flag meaning "leave
+        this out of student lists" is not a reason to ignore that.
+
+        Whichever roster they come from, everyone here has an address of their own that they
+        verified, so nothing is sent to an address nobody confirmed.
+
         :param as_emails_list: If True, return a list of emails instead of a queryset of users
         :param for_announcement_email: If True, only return users who want announcements by email
         :param for_notification_email: If True, only return users who want notifications by email
+        :returns: the matching Users, deduplicated, or their email addresses as a list of
+            strings when as_emails_list is True (which is what a send passes to bcc).
         """
 
         email_filter = models.Q()
@@ -86,7 +106,7 @@ class ProfileManager(models.Manager):
         verified_emails = models.Q(emailaddress__verified=True, emailaddress__primary=True, emailaddress__email__iexact=models.F('email'))
 
         students_to_email = (
-            CourseStudent.objects.all_users_for_active_semester()
+            CourseStudent.objects.all_users_in_open_semesters()
                                  .filter(verified_emails)
                                  .exclude(empty_emails)
                                  .filter(email_filter)
@@ -309,16 +329,23 @@ class Profile(models.Model):
     #
     #################################
 
-    def num_courses(self):
-        return self.current_courses().count()
-
     def current_courses(self):
         return CourseStudent.objects.current_courses(self.user)
 
     @cached_property
     def has_past_courses(self):
-        semester = SiteConfig.get().active_semester
-        return CourseStudent.objects.all_for_user_not_semester(self.user, semester).exists()
+        """Whether the user was registered in a course in some earlier semester.
+
+        Between semesters they are in no open semester, so every course they have is a past
+        one.
+
+        Returns:
+            bool: True when the user has a registration outside the semester they are in
+            now. A registration whose semester was deleted counts as a past one.
+        """
+        return CourseStudent.objects.all_for_user(self.user).exclude(
+            semester__status=Semester.Status.OPEN,
+        ).exists()
 
     @cached_property
     def has_current_course(self):
@@ -343,19 +370,54 @@ class Profile(models.Model):
     #################################
 
     def xp_invalidate_cache(self):
+        """Work out this student's XP and mark again, and store both on the profile.
+
+        Called whenever something either is worked out from changes: a submission approved,
+        a badge granted, a registration saved. The mark is cached alongside the XP because
+        it is a percentage of it, and the student list sorts and colours by it, so it has to
+        be a column rather than something worked out per row.
+
+        Raises:
+            TypeError: when mark() gives something that is neither a number nor None, which
+                only a test can arrange (see the check below).
+
+        Returns:
+            int: the XP just cached.
+        """
         xp = QuestSubmission.objects.calculate_xp(self.user)
         xp += BadgeAssertion.objects.calculate_xp(self.user)
         xp += CourseStudent.objects.calculate_xp(self.user)
         self.xp_cached = xp
-        self.mark_cached = self.mark()
+
+        mark = self.mark()
+        # Checked before it is stored, because the failure it otherwise causes names the
+        # wrong thing (issue #2486): a MagicMock reaching mark_cached raises "Aggregate
+        # functions are not allowed in this query" from the save below, pointing at the
+        # profile rather than at the patch that produced it.
+        if mark is not None and not isinstance(mark, (int, float)):
+            raise TypeError(
+                f"Profile.mark() gave {mark!r}, which is not a mark. A test patching "
+                "CourseStudent.xp() or CourseStudentManager.xp_across() must have the patch "
+                "in place before it saves a CourseStudent, since saving one asks for the "
+                "mark: use courses.tests.utils.patch_registration_xp()."
+            )
+        self.mark_cached = mark
+
         self.save()
         return xp
 
     def xp_per_course(self):
-        course_count = self.num_courses()
-        if not course_count or course_count == 0:
-            return 0
-        return self.xp_cached / course_count
+        """This student's XP as their first course sees it.
+
+        Kept for the places that want a single representative number for a student. Each
+        registration answers for itself through CourseStudent.xp(), which is where the
+        assigned-versus-shared split lives (issue #2440).
+
+        Returns:
+            float: the first current registration's XP, or 0 when they have no course.
+        """
+        registration = self.current_courses().first()
+        return registration.xp() if registration else 0
 
     def xp_to_date(self, date):
         # TODO: Combine this with other methods?
@@ -366,16 +428,27 @@ class Profile(models.Model):
         return xp
 
     def mark(self):
-        courses = self.current_courses()
-        cap_at_100 = SiteConfig.get().cap_marks_at_100_percent
-        if courses:
-            mark = courses[0].calc_mark(self.xp_cached) / len(courses)
-            if cap_at_100:
-                return min(mark, 100)
-            else:
-                return mark
-        else:
-            return None
+        """This student's mark in the first of their courses that has one, for the places that
+        want a single number.
+
+        Each registration has its own mark now that XP is attributed per course (issue #2440);
+        CourseStudent.mark() is where that lives, and this delegates to it. A course can be run
+        on XP alone and have no mark at all (issue #403), so the first registration is not
+        necessarily one that can answer: a student holding an ungraded course and a graded one
+        has a mark, whichever of the two happens to sort first.
+
+        Returns:
+            float or None: that registration's mark, None when they hold no course, or none
+            that uses marks.
+        """
+        marked = [
+            registration for registration in self.current_courses()
+            # a registration whose course was deleted still answers, with the zero it always did
+            if registration.course is None or registration.course.uses_marks
+        ]
+        # hand over this profile: xp_invalidate_cache() asks for the mark with a new xp_cached
+        # it has not saved yet, and the registration would otherwise read the old one back
+        return marked[0].mark(profile=self) if marked else None
 
     #################################
     #
@@ -385,6 +458,27 @@ class Profile(models.Model):
 
     def rank(self):
         return Rank.objects.get_rank(self.xp_cached)
+
+    def course_ranks(self):
+        """This student's rank in each of their current courses, highest rank first.
+
+        A student in several courses has a different amount of XP in each (issue #2440), so
+        they hold a different rank in each, and the navbar shows all of them. Their XP is
+        divided once for the whole student rather than per course, since this is asked on
+        every page.
+
+        Returns:
+            list[tuple]: (Course, Rank) pairs ordered by rank XP descending, so the first is
+            the rank to show when only one fits. Empty when they are in no course.
+        """
+        registrations = CourseStudent.objects.xp_for_registrations(self.user, profile=self)
+        if len(registrations) < 2:
+            # one course is the whole of their XP, which is the rank they already have: no
+            # per-course list to show, and the navbar keeps its single icon
+            return []
+
+        ranks = [(registration.course, Rank.objects.get_rank(xp)) for registration, xp in registrations]
+        return sorted(ranks, key=lambda course_rank: course_rank[1].xp, reverse=True)
 
     def next_rank(self):
         return Rank.objects.get_next_rank(self.xp_cached)
@@ -433,14 +527,20 @@ def create_profile(sender, **kwargs):
 
             new_profile.save()
 
-            staff_list = User.objects.filter(is_staff=True)
-            notify.send(
-                current_user,
-                target=new_profile,
-                recipient=staff_list[0],
-                affected_users=staff_list,
-                icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
-                verb='.  New user registered: ')
+            # "New user registered" announces a newly created student or staff
+            # account to the deck's staff. The deck's system admin account is a
+            # superuser created automatically when the deck itself is created, so
+            # its creation is not a real registration and should not raise this
+            # notification (#2320). Students and teachers still do.
+            if not current_user.is_superuser:
+                staff_list = User.objects.filter(is_staff=True)
+                notify.send(
+                    current_user,
+                    target=new_profile,
+                    recipient=staff_list[0],
+                    affected_users=staff_list,
+                    icon="<i class='fa fa-fw fa-lg fa-user text-success'></i>",
+                    verb='.  New user registered: ')
 
 
 @receiver(post_delete, sender=Profile)

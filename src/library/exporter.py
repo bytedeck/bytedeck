@@ -1,14 +1,72 @@
 from datetime import date
-from copy import deepcopy
 from uuid import uuid4
 
+from django.db import transaction
 from django_tenants.utils import schema_context
-from quest_manager.admin import QuestResource
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
 
+from .transfer import TransferResult, build_available_quest_name, snapshot_quest, write_quests
 from .utils import library_schema_context, get_library_conflicting_quests
+
+
+def build_library_clone_name(local_name, taken_names):
+    """Return a name for a clone of `local_name` that is free in the Library.
+
+    A clone of a quest whose original is already in the Library needs a name of its own,
+    and dating it says what the copy is. The uniqueness work itself is shared with the
+    import direction, which faces the same constraint from the other side.
+
+    Args:
+        local_name (str): the source quest's name.
+        taken_names (set[str]): every name already spoken for in the Library.
+
+    Returns:
+        str: a name not in `taken_names`, within the field's max_length.
+    """
+    return build_available_quest_name(local_name, taken_names, f" (Exported on {date.today()})")
+
+
+def clone_quests_into_library(*, source_schema, quests):
+    """Copy quests into the Library as fresh entries, leaving the originals alone.
+
+    Used when a campaign is shared but some of its quests are already in the
+    Library under the same `import_id`: those get a new copy rather than
+    overwriting what is there.
+
+    Each copy is written with a fresh `import_id` and a name of its own, so it lands
+    beside the Library's existing version instead of replacing it. Everything else
+    travels exactly as a normal push does.
+
+    Args:
+        source_schema (str): the tenant schema holding the quests being copied.
+        quests (list[Quest]): quests loaded from `source_schema`.
+
+    Returns:
+        TransferResult: the copies now in the Library, empty when there was nothing to
+        copy, plus any prerequisites that could not travel with them.
+
+    Raises:
+        LibraryTransferError: if a copy cannot be written to the Library.
+    """
+    if not quests:
+        return TransferResult(quests=[], unmet_prereqs=[])
+
+    with schema_context(source_schema):
+        snapshots = [snapshot_quest(quest) for quest in quests]
+
+    with library_schema_context():
+        # Archived quests count: the unique constraint does not care that the
+        # default manager hides them.
+        taken_names = set(Quest.objects.all_including_archived().values_list('name', flat=True))
+
+        writes = []
+        for snapshot in snapshots:
+            name = build_library_clone_name(snapshot['fields']['name'], taken_names)
+            taken_names.add(name)
+            writes.append((snapshot, False, {'import_id': uuid4(), 'name': name}))
+
+        return write_quests(writes, with_campaign=True, refresh_matched_prereqs=True)
 
 
 def export_quest_to_library(*, source_schema, quest_import_id):
@@ -22,11 +80,12 @@ def export_quest_to_library(*, source_schema, quest_import_id):
         quest_import_id: The import ID (UUID) of the quest to export.
 
     Returns:
-        ImportResult: The result of the import operation into the library schema.
+        TransferResult: The quest as it now exists in the library schema, and the names of
+            any prerequisites that could not travel with it.
 
     Raises:
         Quest.DoesNotExist: If the quest is not found in the source schema.
-        ValidationError: If the import fails due to validation or integrity issues.
+        LibraryTransferError: If the quest cannot be written to the library schema.
     """
     from django.core.exceptions import ObjectDoesNotExist
 
@@ -35,27 +94,10 @@ def export_quest_to_library(*, source_schema, quest_import_id):
             quest = Quest.objects.get(import_id=quest_import_id)
         except ObjectDoesNotExist as e:
             raise Quest.DoesNotExist(f"Quest with import_id={quest_import_id} not found in schema {source_schema}") from e
-        export_data = QuestResource().export([quest])
+        snapshot = snapshot_quest(quest)
 
     with library_schema_context():
-        try:
-            result = QuestResource().import_data(
-                export_data,
-                dry_run=False,
-                raise_errors=True,
-                use_transactions=True,
-            )
-        except (ValidationError, IntegrityError) as e:
-            # Raise a clearer validation error with context
-            raise ValidationError(f"Failed to import quest to library schema: {e}") from e
-
-        # Make sure the quest is unpublished in the library
-        imported_quest = Quest.objects.get(import_id=quest.import_id)
-        imported_quest.published = False
-        imported_quest.full_clean()
-        imported_quest.save()
-
-    return result
+        return write_quests([(snapshot, False, None)], with_campaign=False, refresh_matched_prereqs=True)
 
 
 def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import_ids=None):
@@ -77,16 +119,24 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
             even if all quests are skipped
 
     Returns:
-        ImportResult: The result of the import operation into the library schema.
+        TransferResult: The quests as they now exist in the library schema, and the names
+            of any prerequisites that could not travel with them.
 
     Raises:
         Category.DoesNotExist: If the campaign is not found in the source schema.
         ValidationError: If no published quests exist for the campaign and
             `skip_import_ids` was not provided.
+        LibraryTransferError: If a quest cannot be written to the library schema.
     """
     with schema_context(source_schema):
         category = Category.objects.get(import_id=campaign_import_id)
-        quests = Quest.objects.filter(published=True, campaign=category)
+        # select_related: snapshot_quest reads quest.campaign for every row, and its
+        # questions, which are a query each without the prefetch.
+        quests = (
+            Quest.objects.select_related('campaign')
+            .prefetch_related('question_set')
+            .filter(published=True, campaign=category)
+        )
 
         # filter out conflicts (they'll be cloned and exported later)
         if skip_import_ids:
@@ -94,33 +144,20 @@ def export_campaign_to_library(*, source_schema, campaign_import_id, skip_import
 
         if not quests.exists() and not skip_import_ids:
             raise ValidationError("Cannot export a campaign without any published quests.")
-        export_data = QuestResource().export(quests)
-
-    # Prepare visibility map for library: all quests unpublished
-    exported_visibility_map = {str(q.import_id): False for q in quests}
+        snapshots = [snapshot_quest(quest) for quest in quests]
 
     with library_schema_context():
-        try:
-            result = QuestResource().import_data(
-                export_data,
-                dry_run=False,
-                raise_errors=True,
-                use_transactions=True,
-                import_campaign=True,
-                local_visibility_map=exported_visibility_map,
-            )
-        except (ValidationError, IntegrityError) as e:
-            # Raise a clearer validation error with context
-            raise ValidationError(f"Failed to import campaign to library schema: {e}") from e
+        exported = write_quests([(snapshot, False, None) for snapshot in snapshots], with_campaign=True, refresh_matched_prereqs=True)
 
-        # Explicitly unpublish imported campaign
+        # The campaign is only created unpublished; force it back to draft in case the
+        # Library already holds a published copy under this import_id.
         imported_category = Category.objects.filter(import_id=campaign_import_id).first()
         if imported_category:
             imported_category.published = False
             imported_category.full_clean()
             imported_category.save(update_fields=['published'])
 
-    return result
+    return exported
 
 
 def export_campaign_and_copy_quests(source_schema, campaign_import_id):
@@ -131,34 +168,72 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
       - Detect quests in the target library that share an import_id with local quests.
       - Export only the non-conflicting quests (unpublished) and the campaign.
       - Ensure the campaign exists in the library.
-      - For each conflicting local quest, create a new unpublished copy in the
-        library campaign with a fresh import_id and a suffixed name to avoid
-        uniqueness issues.
+      - Copy each conflicting local quest into the library campaign as a new
+        unpublished entry with a fresh import_id and a name of its own, leaving
+        the library's existing version untouched.
 
     Args:
         source_schema (str): Tenant schema that contains the source campaign.
         campaign_import_id (UUID): Import ID of the campaign to export.
 
     Returns:
-        Category: The library campaign instance.
+        TransferResult: The quests as they now exist in the library, the names of any
+            prerequisites that could not travel with them, and the names of any quests in
+            the campaign that were not shared at all.
 
     Raises:
         Category.DoesNotExist: If the campaign is not found in the source schema.
     """
 
+    # One transaction for the whole push. `write_quests` is atomic per batch, but this
+    # runs several of them (the campaign's own quests, then the conflict clones) with
+    # a campaign write between, so without this a failure part-way leaves the Library
+    # holding some of a campaign and the sharer being told nothing arrived (#2372).
+    with transaction.atomic():
+        return _push_campaign(source_schema, campaign_import_id)
+
+
+def _push_campaign(source_schema, campaign_import_id):
+    """Do the work of `export_campaign_and_copy_quests`, inside its transaction.
+
+    Split out so the transaction is one line at the top rather than an indent around
+    everything, and so the steps below read in the order they happen.
+
+    Args:
+        source_schema (str): Tenant schema that contains the source campaign.
+        campaign_import_id (UUID): Import ID of the campaign to export.
+
+    Returns:
+        TransferResult: as `export_campaign_and_copy_quests` describes.
+    """
     # Step 1: get local campaign and quests first (in source schema)
     with schema_context(source_schema):
         local_campaign = Category.objects.get(import_id=campaign_import_id)
         local_quests = list(local_campaign.current_quests())
 
+        # `current_quests()` is published and not archived, so archiving a quest quietly
+        # takes it out of the share. Name them, so the sharer finds out now rather than
+        # from whoever imports the campaign and wonders where the quest went (#2442).
+        #
+        # Published, because that is what makes "unarchive it and share again" true. An
+        # archived *draft* fails both halves of the filter, so unarchiving alone would not
+        # send it, and a draft staying behind is what a sharer expects anyway.
+        shared_ids = {quest.id for quest in local_quests}
+        skipped_quests = sorted(
+            Quest.objects.all_including_archived()
+            .filter(campaign=local_campaign, published=True, archived=True)
+            .exclude(id__in=shared_ids)
+            .values_list('name', flat=True)
+        )
+
     # detect which local quests already exist in the library before the export happens
     library_conflicting_ids = get_library_conflicting_quests(local_quests)
 
     # Step 2: export campaign + quests normally
-    export_campaign_to_library(source_schema=source_schema,
-                               campaign_import_id=campaign_import_id,
-                               skip_import_ids=library_conflicting_ids
-                               )
+    exported = export_campaign_to_library(source_schema=source_schema,
+                                          campaign_import_id=campaign_import_id,
+                                          skip_import_ids=library_conflicting_ids
+                                          )
 
     # Step 3: ensure the campaign exists in the library
     with library_schema_context():
@@ -176,32 +251,15 @@ def export_campaign_and_copy_quests(source_schema, campaign_import_id):
             library_campaign.full_clean()
             library_campaign.save()
 
-        # Step 4: clone only the conflicting quests
-        for local_quest in local_quests:
-            if local_quest.import_id in library_conflicting_ids:
-                clone = deepcopy(local_quest)
-                clone.pk = None
-                clone.import_id = uuid4()
-                clone.campaign = library_campaign
-                clone.published = False
+    # Step 4: copy the conflicting quests in alongside the campaign. They carry
+    # the campaign in their snapshot, so they attach to the campaign ensured above.
+    conflicting_quests = [q for q in local_quests if q.import_id in library_conflicting_ids]
+    cloned = clone_quests_into_library(source_schema=source_schema, quests=conflicting_quests)
 
-                # make sure name fits max length
-                max_len = Quest._meta.get_field("name").max_length or 50
-                base_suffix = f" (Exported on {date.today()})"
-                counter = 1
-                base_name = local_quest.name
-
-                # Try the base suffix first
-                potential_name = base_name[:max_len - len(base_suffix)] + base_suffix
-                while Quest.objects.filter(name=potential_name).exists():
-                    counter_suffix = f" #{counter}"
-                    full_suffix = base_suffix + counter_suffix
-                    potential_name = base_name[:max_len - len(full_suffix)] + full_suffix
-                    counter += 1
-
-                clone.name = potential_name
-
-                clone.full_clean()
-                clone.save()
-
-        return library_campaign
+    return TransferResult(
+        quests=exported.quests + cloned.quests,
+        unmet_prereqs=sorted(set(exported.unmet_prereqs) | set(cloned.unmet_prereqs)),
+        unmet_alternates=sorted(set(exported.unmet_alternates) | set(cloned.unmet_alternates)),
+        skipped_quests=skipped_quests,
+        dropped_common_data=sorted(set(exported.dropped_common_data) | set(cloned.dropped_common_data)),
+    )

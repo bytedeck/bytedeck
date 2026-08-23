@@ -36,6 +36,14 @@ $(document).ready(function() {
        window.location.href = $(this).attr("href");
      });
 
+    // Sign Out posts directly for a one-click sign out, submitting the hidden POST
+    // form beside the link. The link keeps its href as a no-JS fallback: with JS off
+    // it GETs allauth's confirmation page, whose button POSTs the same logout view.
+    $('.js-signout').click(function(e) {
+      e.preventDefault();
+      $(this).siblings('.js-signout-form').submit();
+    });
+
     // #1981: bootstrap-table reformats server-rendered tables on load. The head CSS
     // (custom_common.css) hides each data-toggle="table" until this code adds .bt-reveal, and a
     // "Loading content..." spinner (.bt-loading) is server-rendered right before the table so

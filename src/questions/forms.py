@@ -1,5 +1,6 @@
 from django import forms
 from django.forms import ValidationError
+from django.utils.safestring import mark_safe
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import Layout, Div, HTML
@@ -13,6 +14,34 @@ from .models import Question, QuestionSubmission, QuestionType
 
 # 16 MiB, the maximum size of a student's file response.
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
+
+# How many characters a student may type into a short answer. One number for the field's
+# validation, the input's maxlength and the help text that tells the student, so what they
+# are told and what they are held to cannot drift apart (#2401).
+SHORT_ANSWER_MAX_LENGTH = 200
+
+
+class AnswerSummernoteWidget(ByteDeckSummernoteSafeInplaceWidget):
+    """A long-answer editor sized for one answer among several on the submission page.
+
+    The site-wide editor height suits a page with one editor on it. A quest can ask several long
+    answers, and each one arrives above the submission's own comment editor, so at that height a
+    three-question quest is metres of scrolling before the student reaches the submit button
+    (#2169). The editor still grows as the student types past the bottom.
+    """
+
+    # ~5 lines of typing before the editor scrolls, against the site-wide 480
+    ANSWER_EDITOR_HEIGHT = "180"
+
+    def summernote_settings(self):
+        """Return the site-wide summernote settings with the shorter answer height.
+
+        Returns:
+            dict: the settings the widget's template hands to summernote.
+        """
+        settings = super().summernote_settings()
+        settings["height"] = self.ANSWER_EDITOR_HEIGHT
+        return settings
 
 
 class QuestionForm(forms.ModelForm):
@@ -125,7 +154,19 @@ class QuestionSubmissionForm(forms.ModelForm):
         )
 
     def __init__(self, *args, **kwargs):
-        """Build the response field appropriate to the instance's question type."""
+        """Build the answer field and crispy layout for the instance's question type.
+
+        A short answer gets a length-capped text input, a long answer a rich-text editor sized
+        for a page that stacks several of them, and a file upload a type-restricted file field.
+        A row whose question has been deleted gets no answer field at all, and clean() reports
+        that instead of raising. The layout skips its own media, since the submission page
+        already loads the editor assets for its comment box.
+
+        Args:
+            *args: positional arguments for the ModelForm (data, files, ...).
+            **kwargs: keyword arguments for the ModelForm; ``instance`` carries the answer row
+                whose question decides the field.
+        """
         super().__init__(*args, **kwargs)
 
         self.question = self.instance.question if self.instance.question_id else None
@@ -136,6 +177,10 @@ class QuestionSubmissionForm(forms.ModelForm):
         # the formset machinery adds a hidden 'id' (pk) field to each form; it must be
         # rendered so a POST can match each answer back to its row
         self.helper.render_hidden_fields = True
+        # A long answer's editor would otherwise emit the whole summernote asset set again,
+        # mid-page, on top of the copy the submission page's own comment editor already loads
+        # in the head (#2169).
+        self.helper.include_media = False
 
         if self.question is None:
             # Degraded stub (question deleted or instance missing): no response fields,
@@ -148,41 +193,42 @@ class QuestionSubmissionForm(forms.ModelForm):
         form_fields = Div("response_text")
         if self.question.type == QuestionType.SHORT_ANSWER:
             del self.fields["response_file"]
-            # replace the model's TextField default with a CharField so the 200-character
-            # limit is enforced server-side, not just by the widget's maxlength attribute.
+            # replace the model's TextField default with a CharField so the 200-character limit
+            # on the raw text the student types is enforced server-side, not just by the widget's
+            # maxlength attribute. The cap is on the raw input (validated before clean_response_text
+            # runs); see that method for why the stored value can be longer (#2170).
             # A short answer is a single line, so use a text input (not a textarea).
             # no visible label (the question's instructions directly above serve as the label,
             # matching the long answer field); a distinct aria-label per question keeps each
             # input tellable apart for screen-reader users when a page has several short answers.
+            # The help text is where the student learns the limit: the input enforces it
+            # silently, by refusing keystrokes once the answer is full (#2401).
             self.fields["response_text"] = forms.CharField(
                 label="",
                 required=self.question.required,
-                max_length=200,
-                widget=forms.TextInput(attrs={'maxlength': '200', 'aria-label': self._response_aria_label()}),
+                max_length=SHORT_ANSWER_MAX_LENGTH,
+                help_text=f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.",
+                widget=forms.TextInput(attrs={
+                    'maxlength': str(SHORT_ANSWER_MAX_LENGTH),
+                    'aria-label': self._response_aria_label(),
+                }),
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
             self.fields["response_text"] = forms.CharField(
-                label="", required=self.question.required, widget=ByteDeckSummernoteSafeInplaceWidget()
+                label="", required=self.question.required, widget=AnswerSummernoteWidget()
             )
         elif self.question.type == QuestionType.FILE_UPLOAD:
             del self.fields["response_text"]
             mime_types = self.question.allowed_mime_types()
 
-            self.fields["response_file"] = RestrictedFileFormField(
-                required=self.question.required,
-                content_types=mime_types,
-                max_upload_size=MAX_RESPONSE_FILE_SIZE,
-                widget=forms.ClearableFileInput(attrs={"multiple": False}),
-                label="Attach files",
-                help_text=f"Allowed file types: {self.question.get_allowed_file_type_display()}",
-            )
-
-            form_fields = Div("response_file")
+            help_text = f"Allowed file types: {self.question.get_allowed_file_type_display()}"
             if isinstance(mime_types, list):
                 # 'all' has no meaningful MIME list to show ("All" sentinel), so the
-                # popover enumerating exact MIME types only appears for restricted choices
-                file_types_popover = f"""
+                # popover enumerating exact MIME types only appears for restricted choices.
+                # It rides inside the help text so the icon sits on the same line as the types
+                # it explains, rather than on a line of its own below them.
+                help_text = mark_safe(help_text + f"""
                 <a data-toggle="popover"
                    data-trigger="hover"
                    data-placement="auto"
@@ -190,8 +236,18 @@ class QuestionSubmissionForm(forms.ModelForm):
                    data-content="{', '.join(mime_types)}">
                     <i class="fa fa-fw fa-lg fa-info-circle"></i>
                 </a>
-                """
-                form_fields = Div("response_file", HTML(file_types_popover))
+                """)
+
+            self.fields["response_file"] = RestrictedFileFormField(
+                required=self.question.required,
+                content_types=mime_types,
+                max_upload_size=MAX_RESPONSE_FILE_SIZE,
+                widget=forms.ClearableFileInput(attrs={"multiple": False}),
+                label="Attach files",
+                help_text=help_text,
+            )
+
+            form_fields = Div("response_file")
         else:
             raise NotImplementedError(
                 f"Question of type {self.question.type} not supported yet."
@@ -232,6 +288,18 @@ class QuestionSubmissionForm(forms.ModelForm):
         summernote widget filters tags but allows every attribute (so onclick etc. survive).
         Sanitizing here keeps legitimate formatting while stripping script vectors, matching
         how comment text is handled.
+
+        The short-answer 200-character limit is on the *raw* text the student types: the
+        CharField's max_length is validated before this runs, matching the input's maxlength,
+        so the student can never type more than 200 characters. HTML-escaping here (``<`` ->
+        ``&lt;``, ``&`` -> ``&amp;``) can make the *stored* value longer than 200, but that
+        escaped value renders back to the same <=200 typed characters via |safe, so the
+        advertised limit still holds from the student's point of view. Capping the escaped
+        length instead would reject <=200-character answers the browser accepted (e.g. one
+        with a few ``<``/``&``), which would be a confusing client/server mismatch (#2170).
+
+        Returns:
+            str: the answer with dangerous HTML removed, ready to store and render with |safe.
         """
         return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 

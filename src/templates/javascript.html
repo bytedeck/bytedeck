@@ -188,6 +188,14 @@
       // Enable allowfullscreen on responsive iframes
       $("iframe.embed-responsive-item").attr('allowfullscreen', '');
 
+      // Bootstrap tooltips and popovers are opt-in per element, so activate every element that
+      // asks for one, once, for the whole site. The markup lives in shared snippets (the
+      // submission-questions table, a submission's time-to-complete note) that render on pages
+      // all over the app, and a page that did not run this itself showed no popover at all: the
+      // marker notes and the list of allowed file types were unreachable (#2166).
+      $('[data-toggle="tooltip"]').tooltip();
+      $('[data-toggle="popover"]').popover();
+
       // Dismiss bootstrap alerts
       if ($('.dismiss-in-3').length) {
         setTimeout(function(){ $('.dismiss-in-3').slideUp(); }, 3000);

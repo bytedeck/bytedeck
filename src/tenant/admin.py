@@ -16,6 +16,7 @@ from django.utils.html import format_html
 from django.utils.formats import date_format
 from django.urls import reverse
 
+
 from allauth.socialaccount.models import SocialApp
 from allauth.account.models import EmailAddress
 from allauth.account.utils import user_email
@@ -75,7 +76,7 @@ class TenantAdminForm(TenantBaseForm):
     class Meta(TenantBaseForm.Meta):
         fields = TenantBaseForm.Meta.fields + [
             'max_active_users', 'paid_until', 'trial_end_date',
-            'stripe_customer_id', 'stripe_subscription_id', 'can_delete']
+            'stripe_customer_id', 'stripe_subscription_id', 'stripe_portal_configuration_id', 'can_delete']
 
     def clean_name(self):
         name = super().clean_name()
@@ -149,17 +150,23 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         'schema_name', 'owner_full_name_text',
         'owner_email_text', 'owner_email_verified_boolean',
         'last_staff_login', 'google_signon_enabled',
-        'subscription_status_text', 'paid_until_text', 'trial_end_date_text',
+        'subscription_status_text', 'deletable_text', 'paid_until_text', 'trial_end_date_text',
         'max_active_users', 'active_user_count', 'total_user_count',
         'quest_count',
     )
+    # the request fields are written by the owner's subscription-page actions, so
+    # the admin shows them for review without offering to edit them
+    readonly_fields = ('deletion_requested_on', 'deletion_requested_by')
 
     class Media:
         """Extra assets for the changelist: the Subscription column's badge
         stylesheet (.deck-status-*), since the admin doesn't load the app's
         bootstrap css."""
         css = {'all': ('css/admin_deck_status.css',)}
-    list_filter = ('paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login')
+    list_filter = (
+        ('deletion_requested_on', admin.EmptyFieldListFilter),
+        'paid_until', 'trial_end_date', 'active_user_count', 'last_staff_login',
+    )
     search_fields = ['schema_name', 'owner_full_name_cached', 'owner_email_cached']
 
     form = TenantAdminForm
@@ -380,12 +387,26 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
                     return True
         return False
 
-    @admin.display(description="subscription")
+    def get_queryset(self, request):
+        """The changelist queryset, with each deck's lifecycle status ranked in SQL
+        so the Subscription column can be sorted on.
+
+        Args:
+            request (HttpRequest): The admin request.
+
+        Returns:
+            QuerySet: Tenants annotated with `subscription_status_rank`.
+        """
+        return Tenant.annotate_subscription_status(super().get_queryset(request))
+
+    @admin.display(description="subscription", ordering="subscription_status_rank")
     def subscription_status_text(self, obj):
         """The deck's lifecycle status as a colored badge: the same status (and
         the same word) the deck owner sees on their subscription details page,
         both rendered from the shared ``Tenant.subscription_status`` precedence
-        chain so the two can never disagree.
+        chain so the two can never disagree. Sorting the column orders by the
+        matching SQL ranking annotation (see ``get_queryset``), which puts the
+        decks needing attention first.
 
         Args:
             obj (Tenant): The changelist row's tenant.
@@ -401,6 +422,27 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
             obj.subscription_status,
             obj.subscription_status_label,
         )
+
+    @admin.display(description="deletable")
+    def deletable_text(self, obj):
+        """Whether this deck can be deleted, and why: "via request" (its owner
+        asked; the date is on the change form) or "via timeout" (a year
+        suspended), next to the Subscription column so decks whose waiting is
+        over surface during any review. Arming *Can delete* on the deck is the
+        one step left before the admin delete is allowed
+        (``Tenant.deletion_eligibility`` / ``is_deletable``).
+
+        Args:
+            obj (Tenant): The changelist row's tenant.
+
+        Returns:
+            str | None: "via request", "via timeout", or None (an empty cell)
+            while the deck cannot be deleted.
+        """
+        eligibility = obj.deletion_eligibility
+        if eligibility is None:
+            return None
+        return 'via request' if eligibility == 'request' else 'via timeout'
 
     @admin.display(description="paid until", ordering="paid_until")
     def paid_until_text(self, obj):
@@ -473,11 +515,11 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
         """Deletion is gated on the deck being abandoned (#2044 retirement policy).
 
         Per object, the Django delete permission must hold AND the deck must be
-        deletable (suspended for over a year, counted from its first suspended
-        notice -- ``Tenant.is_deletable``); this both hides the change form's
-        Delete button and 403s the delete view for protected decks. With no
-        object (module/changelist level) the default applies, so the model
-        itself stays visible to authorized admins.
+        deletable (``Tenant.is_deletable``: suspended and armed, plus either a
+        standing owner deletion request or a year on the suspension clock); this
+        both hides the change form's Delete button and 403s the delete view for
+        protected decks. With no object (module/changelist level) the default
+        applies, so the model itself stays visible to authorized admins.
         """
         allowed = super().has_delete_permission(request, obj)
         if obj is None:

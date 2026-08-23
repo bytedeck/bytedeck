@@ -83,7 +83,7 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.assert403('badges:revoke', args=[s_pk])
         self.assert403('badges:grant_qualifying', args=[b_pk])
 
-        self.assertEqual(self.client.get(reverse('badges:badge_prereqs_update', args=[b_pk])).status_code, 403)
+        self.assert403('badges:badge_prereqs_update', args=[b_pk])
 
     def test_all_badge_page_status_codes__teachers(self):
         """Teachers get 200 on every badge view, including create/update/grant/revoke."""
@@ -237,8 +237,7 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # user_id=0 and badge_id=0 skip the get_object_or_404 initial lookups
-        response = self.client.get(reverse('badges:grant', kwargs={'user_id': 0, 'badge_id': 0}))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('badges:grant', kwargs={'user_id': 0, 'badge_id': 0})
         # neither field is pre-filled because both id lookups were skipped
         self.assertNotIn('user', response.context['form'].initial)
         self.assertNotIn('badge', response.context['form'].initial)
@@ -272,6 +271,98 @@ class BadgeViewTests(ByteDeckTenantTestCase):
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertTrue(new_assertion.do_not_grant_xp)
+
+    def test_assertion_create__offers_the_students_courses_when_they_have_several(self):
+        """Granting from a student's profile asks which of their courses the badge counts toward,
+        the same question they answer on their own submissions (issue #2440)."""
+        self.client.force_login(self.test_teacher)
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}))
+
+        form = response.context['form']
+        self.assertCountEqual(form.fields['course'].queryset, [maths, art])
+        self.assertEqual(form.fields['course'].empty_label, "Split evenly between the student's courses")
+
+    def test_assertion_create__grants_toward_the_chosen_course(self):
+        """The teacher's choice is recorded on the assertion, so the badge's XP counts toward
+        that course instead of being shared."""
+        self.client.force_login(self.test_teacher)
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id, 'course': maths.id},
+        )
+
+        self.assertRedirects(response, reverse('badges:list'))
+        self.assertEqual(BadgeAssertion.objects.latest('timestamp').course, maths)
+
+    def test_assertion_create__refuses_a_course_the_recipient_is_not_in(self):
+        """The courses offered belong to the student named in the URL, but the badge goes to the
+        student picked on the form, so a posted pair that does not match is rejected. Attaching
+        someone else's course would count that XP toward a course this student cannot see."""
+        self.client.force_login(self.test_teacher)
+        # the URL student holds two courses, so the form does offer the question
+        offered_course = baker.make('courses.Course', title='Theirs')
+        for course in (offered_course, baker.make('courses.Course')):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+        baker.make('courses.CourseStudent', user=self.test_student2, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student2.id, 'course': offered_course.id},
+        )
+
+        self.assertEqual(response.status_code, 200)  # redisplayed with the error, not saved
+        self.assertIn('course', response.context['form'].errors)
+        self.assertFalse(BadgeAssertion.objects.filter(user=self.test_student2, badge=self.test_badge).exists())
+
+    def test_assertion_create__does_not_ask_for_a_student_with_one_course(self):
+        """One course means no question to ask, so the field is not there at all."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}))
+
+        self.assertNotIn('course', response.context['form'].fields)
+
+    def test_bulk_assertion_create__warns_that_the_xp_will_be_split(self):
+        """Bulk granting cannot ask about courses, because every student picked has their own.
+        Say so on the page rather than leaving a teacher to assume it landed somewhere."""
+        self.client.force_login(self.test_teacher)
+        for course in (baker.make('courses.Course'), baker.make('courses.Course')):
+            baker.make('courses.CourseStudent', user=self.test_student1, course=course,
+                       block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(reverse('badges:bulk_grant'))
+
+        self.assertContains(response, 'split evenly between their courses')
+        self.assertNotIn('course', response.context['form'].fields)
+
+    def test_bulk_assertion_create__stays_quiet_on_a_deck_of_single_course_students(self):
+        """Nothing is split on a deck where every student takes one course, so the notice would
+        only puzzle the teacher reading it."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.sem)
+
+        response = self.client.get(reverse('badges:bulk_grant'))
+
+        self.assertNotContains(response, 'split evenly between their courses')
 
     def test_bulk_assertion_create__grants_to_all_selected(self):
         """Bulk granting a badge to multiple students creates one assertion per student."""
@@ -570,8 +661,7 @@ class BadgeTypeViewTests(ByteDeckTenantTestCase):
     def test_BadgeTypeList_view__staff_can_view(self):
         """ Admin should be able to view badge type list """
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('badges:badge_types'))
-        self.assertEqual(response.status_code, 200)
+        self.assert200('badges:badge_types')
 
     def test_BadgeTypeCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
@@ -704,13 +794,13 @@ class BadgeAjaxTests(ByteDeckTenantTestCase):
         # test anon
         # ajax_on_show_badge_popup
         self.assert403('badges:ajax_on_show_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_show_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_show_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # ajax_on_close_badge_popup
         self.assert403('badges:ajax_on_close_badge_popup')
-        response = self.client.get(reverse('badges:ajax_on_close_badge_popup'), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
-        self.assertEqual(response.status_code, 302)
+        url = reverse('badges:ajax_on_close_badge_popup')
+        self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
         # test student
         self.client.force_login(self.student)

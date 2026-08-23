@@ -1,5 +1,9 @@
+import datetime
+
 from unittest import mock
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from model_bakery import baker
@@ -203,6 +207,9 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
 
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
+        # a student's semester comes from their registration (issue #2157 Phase 3), so without
+        # one none of their stamped assertions read as this semester's
+        baker.make('courses.CourseStudent', user=cls.student, course=baker.make('courses.Course'), semester=cls.sem)
 
     def test_user_badge_assertion_count__annotates_count_per_user(self):
         """Test that BadgeAssertion.objects.user_assertion_count_of_badge() returns a User queryset with
@@ -221,6 +228,49 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.get(id=self.student.id).assertion_count, 3)
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
+
+    def _granted_on(self, date, xp, course=None):
+        """Grant the student a badge worth `xp`, stamped as granted on `date`.
+
+        The timestamp is auto_now_add, so it has to be written after the fact rather than
+        handed to the assertion when it is made.
+        """
+        assertion = baker.make(
+            BadgeAssertion, user=self.student, badge=baker.make(Badge, xp=xp),
+            semester=self.sem, course=course,
+        )
+        BadgeAssertion.objects.filter(pk=assertion.pk).update(timestamp=date)
+        return assertion
+
+    def test_xp_by_course_series__answers_each_date_with_what_had_been_granted_by_then(self):
+        """Each date gets the split as it stood then, which is what plots a course's line
+        through the semester (issue #2459). Badges have no cap, so a date's figure is the
+        running total of everything granted by then."""
+        maths = baker.make('courses.Course')
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10, course=maths)
+        self._granted_on(monday + datetime.timedelta(days=2), xp=25)
+
+        series = BadgeAssertion.objects.xp_by_course_series(
+            self.student, [monday - datetime.timedelta(days=1), monday, monday + datetime.timedelta(days=2)])
+
+        self.assertEqual(series, [{}, {maths.id: 10}, {maths.id: 10, None: 25}])
+
+    def test_xp_by_course_series__costs_the_same_however_many_dates(self):
+        """Reading the assertions once is the point of the series: charting a course asks for
+        a whole semester of class days at a time, and what it costs must not grow with them
+        (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
+        survives any unrelated change to how the assertions are looked up."""
+        monday = datetime.datetime(2024, 1, 8, tzinfo=datetime.timezone.utc)
+        self._granted_on(monday, xp=10)
+        dates = [monday + datetime.timedelta(days=day) for day in range(20)]
+
+        with CaptureQueriesContext(connection) as one_date:
+            BadgeAssertion.objects.xp_by_course_series(self.student, dates[:1])
+        with CaptureQueriesContext(connection) as every_date:
+            BadgeAssertion.objects.xp_by_course_series(self.student, dates)
+
+        self.assertEqual(len(every_date), len(one_date))
 
     def test_all_for_user_distinct__distinct_by_badge_and_sorted(self):
         """
@@ -391,6 +441,95 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         )
         self.assertEqual(new_assertion.semester_id, explicit_semester.id)
 
+    def test_create_assertion__is_stamped_with_the_recipients_own_semester(self):
+        """A badge counts toward the semester the student is registered in rather than the one
+        the deck points at (issue #2157 Phase 3), so granting it to a student in another open
+        semester adds XP where that student is actually earning it."""
+        from courses.models import Course, CourseStudent
+
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=other_semester)
+
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher
+        )
+
+        self.assertEqual(new_assertion.semester_id, other_semester.id)
+        self.assertNotEqual(new_assertion.semester_id, SiteConfig.get().open_semester_id)
+
+    def test_create_assertion__no_open_semester_grants_an_unstamped_assertion(self):
+        """Staff can still grant a badge between semesters (issue #1177). The assertion isn't
+        stamped with a semester, so it doesn't count toward the next one's XP."""
+        Semester.objects.complete_semester()
+
+        new_assertion = BadgeAssertion.objects.create_assertion(
+            self.student, baker.make(Badge), issued_by=self.teacher
+        )
+
+        self.assertIsNone(new_assertion.semester_id)
+
+    def test_create_assertion__a_badge_granted_between_semesters_does_not_follow_the_student(self):
+        """A badge granted between terms recognises what the student did between terms, so it
+        belongs to no term and stays that way when they join a course (issue #2474). Joining
+        adopts the quests they had on the go, which would otherwise be stranded out of both
+        their in-progress list and their available list (issue #2441); an assertion is an
+        award already made, so there is nothing to strand and its XP counts toward no
+        semester, the same rule XP already follows when it resets each term."""
+        from courses.models import Course, CourseStudent
+
+        Semester.objects.complete_semester()
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+
+        new_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=new_semester)
+
+        unstamped.refresh_from_db()
+        self.assertIsNone(unstamped.semester_id)
+
+    def test_get_queryset__active_semester_only_holds_the_unstamped_assertions_with_no_open_semester(self):
+        """With no semester open, "this semester" is the work that belongs to none: a badge
+        granted between terms is stamped with no semester (issue #2413) and is still the
+        student's, so the semester-scoped queryset is where it shows up. The assertion from
+        the archived semester is past, so it drops out of that queryset but not the
+        unscoped one."""
+        Semester.objects.complete_semester()
+        unstamped = BadgeAssertion.objects.create_assertion(self.student, baker.make(Badge), issued_by=self.teacher)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+        self.assertIn(unstamped, semester_scoped)
+        self.assertNotIn(self.assertion, semester_scoped)
+        self.assertIn(self.assertion, BadgeAssertion.objects.get_queryset(active_semester_only=False))
+
+    def test_get_queryset__active_semester_only_covers_every_open_semester_deck_wide(self):
+        """A deck can run two cohorts on different calendars (issue #1781), so a deck-wide
+        view of "this semester's" badges is every open semester's, not the one the deck
+        happens to point at: naming a single semester drops the other cohort's assertions
+        out of sight (issue #2475). The badges belonging to no semester are in it too, since
+        someone registered in none is still granted them (issue #2413) and no finished term
+        owns their work either. The submission side already reads this way."""
+        second_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_cohort = baker.make(BadgeAssertion, user=baker.make(User), semester=second_semester)
+        between_terms = baker.make(BadgeAssertion, user=baker.make(User), semester=None)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotEqual(second_semester, SiteConfig.get().open_semester)
+        self.assertIn(self.assertion, semester_scoped)
+        self.assertIn(other_cohort, semester_scoped)
+        self.assertIn(between_terms, semester_scoped)
+
+    def test_get_queryset__active_semester_only_leaves_out_an_archived_semester_deck_wide(self):
+        """Covering every open semester is not the same as covering every semester: a term
+        that has been archived is a finished record, so its assertions are past and stay out
+        of the deck-wide view of current work."""
+        archived = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        finished = baker.make(BadgeAssertion, user=self.student, semester=archived)
+
+        semester_scoped = BadgeAssertion.objects.get_queryset(active_semester_only=True)
+
+        self.assertNotIn(finished, semester_scoped)
+        self.assertIn(finished, BadgeAssertion.objects.get_queryset(active_semester_only=False))
+
     def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
         """The granted notification uses the badge type's own fa_icon when it has one, rather
         than the default fa-certificate (the non-default branch of post_save_receiver)."""
@@ -418,6 +557,8 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
     def test_get_by_type_for_user__one_entry_per_badge_type(self):
         """ get_by_type_for_user should return one entry per BadgeType, where the entry for the
         granted badge's type contains the user's assertion and all other entries are empty. """
+        # registered in the semester the recipe stamps, or the assertion isn't theirs to list
+        baker.make('courses.CourseStudent', user=self.student, course=baker.make('courses.Course'), semester=self.sem)
         assertion = self.badge_assertion_recipe.make()
         badge_list_by_type = BadgeAssertion.objects.get_by_type_for_user(self.student)
         self.assertEqual(len(badge_list_by_type), BadgeType.objects.count())

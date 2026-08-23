@@ -27,8 +27,9 @@
               <p class="text-muted"><small><b>Solution:</b> {{ answer.question.solution_text|linebreaksbr }}</small></p>
             {% endif %}
             {% if answer.question.solution_file %}
-              <p class="text-muted"><small><b>Solution file:</b>
-                <a href="{{ answer.question.solution_file.url }}" target="_blank">{{ answer.question.solution_file|filename|safe }}</a></small></p>
+              {# a div, not a paragraph: the snippet can render a video or audio player, which is invalid inside one #}
+              <div class="text-muted"><small><b>Solution file:</b>
+                {% include 'questions/snippets/question_file.html' with file=answer.question.solution_file %}</small></div>
             {% endif %}
             {% if answer.question.marker_notes %}
               {# unwrap_p strips Summernote's wrapping paragraph element so a one-line note sits beside its label, like Solution above. #}
@@ -42,7 +43,7 @@
       </td>
       <td class="col-sm-7">
         {% if answer.response_file %}
-          <a href="{{ answer.response_file.url }}" target="_blank">{{ answer.response_file|filename|safe }}</a>
+          {% include 'questions/snippets/question_file.html' with file=answer.response_file %}
         {% elif answer.response_text %}
           {{ answer.response_text|safe }}
         {% else %}

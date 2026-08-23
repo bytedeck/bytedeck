@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.utils.html import format_html
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, ListView, TemplateView
 from django.views.generic.edit import UpdateView, FormView, DeleteView
 
@@ -20,7 +21,7 @@ from .models import Profile
 from .forms import ProfileForm, UserForm
 from .tasks import invalidate_profile_xp_cache_on_schema
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Block
+from courses.models import CourseStudent, Block, Semester
 from notifications.signals import notify
 from quest_manager.models import QuestSubmission
 from tags.models import get_user_tags_and_xp
@@ -69,7 +70,11 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         profiles_qs = profiles_qs.prefetch_related(
             Prefetch(
                 'user__coursestudent_set',
-                queryset=CourseStudent.objects.filter(semester=SiteConfig.get().active_semester).select_related('course', 'block'),
+                # every open semester, not just the deck's default: a student in the other
+                # cohort's semester is listed as current, so their course and group must show
+                # too rather than leaving their row blank. Empty between semesters, when
+                # nobody has a current course.
+                queryset=CourseStudent.objects.get_queryset().in_open_semesters().select_related('course', 'block'),
             )
         )
 
@@ -105,7 +110,7 @@ class ProfileListCurrent(ProfileList):
         return self.request.user.is_authenticated
 
     def get_queryset(self):
-        profiles_qs = Profile.objects.all_for_active_semester()
+        profiles_qs = Profile.objects.all_in_open_semesters()
         return self.queryset_append(profiles_qs)
 
 
@@ -116,11 +121,22 @@ class ProfileListBlock(ProfileList):
     block_object = None
 
     def get_queryset(self):
-        """block object is queried via pk kwarg in request from block list view, then a queryset of profiles is generated via relatedmanager"""
+        """The profiles of the students currently in this block.
+
+        The block and the semester have to be matched on the same registration: filtering
+        profiles by block separately would also list a student who is in an open semester
+        for one course and in this block only through an archived one.
+
+        Returns:
+            QuerySet[Profile]: the student profiles registered in this block in a semester
+            that is open right now, each appearing once.
+        """
         block_pk = self.kwargs['pk']
         self.block_object = get_object_or_404(Block, pk=block_pk)
-        # queryset specifications: profile objects that are: part of active semester, a part of a coursestudent object that's in the desired block
-        profiles_qs = Profile.objects.all_for_active_semester().filter(user__coursestudent__block=self.block_object)
+        registered_in_block = CourseStudent.objects.filter(
+            block=self.block_object, semester__status=Semester.Status.OPEN,
+        ).values_list('user_id', flat=True)
+        profiles_qs = Profile.objects.all_in_open_semesters().filter(user_id__in=registered_in_block)
         return self.queryset_append(profiles_qs)
 
     def get_context_data(self, **kwargs):
@@ -269,7 +285,10 @@ class ProfileDelete(NonPublicOnlyViewMixin, UserPassesTestMixin, DeleteView):
         # Add success message
         messages.success(
             self.request,
-            f"The user <b>{user.get_full_name()}</b> and all of their submissions and courses have been successfully deleted."
+            format_html(
+                "The user <b>{}</b> and all of their submissions and courses have been successfully deleted.",
+                user.get_full_name(),
+            )
         )
 
         return redirect(self.success_url)
@@ -491,11 +510,12 @@ def oauth_merge_account(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def recalculate_current_xp(request):
     # Recalculating XP for every current student invalidates and recomputes a cache per
     # profile; on a busy deck that is hundreds of profiles in one request, which has grown a
     # uwsgi worker large enough to get OOM-killed and time out the page (issue #2081). Hand it
-    # to the existing background task instead -- it does the same all_for_active_semester()
+    # to the existing background task instead -- it does the same all_in_open_semesters()
     # recompute (with per-profile error handling) and, dispatched from this request, runs in
     # this tenant's schema via tenant-schemas-celery.
     invalidate_profile_xp_cache_on_schema.apply_async(queue='default')
@@ -509,6 +529,7 @@ def recalculate_current_xp(request):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def xp_toggle(request, profile_id):
     profile = get_object_or_404(Profile, id=profile_id)
     profile.not_earning_xp = not profile.not_earning_xp
@@ -518,6 +539,7 @@ def xp_toggle(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_archive(request, profile_id):
     """Archive a student by deactivating their account (``User.is_active = False``).
 
@@ -549,6 +571,7 @@ def profile_archive(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def profile_restore(request, profile_id):
     """Restore an archived student by reactivating their account (``User.is_active = True``).
 
@@ -570,12 +593,28 @@ def profile_restore(request, profile_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban_toggle(request, profile_id):
+    """Toggle whether a student is banned from commenting publicly.
+
+    The toggling form of :func:`comment_ban`: where that view only applies a ban, this one
+    lifts a ban that is already in place. Staff-only, and POST-only because it changes the
+    student's account (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST from a staff user.
+        profile_id: the id of the Profile to ban or unban.
+
+    Returns:
+        The HttpResponseRedirect from :func:`comment_ban`, back to the page the toggle was
+        clicked from.
+    """
     return comment_ban(request, profile_id, toggle=True)
 
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def comment_ban(request, profile_id, toggle=False):
     profile = get_object_or_404(Profile, id=profile_id)
     if toggle:
@@ -600,13 +639,21 @@ def comment_ban(request, profile_id, toggle=False):
             icon=icon,
         )
 
-        messages.warning(request,
-                         "<a href='" + profile.get_absolute_url() + "'>" +
-                         profile.user.username + "</a> banned from commenting publicly")
+        messages.warning(
+            request,
+            format_html(
+                "<a href='{}'>{}</a> banned from commenting publicly",
+                profile.get_absolute_url(), profile.user.username,
+            )
+        )
     else:
         messages.success(
-            request, "Commenting ban removed for <a href='" + profile.get_absolute_url() + "'>" +
-                     profile.user.username + "</a>")
+            request,
+            format_html(
+                "Commenting ban removed for <a href='{}'>{}</a>",
+                profile.get_absolute_url(), profile.user.username,
+            )
+        )
 
     return redirect_to_previous_page(request)
 

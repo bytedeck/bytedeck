@@ -9,3 +9,13 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "daily"
+
+  # Keeps the hook revisions in .pre-commit-config.yaml current. The pip entry
+  # above only sees requirements.txt, so the hooks pinned to an upstream rev
+  # (pre-commit-hooks, pyupgrade) need their own ecosystem. The ruff hook is a
+  # local one that runs the ruff installed from requirements.txt, so the pip
+  # entry above is what bumps ruff.
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "daily"

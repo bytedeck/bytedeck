@@ -12,7 +12,7 @@
 
 {% block content %}
   <div class="help-block">
-    <p>Students answer these questions as part of submitting the quest — each question adds its own
+    <p>Students answer these questions as part of submitting the quest: each question adds its own
     answer field to the quest's submission form, shown in order above the usual comment box.
     Use the buttons above to add a question of each type:</p>
     <ul>
@@ -22,21 +22,52 @@
         (image, video, audio, image or video, or any file).</li>
     </ul>
     <p>Questions marked <strong>Required</strong> must be answered before the quest can be submitted;
-    optional questions can be left blank. Text answers autosave with the student's draft as they
-    work; file answers upload when the quest is submitted. Once submitted, answers appear with the
-    submission for marking — right beside each question's <strong>Solution</strong> and
+    optional questions can be left blank. Answers are saved with the student's draft as they work:
+    text as they type, and any chosen files too. Once submitted, answers appear with the
+    submission for marking, right beside each question's <strong>Solution</strong> and
     <strong>Marker Notes</strong>, which only staff ever see.
     Deleting a question keeps any answers students have already submitted.</p>
   </div>
-  {% include 'questions/snippets/question_table.html' %}
+  <div id="question-table">
+    {% include 'questions/snippets/question_table.html' %}
+  </div>
 {% endblock %}
 
 {% block js %}
 <script>
-    // initialize the popovers and tooltips used by the question table
-    $(document).ready(function(){
-        $('[data-toggle="popover"]').popover();
-        $('[data-toggle="tooltip"]').tooltip();
+  $(document).ready(function () {
+    // Reordering is a several-click job, so each move is posted in the background and the
+    // table redrawn from the server's answer: the teacher keeps their place in the list
+    // between clicks, and the ordering and the disabled arrows at its ends stay the server's
+    // business (#2216). These are ordinary forms, so with JavaScript off they post normally
+    // and the view redirects to the reloaded list.
+    var $table = $('#question-table');
+
+    $table.on('submit', 'form.question-move-form', function (event) {
+      event.preventDefault();
+      var $form = $(this);
+
+      $.ajax({
+        type: 'POST',
+        url: $form.attr('action'),
+        data: $form.serialize(),
+        success: function (data) {
+          $table.html(data.question_table_html);
+          // The site-wide initializer ran on the rows this just replaced, so the new ones
+          // need theirs: an uninitialized bootstrap tooltip or popover does nothing.
+          $table.find('[data-toggle="tooltip"]').tooltip();
+          $table.find('[data-toggle="popover"]').popover();
+          // Put focus back on the same button of the same question, so a teacher moving a
+          // question several places keeps clicking (or pressing enter on) one button.
+          $table.find('form[action="' + $form.attr('action') + '"] button').focus();
+        },
+        error: function () {
+          // Nothing was redrawn, so the page still shows the old order: reload to find out
+          // what the server actually did.
+          window.location.reload();
+        }
+      });
     });
+  });
 </script>
 {% endblock %}

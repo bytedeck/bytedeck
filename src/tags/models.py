@@ -6,8 +6,6 @@ from django.db.models.functions import Greatest
 from taggit.models import Tag
 from taggit.managers import TaggableManager
 
-from siteconfig.models import SiteConfig
-
 
 def get_tags_from_user(user):
     """
@@ -72,9 +70,9 @@ def get_badge_assertion_by_tags(user, tags):
     # get model through here to prevent circular imports
     BadgeAssertion = apps.get_model("badges", "BadgeAssertion")
 
+    # all_for_user() is already limited to the semester this student is earning in
     return BadgeAssertion.objects.all_for_user(user).filter(
         badge__tags__name__in=list(tags),
-        semester=SiteConfig.get().active_semester,
         do_not_grant_xp=False
     ).distinct()
 

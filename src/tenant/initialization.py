@@ -15,7 +15,7 @@ from django.db import connection
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name
 
-from courses.models import Grade, Rank, Course, Block, MarkRange
+from courses.models import Grade, Rank, Course, Block, MarkRange, Semester
 from quest_manager.models import Quest, Category
 from badges.models import Badge, BadgeType, BadgeRarity
 from prerequisites.models import Prereq
@@ -31,12 +31,18 @@ intro_tag = "intro"
 
 
 def load_initial_tenant_data():
+    """Fill a newly created tenant schema with the data a deck needs to be usable.
 
+    Order matters: the SiteConfig singleton comes first (everything else reads it), and the
+    deck's semester is created and opened before the default course and blocks, so the first
+    student to register has a semester to join.
+    """
     if connection.schema_name == get_public_schema_name():
         return
 
     create_users()
     create_site_config_object()
+    create_initial_semester()
     create_initial_course()
     create_initial_blocks()
     create_initial_markranges()
@@ -129,6 +135,18 @@ def create_site_config_object():
         config.save()
 
 
+def create_initial_semester():
+    """Give the new deck a semester and open it, so students can join a course right away.
+
+    Its dates are the Semester defaults (today, and 135 days later); staff can rename it and
+    adjust the dates from the semester list.
+    """
+    semester = Semester()
+    semester.full_clean()
+    semester.save()
+    SiteConfig.get().set_active_semester(semester)
+
+
 def create_initial_course():
     Course.objects.create(title="Default")
 
@@ -145,19 +163,19 @@ def create_initial_markranges():
 
 
 def create_initial_ranks():
-    Rank.objects.create(name="Digital Noob", xp=0, fa_icon="fa fa-circle-o")
-    Rank.objects.create(name="Digital Novice", xp=60, fa_icon="fa fa-angle-up")
-    Rank.objects.create(name="Digital Novice II", xp=125, fa_icon="fa fa-angle-double-up")
-    Rank.objects.create(name="Digital Amateur", xp=185, fa_icon="fa fa-forward fa-rotate-270")
-    Rank.objects.create(name="Digital Amateur II", xp=250, fa_icon="fa fa-fast-forward fa-rotate-270")
-    Rank.objects.create(name="Digital Apprentice", xp=310, fa_icon="fa fa-th-large")
-    Rank.objects.create(name="Digital Apprentice II", xp=375, fa_icon="fa fa-th")
-    Rank.objects.create(name="Digital Journeyman", xp=495, fa_icon="fa fa-pause fa-rotate-90")
-    Rank.objects.create(name="Digital Journeyman II", xp=595, fa_icon="fa fa-align-center")
-    Rank.objects.create(name="Digital Journeyman III", xp=665, fa_icon="fa fa-align-justify")
-    Rank.objects.create(name="Digital Crafter", xp=725, fa_icon="fa fa-star-o")
-    Rank.objects.create(name="Expert Digital Crafter", xp=855, fa_icon="fa fa-star")
-    Rank.objects.create(name="Master Digital Crafter", xp=1000, fa_icon="fa fa-arrows-alt")
+    Rank.objects.create(name="Digital Noob", xp=0, fa_icon="circle-o")
+    Rank.objects.create(name="Digital Novice", xp=60, fa_icon="angle-up")
+    Rank.objects.create(name="Digital Novice II", xp=125, fa_icon="angle-double-up")
+    Rank.objects.create(name="Digital Amateur", xp=185, fa_icon="forward", fa_icon_modifiers="fa-rotate-270")
+    Rank.objects.create(name="Digital Amateur II", xp=250, fa_icon="fast-forward", fa_icon_modifiers="fa-rotate-270")
+    Rank.objects.create(name="Digital Apprentice", xp=310, fa_icon="th-large")
+    Rank.objects.create(name="Digital Apprentice II", xp=375, fa_icon="th")
+    Rank.objects.create(name="Digital Journeyman", xp=495, fa_icon="pause", fa_icon_modifiers="fa-rotate-90")
+    Rank.objects.create(name="Digital Journeyman II", xp=595, fa_icon="align-center")
+    Rank.objects.create(name="Digital Journeyman III", xp=665, fa_icon="align-justify")
+    Rank.objects.create(name="Digital Crafter", xp=725, fa_icon="star-o")
+    Rank.objects.create(name="Expert Digital Crafter", xp=855, fa_icon="star")
+    Rank.objects.create(name="Master Digital Crafter", xp=1000, fa_icon="arrows-alt")
 
 
 def create_initial_grades():

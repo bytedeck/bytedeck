@@ -1,5 +1,6 @@
 {% extends "quest_manager/base.html" %}
 {% load crispy_forms_tags %}
+{% load quest_tags %}
 
 {% block head_title %}Campaigns | {% endblock %}
 
@@ -19,6 +20,7 @@
                 <i class="fa fa-edit"></i>
             </a>
 
+            {% can_export_to_library as can_export %}
             {% if can_export %}
               <a class="btn btn-default" role="button"
                 {% if object.quest_count != 0 %}

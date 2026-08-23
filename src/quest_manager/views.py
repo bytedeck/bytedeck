@@ -1,7 +1,9 @@
 import json
+import posixpath
 import re
 import uuid
 
+from django.utils.html import format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -20,6 +22,7 @@ from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.views.decorators.http import require_POST
 from django.views.generic import DetailView, View
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -28,11 +31,12 @@ from hackerspace_online.decorators import staff_member_required, xml_http_reques
 from badges.models import BadgeAssertion
 from comments.models import Comment, Document
 from comments.sanitize import sanitize_comment_html
+from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
-from questions.utils import sync_draft_question_submissions
+from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from library.utils import from_library_schema_first
+from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
 from prerequisites.views import ObjectPrereqsFormView
@@ -103,13 +107,30 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return queryset
 
     def get_context_data(self, *args, **kwargs):
-        context_data = super().get_context_data(*args, **kwargs)
+        """Add the tab state and the campaign table's flags to the deck's campaign list.
 
-        can_export = SiteConfig.get().can_user_export_to_library(self.request.user)
+        Args:
+            *args: positional arguments passed through to `ListView.get_context_data`.
+            **kwargs: keyword arguments passed through to `ListView.get_context_data`.
+
+        Returns:
+            dict: the template context, with
+                - available_tab_active (bool): the Available tab is the one being shown.
+                - inactive_tab_active (bool): the Inactive tab is the one being shown.
+                - is_library_view (bool): False. The campaign table is shared with the
+                    Library's campaign list, and this is the deck's own copy, so it shows
+                    the local actions rather than the Library's import action.
+
+        The export action's flag is not set here: the template asks the
+        `can_export_to_library` tag itself.
+        """
+        context_data = super().get_context_data(*args, **kwargs)
 
         context_data['available_tab_active'] = self.available_tab_active
         context_data['inactive_tab_active'] = self.inactive_tab_active
-        context_data['can_export'] = can_export
+        # these are the deck's own campaigns, so the shared campaign table shows the
+        # local actions (edit, publish, export, delete) rather than the Library's import action
+        context_data['is_library_view'] = False
 
         return context_data
 
@@ -133,7 +154,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
         Returns:
             dict: Context info containing the appropriate quests for the user to view,
-            including "category_displayed_quests" and "can_export".
+            including "category_displayed_quests".
         """
         if self.request.user.is_staff:
             quests = Quest.objects.filter(campaign=self.object)
@@ -155,7 +176,6 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         )
 
         kwargs['category_displayed_quests'] = quests
-        kwargs['can_export'] = SiteConfig.get().can_user_export_to_library(self.request.user)
 
         return super().get_context_data(**kwargs)
 
@@ -274,8 +294,10 @@ class CategoryPublish(View):
         """
         category = get_object_or_404(Category, pk=pk)
         category.publish_with_quests()
-        link = f'<a href="{category.get_absolute_url()}">{category.title}</a>'
-        messages.success(request, f'Campaign "{link}" and all quests published.')
+        messages.success(request, format_html(
+            'Campaign "<a href="{}">{}</a>" and all quests published.',
+            category.get_absolute_url(), category.title,
+        ))
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
@@ -510,7 +532,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
             )
             return redirect("quests:quest_detail", quest.id)
 
-        link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+        quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
         # Archive the quest
         quest.archived = True
@@ -537,7 +559,7 @@ class QuestArchive(NonPublicOnlyViewMixin, DetailView):
 
         messages.success(
             request,
-            f"Quest '{link}' has been archived and all its submissions have been deleted."
+            format_html("Quest '{}' has been archived and all its submissions have been deleted.", quest_link),
         )
         return redirect("quests:archived")
 
@@ -923,12 +945,40 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 @non_public_only_view
 @login_required
 def ajax_quest_info(request, quest_id=None):
+    """Return the rendered preview panel for one quest, for the accordion tables.
+
+    POST only, and XHR only (see the decorators). The accordion in
+    bootstrap-table-accordion.js calls this when a row is expanded and drops the
+    returned HTML into the row's detail area.
+
+    On a Library page the accordion sets ``use_library_schema=1``, which serves
+    the preview out of the shared Library schema instead of the caller's own
+    deck. That flag is a boolean by design: the schema name is resolved server
+    side from the library app's config, never taken from the request, so a
+    caller cannot name the schema its request runs against (schema names are the
+    decks' public subdomains, so accepting one would let any logged-in user read
+    another deck's content).
+
+    Args:
+        request (HttpRequest): the current request. Reads ``use_library_schema``
+            from POST; everything else comes from the URL and the session.
+        quest_id (int | None): primary key of the quest to preview, in whichever
+            schema the flag above selected. Staff may preview archived quests.
+
+    Returns:
+        JsonResponse: ``{"quest_info_html": "<rendered preview>"}``.
+
+    Raises:
+        Http404: if the request is not a POST, if no ``quest_id`` is given (the
+            "every quest at once" response was an unbounded per-request memory
+            hog with no staff gate, issue #2081), or if no matching quest is
+            visible to this user.
+    """
     if request.method == "POST":
         template = 'quest_manager/preview_content_quests_avail.html'
 
-        with from_library_schema_first(request):
-            is_library_view = (request.POST.get('use_schema') == 'library')
-            can_export = SiteConfig.get().can_user_export_to_library(request.user)
+        with library_schema_if_requested(request):
+            is_library_view = is_library_schema_requested(request)
 
             if quest_id:
                 if request.user.is_staff:
@@ -936,8 +986,11 @@ def ajax_quest_info(request, quest_id=None):
                 else:
                     quest = get_object_or_404(Quest, pk=quest_id)
 
+                # The export button's can_export_to_library tag runs during this render,
+                # so it still answers for the schema selected above: on a Library preview
+                # it sees the Library schema and offers no export button.
                 quest_info_html = render_to_string(template,
-                                                   {'q': quest, 'is_library_view': is_library_view, 'can_export': can_export},
+                                                   {'q': quest, 'is_library_view': is_library_view},
                                                    request=request)
 
                 data = {'quest_info_html': quest_info_html}
@@ -983,6 +1036,14 @@ def ajax_approval_info(request, submission_id=None):
 @non_public_only_view
 @login_required
 def ajax_submission_info(request, submission_id=None):
+    """Render the preview panel for one submission, requested over AJAX from a submission tab.
+
+    Three legs pick the queryset by URL: /past/ and /completed/ scope to the requester's own
+    finished submissions, while the default (in-progress) leg previews any submission for staff
+    and TAs (the copy-a-started-quest feature, #141) but only the requester's own for a regular
+    student, so one student cannot read another's answers or comment thread (#2558). Only an
+    AJAX POST is served; anything else is a 404.
+    """
     if request.method == "POST":
         # past means previous semester that is now closed
         past = "/past/" in request.path_info
@@ -993,7 +1054,13 @@ def ajax_submission_info(request, submission_id=None):
         elif completed:
             qs = QuestSubmission.objects.all_completed(request.user)
         else:
+            # The in-progress preview is unscoped for staff and TAs (a TA previews another
+            # student's started quest to copy it, #141), but a regular student may only see
+            # their own submission: otherwise any logged-in student could POST another
+            # student's submission id and read their answers and comment thread.
             qs = QuestSubmission.objects.all()
+            if not is_staff_or_TA(request.user):
+                qs = qs.get_user(request.user)
 
         sub = get_object_or_404(qs, pk=submission_id)
 
@@ -1037,14 +1104,11 @@ def detail(request, quest_id):
             # No submission either, so display quest flagged as unavailable
             available = False
 
-    can_export = SiteConfig.get().can_user_export_to_library(request.user)
-
     context = {
         "heading": q.name,
         "q": q,
         "available": available,
         "maps": CytoScape.objects.get_related_maps(q),
-        "can_export": can_export,
     }
 
     return render(request, "quest_manager/detail.html", context)
@@ -1075,20 +1139,22 @@ def quest_user_status(request, quest_id):
         HttpResponse: Rendered page showing the user status list for the quest.
     """
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
-    active_semester = SiteConfig.get().active_semester
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
     #   active    — all active students (in a course or not); the superset
-    #   current   — students registered in a course this active semester (the "current" students)
-    #   my_blocks — students in a course block the current teacher teaches this semester
+    #   current   — students registered in a course in a semester that is open
+    #   my_blocks — students in a course block the current teacher teaches in one of those
+    # The last two span every open semester, since a deck can run more than one at a time
+    # (issue #2157 Phase 3): scoping them to the deck's default would count a student as
+    # current and then leave them out of their own teacher's group.
     active_profiles = list(Profile.objects.all_active().students_only().select_related('user'))
     active_ids = {profile.user_id for profile in active_profiles}
     current_ids = set(
-        CourseStudent.objects.all_users_for_active_semester(students_only=True).values_list('id', flat=True)
+        CourseStudent.objects.all_users_in_open_semesters(students_only=True).values_list('id', flat=True)
     ) & active_ids
     my_block_ids = set(
-        CourseStudent.objects.filter(
-            semester=active_semester, block__current_teacher=request.user
+        CourseStudent.objects.get_queryset().in_open_semesters().filter(
+            block__current_teacher=request.user
         ).values_list('user_id', flat=True)
     ) & active_ids
 
@@ -1299,7 +1365,14 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             blank_comment_text = (
                 "<p>(Skipped - You were not granted XP for this quest)</p>"
             )
-            self.submission.mark_approved(transfer=True)
+            # Matches the skip view: waiving the quest drops the answers the student drafted but
+            # never submitted, so they don't linger as rows nothing will ever show (#2164). The
+            # answers of any cycle they did submit stay published with their own comment. Both
+            # steps share a transaction so a failure in the approval (which also grants badges
+            # and recalculates XP) takes the deletion back with it.
+            with transaction.atomic():
+                discard_draft_question_submissions(self.submission)
+                self.submission.mark_approved(transfer=True)
 
         notification_kwargs.update({
             'verb': note_verb,
@@ -1373,8 +1446,10 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         badges = [badge] if badge else self.form.cleaned_data.get("awards", [])
 
         for badge in badges:
+            # a badge granted alongside a quest counts toward whichever course the student put
+            # that quest against, so the badge and the work it recognises land together (#2440)
             new_assertion = BadgeAssertion.objects.create_assertion(
-                self.submission.user, badge, self.request.user
+                self.submission.user, badge, self.request.user, course=self.submission.course
             )
             messages.success(
                 self.request,
@@ -1450,18 +1525,13 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             self.handle_rank_up_notification()
 
-            messages.success(self.request, (
-                "<a href='"
-                + self.submission.get_absolute_url()
-                + "'>Submission of "
-                + self.submission.quest.name
-                + "</a> "
-                + notification_kwargs["verb"]
-                + " for <a href='"
-                + self.submission.user.profile.get_absolute_url()
-                + "'>"
-                + self.submission.user.username
-                + "</a>"
+            messages.success(self.request, format_html(
+                "<a href='{}'>Submission of {}</a> {} for <a href='{}'>{}</a>",
+                self.submission.get_absolute_url(),
+                self.submission.quest.name,
+                notification_kwargs["verb"],
+                self.submission.user.profile.get_absolute_url(),
+                self.submission.user.username,
             ))
 
             return self.form_valid()
@@ -1623,6 +1693,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def unarchive(request, quest_id):
     """
     Unarchive a quest by setting `archived=False` and ensure it is unpublished
@@ -1647,7 +1718,7 @@ def unarchive(request, quest_id):
     quest = get_object_or_404(Quest.objects.all_including_archived(), id=quest_id)
 
     # Make the link that leads to the quests detail page to include in the message
-    link = f'<a href="{quest.get_absolute_url()}">{quest.name}</a>'
+    quest_link = format_html('<a href="{}">{}</a>', quest.get_absolute_url(), quest.name)
 
     quest.archived = False
     # Make sure the quest goes to the Drafts tab
@@ -1655,7 +1726,7 @@ def unarchive(request, quest_id):
     quest.full_clean()
     quest.save()
 
-    messages.success(request, f"Quest '{link}' has been unarchived and moved to the Drafts tab.")
+    messages.success(request, format_html("Quest '{}' has been unarchived and moved to the Drafts tab.", quest_link))
     # Since the quest is sent to the Drafts tab redirect them there
     return redirect("quests:drafts")
 
@@ -1665,6 +1736,47 @@ def unarchive(request, quest_id):
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
+def _keep_posted_uploads(request, form, question_formset, submission, followup=""):
+    """Save the POST's uploads that pass their own validation, and tell the student.
+
+    A browser never repopulates a file input, so any response that sends the student back to
+    the submission page (the re-render with validation errors, or the questions-changed
+    redirect) arrives with every file input empty: without this their uploads are gone with
+    nothing to say so (#2165, #2427, #2428). Comment attachments are kept on the draft
+    comment and file answers on their draft rows, the same places a successful completion
+    publishes them from.
+
+    Validation is run here, because the questions-changed guard calls this before the view
+    has validated anything (`is_valid` caches, so it costs nothing where it already ran),
+    and only uploads that pass are kept: a file rejected for type or size is dropped so its
+    error still applies on the retry.
+
+    Args:
+        request: the request, for its FILES and as the messages target.
+        form: the bound submission form. Forms without an attachments field keep nothing.
+        question_formset: the bound answer formset, or None when the POST involves none.
+        submission: the QuestSubmission whose draft comment holds kept attachments.
+        followup: an extra sentence for the notice. The re-render path points at its
+            inline errors with it; the redirect path passes nothing, since its own error
+            message already says what to do next.
+
+    Returns:
+        int: how many files were kept.
+    """
+    form.is_valid()
+    kept_files = save_draft_attachments(form, submission.draft_comment)
+    if question_formset is not None:
+        question_formset.is_valid()
+        kept_files += save_draft_file_answers(question_formset, request.FILES)
+    if kept_files:
+        noun, verb, pronoun = ("file", "was", "it") if kept_files == 1 else ("files", "were", "them")
+        messages.info(
+            request,
+            f"Your attached {noun} {verb} saved, so you don't need to choose {pronoun} again.{followup}",
+        )
+    return kept_files
+
+
 @non_public_only_view
 @login_required
 def complete(request, submission_id):
@@ -1677,6 +1789,12 @@ def complete(request, submission_id):
     origin_path = submission.get_absolute_url()
 
     # EARLY EXIT CONDITIONS: ####################
+
+    # Completing publishes the submission's comment and question answers under the owner's name
+    # and marks their quest done, so only the owner may do it. Staff act on other students'
+    # submissions through the approve view, not this one. Matches submission() and drop().
+    if submission.user != request.user and not request.user.is_staff:
+        raise Http404("You can only submit your own quests.")
 
     # This view should only be access when a student submits a submission comment form
     if request.method != "POST":
@@ -1708,12 +1826,13 @@ def complete(request, submission_id):
 
     student_can_enter_xp = submission.quest.xp_can_be_entered_by_students and not submission.is_approved
 
+    # the student's own courses, so the form can ask which one this counts toward (#2440)
     if student_can_enter_xp:
-        form = SubmissionFormCustomXP(request.POST, request.FILES)
+        form = SubmissionFormCustomXP(request.POST, request.FILES, student=submission.user)
     elif request.FILES:  # if there are files, we need to use the full form
-        form = SubmissionForm(request.POST, request.FILES)
+        form = SubmissionForm(request.POST, request.FILES, student=submission.user)
     else:
-        form = SubmissionQuickReplyFormStudent(request.POST)
+        form = SubmissionQuickReplyFormStudent(request.POST, student=submission.user)
 
     # The quest's questions, bound to this POST as an answer formset over the submission's
     # draft rows. Only the "complete" action on a not-yet-completed submission involves the
@@ -1742,12 +1861,24 @@ def complete(request, submission_id):
                 "This quest's questions have changed since you opened this page. "
                 "Please review and answer them, then submit again.",
             )
+            # The redirect rebuilds the page with empty file inputs, so keep the uploads
+            # that validate, just as the validation-failure path below does (#2428).
+            _keep_posted_uploads(request, form, question_formset, submission)
             return redirect(origin_path)
 
     if not form.is_valid() or (question_formset and not question_formset.is_valid()):
         # The main form path should only occur if a student tries to use the quick reply form
         # on a quest that has `xp_can_be_entered_by_student`; re-rendering shows the full form
         # so they can enter XP. The formset path re-renders with each question's errors visible.
+
+        # Keep the uploads that did validate, both the comment's attachments and the file
+        # answers, since the re-rendered file inputs come back empty and the student would
+        # otherwise lose them with no warning (#2165, #2427).
+        _keep_posted_uploads(
+            request, form, question_formset, submission,
+            followup=" Fix the problems below and submit the quest again.",
+        )
+
         context = {
             "heading": submission.quest.name,
             "submission": submission,
@@ -1859,8 +1990,12 @@ def complete(request, submission_id):
             note_verb += " (auto-approved quest)"
             msg_text += " and automatically approved."
             msg_text += " Please give me a moment to calculate what new quests this should make available to you."
-            msg_text += " Try refreshing your browser in a few moments. Thanks! <br>&mdash;{deck_ai}"
-            msg_text = msg_text.format(deck_ai=SiteConfig.get().deck_ai)
+            # format_html so the break renders: everything appended above is plain text, which
+            # a message escapes, and the deck AI's name is escaped as an argument.
+            msg_text = format_html(
+                "{} Try refreshing your browser in a few moments. Thanks! <br>{}",
+                msg_text, SiteConfig.get().deck_ai,
+            )
 
         icon = "<i class='fa fa-shield fa-lg'></i>"
 
@@ -1871,6 +2006,14 @@ def complete(request, submission_id):
             and not submission.quest.verification_required
         ):
             affected_users.extend(request.user.profile.current_teachers())
+
+        # Record which course the student said this counts toward, before the XP is granted so
+        # an auto-approved quest lands in the right course straight away (issue #2440).
+        # Assigned whatever they picked, "split evenly" (None) included: a submission a teacher
+        # returned carries its earlier choice, and redoing it has to be able to change that
+        # choice back. The form is seeded with the current course, so this writes back what the
+        # student was actually shown.
+        submission.course = form.cleaned_data.get('course')
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
@@ -1960,8 +2103,11 @@ def start(request, quest_id):
             # instead of starting a new one, and let them know why (issue #57).
             messages.info(
                 request,
-                f"You already have <strong>{quest.name}</strong> in progress — "
-                "finish this one before starting it again.",
+                format_html(
+                    "You already have <strong>{}</strong> in progress: "
+                    "finish this one before starting it again.",
+                    quest.name,
+                ),
             )
             return redirect(sub)
     else:
@@ -1977,9 +2123,7 @@ def hide(request, quest_id):
 
     messages.warning(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been added to your list of hidden quests.",
+        format_html("<strong>{}</strong> has been added to your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:quests")
@@ -1993,16 +2137,31 @@ def unhide(request, quest_id):
 
     messages.success(
         request,
-        "<strong>"
-        + quest.name
-        + "</strong> has been removed from your list of hidden quests.",
+        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", quest.name),
     )
 
     return redirect("quests:available_all")
 
 
 @login_required
+@require_POST
 def skip(request, submission_id):
+    """Approve a submission as a transfer: complete and approved, but worth no XP.
+
+    Limited to staff and to a student marked as not earning XP acting on their own
+    submission, so a student cannot skip a quest by guessing the url. POST-only, because it
+    approves the quest outright (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        submission_id: the id of the QuestSubmission to transfer.
+
+    Returns:
+        An HttpResponseRedirect to the approvals queue for staff, or to the student's quests.
+
+    Raises:
+        Http404: when the requester may not skip this submission.
+    """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     # student can only do this if the button is turned on by a teacher
     # prevent students form skipping by guessing correct url
@@ -2020,9 +2179,27 @@ def skip(request, submission_id):
         #     target=submission,
         # )
 
-        # approve quest automatically, and mark as transfer.
-        submission.mark_completed()
-        submission.mark_approved(transfer=True)
+        # The quest is being waived, so any answers the student drafted will never be submitted
+        # and nothing renders them; drop them rather than leave invisible rows behind (#2164).
+        # In one transaction with the approval that justifies it, so a failure part way through
+        # (marking approved also grants badges and recalculates XP) cannot leave the answers
+        # deleted on a submission that was never transferred.
+        with transaction.atomic():
+            discard_draft_question_submissions(submission)
+
+            draft_comment = submission.draft_comment
+
+            # approve quest automatically, and mark as transfer.
+            submission.mark_completed()
+            submission.mark_approved(transfer=True)
+
+            # mark_completed() clears the draft comment because completing publishes it first.
+            # Skipping publishes nothing, so hand it back: a transferred quest can still be
+            # commented on, and the student keeps whatever they had typed (with anything attached
+            # to it) ready to post. This is how the staff skip button already leaves it (#2431).
+            if draft_comment:
+                submission.draft_comment = draft_comment
+                submission.save()
 
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
@@ -2036,9 +2213,20 @@ def skip(request, submission_id):
 
 @non_public_only_view
 @login_required
+@require_POST
 def skipped(request, quest_id):
-    """A combination of the start and complete views, but automatically approved
-    regardless, and do_not_grant_xp = True
+    """Skip a quest the student never started: start it, then transfer it.
+
+    A combination of the start and complete views, but automatically approved regardless,
+    and do_not_grant_xp = True. POST-only, since it both creates a submission and approves
+    it (#2383).
+
+    Args:
+        request: the HttpRequest; must be a POST.
+        quest_id: the id of the Quest to start and transfer.
+
+    Returns:
+        The HttpResponseRedirect from :func:`skip`, which handles the approval.
     """
     quest = get_object_or_404(Quest, pk=quest_id)
     # create_submission always returns a submission: a new in-progress one, or the
@@ -2051,11 +2239,21 @@ def skipped(request, quest_id):
 @non_public_only_view
 @login_required
 def ajax_save_draft(request):
-    """Autosave the requesting student's own draft comment and draft question answers.
+    """Autosave the requesting student's own draft comment, answers, and chosen files.
 
     Scoped to the submission's owner: a draft is the student's own work in progress, and
     the draft form is only ever rendered for them (staff get the marking form instead), so
     any other user's submission id is a 404.
+
+    The POST carries `submission_id`, the comment HTML as `comment`, text answers as an
+    `answers` JSON object of the formset's field names, and, when files were chosen, the
+    formset's own fields (management form, row ids, files) plus the comment's
+    `attachments`, as the page sends the whole form as FormData (#1459).
+
+    Returns a JSON object: `result` ("Draft saved" or "No changes"), and, when the POST
+    carried files, `saved_answer_files` (file field name to the stored file's bare name),
+    `saved_attachments` (the accepted upload names), and `file_errors` (field name to the
+    validation message for a rejected file).
     """
     if request.POST:
         response_data = {
@@ -2084,9 +2282,9 @@ def ajax_save_draft(request):
             response_data["result"] = "Draft saved"
             draft_comment.save()
 
-        # Autosave draft answers to the quest's questions (text answers only; file answers
-        # upload when the quest is submitted). Sent as a JSON object of the formset's field
-        # names, pairing each row's hidden id with its response_text.
+        # Autosave draft answers to the quest's questions. Text answers arrive as a JSON
+        # object of the formset's field names, pairing each row's hidden id with its
+        # response_text; file answers arrive in request.FILES and are handled below.
         answers_json = request.POST.get("answers")
         if answers_json and sub.quest.question_set.exists():
             try:
@@ -2133,6 +2331,57 @@ def ajax_save_draft(request):
                     row.full_clean()
                     row.save()
                     response_data["result"] = "Draft saved"
+
+        # Draft-save any files in the POST (#1459). The Save Draft button posts the whole
+        # form as FormData, so a chosen comment attachment or file answer arrives here just
+        # as it would on submit, is validated by the same forms, and is stored by the same
+        # helpers in the same places (the draft comment, the draft rows): a draft-saved
+        # file and one kept from a failed submit are indistinguishable, and both publish
+        # with the completion. The response names what was saved and what was rejected, so
+        # the page can clear those inputs and show the outcome without a reload.
+        if request.FILES:
+            saved_answer_files = {}
+            saved_attachments = []
+            file_errors = {}
+
+            if sub.quest.question_set.exists():
+                question_formset = QuestionSubmissionFormsetFactory(
+                    request.POST, request.FILES,
+                    instance=sub, queryset=sync_draft_question_submissions(sub),
+                )
+                # Validate so the per-form errors below are populated. A hand-built POST
+                # that omits the management form does not raise here: Django records a
+                # non-form error and the formset has no forms, so the loop below does
+                # nothing and the text answers (above) still save.
+                question_formset.is_valid()
+                save_draft_file_answers(question_formset, request.FILES)
+                for answer_form in question_formset.forms:
+                    field_name = answer_form.add_prefix("response_file")
+                    if field_name not in request.FILES:
+                        continue
+                    # errors first: a row that already holds a file from an earlier save
+                    # keeps it when a replacement is rejected, and reporting that stored
+                    # file as "saved" would present the rejection as a success
+                    if answer_form.errors.get("response_file"):
+                        file_errors[field_name] = " ".join(answer_form.errors["response_file"])
+                    elif answer_form.instance.pk and answer_form.instance.response_file:
+                        # the bare file name: the stored value is a whole media path
+                        saved_answer_files[field_name] = posixpath.basename(str(answer_form.instance.response_file))
+
+            if request.FILES.getlist("attachments"):
+                # the same form the submit builds, so the same size and count rules apply
+                form = SubmissionForm(request.POST, request.FILES, student=request.user)
+                form.is_valid()
+                saved_attachments = [upload.name for upload in accepted_attachments(form)]
+                save_draft_attachments(form, draft_comment)
+                if form.errors.get("attachments"):
+                    file_errors["attachments"] = " ".join(form.errors["attachments"])
+
+            if saved_answer_files or saved_attachments:
+                response_data["result"] = "Draft saved"
+            response_data["saved_answer_files"] = saved_answer_files
+            response_data["saved_attachments"] = saved_attachments
+            response_data["file_errors"] = file_errors
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
@@ -2201,14 +2450,17 @@ def submission(request, submission_id=None, quest_id=None):
             sub.draft_comment = draft_comment
             sub.save()
 
-        initial = {"comment_text": sub.draft_comment.text}
+        # show the course this already counts toward, so a student returning to the page sees
+        # their earlier choice rather than the form offering to reset it (issue #2440)
+        initial = {"comment_text": sub.draft_comment.text, "course": sub.course}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
             main_comment_form = SubmissionFormCustomXP(initial=initial,
-                                                       minimum_xp=sub.quest.xp)
+                                                       minimum_xp=sub.quest.xp,
+                                                       student=request.user)
         else:
-            main_comment_form = SubmissionForm(initial=initial)
+            main_comment_form = SubmissionForm(initial=initial, student=request.user)
 
         # The quest's questions, as an answer formset over this submission's draft rows.
         # Only while the submission can still be worked on; answers on completed/approved
@@ -2266,7 +2518,7 @@ def ajax_submission_count(request):
 def flag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    # approve quest automatically, and mark as transfer.
+    # record who raised the flag, so it is attributable on a deck with several teachers
     sub.flagged_by = request.user
     sub.save()
 
@@ -2294,14 +2546,15 @@ def ajax_flag(request):
 def unflag(request, submission_id):
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
-    # approve quest automatically, and mark as transfer.
     sub.flagged_by = None
     sub.save()
 
     messages.success(
         request,
-        "Submission <a href='%s'>%s by %s</a> has been unflagged."
-        % (sub.get_absolute_url(), sub.quest_name(), sub.user),
+        format_html(
+            "Submission <a href='{}'>{} by {}</a> has been unflagged.",
+            sub.get_absolute_url(), sub.quest_name(), sub.user,
+        ),
     )
 
     return redirect("quests:approvals")

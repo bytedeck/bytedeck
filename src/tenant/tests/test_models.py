@@ -448,6 +448,117 @@ class TenantBillingStatusTest(SimpleTestCase):
 
 
 @freeze_time(FROZEN_NOW)
+class TenantSubscriptionStatusAnnotationTest(ByteDeckTenantTestCase):
+    """Tests that Tenant.annotate_subscription_status ranks decks in SQL exactly the
+    way the subscription_status property classifies them in Python.
+
+    Needs the database (an annotation is evaluated by Postgres), but not schemas:
+    the rows are bulk_created, which skips Tenant.save() and so skips schema
+    creation, since only public-schema date columns are being ranked. The
+    annotation is always run from inside a test method, never from setUpTestData,
+    because it reads today() and only the test methods are frozen.
+    """
+
+    # one deck per status, keyed by the status it must rank as, plus the
+    # precedence case where a stale paid clock could mask a running trial
+    STATUS_FIXTURES = {
+        'suspended': {'trial_end_date': FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), 'paid_until': None},
+        'grace': {'trial_end_date': FROZEN_TODAY - timedelta(days=1), 'paid_until': None},
+        'trial': {'trial_end_date': FROZEN_TODAY + timedelta(days=30), 'paid_until': None},
+        # trial_end_date is spelled out on the paid fixtures too: it defaults to a
+        # live trial date, and a live trial clock outranks a paid one
+        'maintenance': {
+            'trial_end_date': None, 'paid_until': FROZEN_TODAY + timedelta(days=30),
+            'max_active_users': TRIAL_MAX_ACTIVE_USERS,
+        },
+        'subscribed': {
+            'trial_end_date': None, 'paid_until': FROZEN_TODAY + timedelta(days=30), 'max_active_users': 40,
+        },
+        'manual': {'trial_end_date': None, 'paid_until': None},
+        # a running trial alongside an OLDER paid date still inside its grace tail:
+        # the trial governs, so this must rank 'trial' rather than 'subscribed'
+        'trial-over-stale-paid': {
+            'trial_end_date': FROZEN_TODAY + timedelta(days=30),
+            'paid_until': FROZEN_TODAY - timedelta(days=1),
+        },
+        # both clocks landing on the SAME day: subscription language wins the tie,
+        # so this must rank 'subscribed'. Both chains compare the trial strictly
+        # later, and this fixture is what holds them to it
+        'equal-deadlines': {
+            'trial_end_date': FROZEN_TODAY + timedelta(days=30),
+            'paid_until': FROZEN_TODAY + timedelta(days=30),
+            'max_active_users': 40,
+        },
+    }
+
+    @classmethod
+    def schema_for(cls, fixture):
+        """The schema_name given to a fixture's row.
+
+        Args:
+            fixture (str): A STATUS_FIXTURES key.
+
+        Returns:
+            str: The row's schema_name, e.g. 'rank-suspended'.
+        """
+        return 'rank-{}'.format(fixture)
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create one dateless-schema Tenant row per fixture."""
+        with schema_context(get_public_schema_name()):
+            Tenant.objects.bulk_create([
+                Tenant(schema_name=cls.schema_for(fixture), name=cls.schema_for(fixture), **fields)
+                for fixture, fields in cls.STATUS_FIXTURES.items()
+            ])
+
+    def ranked(self):
+        """Annotate the fixture rows and key them by fixture name.
+
+        Returns:
+            dict: {fixture name: annotated Tenant}.
+        """
+        decks = Tenant.annotate_subscription_status(Tenant.objects.filter(schema_name__startswith='rank-'))
+        by_schema = {deck.schema_name: deck for deck in decks}
+        return {fixture: by_schema[self.schema_for(fixture)] for fixture in self.STATUS_FIXTURES}
+
+    def test_annotate_subscription_status__matches_the_python_chain(self):
+        """Every fixture's annotated rank is the rank of the status the Python
+        property reports for the same deck, so the SQL chain and the Python chain
+        cannot drift apart unnoticed."""
+        rank = {slug: position for position, slug in enumerate(Tenant.SUBSCRIPTION_STATUS_LABELS)}
+        for fixture, deck in self.ranked().items():
+            with self.subTest(fixture=fixture):
+                self.assertEqual(deck.subscription_status_rank, rank[deck.subscription_status])
+
+    def test_annotate_subscription_status__covers_every_status(self):
+        """The fixtures reach all six statuses (so the test above is not silently
+        checking a subset), and each is the status its fixture name claims.
+
+        The two clock-precedence cases are pinned by name: a running trial outranks
+        an older paid clock still inside its grace tail, and two clocks ending on
+        the SAME day are 'subscribed', which is what stops either chain from
+        relaxing its strict comparison to a >=."""
+        statuses = {fixture: deck.subscription_status for fixture, deck in self.ranked().items()}
+        self.assertEqual(set(statuses.values()), set(Tenant.SUBSCRIPTION_STATUS_LABELS))
+        for status in Tenant.SUBSCRIPTION_STATUS_LABELS:
+            self.assertEqual(statuses[status], status)
+        self.assertEqual(statuses['trial-over-stale-paid'], 'trial')
+        self.assertEqual(statuses['equal-deadlines'], 'subscribed')
+
+    def test_annotate_subscription_status__orders_suspended_first_and_manual_last(self):
+        """Sorting ascending on the rank lists the decks needing attention first:
+        suspended, grace, trial, maintenance, subscribed, then managed manually."""
+        one_per_status = [self.schema_for(status) for status in Tenant.SUBSCRIPTION_STATUS_LABELS]
+        ordered = Tenant.annotate_subscription_status(
+            Tenant.objects.filter(schema_name__in=one_per_status)).order_by('subscription_status_rank')
+        self.assertEqual(
+            [deck.subscription_status for deck in ordered],
+            ['suspended', 'grace', 'trial', 'maintenance', 'subscribed', 'manual'],
+        )
+
+
+@freeze_time(FROZEN_NOW)
 class TenantDeletionClockTest(ByteDeckTenantTestCase):
     """Tests for the suspension-keyed deletion clock (#1734 B3): Tenant.deletion_date
     and the is_deletable guard it drives.
@@ -471,7 +582,10 @@ class TenantDeletionClockTest(ByteDeckTenantTestCase):
         Returns:
             Tenant: A fresh instance reflecting the applied fields.
         """
-        fields = {'trial_end_date': self.LAPSED_TRIAL, 'paid_until': None, 'can_delete': True}
+        fields = {
+            'trial_end_date': self.LAPSED_TRIAL, 'paid_until': None, 'can_delete': True,
+            'deletion_requested_on': None,  # each test states its own request explicitly
+        }
         fields.update(overrides)
         Tenant.objects.filter(pk=self.tenant.pk).update(**fields)
         return Tenant.objects.get(pk=self.tenant.pk)
@@ -493,6 +607,43 @@ class TenantDeletionClockTest(ByteDeckTenantTestCase):
         # backdate past auto_now_add: the ledger records when the warning really went out
         DeckNotice.objects.filter(pk=notice.pk).update(sent_on=FROZEN_TODAY - timedelta(days=days_ago))
         return notice
+
+    def test_deletion_eligibility__names_the_path_or_none(self):
+        """The eligibility chain behind is_deletable and the admin's "deletable"
+        column: 'request' for a suspended deck with a standing owner request
+        (outranking the clock), 'timeout' once the year has run, None while the
+        deck is live, unwarned, or mid-clock. Arming can_delete is deliberately
+        NOT part of eligibility (it is the operator's remaining step)."""
+        # suspended with a standing request: 'request', armed or not
+        self.assertEqual(
+            self.deck(deletion_requested_on=FROZEN_TODAY, can_delete=False).deletion_eligibility, 'request')
+        # suspended, warned over a year ago: 'timeout'
+        self.warn(days_ago=INACTIVE_DELETE_DAYS + 1)
+        self.assertEqual(self.deck().deletion_eligibility, 'timeout')
+        # a request outranks (and out-labels) the elapsed clock
+        self.assertEqual(self.deck(deletion_requested_on=FROZEN_TODAY).deletion_eligibility, 'request')
+        # live deck: never eligible, request or not
+        self.assertIsNone(self.deck(
+            trial_end_date=FROZEN_TODAY + timedelta(days=30),
+            deletion_requested_on=FROZEN_TODAY).deletion_eligibility)
+
+    def test_is_deletable__owner_request_skips_the_year_clock(self):
+        """A suspended, armed deck whose owner has a standing deletion request is
+        deletable immediately: the request plus the operator arming can_delete
+        stand in for the year clock (#2330). The request alone changes nothing
+        on a deck that is not suspended or not armed, and without a request the
+        same deck still waits out its year."""
+        self.warn(days_ago=10)  # the year clock started 10 days ago: nowhere near up
+        self.assertTrue(self.deck(deletion_requested_on=FROZEN_TODAY - timedelta(days=1)).is_deletable)
+        # same deck, no request: the year clock still governs
+        self.assertFalse(self.deck().is_deletable)
+        # a live deck is never deletable, request or not (the operator can
+        # suspend it first by editing its dates)
+        self.assertFalse(self.deck(
+            trial_end_date=FROZEN_TODAY + timedelta(days=30),
+            deletion_requested_on=FROZEN_TODAY).is_deletable)
+        # unarmed: the request is advisory until an operator reviews it
+        self.assertFalse(self.deck(can_delete=False, deletion_requested_on=FROZEN_TODAY).is_deletable)
 
     def test_deletion_date__none_while_not_suspended(self):
         """An active, on-trial, or managed-manually deck has no deletion date."""

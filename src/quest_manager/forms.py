@@ -13,7 +13,43 @@ from comments.sanitize import sanitize_comment_html
 from utilities.fields import RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
+from courses.forms import XPCourseChoiceMixin
+from courses.models import Course
+
 from .models import Category, Quest, CommonData
+
+
+#: Quest fields a student TA may not set. A TA works on drafts, so whether a quest is
+#: visible to students (``published``), who may keep editing it (``editor``), whether it is
+#: filed away (``archived``) and whether it escapes course enrolment
+#: (``available_outside_course``) all stay with the teacher.
+TA_RESTRICTED_QUEST_FIELDS = ('published', 'editor', 'archived', 'available_outside_course')
+
+
+def remove_layout_fields(layout_object, field_names):
+    """Remove the named fields from a crispy-forms layout tree, in place.
+
+    Used when a form subclass drops fields the shared layout still names, so crispy is
+    never asked to render a field the form does not have.
+
+    Args:
+        layout_object: a crispy ``Layout`` (or any nested layout object). Objects without
+            a ``fields`` list, such as ``HTML``, are left alone.
+        field_names: an iterable of field names to drop wherever they appear in the tree.
+
+    Returns:
+        None. The layout is modified in place.
+    """
+    fields = getattr(layout_object, 'fields', None)
+    if fields is None:
+        return
+
+    layout_object.fields = [
+        field for field in fields
+        if not (isinstance(field, str) and field in field_names)
+    ]
+    for child in layout_object.fields:
+        remove_layout_fields(child, field_names)
 
 
 class BadgeLabel:
@@ -112,6 +148,17 @@ class QuestForm(forms.ModelForm):
         }
 
     def __init__(self, *args, **kwargs):
+        """Build the quest form's crispy layout.
+
+        Beyond the model fields, the layout carries the form's action buttons (cancel and submit,
+        repeated top and bottom) and links out to the two parts of a quest configured on their own
+        pages: prerequisites and submission questions. Both of those need a saved quest to attach
+        to, so on the create form they render as disabled placeholders explaining why.
+
+        Args:
+            *args: positional arguments passed through to ``forms.ModelForm``.
+            **kwargs: keyword arguments passed through to ``forms.ModelForm``.
+        """
         super().__init__(*args, **kwargs)
 
         self.fields['common_data'].label = 'Common Quest Info'
@@ -124,6 +171,18 @@ class QuestForm(forms.ModelForm):
             'Edit Prerequisites</a>' \
             '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
             'before you can add prerequisites.">Edit Prerequisites</button>' \
+            '{% endif %} '
+
+        # Questions are managed on their own page, so link to it from the form where the rest of
+        # the quest is configured (#2347); the detail page's "Submission Questions" panel is the
+        # other way in. Staff-only, because every view in the questions app requires staff and
+        # TAQuestForm inherits this layout, so an unguarded button would 403 for a TA.
+        questions_btn = '{% if request.user.is_staff %}' \
+            '{% if object.id %}<a role="button" class="btn btn-default" href="{% url \'questions:list\' object.id %}">' \
+            'Manage Questions</a>' \
+            '{% else %}<button type="button" class="btn btn-default" disabled title="You need to create this new quest first, ' \
+            'before you can add submission questions.">Manage Questions</button>' \
+            '{% endif %}' \
             '{% endif %}'
 
         self.helper = FormHelper()
@@ -131,6 +190,7 @@ class QuestForm(forms.ModelForm):
             HTML(cancel_btn),
             HTML(submit_btn),
             HTML(prereqs_btn),
+            HTML(questions_btn),
             Div(
                 'name',
                 'xp',
@@ -224,18 +284,56 @@ class QuestForm(forms.ModelForm):
 
 
 class TAQuestForm(QuestForm):
-    """ Modified QuestForm that removes some fields TAs should not be able to set. """
+    """QuestForm for a student TA, with the fields a TA may not set left off the form entirely.
+
+    Those fields (``TA_RESTRICTED_QUEST_FIELDS``) are not bound, so a hand-made POST cannot
+    reach them: an unbound field is one a ``ModelForm`` never writes to its instance. Editing
+    therefore leaves whatever the teacher set in place, and creating falls back to the model
+    defaults. ``QuestFormViewMixin.form_valid`` still forces ``published`` and ``editor`` for a
+    TA, which keeps a TA's quest a draft of their own no matter which form or view saved it.
+    """
+
+    class Meta(QuestForm.Meta):
+        fields = tuple(f for f in QuestForm.Meta.fields if f not in TA_RESTRICTED_QUEST_FIELDS)
+
     def __init__(self, *args, **kwargs):
+        """Build the TA form, then drop the restricted fields from the inherited layout.
+
+        Args:
+            *args: positional arguments passed through to ``QuestForm``.
+            **kwargs: keyword arguments passed through to ``QuestForm``.
+        """
         super().__init__(*args, **kwargs)
-        # SET published here to?
-        self.fields['published'].widget = forms.HiddenInput()
-        self.fields['available_outside_course'].widget = forms.HiddenInput()
-        self.fields['archived'].widget = forms.HiddenInput()
-        self.fields['editor'].widget = forms.HiddenInput()
+        # QuestForm's layout names fields this form doesn't have, so take them back out
+        remove_layout_fields(self.helper.layout, TA_RESTRICTED_QUEST_FIELDS)
 
 
-class SubmissionForm(forms.Form):
+class SanitizeCommentTextMixin:
+    """Sanitizes HTML entered in a form's `comment_text` field.
+
+    Comment text is written by anyone, including students, and is rendered with |safe,
+    so it must be sanitized or an injected script runs for whoever reads the comment
+    (issue #1343). It carries rich HTML from the Summernote editor, so the sanitizer is
+    an allow-list rather than a blanket escape: legitimate formatting survives while
+    scripts and event-handler attributes do not (issue #2113).
+
+    Every form with a `comment_text` field needs this, the Summernote-backed ones
+    included. The Summernote "Safe" widget bleaches on its way in but allows every
+    attribute (see `ByteDeckSummernoteSafeInplaceWidget.value_from_datadict`), so it
+    stops a `<script>` tag and not an `onerror=`.
+    """
+
+    def clean_comment_text(self):
+        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
+        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
+
+
+class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=ByteDeckSummernoteSafeInplaceWidget())
+
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
     attachments = RestrictedMultiFileFormField(
         required=False,
@@ -276,22 +374,6 @@ class SubmissionFormStaff(SubmissionForm):
         )
 
 
-class SanitizeCommentTextMixin:
-    """Sanitizes HTML entered in a form's `comment_text` field.
-
-    These plain-text (non-wysiwyg) comment fields are accessible to all users and
-    rendered with |safe, so they must be sanitized to stop injected scripts from
-    executing (issue #1343). In practice they carry rich HTML from the Summernote
-    editor, so we sanitize with an allow-list rather than escaping everything,
-    keeping legitimate formatting while stripping scripts and event handlers
-    (issue #2113).
-    """
-
-    def clean_comment_text(self):
-        """Return the submitted ``comment_text`` sanitized to safe HTML for storage/display."""
-        return sanitize_comment_html(self.cleaned_data.get('comment_text', ''))
-
-
 class SubmissionReplyForm(SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='Reply', widget=forms.Textarea(attrs={'rows': 2}))
 
@@ -310,8 +392,12 @@ class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
         self.fields['award'].queryset = Badge.objects.all_manually_granted()
 
 
-class SubmissionQuickReplyFormStudent(SanitizeCommentTextMixin, forms.Form):
+class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+
+    # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
+    # is worded the same here as it is when a teacher grants a badge
+    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):
