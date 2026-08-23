@@ -1,4 +1,5 @@
 import functools
+from uuid import UUID
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -916,7 +917,8 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_import_ids = [q.import_id for q in shared_quests]
 
         # Need local import_ids so the template can indicate which library quests already exist locally
-        local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
+        local_quests = list(Quest.objects.all_including_archived().filter(import_id__in=quest_import_ids))
+        local_quest_import_ids = [quest.import_id for quest in local_quests]
         colliding_names = get_colliding_quest_names(shared_quests)
 
         context = {
@@ -930,6 +932,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             'category_displayed_quests': shared_quests,
             'local_category': local_category,
             'local_quest_import_ids': local_quest_import_ids,
+            'preservable_quests': local_quests,
             'colliding_names': colliding_names,
         }
         return render(request, self.template_name, context)
@@ -964,10 +967,32 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             # Collect import IDs for all quests in the campaign
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+
+        # Quests the teacher ticked to keep as they are. Parsed as UUIDs first, because a
+        # value that is not one would raise rather than simply match nothing, then narrowed
+        # twice: to quests belonging to the campaign being imported, and to quests this deck
+        # actually holds. Both are needed against a hand-made POST, which could otherwise
+        # name a quest this deck has in some other campaign and have it moved into this one.
+        requested = set()
+        for value in request.POST.getlist('preserve'):
+            try:
+                requested.add(UUID(value))
+            except ValueError:
+                continue
+        requested &= set(quest_ids)
+
+        preserve_import_ids = list(
+            Quest.objects.all_including_archived()
+            .filter(import_id__in=requested)
+            .values_list('import_id', flat=True)
+        )
+
+        with library_schema_context():
             # Use dest_schema because current schema is library
             try:
                 imported = import_campaign_to(
-                    destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
+                    destination_schema=dest_schema, quest_import_ids=quest_ids,
+                    campaign_import_id=category.import_id, preserve_import_ids=preserve_import_ids,
                 )
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:category_list')
