@@ -413,13 +413,18 @@ def _relative_date_phrase(target, style):
         target (date): The date to describe.
         style (str): 'remaining' for deadline rows ("N days remaining" /
             "expires today" / "expired N days ago"), 'ends' for the grace-period
-            row ("ends in N days" / "ends today" / "ended N days ago").
+            row ("ends in N days" / "ends today" / "ended N days ago"), 'renews'
+            for an auto-renewing subscription's date ("renews in N days" /
+            "renews today"), which never speaks in the past: a renewal that has
+            not landed by its date stops counting as auto-renewing (#2586).
 
     Returns:
         str: The phrase, ready to drop into the row's parenthetical.
     """
     days = (target - timezone.localdate()).days
     plural = 's' if abs(days) != 1 else ''
+    if style == 'renews':
+        return f"renews in {days} day{plural}" if days > 0 else "renews today"
     if style == 'remaining':
         if days > 0:
             return f"{days} day{plural} remaining"
@@ -471,6 +476,13 @@ class SubscriptionDetail(NonPublicOnlyViewMixin, TemplateView):
             # relative phrases for the Dates rows ("(100 days remaining)" /
             # "(expired 24 days ago)"); None when the corresponding date is unset
             'paid_until_phrase': _relative_date_phrase(deck.paid_until, 'remaining') if deck.paid_until else None,
+            # an auto-renewing deck's date is a renewal, not an expiry, so its row
+            # and status line count toward the charge instead of toward losing
+            # access (#2586); None whenever the deck is not auto-renewing
+            'renews_phrase': (
+                _relative_date_phrase(deck.paid_until, 'renews')
+                if deck.auto_renews and deck.paid_until else None
+            ),
             'trial_end_phrase': _relative_date_phrase(deck.trial_end_date, 'remaining') if deck.trial_end_date else None,
             # the unified grace window closes after the LATEST deadline, trial and
             # paid clocks alike (#1734 B4)

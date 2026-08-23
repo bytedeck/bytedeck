@@ -145,6 +145,12 @@ class Tenant(TenantMixin):
         max_length=255, blank=True, default='',
         help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
     )
+    stripe_auto_renews = models.BooleanField(
+        default=False, editable=False,
+        help_text="Whether Stripe says the linked subscription bills again on its own. Cleared when the "
+                  "owner sets it to cancel at period end, when a renewal starts failing, and on decks "
+                  "with no Stripe subscription. Synced from Stripe, never edited here."
+    )
     stripe_portal_configuration_id = models.CharField(
         max_length=255, blank=True, default='',
         help_text="The Billing Portal configuration (bpc_...) whose headline names this deck, created "
@@ -483,15 +489,33 @@ class Tenant(TenantMixin):
         return self.get_active_user_count() > self.effective_max_active_users
 
     @property
+    def auto_renews(self):
+        """Whether this deck's paid access renews on its own, so every lifecycle
+        surface should say "renews" rather than "expires" (#2586).
+
+        ``stripe_auto_renews`` is what Stripe last told us; this adds the sanity
+        check that the deadline has not already passed. A renewal that never
+        landed (a payment failing while its webhook is late, or a webhook
+        outage) would otherwise leave the flag set on a deck whose paid period
+        is history, and that deck really is expiring: it falls back to the
+        expiry cadence, the grace-window banner, and eventually suspension
+        rather than sitting reassured and silent.
+        """
+        days = self.days_until_expiry
+        return self.stripe_auto_renews and days is not None and days >= 0
+
+    @property
     def is_expiring_soon(self):
         """Whether the governing deadline is within EXPIRY_WARNING_DAYS (or already
         past, while still in the paid grace window) -- i.e. the status banner should
         escalate from "info" to "warning".
 
-        False for suspended decks (they get the suspension banner instead) and for
-        unmanaged/comped decks (no deadline at all).
+        False for suspended decks (they get the suspension banner instead), for
+        auto-renewing decks (nothing is expiring: the card is charged and the
+        period rolls forward, #2586), and for unmanaged/comped decks (no
+        deadline at all).
         """
-        if self.is_suspended:
+        if self.is_suspended or self.auto_renews:
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
@@ -619,7 +643,10 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import (
+            clear_plan_summary_cache, subscription_auto_renews, subscription_max_active_users,
+            subscription_period_end_date,
+        )
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -655,6 +682,13 @@ class Tenant(TenantMixin):
                 cap = subscription_max_active_users(subscription)
                 if cap is not None and cap != current.max_active_users:
                     updates['max_active_users'] = cap
+
+            # tracked on every sync, not just while granting access: a renewal
+            # that starts failing (past_due) or an owner's "cancel at period end"
+            # must both put the deck back on the expiry cadence (#2586)
+            auto_renews = subscription_auto_renews(subscription)
+            if auto_renews != current.stripe_auto_renews:
+                updates['stripe_auto_renews'] = auto_renews
 
             if status in ('canceled', 'incomplete_expired'):
                 # unlink strictly on an id match: with the identity guard above this
@@ -853,11 +887,13 @@ class DeckNotice(models.Model):
     outages catch-up-safe: late, never duplicated.
     """
     KIND_EXPIRY = 'expiry'
+    KIND_RENEWAL = 'renewal'
     KIND_LIMIT = 'limit'
     KIND_SUSPENDED = 'suspended'
     KIND_PAYMENT_FAILED = 'payment_failed'  # reserved for the Stripe webhook phase (plan PR 7)
     KIND_CHOICES = [
         (KIND_EXPIRY, 'Trial/subscription expiry reminder'),
+        (KIND_RENEWAL, 'Subscription auto-renewal reminder'),
         (KIND_LIMIT, 'Current-student limit warning'),
         (KIND_SUSPENDED, 'Deck suspended'),
         (KIND_PAYMENT_FAILED, 'Payment failed'),

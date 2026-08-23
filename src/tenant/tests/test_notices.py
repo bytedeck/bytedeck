@@ -11,7 +11,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 from siteconfig.models import SiteConfig
 from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
-from tenant.notices import evaluate_deck_notices, process_deck_notices
+from tenant.notices import RENEWAL_NOTICE_DAYS, evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
 
 # Frozen mid-day UTC so timezone.localdate() (America/Vancouver) is the same calendar date.
@@ -155,6 +155,49 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=TODAY + timedelta(days=90))
         self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
 
+    def test_evaluate__auto_renewing_deck_gets_one_renewal_notice_not_the_expiry_cadence(self):
+        """An auto-renewing deck never gets the "renew or lose access" cadence:
+        nothing is expiring on it. It gets exactly ONE heads-up inside the
+        renewal window, and silence on every later day of that period (#2586)."""
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        self.set_deck(trial_end_date=None, paid_until=renews_on, stripe_auto_renews=True)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(renews_on))])
+
+        process_deck_notices(self.tenant)
+        self.assertEqual(self.due(), [])  # exactly one per renewal
+
+        # every remaining day before the charge stays quiet, including the day itself
+        with freeze_time("2026-08-22 20:00:00"):  # renews_on
+            self.assertEqual(self.due(), [])
+
+    def test_evaluate__renewal_notice_waits_for_its_window_and_re_arms_next_period(self):
+        """Outside the window a renewing deck hears nothing at all (no d30/d14
+        milestones), and the next period's renewal gets its own notice because
+        the ledger key is the date being renewed."""
+        self.set_deck(trial_end_date=None, paid_until=TODAY + timedelta(days=30), stripe_auto_renews=True)
+        self.assertEqual(self.due(), [])  # d30 would have fired for a non-renewing deck
+
+        self.set_deck(paid_until=TODAY + timedelta(days=RENEWAL_NOTICE_DAYS))
+        process_deck_notices(self.tenant)
+        self.assertEqual(self.due(), [])
+
+        # a year on, the renewed period comes back around
+        next_renewal = TODAY + timedelta(days=372)
+        with freeze_time("2027-08-15 20:00:00"):
+            self.set_deck(paid_until=next_renewal)
+            self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(next_renewal))])
+
+    def test_evaluate__expiry_cadence_returns_when_the_subscription_stops_renewing(self):
+        """Cancelling at period end (or a renewal that starts failing) clears the
+        Stripe flag, and the deck goes straight back onto the expiry cadence so
+        its owner is warned before access ends."""
+        deadline = TODAY + timedelta(days=7)
+        self.set_deck(trial_end_date=None, paid_until=deadline, stripe_auto_renews=True)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(deadline))])
+
+        self.set_deck(stripe_auto_renews=False)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(deadline))])
+
     def test_evaluate__unlimited_deck_gets_no_limit_warnings(self):
         """The -1 unlimited sentinel disables limit warnings entirely."""
         self.set_deck(max_active_users=-1, paid_until=TODAY + timedelta(days=90), active_user_count=999)
@@ -247,6 +290,30 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         if config.deck_ai == config.deck_owner:
             config.deck_ai = get_user_model().objects.create(username='deck_ai_bot', is_staff=True)
             config.save()
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__renewal_email_says_it_renews_and_asks_for_nothing(self):
+        """The renewal email states the date and that nothing is required, and
+        carries none of the expiry cadence's "subscribe or lose access" pressure
+        (#2586). Its in-app notification says the same in one line."""
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=None, paid_until=renews_on, stripe_auto_renews=True, active_user_count=0)
+        self.tenant.refresh_from_db()
+
+        self.run_engine_with_inline_email()
+
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        self.assertIn('renews automatically', body)
+        self.assertIn('nothing you need to do', body)
+        # none of the expiry cadence's act-or-lose-access pressure (those emails say
+        # "to keep full access" / "Subscribe here to restore access"); this email
+        # mentions suspension only to explain what cancelling would eventually lead to
+        self.assertNotIn('to keep full access', body)
+        self.assertNotIn('Subscribe here', body)
+        self.assertNotIn('to restore access', body)
+        self.assertTrue(Notification.objects.filter(verb__contains='renewal reminder').exists())
 
     def test_process__report_only_by_default_sends_and_records_nothing(self):
         """With DECK_NOTICES_ENABLED off (the default), the engine only reports."""

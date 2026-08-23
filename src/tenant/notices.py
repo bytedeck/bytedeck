@@ -38,6 +38,12 @@ from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 # ONE notice -- d14 -- not a d30+d14 double)
 EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
 
+# How many days before an auto-renewing subscription's renewal date its single
+# heads-up goes out. Matches the 7 days Stripe uses for its own optional renewal
+# reminder, which is long enough to change or cancel the plan before the card is
+# charged, and short enough that the date still means something (#2586).
+RENEWAL_NOTICE_DAYS = 7
+
 LIMIT_WARNING_FRACTION = 0.8
 
 def _unfired(deck, kind, threshold, period_key):
@@ -129,6 +135,17 @@ def evaluate_deck_notices(deck):
         period_key = str(deck.governing_deadline)
         if _unfired(deck, DeckNotice.KIND_SUSPENDED, 'suspended', period_key):
             due.append((DeckNotice.KIND_SUSPENDED, 'suspended', period_key))
+    elif deck.auto_renews:
+        # --- auto-renewing: ONE heads-up, not the expiry cadence -----------------
+        # Nothing is expiring on this deck: the card is charged and the period
+        # rolls forward, so the "renew or lose access" cadence was simply wrong
+        # here (#2586). One notice per renewal, keyed to the date being renewed,
+        # so next period's renewal gets its own.
+        days = deck.days_until_expiry
+        if days is not None and days <= RENEWAL_NOTICE_DAYS:
+            period_key = str(deck.governing_deadline)
+            if _unfired(deck, DeckNotice.KIND_RENEWAL, 'upcoming', period_key):
+                due.append((DeckNotice.KIND_RENEWAL, 'upcoming', period_key))
     else:
         # --- expiry cadence (not for suspended decks; their deadline is history) --
         days = deck.days_until_expiry
@@ -228,6 +245,8 @@ def _notification_detail(deck, kind):
         return detail + '.'
     if kind == DeckNotice.KIND_LIMIT:
         return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+    if kind == DeckNotice.KIND_RENEWAL:
+        return f'this deck renews automatically on {deadline}, with nothing for you to do.'
     # expiry cadence: approaching the deadline, or already inside the grace window
     days = deck.days_until_expiry
     if days is not None and days < 0:
@@ -287,10 +306,18 @@ def _deliver(deck, kind):
     # "{site}: {label}" and the in-app notification sentence "sent a {label}."
     templates = {
         DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'subscription expiry reminder'),
+        DeckNotice.KIND_RENEWAL: ('renewal_reminder', 'subscription renewal reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
         DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended warning'),
         DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
+    # what the renewal will actually charge, for the one email that has to state
+    # it; cached per subscription by the billing helper, and None when Stripe
+    # cannot say (the template then omits the plan line rather than guessing)
+    if kind == DeckNotice.KIND_RENEWAL:
+        from tenant.billing import subscription_plan_summary
+        context['plan_summary'] = subscription_plan_summary(deck)
+
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"
     message = render_to_string(f'tenant/email/{template_name}.html', context)

@@ -873,6 +873,40 @@ class TenantBannerStatusTest(SimpleTestCase):
         since the live recount is skipped entirely by the -1 short-circuit."""
         self.assertFalse(self.make_tenant(max_active_users=-1, active_user_count=999).is_over_user_limit)
 
+    def test_auto_renews__only_while_the_deadline_is_still_ahead(self):
+        """The stored Stripe flag alone does not mean the deck renews: the renewal
+        must still be ahead of it. A flag left set on a deck whose paid period
+        already lapsed (a failed payment whose webhook is late, a webhook
+        outage) reads as NOT renewing, so the deck falls back to the expiry
+        cadence and the grace banner instead of sitting reassured (#2586)."""
+        renewing = self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=5))
+        renewing.stripe_auto_renews = True
+        self.assertTrue(renewing.auto_renews)
+
+        # the renewal date itself still counts as ahead (it bills that day)
+        today_renewal = self.make_tenant(paid_until=FROZEN_TODAY)
+        today_renewal.stripe_auto_renews = True
+        self.assertTrue(today_renewal.auto_renews)
+
+        # the date passed and paid_until never advanced: not renewing after all
+        lapsed = self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1))
+        lapsed.stripe_auto_renews = True
+        self.assertFalse(lapsed.auto_renews)
+
+        # no Stripe subscription (manually managed deck): never auto-renewing
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=5)).auto_renews)
+
+    def test_is_expiring_soon__false_while_auto_renewing(self):
+        """An auto-renewing deck is not expiring, so the banner must not warn about
+        it: the card is charged and the period rolls forward (#2586). The same
+        deck warns once it is set to cancel instead."""
+        deck = self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=3))
+        deck.stripe_auto_renews = True
+        self.assertFalse(deck.is_expiring_soon)
+
+        deck.stripe_auto_renews = False  # cancel-at-period-end, or a failing renewal
+        self.assertTrue(deck.is_expiring_soon)
+
     def test_is_expiring_soon__within_warning_window_or_grace(self):
         """Warns within EXPIRY_WARNING_DAYS of the governing deadline, and through the
         grace window (negative days), paid or trial alike; quiet before the window."""
@@ -937,7 +971,9 @@ class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
     def test_sync__monotonic_never_lowers_paid_until(self):
         """A re-delivered or out-of-order older event can never LOWER paid_until."""
         later = self.PERIOD_END + timedelta(days=365)
-        self.set_deck(paid_until=later, stripe_subscription_id='sub_sync')
+        # the sync that granted this later period also recorded that it renews, so
+        # the older event genuinely has nothing left to change
+        self.set_deck(paid_until=later, stripe_subscription_id='sub_sync', stripe_auto_renews=True)
         summary = self.tenant.sync_from_stripe_subscription(self.make_subscription())
         self.assertEqual(summary, 'no changes')
         self.tenant.refresh_from_db()
