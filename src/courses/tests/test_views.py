@@ -2280,7 +2280,14 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
             reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
+        # no points to plot, but the chart is still told the charted course's scale so its axis
+        # and mark lines set up correctly (issue #403): the response shape is the same either way
+        self.assertEqual(json.loads(response.content), {
+            'days_in_semester': 0,
+            'xp_data': [],
+            'xp_for_100_percent': self.course.xp_for_100_percent,
+            'uses_marks': self.course.uses_marks,
+        })
 
     def test_ajax_xp_data__empty_with_no_open_semester(self):
         """Between semesters there is no semester to chart progress through, so the chart gets
@@ -2292,7 +2299,13 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
             reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(json.loads(response.content), {'days_in_semester': 0, 'xp_data': []})
+        # with no open semester there is no course to chart, so the scale falls back to no marks
+        self.assertEqual(json.loads(response.content), {
+            'days_in_semester': 0,
+            'xp_data': [],
+            'xp_for_100_percent': 0,
+            'uses_marks': False,
+        })
 
     @freeze_time('2024-02-01')
     def test_ajax_progress_chart__charts_the_students_own_semester(self):
