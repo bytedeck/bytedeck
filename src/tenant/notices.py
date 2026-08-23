@@ -3,9 +3,10 @@
 Evaluates, records, and delivers deck status notices -- run per deck by the
 nightly ``deck_status_check`` task, right after the cached counts refresh:
 
-* EXPIRY cadence: a reminder at 30, 14, and 7 days before the governing deadline
-  (trial end, or paid_until), then daily through the final week and the paid
-  grace window. At most one expiry notice per deck per day.
+* EXPIRY cadence: a reminder at 30, 14, 7, and 1 days before the governing
+  deadline (trial end, or paid_until). Four notices per period and nothing
+  after: the deck keeps running through the grace window that follows, and the
+  SUSPENDED notice closes the story out when that window ends.
 * LIMIT warnings: when the current-student count reaches 80% / 100% of the
   effective cap; re-armed monthly so owners are reminded but not spammed.
 * SUSPENDED: once per suspension (a deck whose clocks all lapsed).
@@ -36,7 +37,7 @@ from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 # expiry thresholds, most specific first: the first unfired one whose window has
 # been entered is the one that fires (so a deck first seen at 10 days out gets
 # ONE notice -- d14 -- not a d30+d14 double)
-EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
+EXPIRY_THRESHOLDS = (('d1', 1), ('d7', 7), ('d14', 14), ('d30', 30))
 
 # How many days before an auto-renewing subscription's renewal date its single
 # heads-up goes out. Deliberately NOT Stripe's 7 days: every ByteDeck plan bills
@@ -156,19 +157,16 @@ def evaluate_deck_notices(deck):
             # and the email reports), so a stale paid key can never suppress
             # reminders for a later governing trial date (#1734 B4)
             period_key = str(deck.governing_deadline)
-            # the first (most specific) milestone whose window we're inside governs --
-            # broader milestones are superseded, never fired late. The guard above
-            # guarantees at least the broadest window matches.
+            # the first (most specific) milestone whose window we're inside governs:
+            # broader milestones are superseded, never fired late, and d1 ends the
+            # cadence. Past the deadline `days` goes negative and d1 still matches, so
+            # a deck that reaches us already inside its grace window gets that one
+            # catch-up notice and then nothing: it is still fully usable in there, and
+            # the suspension notice covers the day that stops being true (maintainer
+            # decision, 2026-08-23). The guard above guarantees a window matches.
             threshold = [t for t, t_days in EXPIRY_THRESHOLDS if days <= t_days][0]
-            fired_milestone = _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key)
-            if fired_milestone:
+            if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
                 due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
-            # daily through the final week and the grace window (days goes negative),
-            # but never two expiry notices on the same day
-            if not fired_milestone and days <= EXPIRY_THRESHOLDS[0][1]:
-                threshold = f'daily-{today}'
-                if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
-                    due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
 
     # --- current-student limit warnings, re-armed monthly ------------------------
     # not for suspended decks: students cannot sign in there at all, so a

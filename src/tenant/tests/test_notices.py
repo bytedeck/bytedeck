@@ -55,22 +55,28 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=TODAY + timedelta(days=10))
         self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd14', str(TODAY + timedelta(days=10)))])
 
-    def test_evaluate__daily_inside_final_week_and_through_grace(self):
-        """After the milestones, one notice per day fires inside the final week, and keeps
-        firing through the paid grace window (negative days)."""
+    def test_evaluate__d1_is_the_last_notice_and_the_grace_window_is_quiet(self):
+        """d1 is the end of the cadence: the day before the deadline is the last
+        reminder, and the deck hears nothing more about that deadline, neither on
+        the days between milestones nor through the grace window that follows."""
         deadline = TODAY + timedelta(days=3)
         self.set_deck(trial_end_date=None, paid_until=deadline)
         process_deck_notices(self.tenant)  # consumes d7 (and only d7)
         self.assertEqual(DeckNotice.objects.filter(tenant=self.tenant).count(), 1)
 
-        with freeze_time("2026-08-16 20:00:00"):
-            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(deadline))])
-            process_deck_notices(self.tenant)
-            self.assertEqual(self.due(), [])  # once per day only
+        with freeze_time("2026-08-16 20:00:00"):  # 2 days out: inside d7, already sent
+            self.assertEqual(self.due(), [])
 
-        # 10 days after the deadline: in grace (30-day window), daily continues
+        with freeze_time("2026-08-17 20:00:00"):  # 1 day out: the final milestone
+            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd1', str(deadline))])
+            process_deck_notices(self.tenant)
+            self.assertEqual(self.due(), [])
+
+        # 10 days past the deadline, inside the 30-day grace window: still quiet.
+        # The deck is fully usable in there, and the suspension notice covers the
+        # moment that stops being true.
         with freeze_time("2026-08-28 20:00:00"):
-            self.assertIn((DeckNotice.KIND_EXPIRY, 'daily-2026-08-28', str(deadline)), self.due())
+            self.assertEqual(self.due(), [])
 
     def test_evaluate__beat_outage_catches_up_with_one_notice(self):
         """If beat is down for days, the next run sends one catch-up notice, not a backlog."""
@@ -78,7 +84,7 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         # no runs happen for 4 days...
         with freeze_time("2026-08-19 20:00:00"):
             due = self.due()
-            self.assertEqual(len(due), 1)  # just d7 (unfired), not four daily notices
+            self.assertEqual(len(due), 1)  # just d7 (the unfired milestone), never a backlog
 
     def test_evaluate__renewal_re_arms_the_cadence(self):
         """Advancing paid_until (a renewal) re-arms the milestones via the new period_key."""
@@ -230,15 +236,16 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.assertEqual(self.due(), [])  # still just the one
 
     def test_evaluate__lapsed_trial_stays_on_expiry_cadence_through_grace(self):
-        """A lapsed trial inside its grace window is NOT suspended: it stays on the
-        expiry-reminder cadence (daily after the milestone), exactly like a lapsed
-        paid deck (#1734 B4)."""
+        """A lapsed trial inside its grace window is NOT suspended: it is still on
+        the expiry cadence, exactly like a lapsed paid deck (#1734 B4), so a deck
+        that was never reminded still gets the final milestone (d1). Once that is
+        spent the grace window runs out quietly."""
         lapsed = TODAY - timedelta(days=10)
         self.set_deck(trial_end_date=lapsed, paid_until=None)
-        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(lapsed))])  # no suspension notice
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd1', str(lapsed))])  # no suspension notice
         process_deck_notices(self.tenant)
         with freeze_time("2026-08-16 20:00:00"):
-            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(lapsed))])
+            self.assertEqual(self.due(), [])
 
 
 @freeze_time(NOW)

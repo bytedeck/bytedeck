@@ -903,7 +903,7 @@ class DeckNotice(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.CharField(
         max_length=20,
-        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7', 'daily-YYYY-MM-DD', 'pct80'/'pct100', or 'suspended'."
+        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7'/'d1', 'upcoming', 'pct80'/'pct100', 'suspended', or 'invoice'."
     )
     period_key = models.CharField(
         max_length=32,
