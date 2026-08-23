@@ -1184,12 +1184,23 @@ def ajax_progress_chart(request, user_id=0):
         # (issue #1781).
         sem = semester_for(user)
 
+        # The course being charted (from the request, defaulting to the student's first), worked
+        # out up front so the chart is told its scale even when there is nothing to plot yet: the
+        # mark lines and percent axis come from the course, not the data (issue #403, #2453).
+        registrations, charted = _registrations_to_chart(user, request.POST.get('course'))
+        charted_course = registrations[charted].course if charted is not None else None
+
         if sem is None or sem.days_so_far() <= 0:
             # Nothing to plot: either the student is in no open semester, or theirs has no
-            # class days behind it yet (a semester with no dates set has none at all). Hand
-            # the chart an empty dataset rather than building one from an empty date list,
-            # which the weekend adjustment below would then index into.
-            return HttpResponse(json.dumps({"days_in_semester": 0, "xp_data": []}), content_type='application/json')
+            # class days behind it yet (a semester with no dates set has none at all). Hand the
+            # chart an empty dataset, but still the charted course's scale, so the axis and mark
+            # lines set up correctly and the response has the same shape as when there is data.
+            return HttpResponse(json.dumps({
+                "days_in_semester": 0,
+                "xp_data": [],
+                "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
+                "uses_marks": charted_course.uses_marks if charted_course else False,
+            }), content_type='application/json')
 
         # the date of every class day so far, weekends and non-class days skipped, off a
         # single read of the semester's excluded days (issue #2459)
@@ -1206,10 +1217,7 @@ def ajax_progress_chart(request, user_id=0):
         off_day = today.weekday() in [5, 6] or today.date() in sem.excluded_days()
 
         # A course's own line, not an even share of the student's whole total: since #2440 the
-        # two are different numbers for a student who assigned their work (issue #2453). The
-        # course to chart comes from the request, defaulting to the first of their courses.
-        registrations, charted = _registrations_to_chart(user, request.POST.get('course'))
-
+        # two are different numbers for a student who assigned their work (issue #2453).
         if charted is None:  # pragma: no cover
             # Defensive race guard, not reachable by a plain request: semester_for() just
             # found an open-semester registration for this user, and _registrations_to_chart
@@ -1239,7 +1247,6 @@ def ajax_progress_chart(request, user_id=0):
         if difference > 0:
             xp_data[-1]['y'] += difference
 
-        charted_course = registrations[charted].course if charted is not None else None
         progress_chart = {
             "days_in_semester": sem.num_days(),
             "xp_data": xp_data,

@@ -364,6 +364,42 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         # the badge styles ride along via the ModelAdmin's Media declaration
         self.assertContains(response, "css/admin_deck_status.css")
 
+    def test_subscription_status_text__column_is_sortable(self):
+        """The Subscription column sorts. Its header is rendered sortable (a column
+        of values derived in Python has nothing for the database to order by, so
+        without the ranking annotation the header is inert text), and ordering by
+        it lists the decks by lifecycle: suspended first, managed manually last."""
+        # three decks, three distinct statuses, deliberately NOT in rank order by pk
+        Tenant.objects.filter(pk=self.tenant.pk).update(  # suspended: every clock long lapsed
+            trial_end_date=date(2022, 1, 1), paid_until=None)
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(  # free trial: no paid clock
+            trial_end_date=date(2032, 1, 1), paid_until=None)
+        Tenant.objects.filter(pk=self.public_tenant.pk).update(  # managed manually: no clocks at all
+            trial_end_date=None, paid_until=None)
+
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+
+        # the header itself is clickable, which is the whole complaint
+        response = self.client.get(url)
+        self.assertContains(response, 'class="sortable column-subscription_status_text"')
+
+        # Django's ordering param indexes into list_display, with the action
+        # checkbox column prepended ahead of it
+        column = list(TenantAdmin.list_display).index('subscription_status_text') + 1
+        response = self.client.get('{}?o={}'.format(url, column))
+        content = response.content.decode()
+        rows_in_rank_order = [self.tenant, self.extra_tenant, self.public_tenant]
+        positions = [content.index('/tenant/tenant/{}/change/'.format(deck.pk)) for deck in rows_in_rank_order]
+        self.assertEqual(positions, sorted(positions))
+
+        # and descending flips it, so the ordering is really being applied
+        response = self.client.get('{}?o=-{}'.format(url, column))
+        content = response.content.decode()
+        positions = [content.index('/tenant/tenant/{}/change/'.format(deck.pk)) for deck in rows_in_rank_order]
+        self.assertEqual(positions, sorted(positions, reverse=True))
+
     def test_deletable_text__shows_why_a_deck_can_be_deleted(self):
         """The "deletable" column marks decks whose deletion waiting is over:
         "via request" for a suspended deck whose owner asked, empty for a live
