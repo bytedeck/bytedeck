@@ -1,8 +1,10 @@
+import re
 import uuid
 from copy import deepcopy
 from datetime import date
 from unittest.mock import patch
 from django.contrib.auth import get_user_model
+from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages import get_messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, connection
@@ -1926,10 +1928,10 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
 
         imported = Category.objects.get(import_id=self.library_campaign.import_id)
         message = str(list(response.context['messages'])[0])
-        self.assertIn(
-            f'href="{reverse("quests:category_update", args=[imported.id])}">publish the campaign</a>', message
-        )
-        # the prerequisite belongs to one of its quests, so this one points at the campaign
+        # Both steps live on the campaign's own page: the publish button there is the one
+        # that publishes the quests too, and the quests are listed there so the first can
+        # be given a prerequisite (#2533)
+        self.assertIn(f'href="{imported.get_absolute_url()}">publish the campaign</a>', message)
         self.assertIn(f'href="{imported.get_absolute_url()}">prerequisite</a>', message)
 
 
@@ -2277,26 +2279,26 @@ class LibraryImportNameCollisionTests(LibraryTenantTestCaseMixin):
 
 
 class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
-    """What happens to a quest's gating when the importing deck does not have it.
+    """What happens to a quest's prerequisites when the importing deck does not have them.
 
     Imported content is a self-contained package: the importing teacher places it into
-    their own map and sets their own prerequisites, so a gate that did not travel is not
+    their own map and sets their own prerequisites, so a prerequisite that did not travel is not
     something they need telling about. It is the sharer's business, and is warned about on
     the push instead (see `LibrarySharerWarningTests`).
     """
 
     @classmethod
     def setUpTestData(cls):
-        """Publish a Library quest gated on another quest that is not being imported."""
+        """Publish a Library quest requiring another quest that is not being imported."""
         with library_schema_context():
-            cls.gate = baker.make(Quest, name="Finish The Prologue", published=True)
+            cls.prereq_target = baker.make(Quest, name="Finish The Prologue", published=True)
             cls.library_quest = baker.make(Quest, name="Chapter Two", published=True)
-            Prereq.add_simple_prereq(cls.library_quest, cls.gate)
+            Prereq.add_simple_prereq(cls.library_quest, cls.prereq_target)
 
         cls.test_teacher = User.objects.create_user('unmet_prereq_teacher', is_staff=True)
 
-    def test_import_quest__arrives_ungated_when_the_prerequisite_is_missing(self):
-        """A quest whose gate this deck does not have arrives with no prerequisite."""
+    def test_import_quest__arrives_with_no_prerequisite_when_the_target_is_missing(self):
+        """A quest whose prerequisite target this deck does not have arrives with none."""
         self.client.force_login(self.test_teacher)
 
         self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
@@ -2305,8 +2307,8 @@ class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
         self.assertEqual(list(imported.prereqs()), [])
 
     def test_import_quest__rebuilds_a_prerequisite_the_deck_already_has(self):
-        """A deck holding the gate gets the prerequisite rebuilt rather than dropped."""
-        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        """A deck holding the target gets the prerequisite rebuilt rather than dropped."""
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.prereq_target.import_id)
         self.client.force_login(self.test_teacher)
 
         self.client.post(reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True)
@@ -2315,12 +2317,12 @@ class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
         self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
 
     def test_import_quest__re_importing_does_not_duplicate_an_existing_prerequisite(self):
-        """Importing the same quest twice refreshes it without stacking up its gate again.
+        """Importing the same quest twice refreshes it without stacking up its prerequisite again.
 
         Re-importing is how a deck picks up an updated version of Library content, so it
         happens to quests that already have their prerequisites wired up.
         """
-        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.gate.import_id)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.prereq_target.import_id)
         import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
 
         import_quest_to(destination_schema=connection.schema_name, quest_import_id=self.library_quest.import_id)
@@ -2329,7 +2331,7 @@ class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
         self.assertEqual([p.get_prereq().name for p in imported.prereqs()], ["Finish The Prologue"])
 
     def test_import_quest__tells_the_importer_only_what_they_have_to_do_next(self):
-        """The import message covers publishing and gating, and nothing about what was lost.
+        """The import message covers publishing and prerequisites, and nothing about what was lost.
 
         Everything the Library could not carry is reported to the sharer on the push. The
         importer is told the two things they have to do, which is all that is theirs to act
@@ -2345,7 +2347,195 @@ class LibraryImportPrereqBehaviourTests(LibraryTenantTestCaseMixin):
         self.assertTrue(any("publish" in text.lower() and "prerequisite" in text.lower() for text in texts))
         self.assertFalse(
             any("Finish The Prologue" in text for text in texts),
-            f"the importer should not be told about gating that did not travel, got {texts}",
+            f"the importer should not be told about prerequisites that did not travel, got {texts}",
+        )
+
+
+class LibraryShareRefusalTests(LibraryTenantTestCaseMixin):
+    """A share the Library would reject is refused with a reason, not a 500.
+
+    A quest name and a campaign title are unique per schema, so content whose name is
+    already taken in the Library cannot be written there. The sharer cannot see that from
+    their own deck: the Library is another schema, and their own deck's pages say nothing
+    about what is in it. Refusing with a reason is the only thing standing between them
+    and a failure they cannot interpret, after they have agreed to the licence (#2531).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to share content from this deck."""
+        cls.test_teacher = User.objects.create_user('share_refusal_teacher', is_staff=True)
+
+    def setUp(self):
+        """Let any staff user share, and sign the teacher in."""
+        super().setUp()
+        config = SiteConfig.get()
+        config.allow_staff_export = True
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+    def _take_the_name_in_the_library(self, name):
+        """Put an unrelated quest into the Library under `name`.
+
+        A different quest, not the one being shared: same name, its own import_id, which
+        is what makes it a clash rather than the same content arriving again.
+
+        Args:
+            name (str): the quest name to occupy.
+        """
+        with library_schema_context():
+            baker.make(Quest, name=name, published=True)
+
+    def test_export_quest__get_warns_that_the_name_is_taken(self):
+        """The share confirmation page names the clash before the licence is agreed to.
+
+        Refusing at this point costs the teacher a rename; refusing after the POST costs
+        them the same rename plus a server error page they cannot interpret (#2531).
+        """
+        local = baker.make(Quest, name="Photoshop Basics", published=True)
+        self._take_the_name_in_the_library("Photoshop Basics")
+
+        response = self.client.get(reverse('library:export_quest', args=[local.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "already has a different quest called")
+        # No licence form on a page that cannot go through.
+        self.assertNotContains(response, 'id="export-form"')
+
+    def test_export_quest__post_is_refused_with_a_message(self):
+        """Submitting a share whose name is taken redirects with the reason (#2531).
+
+        Nothing reaches the Library, and the message names the quest so the teacher knows
+        which one to rename.
+        """
+        local = baker.make(Quest, name="Photoshop Basics", published=True)
+        self._take_the_name_in_the_library("Photoshop Basics")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Photoshop Basics" in text and "could not be completed" in text for text in texts),
+            f"expected a refusal naming the quest, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Quest.objects.filter(import_id=local.import_id).exists())
+
+    def test_export_quest__a_clash_arriving_mid_push_is_still_refused(self):
+        """A failure the pre-check could not have seen is refused, not raised (#2531).
+
+        The guard runs before the write, so between the two another deck can take the name.
+        Patching the push to raise is how that race is reached deterministically: the point
+        is that the exception is turned into a message rather than escaping as a 500.
+        """
+        local = baker.make(Quest, name="Racing The Library", published=True)
+
+        with patch(
+            'library.views.export_quest_to_library',
+            side_effect=LibraryTransferError("'Racing The Library' could not be copied: name: already exists."),
+        ):
+            response = self.client.post(
+                reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Racing The Library" in text and "could not be completed" in text for text in texts),
+            f"expected the raised failure to be reported, got {texts}",
+        )
+
+    def test_export_quest__the_refusal_escapes_markup_in_the_clashing_name(self):
+        """A clashing name carrying HTML is escaped in the refusal message.
+
+        The name in this message comes from the *Library*, so it was written on a deck
+        other than the one reading it. That makes it the one part of the message its
+        reader has no control over, and worth pinning: messages are rendered through
+        `_message_body.html`, which escapes a plain string and only lets markup through
+        when it was built with `format_html` (#2498).
+        """
+        local = baker.make(Quest, name="Clean Quest Name", published=True)
+        self._take_the_name_in_the_library("Clean Quest Name")
+        with library_schema_context():
+            Quest.objects.filter(name="Clean Quest Name").update(name="<img src=x onerror=alert(1)>")
+        Quest.objects.filter(pk=local.pk).update(name="<img src=x onerror=alert(1)>")
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertNotContains(response, "<img src=x onerror=alert(1)>")
+        self.assertContains(response, "&lt;img src=x onerror=alert(1)&gt;")
+
+    def test_export_campaign__post_is_refused_when_the_title_is_taken(self):
+        """A campaign whose title the Library already uses is refused, not 500 (#2534).
+
+        The clash is on `Category.title`, which is unique per schema, so `full_clean`
+        rejects the write and the refusal has to come from the view rather than the page.
+        """
+        campaign = baker.make(Category, title="Digital Citizenship", published=True)
+        quest = baker.make(Quest, name="A Quest Of Its Own", campaign=campaign, published=True)
+        with library_schema_context():
+            baker.make(Category, title="Digital Citizenship", published=True)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Digital Citizenship" in text and "could not be completed" in text for text in texts),
+            f"expected a refusal naming the campaign, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+            self.assertFalse(Quest.objects.filter(import_id=quest.import_id).exists())
+
+    def test_export_campaign__post_is_refused_when_a_quest_name_is_taken(self):
+        """A campaign carrying a quest whose name is taken is refused as a whole (#2534).
+
+        The push is atomic, so a clash on one quest stops the campaign: better to say which
+        name is in the way than to leave half of it in the Library.
+        """
+        campaign = baker.make(Category, title="Soldering Skills", published=True)
+        baker.make(Quest, name="Tin Your Iron", campaign=campaign, published=True)
+        self._take_the_name_in_the_library("Tin Your Iron")
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("Tin Your Iron" in text for text in texts),
+            f"expected a refusal naming the quest, got {texts}",
+        )
+        with library_schema_context():
+            self.assertFalse(Category.objects.filter(import_id=campaign.import_id).exists())
+
+    def test_export_campaign__post_with_no_published_quests_is_refused(self):
+        """POSTing a share for a campaign with nothing publishable is refused (#2534).
+
+        The button for this is disabled in the UI, but the URL is not, so a stale tab or a
+        resubmit reached the exporter and raised. Nothing about a disabled button stops a
+        POST.
+        """
+        campaign = baker.make(Category, title="Empty Campaign", published=True)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("could not be completed" in text for text in texts),
+            f"expected a refusal rather than a server error, got {texts}",
         )
 
 
@@ -2368,14 +2558,14 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         config.allow_staff_export = True
         config.save()
 
-    def test_export_quest__warns_the_sharer_that_a_gate_could_not_travel(self):
-        """Sharing a rank-gated quest tells the sharer the Library copy is ungated.
+    def test_export_quest__warns_the_sharer_that_a_prerequisite_could_not_travel(self):
+        """Sharing a quest with a rank prerequisite tells the sharer the copy arrives without it.
 
         This is the only place the loss is visible. The Library row simply has no
         prerequisite, so nobody downstream can tell it ever had one (#2399, #2450).
         """
         rank = baker.make(Rank, name="Digital Novice")
-        local = baker.make(Quest, name="Locally Gated Quest", published=True)
+        local = baker.make(Quest, name="Locally Restricted Quest", published=True)
         Prereq.add_simple_prereq(local, rank)
         self._allow_staff_export()
         self.client.force_login(self.test_teacher)
@@ -2389,16 +2579,114 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
             f"expected the sharer to be told, got {self._message_texts(response)}",
         )
 
-    def test_export_quest__stays_quiet_when_the_gate_is_already_in_the_library(self):
-        """No warning when the Library already holds the quest this one is gated on.
+    def test_export_quest__escapes_markup_in_a_lost_prerequisites_name(self):
+        """A markup-bearing name reaches the sharer's warning as text, not as markup.
 
-        A single-quest share carries only that quest, so its gate resolves in the Library
-        only if it is already there. Sharing the gate first is what makes that true.
+        The messages block renders through `|safe`, so the warning must pre-escape the
+        names it interpolates; otherwise a rank or quest named with a tag would run as
+        HTML for whoever shares content that requires it.
         """
-        gate = baker.make(Quest, name="Shareable Gate", published=True)
-        local = baker.make(Quest, name="Quest With A Shareable Gate", published=True)
-        Prereq.add_simple_prereq(local, gate)
-        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=gate.import_id)
+        rank = baker.make(Rank, name="<b>Sneaky Rank</b>")
+        local = baker.make(Quest, name="Quest Requiring Markup", published=True)
+        Prereq.add_simple_prereq(local, rank)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(any("&lt;b&gt;Sneaky Rank&lt;/b&gt;" in text for text in texts), texts)
+        self.assertFalse(any("<b>Sneaky Rank</b>" in text for text in texts), texts)
+
+    def test_export_quest__escapes_markup_in_a_lost_alternatives_name(self):
+        """The lost-alternative warning pre-escapes names the same way (issue #2549)."""
+        main = baker.make(Quest, name="Shareable Main Requirement", published=True)
+        rank = baker.make(Rank, name="<i>Sneaky Alternative</i>")
+        local = baker.make(Quest, name="Quest With Markup Alternative", published=True)
+        prereq = Prereq.add_simple_prereq(local, main)
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+        prereq.or_prereq_object_id = rank.id
+        prereq.full_clean()
+        prereq.save()
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=main.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(any("&lt;i&gt;Sneaky Alternative&lt;/i&gt;" in text for text in texts), texts)
+        self.assertFalse(any("<i>Sneaky Alternative</i>" in text for text in texts), texts)
+
+    def test_export_quest__pluralises_the_missing_prerequisites_warning(self):
+        """Two prerequisites that cannot travel get plural wording, one warning.
+
+        A single missing prerequisite reads "One thing did not travel"; with several the
+        message switches to "Some things" and "prerequisites", so the grammar matches
+        however many names it lists.
+        """
+        local = baker.make(Quest, name="Quest With Two Rank Prereqs", published=True)
+        for rank_name in ("First Missing Rank", "Second Missing Rank"):
+            Prereq.add_simple_prereq(local, baker.make(Rank, name=rank_name))
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        plural = [text for text in texts if "Some things did not travel" in text]
+        self.assertEqual(len(plural), 1, texts)
+        self.assertIn("'First Missing Rank', 'Second Missing Rank'", plural[0])
+        self.assertIn("as prerequisites", plural[0])
+
+    def test_export_quest__pluralises_the_lost_alternatives_warning(self):
+        """Two prerequisites each losing their alternative get plural wording, one warning.
+
+        A single lost alternative reads "A prerequisite kept its main requirement"; with
+        several the message switches to "Some prerequisites" and "alternatives", so the
+        grammar matches however many names it lists.
+        """
+        main1 = baker.make(Quest, name="First Main Requirement", published=True)
+        main2 = baker.make(Quest, name="Second Main Requirement", published=True)
+        local = baker.make(Quest, name="Quest With Two Narrowed Prereqs", published=True)
+        for main, rank_name in ((main1, "First Lost Route"), (main2, "Second Lost Route")):
+            rank = baker.make(Rank, name=rank_name)
+            prereq = Prereq.add_simple_prereq(local, main)
+            prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+            prereq.or_prereq_object_id = rank.id
+            prereq.full_clean()
+            prereq.save()
+            export_quest_to_library(source_schema=connection.schema_name, quest_import_id=main.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        plural = [text for text in texts if "Some prerequisites kept their main requirement" in text]
+        self.assertEqual(len(plural), 1, texts)
+        self.assertIn("'First Lost Route', 'Second Lost Route'", plural[0])
+        self.assertIn("alternatives too", plural[0])
+
+    def test_export_quest__stays_quiet_when_the_prerequisite_is_already_in_the_library(self):
+        """No warning when the Library already holds the quest this one requires.
+
+        A single-quest share carries only that quest, so its prerequisite resolves in the
+        Library only if it is already there. Sharing the target first is what makes that
+        true.
+        """
+        target = baker.make(Quest, name="Shareable Requirement", published=True)
+        local = baker.make(Quest, name="Quest With A Shareable Requirement", published=True)
+        Prereq.add_simple_prereq(local, target)
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=target.import_id)
         self._allow_staff_export()
         self.client.force_login(self.test_teacher)
 
@@ -2409,6 +2697,40 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         self.assertFalse(
             any("did not travel" in text for text in self._message_texts(response)),
             f"expected no warning, got {self._message_texts(response)}",
+        )
+
+    def test_export_quest__warns_the_sharer_that_an_or_alternative_could_not_travel(self):
+        """Losing only a prerequisite's OR alternative gets its own warning, not the missing-prerequisite one.
+
+        The prerequisite itself survives, so the copy arrives stricter than written, with
+        one of the ways to meet it gone. Saying the copy is missing its prerequisite for
+        that case would point the teacher at the wrong problem, so the alternative gets a
+        message of its own instead (#2549).
+        """
+        main = baker.make(Quest, name="Shareable Requirement", published=True)
+        local = baker.make(Quest, name="Quest With A Narrower Copy", published=True)
+        prereq = Prereq.add_simple_prereq(local, main)
+        rank = baker.make(Rank, name="Digital Novice")
+        prereq.or_prereq_content_type = ContentType.objects.get_for_model(rank)
+        prereq.or_prereq_object_id = rank.id
+        prereq.full_clean()
+        prereq.save()
+        export_quest_to_library(source_schema=connection.schema_name, quest_import_id=main.import_id)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_quest', args=[local.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        self.assertTrue(
+            any("lost its OR alternative" in text and "Digital Novice" in text for text in texts),
+            f"expected the alternative to be named in its own warning, got {texts}",
+        )
+        self.assertFalse(
+            any("One thing did not travel" in text for text in texts),
+            f"expected no missing-prerequisite warning when only the alternative was lost, got {texts}",
         )
 
     def test_export_quest__warns_the_sharer_that_the_general_info_block_stays_behind(self):
@@ -2751,7 +3073,7 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
 
     @classmethod
     def setUpTestData(cls):
-        """Publish a tagged, gated quest and its campaign in the Library, plus a staff viewer.
+        """Publish a tagged quest with a prerequisite, and its campaign, in the Library, plus a staff viewer.
 
         The Library quest carries a tag and a prerequisite on a second Library quest, so a
         page can be checked for the Library's own values rather than only for the absence
@@ -2763,10 +3085,10 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
                 Quest, name="Titration Practice", campaign=cls.library_campaign, published=True,
             )
             cls.library_quest.tags.add("chemistry")
-            # A gate of the Library's own, so the pages can be checked for the right one
-            # rather than only for the absence of the wrong one.
-            cls.library_gate = baker.make(Quest, name="Library Safety Briefing", published=True)
-            Prereq.add_simple_prereq(cls.library_quest, cls.library_gate)
+            # A prerequisite of the Library's own, so the pages can be checked for the
+            # right one rather than only for the absence of the wrong one.
+            cls.library_prereq = baker.make(Quest, name="Library Safety Briefing", published=True)
+            Prereq.add_simple_prereq(cls.library_quest, cls.library_prereq)
 
         cls.test_teacher = User.objects.create_user('lazy_queryset_teacher', is_staff=True)
 
@@ -2831,11 +3153,11 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         )
 
     def test_ImportQuestView__shows_the_library_quests_own_prereqs(self):
-        """The quest import preview names the Library quest's gate, not this deck's (#2529).
+        """The quest import preview names the Library quest's prerequisite, not this deck's (#2529).
 
         The preview exists to say what is about to arrive, and this project has decided
-        gating is the importing deck's own business (#2375), so showing them a gate that
-        is really their own, attached to a quest they do not have yet, is the most
+        prerequisites are the importing deck's own business (#2375), so showing them one
+        that is really their own, attached to a quest they do not have yet, is the most
         misleading thing the page could do.
 
         This is the only Library page that renders prerequisites server-side. The list and
@@ -2991,6 +3313,94 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         local.refresh_from_db()
         # Nothing was preserved, so the import behaved normally.
         self.assertIn("The Library's wording", local.instructions)
+
+
+class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
+    """The import message's publish link reaches the action it promises (#2533).
+
+    The message tells the teacher that publishing the campaign publishes its quests. Only
+    one control does that, and it is a POST-only button on the campaign's own page, so the
+    link has to lead there: the campaign's edit form publishes the campaign alone and
+    leaves every quest a draft, which looks identical to the teacher until a student says
+    they cannot see anything.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to import with."""
+        cls.test_teacher = User.objects.create_user('publish_link_teacher', is_staff=True)
+
+    def setUp(self):
+        """Publish a two-quest campaign in the Library and sign the teacher in.
+
+        Two quests rather than one, so "and all its Quests" is asserted against a set the
+        publish has to walk, and an assertion about every quest cannot pass on an empty one.
+        """
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            self.library_campaign = baker.make(Category, title="Digital Citizenship", published=True)
+            baker.make(Quest, name="Your Digital Footprint", campaign=self.library_campaign, published=True)
+            baker.make(Quest, name="Reading The Terms", campaign=self.library_campaign, published=True)
+
+    def _import_and_read_the_message(self):
+        """Import the Library campaign and return the success message's HTML.
+
+        Returns:
+            str: the rendered message.
+        """
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+        messages = [str(message) for message in response.context['messages']]
+        return next(message for message in messages if "Successfully imported" in message)
+
+    def _publish_link_target(self, message):
+        """Return the URL that the message's "publish the campaign" link points at.
+
+        Args:
+            message (str): the rendered success message.
+
+        Returns:
+            str: the link's href.
+        """
+        return re.search(r'<a href="([^"]+)">publish the campaign</a>', message).group(1)
+
+    def test_ImportCampaignView__the_publish_link_goes_to_the_campaign_page(self):
+        """The "publish the campaign" link points at the campaign, not at its edit form."""
+        message = self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+
+        self.assertEqual(self._publish_link_target(message), campaign.get_absolute_url())
+        self.assertNotIn(reverse('quests:category_update', args=[campaign.id]), message)
+
+    def test_ImportCampaignView__the_page_the_publish_link_reaches_publishes_the_quests(self):
+        """The page that link reaches carries the control publishing the campaign and its quests.
+
+        The href is read out of the message and requested, so this fails if the button moves
+        off the page the message points at, not merely if the link string changes.
+        """
+        message = self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+
+        response = self.client.get(self._publish_link_target(message))
+
+        self.assertContains(response, reverse('quests:category_publish', args=[campaign.id]))
+        self.assertContains(response, "Publish Campaign and all its Quests")
+
+    def test_CategoryPublish__publishes_the_campaign_and_its_quests(self):
+        """The linked-to control does publish both, which is what the message promises."""
+        self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+        quests = Quest.objects.filter(campaign=campaign)
+        self.assertFalse(campaign.published)
+        self.assertEqual(quests.filter(published=False).count(), 2)
+
+        self.client.post(reverse('quests:category_publish', args=[campaign.id]))
+
+        campaign.refresh_from_db()
+        self.assertTrue(campaign.published)
+        self.assertEqual(quests.filter(published=True).count(), 2)
 
 
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):

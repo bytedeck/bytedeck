@@ -2,7 +2,7 @@ import functools
 from uuid import UUID
 
 from django.contrib import messages
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
 from django.db.models import Q
@@ -11,7 +11,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
 from django.urls import reverse
 from django.utils.decorators import method_decorator
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth import get_user_model
@@ -33,7 +33,7 @@ from .exporter import export_quest_to_library, export_campaign_and_copy_quests
 from .forms import ShareLicenceForm
 from .importer import import_campaign_to, import_quest_to
 from .models import ContentOrigin
-from .transfer import LibraryTransferError
+from .transfer import LibraryTransferError, describe_validation_error
 from .utils import (
     get_colliding_quest_names,
     get_library_conflicting_quests,
@@ -219,6 +219,58 @@ def redirect_already_imported(request, local_object, content_type, redirect_to):
     return redirect(redirect_to)
 
 
+def _describe_transfer_failure(error):
+    """One readable sentence for either kind of failure a push can raise.
+
+    Two exception types reach the same place. `LibraryTransferError` already reads as a
+    sentence naming the content and the clash. A `ValidationError` does not: it carries a
+    dict or list that renders with Django's punctuation, so it goes through the same
+    formatting the transfer layer uses for the errors it wraps.
+
+    Args:
+        error (LibraryTransferError | ValidationError): the failure.
+
+    Returns:
+        str: the reason, ending in a full stop so it reads inside the surrounding message.
+    """
+    described = describe_validation_error(error) if isinstance(error, ValidationError) else str(error)
+
+    return described if described.endswith('.') else f"{described}."
+
+
+def redirect_failed_export(request, error, redirect_to):
+    """Send the sharer back, explaining why their content did not reach the Library.
+
+    A push can fail on something the sharer cannot see from their own deck, because the
+    Library is another schema: a quest name or a campaign title that something else there
+    already uses. Nothing was written when this runs, since the push is atomic.
+
+    The mirror of `redirect_failed_import`, and it exists for the same reason: without it
+    the failure escapes the view as an exception and the sharer meets a 500 page, after
+    they have read and agreed to the licence, with nothing naming the cause (#2531, #2534).
+
+    Renaming is the sharer's move to make rather than ours. The import direction resolves a
+    clash by renaming the arriving copy, but that copy is a stranger to the receiving deck;
+    here the clashing name is the sharer's own, on their own quest, and silently publishing
+    it to every other deck under a name they did not choose is not a favour. Two quests
+    called the same thing is also exactly what makes a Library hard to browse.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        error (Exception): the failure, whose message names the content and the clash.
+        redirect_to (str): the URL name to redirect to.
+
+    Returns:
+        HttpResponseRedirect: a redirect carrying the error message.
+    """
+    messages.error(
+        request,
+        f"That share could not be completed, so nothing was added to the Library. {error} "
+        "Renaming your copy and sharing again should clear it."
+    )
+    return redirect(redirect_to)
+
+
 def redirect_already_shared(request, local_object, content_type, redirect_to):
     """Send the user back, explaining that the Library already has this content.
 
@@ -349,34 +401,78 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
     )
 
 
-def warn_sharer_about_unmet_prereqs(request, unmet_prereqs):
-    """Tell the sharer which gating did not travel with the content they just shared.
+def warn_sharer_about_unmet_prereqs(request, unmet_prereqs, unmet_alternates=()):
+    """Tell the sharer which prerequisites did not travel with the content they just shared.
 
     A prerequisite only crosses if the thing it points at is in the Library too. A rank or
     a course can never be, and a quest outside what is being pushed is simply not there
-    yet, so those gates are dropped at this end and the copy in the Library is ungated.
+    yet, so those prerequisites are dropped at this end and the copy in the Library
+    arrives without them.
 
-    Nobody downstream can tell, because the Library row simply has no prerequisite: the
-    teacher who imports it later has nothing to be warned about.
+    A lost OR alternative is the opposite loss, warned about separately (#2549): the
+    prerequisite itself survives, so the copy arrives *stricter* than written, with one
+    of the ways to meet it gone. The two need different fixes from the teacher (a quest
+    that arrives without its prerequisite needs one re-added on the far side; a narrowed
+    one needs the alternative shared alongside it), so telling them the copy has no
+    prerequisite when it is narrowed would point them at the wrong one.
 
-    That makes this the only place the loss is visible, and the sharer is also the one who
-    can act on it, by widening what they share or by re-gating it (#2399, #2450).
+    Nobody downstream can tell either way, because the Library row simply carries less
+    than the original: the teacher who imports it later has nothing to be warned about.
+
+    That makes this the only place the losses are visible, and the sharer is also the one
+    who can act on them, by widening what they share or by re-adding the prerequisite on
+    the far side (#2399, #2450).
 
     Args:
         request (HttpRequest): the current request, for the message framework.
-        unmet_prereqs (list[str]): names of the prerequisites that did not travel.
-    """
-    if not unmet_prereqs:
-        return
+        unmet_prereqs (list[str]): names of the prerequisite targets that did not travel.
+        unmet_alternates (list[str]): names of the OR alternatives that did not travel.
 
-    names = ', '.join(f"'{name}'" for name in unmet_prereqs)
-    messages.warning(
-        request,
-        f"One thing did not travel: this content was gated on {names}, which is not in the "
-        "Library, so the copy there is not gated on it and anyone importing it will get it "
-        "ungated. Sharing the whole campaign carries gates between its own quests; a rank, "
-        "grade, block or course cannot be shared at all."
-    )
+    Returns:
+        None: the outcome is zero, one or two warnings queued on the message
+        framework, one per kind of loss that actually happened.
+    """
+    # format_html(_join), not f-strings: every message is rendered through `|safe`,
+    # so a markup-bearing quest or rank name must arrive pre-escaped.
+    if unmet_prereqs:
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_prereqs))
+        if len(unmet_prereqs) == 1:
+            template = (
+                "One thing did not travel: this content has {} as a prerequisite, which is not in "
+                "the Library, so the copy there is missing that prerequisite and anyone importing "
+                "the content will get it without that requirement. Sharing the whole campaign "
+                "carries prerequisites between its own quests; a rank, grade, block or course "
+                "cannot be shared at all."
+            )
+        else:
+            template = (
+                "Some things did not travel: this content has {} as prerequisites, which are not "
+                "in the Library, so the copy there is missing those prerequisites and anyone "
+                "importing the content will get it without those requirements. Sharing the whole "
+                "campaign carries prerequisites between its own quests; a rank, grade, block or "
+                "course cannot be shared at all."
+            )
+        messages.warning(request, format_html(template, names))
+
+    if unmet_alternates:
+        names = format_html_join(', ', "'{}'", ((name,) for name in unmet_alternates))
+        if len(unmet_alternates) == 1:
+            template = (
+                "A prerequisite kept its main requirement but lost its OR alternative: {} is "
+                "not in the Library, so where the prerequisite offered a second way for the "
+                "content to become available, the copy no longer does. Anyone importing it "
+                "gets the stricter version. Share the alternative too if both options should "
+                "remain open."
+            )
+        else:
+            template = (
+                "Some prerequisites kept their main requirement but lost an OR alternative: {} "
+                "are not in the Library, so where those prerequisites offered a second way for "
+                "the content to become available, the copy no longer does. Anyone importing it "
+                "gets the stricter version. Share the alternatives too if all options should "
+                "remain open."
+            )
+        messages.warning(request, format_html(template, names))
 
 
 def record_push_origin(content_type, import_ids, request, source_deck_url):
@@ -902,9 +998,12 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         # As with a single quest: the campaign and its quests arrive unpublished and
-        # unreachable, so the import is only half the job (#2377). Publishing is on the
-        # campaign's own edit form; the prerequisite belongs to one of its quests, so that
-        # step links to the campaign, where they are listed.
+        # unreachable, so the import is only half the job (#2377). Both remaining steps are
+        # on the campaign's own page: the publish button there is the one that publishes
+        # the quests too, and the quests are listed there for the one that needs a
+        # prerequisite.
+        # The edit form is deliberately not linked: ticking Published on it publishes the
+        # campaign alone, leaving every quest a draft and students still seeing nothing.
         messages.success(
             request,
             format_html(
@@ -914,7 +1013,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
                 '<strong><a href="{}">prerequisite</a></strong> so the campaign is reachable on the '
                 "quest map.",
                 category.get_absolute_url(), category.name,
-                reverse("quests:category_update", args=[category.id]),
+                category.get_absolute_url(),
                 category.get_absolute_url(),
             )
         )
@@ -977,10 +1076,12 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
 
         with library_schema_context():
             library_quest = Quest.objects.all_including_archived().filter(import_id=quest.import_id).first()
+            colliding_names = get_colliding_quest_names([quest])
 
         return render(request, self.template_name, {
             'quest': quest,
             'library_quest': library_quest,
+            'colliding_names': colliding_names,
             'licence_form': ShareLicenceForm(),
         })
 
@@ -1028,40 +1129,58 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
 
         with library_schema_context():
             already_shared = Quest.objects.all_including_archived().filter(import_id=quest.import_id).exists()
+            colliding_names = get_colliding_quest_names([quest])
 
         if already_shared:
             return redirect_already_shared(request, quest, 'quest', 'quests:quests')
 
+        if colliding_names:
+            # Checked here as well as on the confirmation page, because that page can be
+            # minutes old: another deck may have shared the name in between (#2531).
+            return redirect_failed_export(
+                request,
+                f"The Library already has a different quest called '{colliding_names[0]}'.",
+                'quests:quests',
+            )
+
         # One transaction over the push, the notification it raises and the origin row it
         # records: a reviewer told to come and look at content, or an attribution pointing
         # at content, must not outlive a failure that rolled the content back (#2372).
-        with transaction.atomic():
-            shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
+        try:
+            with transaction.atomic():
+                shared = export_quest_to_library(source_schema=source_schema, quest_import_id=quest.import_id)
 
-            with library_schema_context():
-                # Get the newly exported quest
-                exported_quest = Quest.objects.get(import_id=quest.import_id)
+                with library_schema_context():
+                    # Get the newly exported quest
+                    exported_quest = Quest.objects.get(import_id=quest.import_id)
 
-                config = SiteConfig.get()
-                sender = config.deck_ai
+                    config = SiteConfig.get()
+                    sender = config.deck_ai
 
-                recipients = User.objects.filter(is_active=True, is_staff=True)
+                    recipients = User.objects.filter(is_active=True, is_staff=True)
 
-                # Notification sent to all active Library staff about the export
-                notify.send(
-                    sender=sender,
-                    recipient=None,
-                    affected_users=list(recipients),
-                    verb=f"{request.user} exported a quest to the library from {source_schema}:",
-                    action=quest,
-                    target=exported_quest,
-                    icon="<i class='fa fa-book'></i>"
-                )
+                    # Notification sent to all active Library staff about the export
+                    notify.send(
+                        sender=sender,
+                        recipient=None,
+                        affected_users=list(recipients),
+                        verb=f"{request.user} exported a quest to the library from {source_schema}:",
+                        action=quest,
+                        target=exported_quest,
+                        icon="<i class='fa fa-book'></i>"
+                    )
 
-                # Email active Library staff so they know there's a quest to review/publish (#1949).
-                email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
+                    # Email active Library staff so they know there's a quest to review/publish (#1949).
+                    email_library_staff_of_push("quest", quest.name, exported_quest, request.user, source_deck_url)
 
-                record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
+                    record_push_origin(ContentOrigin.QUEST, [quest.import_id], request, source_deck_url)
+        except (LibraryTransferError, ValidationError) as error:
+            # The guard above catches the clash this is usually raised for, so reaching here
+            # means something neither the confirmation page nor that guard could know: a
+            # name taken between the two requests, or a field the Library rejects. The
+            # sharer has already agreed to the licence by this point, so the failure is
+            # worth a reason they can act on.
+            return redirect_failed_export(request, _describe_transfer_failure(error), 'quests:quests')
 
         # Success message displayed on local deck
         messages.success(
@@ -1072,7 +1191,7 @@ class ExportQuestView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 quest.get_absolute_url(), quest.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:quests')
 
@@ -1108,6 +1227,16 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         # Get existing campaign in library (if any)
         with library_schema_context():
             existing_campaign = Category.objects.filter(import_id=campaign.import_id).first()
+            # Clashes the Library would reject the push for, which the sharer cannot see
+            # from their own deck. A title match on a *different* campaign is a clash;
+            # the same campaign arriving again is `existing_campaign` above (#2534).
+            colliding_title = (
+                Category.objects.filter(title=campaign.title)
+                .exclude(import_id=campaign.import_id)
+                .values_list('title', flat=True)
+                .first()
+            )
+            colliding_names = get_colliding_quest_names(quests)
 
         library_quest_import_ids = get_library_conflicting_quests(quests)
 
@@ -1122,6 +1251,8 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
             'category_published': campaign.published,
             'category_displayed_quests': quests,
             'library_quest_import_ids': library_quest_import_ids,
+            'colliding_title': colliding_title,
+            'colliding_names': colliding_names,
             'licence_form': licence_form,
         }
         return render(request, self.template_name, context)
@@ -1181,40 +1312,77 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
         if already_shared:
             return redirect_already_shared(request, campaign, 'campaign', 'quests:categories')
 
-        # One transaction over the push, the notification it raises and the origin rows it
-        # records, for the same reason as the quest push above (#2372).
-        with transaction.atomic():
-            shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
+        # Read this deck's quests before switching schemas: evaluated inside the Library
+        # context the queryset would list the Library's quests for that campaign instead,
+        # and report no clash at all (the lazy-evaluation trap of #2369 and #2529).
+        quests = list(campaign.current_quests())
 
-            with library_schema_context():
-                exported_campaign = Category.objects.get(import_id=campaign.import_id)
+        with library_schema_context():
+            colliding_title = (
+                Category.objects.filter(title=campaign.title)
+                .exclude(import_id=campaign.import_id)
+                .values_list('title', flat=True)
+                .first()
+            )
+            colliding_names = get_colliding_quest_names(quests)
 
-                config = SiteConfig.get()
-                sender = config.deck_ai
-                recipients = User.objects.filter(is_active=True, is_staff=True)
+        # Re-checked here as well as on the confirmation page, which can be minutes old
+        # by the time it is submitted (#2534).
+        if colliding_title:
+            return redirect_failed_export(
+                request,
+                f"The Library already has a different campaign called '{colliding_title}'.",
+                'quests:categories',
+            )
 
-                notify.send(
-                    sender=sender,
-                    recipient=None,
-                    affected_users=list(recipients),
-                    verb=f"{request.user} exported a campaign to the library from {source_schema}:",
-                    action=campaign,
-                    target=exported_campaign,
-                    icon="<i class='fa fa-book'></i>",
-                )
+        if colliding_names:
+            return redirect_failed_export(
+                request,
+                f"The Library already has a different quest called '{colliding_names[0]}', "
+                "which is in this campaign.",
+                'quests:categories',
+            )
 
-                # Email active Library staff so they know there's a campaign to review/publish (#1949).
-                email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
+        try:
+            # One transaction over the push, the notification it raises and the origin rows it
+            # records, for the same reason as the quest push above (#2372).
+            with transaction.atomic():
+                shared = export_campaign_and_copy_quests(source_schema=source_schema, campaign_import_id=campaign.import_id)
 
-                record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
-                # ...and each quest that travelled with it, so a quest imported on its own still
-                # says where it came from
-                record_push_origin(
-                    ContentOrigin.QUEST,
-                    exported_campaign.quest_set.values_list('import_id', flat=True),
-                    request,
-                    source_deck_url,
-                )
+                with library_schema_context():
+                    exported_campaign = Category.objects.get(import_id=campaign.import_id)
+
+                    config = SiteConfig.get()
+                    sender = config.deck_ai
+                    recipients = User.objects.filter(is_active=True, is_staff=True)
+
+                    notify.send(
+                        sender=sender,
+                        recipient=None,
+                        affected_users=list(recipients),
+                        verb=f"{request.user} exported a campaign to the library from {source_schema}:",
+                        action=campaign,
+                        target=exported_campaign,
+                        icon="<i class='fa fa-book'></i>",
+                    )
+
+                    # Email active Library staff so they know there's a campaign to review/publish (#1949).
+                    email_library_staff_of_push("campaign", campaign.name, exported_campaign, request.user, source_deck_url)
+
+                    record_push_origin(ContentOrigin.CAMPAIGN, [campaign.import_id], request, source_deck_url)
+                    # ...and each quest that travelled with it, so a quest imported on its own still
+                    # says where it came from
+                    record_push_origin(
+                        ContentOrigin.QUEST,
+                        exported_campaign.quest_set.values_list('import_id', flat=True),
+                        request,
+                        source_deck_url,
+                    )
+        except (LibraryTransferError, ValidationError) as error:
+            # Reached when the Library rejects something the confirmation page could not
+            # foresee: a name taken between the two requests, or a campaign left with no
+            # publishable quest. Either way nothing landed, and saying so beats a 500.
+            return redirect_failed_export(request, _describe_transfer_failure(error), 'quests:categories')
 
         messages.success(
             request,
@@ -1224,7 +1392,7 @@ class ExportCampaignView(NonPublicOnlyViewMixin, ExportPermissionMixin, View):
                 campaign.get_absolute_url(), campaign.name,
             )
         )
-        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs)
+        warn_sharer_about_unmet_prereqs(request, shared.unmet_prereqs, shared.unmet_alternates)
         warn_sharer_about_skipped_quests(request, shared.skipped_quests)
         warn_sharer_about_dropped_common_data(request, shared.dropped_common_data)
         return redirect('quests:categories')
