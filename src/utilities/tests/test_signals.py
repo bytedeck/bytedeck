@@ -90,8 +90,10 @@ class DisableForLoaddataTest(SimpleTestCase):
 class SaveReceiverFixtureAuditTest(SimpleTestCase):
     """Which receivers sit out a fixture load, checked rather than described.
 
-    Applying the guard to some receivers and not others is how the half-guarded state this
-    fixes came about, so both halves of the decision are asserted here.
+    Both halves of the decision are asserted: every receiver that reads or writes beyond
+    its own instance is guarded, and the four that deliberately keep running are not. Both
+    lists are data, so a receiver that lands on the wrong side of the rule fails this test
+    by name rather than going unnoticed.
     """
 
     def test_receivers_that_touch_other_rows__all_sit_out_fixture_loading(self):
