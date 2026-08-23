@@ -39,10 +39,12 @@ from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
 
 # How many days before an auto-renewing subscription's renewal date its single
-# heads-up goes out. Matches the 7 days Stripe uses for its own optional renewal
-# reminder, which is long enough to change or cancel the plan before the card is
-# charged, and short enough that the date still means something (#2586).
-RENEWAL_NOTICE_DAYS = 7
+# heads-up goes out. Deliberately NOT Stripe's 7 days: every ByteDeck plan bills
+# at 6 months or a year, so Stripe's own reminder (where the dashboard toggle is
+# on) lands at 7 days for all of them. Going out at 14 makes ours the early,
+# deck-specific heads-up and leaves Stripe's as a closer second nudge, instead of
+# two emails about the same charge on the same day (#2586).
+RENEWAL_NOTICE_DAYS = 14
 
 LIMIT_WARNING_FRACTION = 0.8
 

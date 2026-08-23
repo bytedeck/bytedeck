@@ -167,7 +167,7 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.assertEqual(self.due(), [])  # exactly one per renewal
 
         # every remaining day before the charge stays quiet, including the day itself
-        with freeze_time("2026-08-22 20:00:00"):  # renews_on
+        with freeze_time(f"{renews_on} 20:00:00"):  # the renewal day itself
             self.assertEqual(self.due(), [])
 
     def test_evaluate__renewal_notice_waits_for_its_window_and_re_arms_next_period(self):
