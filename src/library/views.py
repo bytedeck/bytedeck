@@ -968,16 +968,18 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
 
-        # Quests the teacher ticked to keep as they are. Narrowed to what this deck
-        # actually holds, so a hand-made POST cannot use it to smuggle anything in, and
-        # parsed first because anything that is not a UUID would raise rather than simply
-        # match nothing.
-        requested = []
+        # Quests the teacher ticked to keep as they are. Parsed as UUIDs first, because a
+        # value that is not one would raise rather than simply match nothing, then narrowed
+        # twice: to quests belonging to the campaign being imported, and to quests this deck
+        # actually holds. Both are needed against a hand-made POST, which could otherwise
+        # name a quest this deck has in some other campaign and have it moved into this one.
+        requested = set()
         for value in request.POST.getlist('preserve'):
             try:
-                requested.append(UUID(value))
+                requested.add(UUID(value))
             except ValueError:
                 continue
+        requested &= set(quest_ids)
 
         preserve_import_ids = list(
             Quest.objects.all_including_archived()

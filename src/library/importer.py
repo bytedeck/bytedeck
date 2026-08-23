@@ -136,8 +136,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
                 # Saved one at a time rather than through a bulk update, so a quest moving
                 # between campaigns raises the same signals it would if a teacher moved it
-                # by hand: the quest map is rebuilt from campaigns.
-                for quest in Quest.objects.filter(import_id__in=preserve_import_ids):
+                # by hand: the quest map is rebuilt from campaigns. Archived quests are
+                # included because the confirmation page offers them for preservation too,
+                # and a preserved quest left out here would be a hole in the campaign.
+                for quest in Quest.objects.all_including_archived().filter(import_id__in=preserve_import_ids):
                     quest.campaign = category
                     quest.full_clean(exclude=['campaign'])
                     quest.save()

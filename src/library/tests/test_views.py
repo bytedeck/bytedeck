@@ -758,8 +758,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         for quest in library_quests[1:]:
             self.assertNotIn(quest.import_id, local_ids)
 
-        # Check the notice appears in the rendered content, now offering the choice of
-        # keeping this deck's own version rather than only warning about the overwrite (#1845)
+        # The notice names what the deck already has and offers to keep this deck's version (#1845)
         self.assertContains(response, "Your deck already has this quest")
         self.assertContains(response, "Keep my version of")
 
@@ -3174,8 +3173,8 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
 class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
     """A campaign import can keep the deck's own version of a quest it already has.
 
-    Without this the only options were to take the Library's version and lose local edits,
-    or not import the campaign at all (#1845).
+    Ticking "Keep my version of ..." on the confirmation page leaves that quest's local
+    content alone, and it still joins the arriving campaign (#1845).
     """
 
     @classmethod
@@ -3215,8 +3214,10 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         }
         fields.update(overrides)
         quest = baker.make(Quest, **fields)
-        Quest.objects.filter(pk=quest.pk).update(published=fields['published'])
-        return Quest.objects.get(pk=quest.pk)
+        # all_including_archived: the default manager hides archived quests, and a deck's
+        # archived copy is preservable like any other.
+        Quest.objects.all_including_archived().filter(pk=quest.pk).update(published=fields['published'])
+        return Quest.objects.all_including_archived().get(pk=quest.pk)
 
     def _import(self, preserve=()):
         """Import the Library campaign, optionally preserving some quests.
@@ -3232,7 +3233,7 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
             reverse('library:import_category', args=[self.library_campaign.import_id]), data, follow=True,
         )
 
-    def test_import_campaign__the_page_offers_to_keep_each_quest_the_deck_already_has(self):
+    def test_ImportCampaignView__the_page_offers_to_keep_each_quest_the_deck_already_has(self):
         """The confirmation page lists a tick box per quest the deck already holds."""
         self._local_copy_of_the_shared_quest()
 
@@ -3244,7 +3245,7 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         # Only the quest this deck actually has, not every quest in the campaign.
         self.assertNotContains(response, f'value="{self.untouched.import_id}"')
 
-    def test_import_campaign__a_preserved_quest_keeps_its_own_wording(self):
+    def test_ImportCampaignView__a_preserved_quest_keeps_its_own_wording(self):
         """Ticking a quest leaves this deck's version of it untouched (#1845)."""
         local = self._local_copy_of_the_shared_quest()
 
@@ -3253,7 +3254,7 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         local.refresh_from_db()
         self.assertIn("My own wording", local.instructions)
 
-    def test_import_campaign__a_preserved_quest_joins_the_campaign(self):
+    def test_ImportCampaignView__a_preserved_quest_joins_the_campaign(self):
         """A preserved quest is put into the arriving campaign rather than left out.
 
         The decision recorded on #1845: the campaign should be whole. A quest that stayed
@@ -3270,8 +3271,8 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         # ends with the quest in the campaign, but only after overwriting it.
         self.assertIn("My own wording", local.instructions)
 
-    def test_import_campaign__quests_left_unticked_are_still_overwritten(self):
-        """Not ticking a quest keeps the old behaviour: the Library's version wins."""
+    def test_ImportCampaignView__quests_left_unticked_are_still_overwritten(self):
+        """A quest left unticked is replaced by the Library's version."""
         local = self._local_copy_of_the_shared_quest()
 
         self._import()
@@ -3279,7 +3280,7 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         local.refresh_from_db()
         self.assertIn("The Library's wording", local.instructions)
 
-    def test_import_campaign__preserving_every_quest_still_creates_the_campaign(self):
+    def test_ImportCampaignView__preserving_every_quest_still_creates_the_campaign(self):
         """The campaign arrives even when no quest is written.
 
         The campaign row is normally created from the arriving quests' snapshots, so
@@ -3303,7 +3304,7 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         self.assertIn("My own wording", first.instructions)
         self.assertIn("My own second wording", second.instructions)
 
-    def test_import_campaign__a_preserve_value_this_deck_does_not_have_is_ignored(self):
+    def test_ImportCampaignView__a_preserve_value_this_deck_does_not_have_is_ignored(self):
         """A hand-made POST naming something else cannot change what is imported."""
         local = self._local_copy_of_the_shared_quest()
 
@@ -3313,6 +3314,36 @@ class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
         local.refresh_from_db()
         # Nothing was preserved, so the import behaved normally.
         self.assertIn("The Library's wording", local.instructions)
+
+    def test_ImportCampaignView__a_preserved_archived_quest_joins_the_campaign(self):
+        """An archived copy is preservable, and joins the campaign like any other.
+
+        The confirmation page offers the deck's archived quests too, so leaving them out of
+        the campaign would put a hole in it: the quest is neither imported nor joined.
+        """
+        local = self._local_copy_of_the_shared_quest(campaign=None, archived=True)
+
+        self._import(preserve=[self.shared.import_id])
+
+        local = Quest.objects.all_including_archived().get(pk=local.pk)
+        self.assertTrue(local.archived, "preserving a quest should not unarchive it")
+        self.assertIsNotNone(local.campaign)
+        self.assertEqual(local.campaign.import_id, self.library_campaign.import_id)
+        self.assertIn("My own wording", local.instructions)
+
+    def test_ImportCampaignView__a_preserve_value_from_another_campaign_is_ignored(self):
+        """A quest outside the campaign being imported cannot be pulled into it.
+
+        Holding a quest is not on its own enough to make it preservable: a hand-made POST
+        naming one of this deck's quests from elsewhere leaves that quest where it is.
+        """
+        other_campaign = baker.make(Category, title="A campaign of my own")
+        outsider = baker.make(Quest, name="Nothing to do with the Library", campaign=other_campaign)
+
+        self._import(preserve=[outsider.import_id])
+
+        outsider.refresh_from_db()
+        self.assertEqual(outsider.campaign, other_campaign)
 
 
 class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
