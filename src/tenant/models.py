@@ -113,9 +113,25 @@ class Tenant(TenantMixin):
         # the #2044 retirement policy; the help text stays free of issue numbers
         # (they mean nothing to an admin reading the form)
         help_text="Arms this deck for deletion: deletion from the admin is refused until an "
-                  "admin deliberately turns this on -- and even then only a deck that has been suspended "
-                  "for over a year, counted from when its owner was first sent the suspension notice, "
-                  "can actually be deleted."
+                  "admin deliberately turns this on -- and even then only a suspended deck whose "
+                  "owner has requested deletion, or one that has been suspended for over a year "
+                  "(counted from when its owner was first sent the suspension notice), can "
+                  "actually be deleted."
+    )
+
+    # An owner's standing request to have the deck deleted, made from the deck's
+    # subscription page. Advisory: an operator still reviews it and arms
+    # can_delete to honor it (the owner may not be a school deck's only
+    # stakeholder), but it lets deletion skip the year-long suspension clock,
+    # and it silences the deck's lifecycle reminder emails.
+    deletion_requested_on = models.DateField(
+        blank=True, null=True, editable=False,
+        help_text="When the deck owner asked for this deck to be deleted; blank = no standing request. "
+                  "Set and cleared by the owner from the deck's subscription page."
+    )
+    deletion_requested_by = models.CharField(
+        max_length=255, blank=True, default='', editable=False,
+        help_text="Who asked (their username at the time of the request), for the audit trail."
     )
 
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
@@ -128,6 +144,13 @@ class Tenant(TenantMixin):
     stripe_subscription_id = models.CharField(
         max_length=255, blank=True, default='',
         help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
+    )
+    stripe_portal_configuration_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="The Billing Portal configuration (bpc_...) whose headline names this deck, created "
+                  "automatically on the owner's first portal visit. Clear it to have the next portal visit "
+                  "rebuild the configuration from the account default (e.g. after changing the default's "
+                  "features in the Stripe dashboard)."
     )
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
@@ -520,24 +543,44 @@ class Tenant(TenantMixin):
         #2044 retirement policy. ALL of these must hold:
 
         * ``can_delete`` was deliberately armed by an admin (default False);
-        * the deck is SUSPENDED -- an active subscription, a running trial, or a
-          managed-manually deck (both dates blank) is never deletable;
-        * the deck's ``deletion_date`` has arrived: a year of suspension, measured
-          from the later of the suspension start and the episode's first suspended
-          notice, so deletion can never outrun the year the warning email
-          promised. A deck that was never warned is never deletable (its clock
-          has not started);
-        * never the public schema (deleting it would take down the installation).
+        * the deck's waiting is over (``deletion_eligibility``): it is SUSPENDED
+          and either its owner has a standing deletion request or its
+          ``deletion_date`` has arrived (a year of suspension, measured from the
+          later of the suspension start and the episode's first suspended
+          notice, so unrequested deletion can never outrun the year the warning
+          email promised; a deck never warned at all never times out, since its
+          clock has not started). The public schema is never eligible.
+        """
+        return self.can_delete and self.deletion_eligibility is not None
+
+    @property
+    def deletion_eligibility(self):
+        """Why this deck's deletion waiting is over: ``'request'`` (its owner has a
+        standing deletion request, which outranks the year clock), ``'timeout'``
+        (the year-long suspension clock has run out), or None while neither
+        holds. Only a SUSPENDED deck is ever eligible (an active subscription, a
+        running trial, or a managed-manually deck is not, and the operator can
+        suspend a live deck by editing its dates), and the public schema never is.
+
+        Arming ``can_delete`` is the operator's remaining step: ``is_deletable``
+        is exactly this eligibility plus that arming, and the tenant admin's
+        "deletable" column shows this value so decks whose waiting is over
+        surface before anyone opens their change form.
+
+        Returns:
+            str | None: ``'request'``, ``'timeout'``, or None.
         """
         from django_tenants.utils import get_public_schema_name
 
         if self.schema_name == get_public_schema_name():
-            return False
-        if not self.can_delete:
-            return False
+            return None
         if not self.is_suspended:  # active sub, on trial, or managed manually
-            return False
-        return localdate() >= self.deletion_date
+            return None
+        if self.deletion_requested_on is not None:
+            return 'request'
+        if localdate() >= self.deletion_date:
+            return 'timeout'
+        return None
 
     def sync_from_stripe_subscription(self, subscription):
         """The SINGLE write path from a Stripe Subscription object to this deck (plan §5.2).
@@ -732,10 +775,16 @@ class Tenant(TenantMixin):
         active_only=True further excludes registrations deactivated by a semester
         close (e.g. the suspension auto-close, #1734 redesign B2), so a closed
         semester contributes zero current students.
+
+        The count spans every semester that is open, so a deck running two cohorts on
+        different calendars pays for both (issue #2157 Phase 3).
+
+        Returns:
+            int: how many distinct current students the deck has.
         """
         CourseStudent = apps.get_model('courses', 'CourseStudent')
         return (
-            CourseStudent.objects.all_users_for_active_semester(students_only=True, active_only=True)
+            CourseStudent.objects.all_users_in_open_semesters(students_only=True, active_only=True)
             .exclude(is_superuser=True)
             .count()
         )
@@ -839,6 +888,31 @@ class DeckNotice(models.Model):
 
 class TenantDomain(DomainMixin):
     pass
+
+
+class ReleaseNotification(models.Model):
+    """Public-schema record of a ByteDeck release version that deck staff have been
+    notified about, so ``tenant.tasks.poll_release_announcement`` notifies each
+    version exactly once across every deck.
+
+    ``notified=False`` marks a baseline row written the first time the poll runs:
+    the version that shipped before this feature was enabled is recorded but no
+    notification is sent, so turning the feature on never mass-notifies staff about
+    a release they already have. Lives in the public schema (tenant app), like the
+    Tenant registry itself, because "which versions have been announced" is one
+    global fact, not a per-deck one.
+    """
+    version = models.CharField(max_length=20, unique=True)
+    discussion_url = models.CharField(max_length=500, blank=True, default="")
+    notified = models.BooleanField(
+        default=True,
+        help_text="False for the baseline row recorded on the first poll (no notification sent).",
+    )
+    created = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        """Audit identifier: the version and whether staff were actually notified."""
+        return f"{self.version} ({'notified' if self.notified else 'baseline'})"
 
 
 class StripeEventLog(models.Model):

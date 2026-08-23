@@ -63,7 +63,15 @@ class LibrarySchemaIfRequestedTestCase(LibraryTenantTestCaseMixin):
         self.factory = RequestFactory()
 
     def _request(self, data):
-        """Return a POST request carrying the current tenant, as the middleware would."""
+        """Build a POST request carrying the current tenant, as the middleware would.
+
+        Args:
+            data (dict): form fields to post.
+
+        Returns:
+            HttpRequest: the POST request, with `tenant` set to the test tenant so
+            the schema resolution under test has a deck to fall back to.
+        """
         request = self.factory.post('/', data)
         request.tenant = connection.tenant
         return request
@@ -112,7 +120,15 @@ class AjaxQuestInfoSchemaIsolationTestCase(LibraryTenantTestCaseMixin):
         cls.test_teacher = User.objects.create_user('isolation_teacher', is_staff=True)
 
     def _post_preview(self, data):
-        """POST the quest-preview endpoint for the Library quest's pk with the given data."""
+        """POST the quest-preview endpoint for the Library quest's pk.
+
+        Args:
+            data (dict): form fields to post, e.g. the schema flag under test.
+
+        Returns:
+            HttpResponse: the endpoint's response. 200 with a `quest_info_html`
+            JSON body when a quest was found, 404 when none was visible.
+        """
         return self.client.post(
             reverse('quests:ajax_quest_info', args=[self.library_quest.id]),
             data=data,

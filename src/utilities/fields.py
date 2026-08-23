@@ -1,3 +1,5 @@
+import mimetypes
+
 from django import forms
 from django.contrib.contenttypes.models import ContentType
 from django.db.utils import OperationalError, ProgrammingError
@@ -37,15 +39,21 @@ VIDEO_MIME_TYPES = [
     'video/x-m4v'  # M4V videos
 ]
 
+# WAV and M4A each go by two names: browsers disagree on the content type they send when
+# one is uploaded, and Python's `mimetypes` (which `media_kind_of` guesses stored files
+# with) uses `audio/x-wav` and `audio/mp4`. Both spellings of each are listed so a
+# recording is accepted and played back whichever authority names it (#2492).
 AUDIO_MIME_TYPES = [
     'audio/mpeg',  # MP3 audio
     'audio/ogg',   # OGG audio
     'audio/wav',   # WAV audio
+    'audio/x-wav',  # WAV audio
     'audio/webm',  # WebM audio
     'audio/aac',   # AAC audio
     'audio/x-aiff',  # AIFF audio
     'audio/x-ms-wma',  # WMA audio
     'audio/x-m4a',  # M4A audio
+    'audio/mp4',   # M4A audio
     'audio/flac',  # FLAC audio
 ]
 
@@ -58,6 +66,46 @@ FILE_MIME_TYPES = {
     'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
     'all': 'All',
 }
+
+# Python's builtin MIME table does not know `.m4a`: platforms fill the gap from
+# /etc/mime.types when that file exists, so the same recording guessed as `audio/mp4` on
+# one machine and as nothing at all on another (CI's container has no such file).
+# Register the mapping so `media_kind_of` answers the same everywhere (#2492).
+mimetypes.add_type('audio/mp4', '.m4a')
+
+# Which browser element can play a stored file, by the MIME types above. The value is the
+# kind of media, so a template can pick between an image, a video player and an audio
+# player without repeating the type lists.
+_MEDIA_KINDS = (
+    ('image', IMAGE_MIME_TYPES),
+    ('video', VIDEO_MIME_TYPES),
+    ('audio', AUDIO_MIME_TYPES),
+)
+
+
+def media_kind_of(file_name):
+    """Say whether a stored file is an image, a video, an audio file, or none of those.
+
+    The answer is guessed from the name, because that is all a page rendering a saved file
+    has: the content type the browser sent is checked when the file is uploaded (see
+    `RestrictedFileFormField.validate_file`) and not kept. The guess is measured against
+    the same MIME lists that validation uses, so a file a question accepted as an image is
+    the kind of file this reports as an image.
+
+    Args:
+        file_name (str): the stored file's name or path.
+
+    Returns:
+        str: 'image', 'video', 'audio', or '' for anything else (a PDF, a zip, a name with
+        no extension to guess from).
+    """
+    mime_type = mimetypes.guess_type(file_name)[0] or ''
+
+    for kind, mime_types in _MEDIA_KINDS:
+        if mime_type in mime_types:
+            return kind
+
+    return ''
 
 
 class GFKChoiceIterator(ModelChoiceIterator):

@@ -14,6 +14,7 @@ from django.db.models.signals import post_delete, post_save
 from siteconfig.models import SiteConfig
 from notifications.signals import notify
 
+from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
 from notifications.models import notify_rank_up
@@ -196,7 +197,15 @@ class BadgeManager(models.Manager):
         return self.filter(pk__in=pk_manual_list).order_by('name')
 
 
-class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
+class Badge(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
+    """An award a student earns, granted by staff or by meeting its prerequisites.
+
+    Badges can gate other content (`IsAPrereqMixin`) and can themselves be shared between
+    decks through the Shared Library (`IsLibraryContentMixin`), which is why `import_id`
+    below is stable: it is how a badge referenced as a prerequisite is recognised as the
+    same badge in another deck's schema.
+    """
+
     name = models.CharField(max_length=50, unique=True)
     xp = models.PositiveIntegerField(default=0)
     datetime_created = models.DateTimeField(auto_now_add=True, auto_now=False)
@@ -269,7 +278,7 @@ class Badge(IsAPrereqMixin, HasPrereqsMixin, TagsModelMixin, models.Model):
 
         # students_only=True: the grant-check is for students, so exclude staff/test accounts that
         # happen to be enrolled in a course (issue #2061). The grant task filters the same way.
-        students = CourseStudent.objects.all_users_for_active_semester(students_only=True)
+        students = CourseStudent.objects.all_users_in_open_semesters(students_only=True)
         return [user for user in students if self.student_qualifies_ungranted(user)]
 
     def get_icon_url(self):
@@ -338,32 +347,86 @@ class BadgeAssertionQuerySet(models.query.QuerySet):
         return self.filter(do_not_grant_xp=False)
 
     def get_semester(self, semester):
+        """Assertions granted in `semester`.
+
+        None is a semester's worth of badges in its own right rather than a missing filter
+        (issue #2413), matching how submissions read: a student between terms is in no
+        semester, so a badge granted to them is stamped with none, and it is still theirs.
+
+        Args:
+            semester: a Semester, or None for the badges that belong to no semester.
+
+        Returns:
+            BadgeAssertionQuerySet: the assertions from that semester, or the unstamped ones
+            when there is no semester.
+        """
         return self.filter(semester=semester)
+
+    def in_open_or_no_semester(self):
+        """Assertions no finished term owns: what a deck-wide staff view of current work holds.
+
+        Every open semester's assertions, since a deck can run several at once (issue #2157
+        Phase 3, #1781) and scoping to the deck's default would hide everything the other
+        cohort was granted. Plus the assertions stamped with no semester at all (issue
+        #2413), which is what someone registered in no semester is granted: a student between
+        terms, or staff trying a badge out. The submission side answers the same question the
+        same way, so a deck-wide view of badges and one of quests cover the same students.
+
+        Returns:
+            BadgeAssertionQuerySet: the assertions in an open semester or in none.
+        """
+        from courses.models import Semester  # locally: courses imports this app's models
+
+        return self.filter(Q(semester__status=Semester.Status.OPEN) | Q(semester__isnull=True))
 
     def get_issued_before(self, date):
         return self.filter(timestamp__lte=date)
 
 
 class BadgeAssertionManager(models.Manager):
-    def get_queryset(self, active_semester_only=False):
+    def get_queryset(self, active_semester_only=False, user=None):
+        """Assertions, optionally limited to the semester being earned in right now.
+
+        Args:
+            active_semester_only (bool): limit to the current semester's assertions.
+            user (User): whose semester to limit to. Their registration names it (issue
+                #2157 Phase 3), and someone holding none is in no semester, so their badges
+                are the ones stamped with none. Without a user this is a deck-wide staff
+                view, which covers every open semester and the unstamped assertions besides:
+                a deck can run two cohorts on different calendars, so naming one semester
+                would drop the other cohort's badges (issue #2475).
+
+        Returns:
+            BadgeAssertionQuerySet: the matching assertions.
+        """
+        from courses.models import semester_for  # locally: courses imports this app's models
+
         # badge/badge_type are needed almost everywhere assertions are rendered
         qs = BadgeAssertionQuerySet(self.model, using=self._db).select_related('badge__badge_type')
         if active_semester_only:
-            return qs.get_semester(SiteConfig.get().active_semester)
+            return qs.get_semester(semester_for(user)) if user is not None else qs.in_open_or_no_semester()
         else:
             return qs
 
     def all_for_user_badge(self, user, badge, active_semester_only):
-        return self.get_queryset(active_semester_only).get_user(user).get_badge(badge)
+        return self.get_queryset(active_semester_only, user=user).get_user(user).get_badge(badge)
 
-    def user_badge_assertion_count(self, badge, active_semester_only=False):
-        """Returns a queryset of users with each user's number of assertions of `badge` annotated as assertion_count.
-        If active_semester_only is True, only users with active profiles in the active semester will be returned.
-        Otherwise, all users with active profiles will be returned.
+    def user_badge_assertion_count(self, badge, current_students_only=False):
+        """Users with their number of assertions of `badge` annotated as assertion_count.
+
+        Args:
+            badge: the Badge being counted.
+            current_students_only (bool): limit to students taking a course right now, in
+                any semester that is open. Otherwise every student with an active profile
+                is counted, including those from past semesters.
+
+        Returns:
+            QuerySet[User]: the users who hold at least one assertion of the badge, most
+            assertions first, each annotated with assertion_count.
         """
         from profile_manager.models import Profile
-        if active_semester_only:
-            users = User.objects.filter(profile__in=Profile.objects.all_for_active_semester())
+        if current_students_only:
+            users = User.objects.filter(profile__in=Profile.objects.all_in_open_semesters())
         else:
             users = User.objects.filter(profile__in=Profile.objects.all_students())
 
@@ -372,7 +435,7 @@ class BadgeAssertionManager(models.Manager):
         return users.exclude(assertion_count=0).select_related('profile').order_by('-assertion_count')
 
     def all_for_user(self, user):
-        return self.get_queryset(True).get_user(user)
+        return self.get_queryset(True, user=user).get_user(user)
 
     def all_for_user_distinct(self, user):
         """
@@ -432,13 +495,20 @@ class BadgeAssertionManager(models.Manager):
     def get_assertion_ordinal(self, user, badge):
         return self.num_assertions(user, badge) + 1
 
-    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None):
+    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None, course=None):
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
 
         if not active_semester:
-            active_semester = SiteConfig.get().active_semester.id
+            from courses.models import semester_for
+
+            # the recipient's own semester, so a badge counts toward the semester that
+            # student is in rather than whichever one the deck points at. None when they
+            # are in none: the badge is still granted, it just isn't counted toward any
+            # semester's XP
+            semester = semester_for(user)
+            active_semester = semester.pk if semester is not None else None
 
         new_assertion = BadgeAssertion(
             badge=badge,
@@ -446,7 +516,8 @@ class BadgeAssertionManager(models.Manager):
             ordinal=ordinal,
             issued_by=issued_by,
             do_not_grant_xp=transfer,
-            semester_id=active_semester
+            semester_id=active_semester,
+            course=course,
         )
         new_assertion.full_clean()
         new_assertion.save()
@@ -466,7 +537,7 @@ class BadgeAssertionManager(models.Manager):
     def get_by_type_for_user(self, user):
         self.check_for_new_assertions(user)
         types = BadgeType.objects.all()
-        qs = self.get_queryset(True).get_user(user)
+        qs = self.get_queryset(True, user=user).get_user(user)
         by_type = [
             {
                 'badge_type': t,
@@ -475,9 +546,64 @@ class BadgeAssertionManager(models.Manager):
         ]
         return by_type
 
+    def xp_by_course(self, user):
+        """How much of this student's badge XP counts toward each of their courses.
+
+        A badge granted alongside a quest carries that quest's course; one granted on its own
+        carries whichever course the teacher chose, or none. Badges with no course are shared
+        evenly between the student's courses, the same as unassigned quest XP (issue #2440).
+
+        Args:
+            user: the student whose badge XP is being divided.
+
+        Returns:
+            dict: course id to XP, with None collecting everything left unassigned.
+        """
+        qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
+        rows = qs.values('course').annotate(xp_sum=Sum('badge__xp'))
+        return {row['course']: row['xp_sum'] or 0 for row in rows}
+
+    def xp_by_course_series(self, user, dates):
+        """How much of this student's badge XP counted toward each course, at each of `dates`.
+
+        What xp_by_course() answers for one date, answered for a whole series off a single
+        query (issue #2459). Charting a course's progress asks it once per class day, and
+        asking the database that many times over is the cost this removes.
+
+        Badges have no per-badge cap the way quests do, so each date's figure is simply the
+        running total of everything granted by then, and a date's whole badge XP is the sum
+        of its map.
+
+        Args:
+            user: the student whose badge XP is being divided.
+            dates: the dates to answer for, in ascending order.
+
+        Returns:
+            list[dict]: one course-id-to-XP map per date, in the order the dates were given,
+            with None collecting everything left unassigned.
+        """
+        assertions = self.get_queryset(True, user=user).grant_xp().get_user(user).order_by(
+            'timestamp',
+        ).values('course', 'badge__xp', 'timestamp')
+
+        # one pass over the assertions and one over the dates, walking both forward together
+        pending = list(assertions)
+        position = 0
+        running = {}  # course -> the XP granted toward it so far
+        series = []
+        for date in dates:
+            while position < len(pending) and pending[position]['timestamp'] <= date:
+                row = pending[position]
+                course_id = row['course']
+                running[course_id] = running.get(course_id, 0) + (row['badge__xp'] or 0)
+                position += 1
+            series.append(dict(running))
+
+        return series
+
     def calculate_xp(self, user):
         # self.check_for_new_assertions(user)
-        total_xp = self.get_queryset(True).grant_xp().get_user(user).aggregate(Sum('badge__xp'))
+        total_xp = self.get_queryset(True, user=user).grant_xp().get_user(user).aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
         if xp is None:
             xp = 0
@@ -485,7 +611,7 @@ class BadgeAssertionManager(models.Manager):
 
     def calculate_xp_to_date(self, user, date):
         # self.check_for_new_assertions(user)
-        qs = self.get_queryset(True).grant_xp().get_user(user)
+        qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
         qs = qs.get_issued_before(date)
         total_xp = qs.aggregate(Sum('badge__xp'))
         xp = total_xp['badge__xp__sum']
@@ -504,7 +630,14 @@ class BadgeAssertion(models.Model):
     issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, related_name='issued_by',
                                   on_delete=models.SET_NULL)
     do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
-    semester = models.ForeignKey('courses.Semester', default=1, on_delete=models.SET_DEFAULT)
+    semester = models.ForeignKey('courses.Semester', null=True, blank=True, on_delete=models.SET_NULL)
+    # Which of the student's courses this badge's XP counts toward (issue #2440). Null means it
+    # was never assigned, and unassigned XP is shared evenly between their courses. A badge
+    # granted alongside a quest inherits that submission's course, so the two land together.
+    course = models.ForeignKey(
+        'courses.Course', null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="The course this badge's XP counts toward.",
+    )
 
     objects = BadgeAssertionManager()
 

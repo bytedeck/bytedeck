@@ -109,6 +109,31 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.set_deck(active_user_count=4, trial_end_date=TODAY + timedelta(days=365))
             self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-09')])
 
+    def test_record_and_deliver_payment_failure__muted_by_a_deletion_request(self):
+        """The payment-failure webhook notice honors the deletion-request mute too:
+        it arrives via the webhook path rather than evaluate_deck_notices, so it
+        needs its own guard (#2330 review find). No ledger row, no email."""
+        from tenant.notices import record_and_deliver_payment_failure
+
+        self.set_deck(deletion_requested_on=TODAY, deletion_requested_by='the-owner')
+        summary = record_and_deliver_payment_failure(self.tenant, 'in_test123')
+        self.assertIn('muted', summary)
+        self.assertFalse(DeckNotice.objects.filter(
+            tenant=self.tenant, kind=DeckNotice.KIND_PAYMENT_FAILED).exists())
+
+    def test_evaluate__deletion_request_mutes_all_notices(self):
+        """A deck with a standing deletion request gets no notices at all, not
+        even the suspension notice: asking for deletion is the strongest possible
+        do-not-nag signal (#2330). Withdrawing the request turns the cadence back
+        on exactly where it was."""
+        lapsed = TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1)
+        self.set_deck(
+            trial_end_date=lapsed, paid_until=None,
+            deletion_requested_on=TODAY, deletion_requested_by='the-owner')
+        self.assertEqual(self.due(), [])
+        self.set_deck(deletion_requested_on=None, deletion_requested_by='')
+        self.assertEqual(self.due(), [(DeckNotice.KIND_SUSPENDED, 'suspended', str(lapsed))])
+
     def test_evaluate__suspended_deck_gets_no_limit_warnings(self):
         """A suspended deck never warns about student seats: students cannot sign
         in there at all, so the warning is wrong, and it would reach an owner who
@@ -774,7 +799,8 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         self.assertIn('closed semester', summary)
         self.assertIn('returned 1 awaiting-approval submission(s)', summary)
 
-        self.assertTrue(SiteConfig.get().active_semester.closed)
+        # the close archives the semester and leaves the deck with no open one
+        self.assertIsNone(SiteConfig.get().active_semester)
         self.assertEqual(self.tenant.get_active_user_count(), 0)
         # the returned submission was then swept by the close's normal
         # in-progress cleanup: nothing stays stuck in a teacher's queue
@@ -782,9 +808,40 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
 
         self.assertEqual(self.close(), 'semester close already handled this episode')
 
+    def test_close__closes_every_open_semester(self):
+        """Suspension stops the whole deck, so a second open semester closes with the first
+        (issue #2157 Phase 3). Its own pending approvals are returned first: leaving them
+        would make its close report QUEST_AWAITING_APPROVAL and roll the whole suspension
+        enforcement back."""
+        from django.contrib.auth import get_user_model
+        from model_bakery import baker
+        from courses.models import Semester
+        from quest_manager.models import QuestSubmission
+        from siteconfig.models import SiteConfig
+
+        User = get_user_model()
+        baker.make(User, is_staff=True)  # a teacher must exist before students
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        other_student = baker.make(User)
+        baker.make('courses.CourseStudent', user=other_student, semester=other_semester)
+        baker.make(
+            QuestSubmission, user=other_student, is_completed=True, is_approved=False,
+            semester=other_semester,
+        )
+
+        self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
+        summary = self.close()
+
+        self.assertIn('closed semester', summary)
+        other_semester.refresh_from_db()
+        self.assertTrue(other_semester.is_archived)
+        self.assertIsNone(SiteConfig.get().active_semester)
+        self.assertFalse(Semester.objects.open().exists())
+
     def test_close__no_op_paths(self):
         """Unsuspended decks are untouched (no ledger row); a suspended deck whose
         semester is already closed records the episode without changes."""
+        from courses.models import Semester
         from siteconfig.models import SiteConfig
 
         self.set_deck(trial_end_date=TODAY + timedelta(days=60), paid_until=None)
@@ -792,10 +849,10 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())
 
         sem = SiteConfig.get().active_semester
-        sem.closed = True
+        sem.status = Semester.Status.ARCHIVED
         sem.save()
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1))
-        self.assertEqual(self.close(), 'semester was already closed')
+        self.assertEqual(self.close(), 'no open semester to close')
         self.assertEqual(self.close(), 'semester close already handled this episode')
 
     def test_close__clamps_negative_xp_to_zero(self):
@@ -830,7 +887,7 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
         from courses.models import Semester
 
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
-        with patch.object(Semester.objects, 'complete_active_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
+        with patch.object(Semester.objects, 'complete_semester', return_value=Semester.QUEST_AWAITING_APPROVAL):
             with self.assertRaises(RuntimeError):
                 self.close()
         self.assertFalse(DeckNotice.objects.filter(threshold='semester-close').exists())

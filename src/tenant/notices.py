@@ -78,21 +78,32 @@ def close_semester_on_new_suspension(deck):
         if not created:
             return 'semester close already handled this episode'
 
-        returned = 0
-        for submission in QuestSubmission.objects.all_awaiting_approval():
-            submission.mark_returned()
-            returned += 1
-
-        result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
-        if result == Semester.CLOSED:
+        # every open semester, not just the one the deck points at: suspension stops the
+        # whole deck, so a second cohort's semester has to close with the first
+        open_semesters = list(Semester.objects.open())
+        if not open_semesters:
             # nothing was open; the episode is recorded so this isn't re-checked
-            return 'semester was already closed'
-        if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
-            # can't happen (submissions were just returned; negative XP is clamped),
-            # but if it ever does, roll everything back and retry next run instead
-            # of recording a close that didn't happen
-            raise RuntimeError(f'semester close failed with sentinel {result}')
-    return f'closed semester "{result}" (returned {returned} awaiting-approval submission(s))'
+            return 'no open semester to close'
+
+        returned = 0
+        closed = []
+        for semester in open_semesters:
+            # this semester's own pending approvals, cleared before it closes. Returning
+            # only the deck-pointed semester's queue would leave a second open semester
+            # blocked on its own, which rolls the whole suspension close back.
+            for submission in QuestSubmission.objects.all_awaiting_approval(semester=semester):
+                submission.mark_returned()
+                returned += 1
+
+            result = Semester.objects.complete_semester(semester, clamp_negative_xp=True)
+            if result in (Semester.NO_OPEN_SEMESTER, Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
+                # can't happen (submissions were just returned; negative XP is clamped),
+                # but if it ever does, roll everything back and retry next run instead
+                # of recording a close that didn't happen
+                raise RuntimeError(f'semester close failed with sentinel {result}')
+            closed.append(str(result))
+    names = ', '.join(f'"{name}"' for name in closed)
+    return f'closed semester {names} (returned {returned} awaiting-approval submission(s))'
 
 
 def evaluate_deck_notices(deck):
@@ -100,7 +111,16 @@ def evaluate_deck_notices(deck):
 
     Pure evaluation -- no ledger writes, no delivery. Reads the deck's derived
     status properties and the DeckNotice ledger.
+
+    A deck whose owner has a standing deletion request gets NO notices of any
+    kind: asking for the deck to be deleted is the strongest possible signal
+    that its owner is done hearing from us, and every notice this engine sends
+    is a nudge toward keeping the deck alive. Canceling the request (from the
+    subscription page) turns the notices back on.
     """
+    if deck.deletion_requested_on is not None:
+        return []
+
     due = []
     today = localdate()
 
@@ -331,6 +351,12 @@ def record_and_deliver_payment_failure(deck, invoice_id):
     Returns:
         str: A short summary string for the webhook log.
     """
+    # a standing deletion request mutes this like every other lifecycle notice
+    # (the webhook path doesn't go through evaluate_deck_notices, so the mute
+    # has to be applied here too); the operator, not the owner, untangles any
+    # still-live Stripe subscription when honoring the request
+    if deck.deletion_requested_on is not None:
+        return 'deletion requested: payment-failure notice muted'
     period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
     if not settings.DECK_NOTICES_ENABLED:
         return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"

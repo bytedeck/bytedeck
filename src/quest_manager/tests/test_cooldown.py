@@ -6,7 +6,6 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.utils import timezone
 
-from django_tenants.test.client import TenantClient
 from freezegun import freeze_time
 from model_bakery import baker
 
@@ -31,10 +30,6 @@ class CooldownTestMixin:
 
         # unlimited repeats, 24h cooldown between them
         cls.quest = baker.make(Quest, name="Daily Quest", max_repeats=-1, hours_between_repeats=24)
-
-    def setUp(self):
-        """Set up a tenant-aware test client."""
-        self.client = TenantClient(self.tenant)
 
     def _complete(self, quest=None):
         """Create and complete a submission of `quest` (defaults to self.quest) for the student."""
@@ -136,6 +131,7 @@ class GetInCooldownManagerTests(CooldownTestMixin, ByteDeckTenantTestCase):
 
 
 class CooldownViewTests(CooldownTestMixin, ByteDeckTenantTestCase):
+    """Tests how quests on cooldown appear in the quest list and behave when started."""
 
     def test_quest_list__available_tab_lists_cooldown_quest(self):
         """The Available tab shows a completed-in-cooldown quest with its countdown."""

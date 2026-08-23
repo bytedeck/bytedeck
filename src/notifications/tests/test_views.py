@@ -1,7 +1,9 @@
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
+from django.db.models import Max
 from django.shortcuts import reverse
+from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
 
 from model_bakery import baker
@@ -14,6 +16,7 @@ User = get_user_model()
 
 
 class NotificationViewTests(ByteDeckTenantTestCase):
+    """Tests access to the notification pages for anonymous users, students, and teachers."""
 
     # includes some basic model data
     # fixtures = ['initial_data.json']
@@ -26,6 +29,19 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
 
+    def unused_notification_id(self):
+        """An id that belongs to no notification, for the "deleted or never existed" path.
+
+        A literal id is not safe here: ids come from a sequence shared by every test in the run,
+        so a long run reaches any number eventually, and the view then finds someone else's
+        notification and 404s instead of redirecting.
+
+        Returns:
+            int: one past the highest notification id in the database.
+        """
+        highest = Notification.objects.all().aggregate(Max('id'))['id__max'] or 0
+        return highest + 1
+
     def test_notification_page_status_codes__anonymous(self):
         ''' If not logged in then all views should redirect to home page '''
 
@@ -36,8 +52,10 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         self.assert403('notifications:ajax')
         self.assert403('notifications:ajax_mark_read')
-        self.assertEqual(self.client.get(reverse('notifications:ajax_mark_read'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
-        self.assertEqual(self.client.get(reverse('notifications:ajax'), HTTP_X_REQUESTED_WITH='XMLHttpRequest').status_code, 302)
+        # an ajax request clears the 403 above, so these reach LoginRequiredMixin and go to the login page
+        for url_name in ('notifications:ajax_mark_read', 'notifications:ajax'):
+            url = reverse(url_name)
+            self.assertLoginRedirect(self.client.get(url, HTTP_X_REQUESTED_WITH='XMLHttpRequest'), url)
 
     def test_notification_page_status_codes__students(self):
         """A logged-in student can view list pages but not the ajax-only endpoints."""
@@ -45,8 +63,8 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         self.assertRedirects(
             response=self.client.get(reverse('notifications:read_all')),
@@ -66,12 +84,12 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
 
         # Accessible views:
-        self.assertEqual(self.client.get(reverse('notifications:list')).status_code, 200)
-        self.assertEqual(self.client.get(reverse('notifications:list_unread')).status_code, 200)
+        self.assert200('notifications:list')
+        self.assert200('notifications:list_unread')
 
         # Bad id notification read request should redirect to list view
         self.assertRedirects(
-            response=self.client.get(reverse('notifications:read', args=[999])),
+            response=self.client.get(reverse('notifications:read', args=[self.unused_notification_id()])),
             expected_url=reverse('notifications:list'),
         )
 
@@ -140,7 +158,7 @@ class NotificationViewTests(ByteDeckTenantTestCase):
 
         response = self.client.post(
             reverse('notifications:ajax_mark_read'),
-            data={'id': 999999},
+            data={'id': self.unused_notification_id()},
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
         self.assertEqual(response.status_code, 404)
@@ -286,6 +304,66 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': '/quests/available/'})
 
         self.assertRedirects(response, '/quests/available/', fetch_redirect_response=False)
+
+    def test_read__external_untrusted_next_falls_back_to_list(self):
+        """A ?next= pointing at an untrusted external host is refused: the user is sent to
+        the notifications list instead of being redirected off-site (open-redirect guard)."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': 'https://evil.example.com/phish'})
+
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
+
+    def test_read__trusted_github_next_is_followed(self):
+        """A ?next= pointing at the trusted release-announcement host (github.com) is followed,
+        so the release-announcement notice can still link out to its GitHub discussion."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        github_url = 'https://github.com/bytedeck/bytedeck/discussions/2318'
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': github_url})
+
+        self.assertRedirects(response, github_url, fetch_redirect_response=False)
+
+    @override_settings(NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS=['example.org'])
+    def test_read__configured_extra_host_next_is_followed(self):
+        """A ?next= host that isn't the current deck but is listed in
+        NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS is followed, so the allowlist setting (not just
+        the hardcoded default) actually widens the trusted destinations."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        configured_url = 'https://example.org/whats-new'
+
+        response = self.client.get(reverse('notifications:read', args=[note.id]), {'next': configured_url})
+
+        self.assertRedirects(response, configured_url, fetch_redirect_response=False)
+
+    def test_read__insecure_next_rejected_on_secure_request(self):
+        """On an HTTPS request, an http:// ?next= (even to an allowed host) is refused and falls
+        back to the list: require_https follows the request scheme, so a secure page won't bounce
+        the user down to an insecure URL."""
+        self.client.force_login(self.test_student1)
+        note = baker.make(
+            Notification, recipient=self.test_student1, unread=True,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        # secure=True makes request.is_secure() True, so require_https rejects the http:// target.
+        response = self.client.get(
+            reverse('notifications:read', args=[note.id]), {'next': 'http://github.com/bytedeck/bytedeck'}, secure=True,
+        )
+
+        self.assertRedirects(response, reverse('notifications:list'), fetch_redirect_response=False)
 
     def test_read__other_users_notification_raises_404(self):
         """Reading a notification that belongs to another user is a 404 (not readable)."""

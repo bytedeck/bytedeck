@@ -17,10 +17,10 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.sites.models import Site
 from django.core.exceptions import PermissionDenied
+from django.db import connection
 from django.http import HttpResponse
 from django.template.response import TemplateResponse
 from django.test import RequestFactory, override_settings
-# from django.core.exceptions import ValidationError
 from django.urls import path, reverse
 from django.utils import timezone
 
@@ -199,8 +199,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         since they refresh nightly rather than on page load (#1729 PR 2)."""
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # setUpTestData refreshed the cached fields, so a timestamped message shows
         self.assertContains(response, "were last refreshed")
 
@@ -209,8 +208,7 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Tenant.objects.update(cached_fields_updated_on=None)
         self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))  # move client to public schema
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         self.assertContains(response, "have not been refreshed yet")
 
     def test_changelist_view__freshness_notice_not_duplicated_by_action_posts(self):
@@ -276,16 +274,14 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom column "owner_full_name_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "John Doe")
 
@@ -304,16 +300,14 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom column "owner_email_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page (both verified and unverified emails)
         self.assertContains(response, "john@doe.com")  # verified email
         self.assertContains(response, "jane@doe.com")  # unverified email
@@ -323,16 +317,14 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of htmlized column "paid_until_text" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2032-01-01\">Jan. 1, 2032</span>")
 
@@ -341,16 +333,14 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of htmlized column "trial_end_date" is present in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
         # assert the content of custom column is present on changelist page
         self.assertContains(response, "<span data-date=\"2022-01-01\">Jan. 1, 2022</span>")
 
@@ -410,6 +400,31 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         positions = [content.index('/tenant/tenant/{}/change/'.format(deck.pk)) for deck in rows_in_rank_order]
         self.assertEqual(positions, sorted(positions, reverse=True))
 
+    def test_deletable_text__shows_why_a_deck_can_be_deleted(self):
+        """The "deletable" column marks decks whose deletion waiting is over:
+        "via request" for a suspended deck whose owner asked, empty for a live
+        deck even with a request standing, and the empty/non-empty request
+        filter stays available for pulling requests up for review (#2330).
+        The "via timeout" flavor is pinned on the model
+        (test_deletion_eligibility__names_the_path_or_none): building a
+        year-suspended ledger row here would only re-test that chain."""
+        # suspended (dates long lapsed) with a standing owner request
+        Tenant.objects.filter(pk=self.extra_tenant.pk).update(
+            trial_end_date=date(2022, 1, 1), paid_until=None,
+            deletion_requested_on=date(2026, 8, 1), deletion_requested_by='the-owner')
+        # the OTHER deck is live with a request: no eligibility, empty cell
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=date(2032, 1, 1), paid_until=None,
+            deletion_requested_on=date(2026, 8, 1), deletion_requested_by='the-owner')
+        url = reverse("admin:{}_{}_changelist".format("tenant", "tenant"))
+        self.client.get(url)  # move client to public schema
+        self.client.force_login(self.superuser)
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'via request', count=1)
+        # the EmptyFieldListFilter's query parameter marks the filter's presence
+        self.assertContains(response, 'deletion_requested_on__isempty')
+
     def test_subscription_status_text__no_status_for_public_schema(self):
         """The public schema row isn't a deck, so its Subscription cell is empty
         (None), while a real deck row renders its status badge."""
@@ -423,9 +438,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
         Test whether content of custom fields is searchable in admin list view or not.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
@@ -559,8 +573,13 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
 
         mock_add_message.assert_called()
 
-    def test_save_model__public_tenant_creates_schema(self):
-        """save_model on the public tenant creates a new tenant with a sanitized schema name."""
+    def test_save_model__public_tenant_creates_a_working_deck(self):
+        """save_model on the public tenant creates a deck that is actually usable: the schema name
+        is sanitized, the deck answers on its own subdomain, and a teacher can sign in and load a page.
+
+        A schema and a Tenant row are not enough on their own. Requests are routed by hostname, so a
+        deck is only reachable once it also has a TenantDomain, which the save creates.
+        """
         with tenant_context(self.public_tenant):
             non_public_tenant = Tenant(
                 name="Non-Public",  # Not a valid name, but not validated in this test
@@ -571,44 +590,24 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
             self.assertIsInstance(non_public_tenant, Tenant)
             # schema names should be all lower case and dashes converted to underscores
             self.assertEqual(non_public_tenant.schema_name, "non_public")
+            # the subdomain keeps the name as typed (lower cased), so it does not match the schema name
+            self.assertEqual(non_public_tenant.get_primary_domain().domain, f"non-public.{settings.ROOT_DOMAIN}")
 
-        # TODO: Not working, can't figure out why?
-        # When try to use client.get() the context switches back to the public tenant
-        # WHY!?!?
+        with tenant_context(non_public_tenant):
+            new_deck_teacher = User.objects.create_user('test_teacher', password="password", is_staff=True)
 
-        # make sure we can access and sign-in to the new tenant
-        # with tenant_context(non_public_tenant):
-        #     from django.db import connection
-        #     from django.contrib.auth import get_user_model
-        #     from django.urls import reverse
+        # TenantClient sends the deck's primary domain as the Host header, which is what actually
+        # selects the schema: the middleware resets the connection to public and re-resolves the
+        # tenant from that host on every request.
+        client = TenantClient(non_public_tenant)
+        response = client.get(reverse('account_login'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.wsgi_request.tenant, non_public_tenant)
 
-        #     client = TenantClient(non_public_tenant)
-        #     connection.set_tenant(non_public_tenant)
-        #     print(connection.schema_name)  # non_public
-        #     response = client.get(reverse('account_login'))
-        #     print(connection.schema_name)  # public
-
-        #     # self.assertEqual(response.status_code, 200)
-        #     print(connection.schema_name)
-
-        #     test_teacher = get_user_model().objects.create_user('test_teacher', password="password", is_staff=True)
-        #     client = TenantClient(non_public_tenant)
-        #     client.force_login(test_teacher)
-        #     response = client.get(reverse('quests:quests'))
-        #     self.assertEqual(response.status_code, 200)
-
-    # FIXME:
-    # def test_public_tenant_admin_save_new_tenant_with_bad_names(self):
-    #
-    #     with tenant_context(self.public_tenant):
-    #         # tenant names with spaces should be rejected:
-    #         with self.assertRaises(ValidationError):
-    #             non_public_tenant_bad_name = Tenant(name="Non Public")
-    #             self.tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
-    #         # also other alpha-numeric characters except dashes and underscores
-    #         with self.assertRaises(ValidationError):
-    #             non_public_tenant_bad_name = Tenant(name="Non*Public")
-    #             self.tenant_model_admin.save_model(obj=non_public_tenant_bad_name, request=None, form=None, change=None)
+        client.force_login(new_deck_teacher)
+        response = client.get(reverse('quests:quests'))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(connection.schema_name, non_public_tenant.schema_name)
 
 
 class TenantAdminFormTest(ByteDeckTenantTestCase):
@@ -659,6 +658,26 @@ class TenantAdminFormTest(ByteDeckTenantTestCase):
         form = TenantAdminForm(self.form_data)
         form.instance = Tenant.get()  # test tenant with schema 'test'
         self.assertFalse(form.is_valid())
+
+    def test_clean__rejects_names_that_would_not_work_as_a_subdomain(self):
+        """A deck name that can't be part of a URL is rejected by the admin form, with the reason.
+
+        The name becomes both the schema name and the deck's subdomain, so the rules live on the
+        model field's validator; this is the admin form surfacing them to whoever is typing.
+        """
+        for bad_name, expected_error in [
+            ("Non Public", "The name must begin with a lower-case letter."),
+            ("Non*Public", "The name must begin with a lower-case letter."),
+            ("non public", "Invalid string used for the tenant name."),
+            ("non*public", "Invalid string used for the tenant name."),
+            ("non--public", "The name cannot have two consecutive dashes."),
+            ("non-public-", "The name cannot end in a dash."),
+        ]:
+            with self.subTest(name=bad_name):
+                self.form_data["name"] = bad_name
+                form = TenantAdminForm(self.form_data)
+                self.assertFalse(form.is_valid())
+                self.assertIn(expected_error, form.errors["name"])
 
     def test_clean__cant_create_if_schema_still_exists(self):
         """
@@ -1062,16 +1081,14 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         using both *verified* and *unverified* email addresses.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "message_unverified" action
         # should returns 200 (intermediate page)
@@ -1149,16 +1166,14 @@ class TenantAdminActionsTest(ByteDeckTenantTestCase):
         using *verified* only email addresses.
         """
         # first case, access /admin/tenant/ page as anonymous user
-        # should returns 302 (login required)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 302)
+        # should be sent to the admin login page, carrying the page asked for in ?next=
+        self.assertRedirectsAdminLogin("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         self.client.force_login(self.superuser)
 
         # second case, access /admin/tenant/ page as authenticated superuser
         # should returns 200 (ok)
-        response = self.client.get(reverse("admin:{}_{}_changelist".format("tenant", "tenant")))
-        self.assertEqual(response.status_code, 200)
+        self.assert200("admin:{}_{}_changelist".format("tenant", "tenant"))
 
         # third case, select tenants and execute "send_email_message" action
         # should returns 200 (intermediate page)

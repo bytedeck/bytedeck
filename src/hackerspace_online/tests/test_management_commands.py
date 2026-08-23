@@ -10,9 +10,10 @@ from django.contrib.sites.models import Site
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.utils import OperationalError
-from django.test import TestCase
+from django.test import TestCase, SimpleTestCase, override_settings
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
 
+from hackerspace_online.management.commands.initdb import get_homepage_content
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
@@ -69,12 +70,36 @@ class InitDbTest(TestCase, CommandMixin):
         public_tenant = Tenant.objects.get(schema_name="public")  # no assert, but will throw exception if doesn't exist
 
         with tenant_context(public_tenant):
-            FlatPage.objects.get(url='/home/')  # no assert, but will throw exception if doesn't exist
+            homepage = FlatPage.objects.get(url='/home/')  # will throw exception if doesn't exist
+            # ALL THREE seeded TRY IT buttons must point at the deck-request form:
+            # the old "#contact" anchor target no longer exists anywhere on the page
+            self.assertEqual(homepage.content.count('href="/decks/request/"'), 3)
+            self.assertNotIn('href="#contact"', homepage.content)
             user = User.objects.get(username='admin')
             self.assertTrue(user.is_superuser)
             self.assertTrue(Site.objects.exists())
 
             Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)  # no assert, but will throw exception if doesn't exist
+
+    def test_initdb__gives_the_shared_library_a_reachable_domain(self):
+        """A single initdb run leaves the Library deck reachable at library.<ROOT_DOMAIN> (#2382).
+
+        The tenant post_save signal derives a domain from the tenant's name, and the Library
+        tenant is named 'Shared Library', so the derived domain contains a space and can never
+        be reached. initdb has to set the intended domain itself, on the first run rather than
+        only on a re-run against a database where the tenant already exists.
+        """
+        self.call_command()
+
+        library_tenant = Tenant.objects.get(schema_name=apps.get_app_config('library').TENANT_NAME)
+        primary_domain = library_tenant.get_primary_domain().domain
+
+        self.assertEqual(primary_domain, f'library.{settings.ROOT_DOMAIN}')
+        # no leftover unreachable domain beside it, or the deck answers on a host nobody can type
+        self.assertEqual(
+            list(library_tenant.domains.values_list('domain', flat=True)),
+            [f'library.{settings.ROOT_DOMAIN}'],
+        )
 
     def test_initdb__bails_when_database_is_unreachable(self):
         """If the initial DB connectivity check raises OperationalError, initdb reports it and
@@ -122,6 +147,56 @@ class InitDbTest(TestCase, CommandMixin):
 
         self.assertTrue(library.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists())
 
+    def test_initdb__setup_shared_library_leaves_a_correct_domain_alone(self):
+        """setup_shared_library leaves the library tenant's domain untouched when it is already
+        the intended one, rather than deleting and re-creating it on every run.
+
+        The domain row's pk is the tell: a delete-and-recreate would hand out a new one.
+        """
+        from hackerspace_online.management.commands.initdb import Command
+
+        self.call_command()
+        library_schema = apps.get_app_config('library').TENANT_NAME
+        library = Tenant.objects.get(schema_name=library_schema)
+        domain_before = library.get_primary_domain()
+
+        # As above: patch out the non-idempotent library quest re-labelling, which would
+        # re-prefix names and overflow Quest.name on a second run.
+        with patch('quest_manager.models.Quest'):
+            Command().setup_shared_library()
+
+        domain_after = library.get_primary_domain()
+        self.assertEqual(domain_after.pk, domain_before.pk)
+        self.assertEqual(domain_after.domain, 'library.' + settings.ROOT_DOMAIN)
+        self.assertEqual(library.domains.count(), 1)
+
+    def test_initdb__setup_shared_library_drops_a_stale_domain_beside_the_correct_one(self):
+        """setup_shared_library removes any other domain on the library tenant, so the deck
+        answers on library.<ROOT_DOMAIN> and nothing else.
+
+        A tenant can end up with a second domain because the post_save signal derives one from
+        the tenant's name; leaving it in place would keep the Library reachable on a host nobody
+        intended (#2382).
+        """
+        from hackerspace_online.management.commands.initdb import Command
+
+        self.call_command()
+        library_schema = apps.get_app_config('library').TENANT_NAME
+        library = Tenant.objects.get(schema_name=library_schema)
+        library.domains.create(domain='stale.' + settings.ROOT_DOMAIN, is_primary=True)
+
+        # As above: patch out the non-idempotent library quest re-labelling, which would
+        # re-prefix names and overflow Quest.name on a second run.
+        with patch('quest_manager.models.Quest'):
+            Command().setup_shared_library()
+
+        self.assertEqual(
+            list(library.domains.values_list('domain', flat=True)),
+            [f'library.{settings.ROOT_DOMAIN}'],
+        )
+        # and the survivor is the primary, even though the stale one held that flag
+        self.assertEqual(library.get_primary_domain().domain, f'library.{settings.ROOT_DOMAIN}')
+
     def test_initdb__notes_when_public_tenant_already_existed(self):
         """When the public tenant already exists, initdb reports that (a not-created notice)
         instead of failing.
@@ -147,6 +222,33 @@ class InitDbTest(TestCase, CommandMixin):
         self.assertEqual(
             FlatPage.objects.filter(url='/home/', sites__domain=settings.ROOT_DOMAIN).count(), 1
         )
+
+
+class GetHomepageContentTest(SimpleTestCase):
+    """The seeded public homepage HTML must build image URLs from STATIC_URL.
+
+    Guards against regressing to a hardcoded CDN domain (the real production
+    CloudFront distribution was previously baked into every seeded homepage).
+    """
+
+    def test_get_homepage_content__derives_image_urls_from_static_url(self):
+        """Every image src uses settings.STATIC_URL, with no hardcoded CDN domain."""
+        with override_settings(STATIC_URL='https://cdn.example.test/static/'):
+            html = get_homepage_content()
+        # All homepage images resolve against the STATIC_URL-derived base...
+        self.assertIn('https://cdn.example.test/static/public/images/wordmark-v2.png', html)
+        self.assertEqual(html.count('https://cdn.example.test/static/public/images/'), 10)
+        # ...and no real production CDN identifier is baked into the seed content.
+        self.assertNotIn('cloudfront.net', html)
+        self.assertNotIn('d10ge8y4vx8iud', html)
+
+    def test_get_homepage_content__local_static_url_yields_relative_paths(self):
+        """With the local dev STATIC_URL, image URLs are relative /static/ paths."""
+        with override_settings(STATIC_URL='/static/'):
+            html = get_homepage_content()
+        self.assertIn('/static/public/images/wordmark-v2.png', html)
+        self.assertEqual(html.count('/static/public/images/'), 10)
+        self.assertNotIn('cloudfront.net', html)
 
 
 class GenerateContentTest(ByteDeckTenantTestCase, CommandMixin):

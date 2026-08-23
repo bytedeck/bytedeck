@@ -10,6 +10,18 @@
 {% block heading_inner %} {{ heading }}{% endblock %}
 
 {% block content %}
+{% comment %}
+Granting in bulk cannot ask which course each student's XP counts toward, since every student
+picked has their own courses (#2440). Say so rather than letting a teacher assume otherwise.
+Only shown on a deck that asks about courses and has a student in more than one of them.
+{% endcomment %}
+{% if bulk_course_note %}
+<div class="alert alert-info">
+  <i class="fa fa-fw fa-info-circle"></i>
+  Students in more than one course will have this XP split evenly between their courses. To
+  count it toward one course, grant that student their own separately.
+</div>
+{% endif %}
 <form action="" enctype="multipart/form-data" method="post">{% csrf_token %}
   {{ form|crispy }}
   <a href="{% url 'badges:list' %}" role="button" class="btn btn-danger">Cancel</a>

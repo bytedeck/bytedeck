@@ -17,6 +17,18 @@
     <div class="alert alert-danger">
       You cannot export a campaign with no published quests.
     </div>
+  {% elif colliding_title %}
+    <div class="alert alert-danger">
+      The Library already has a different campaign called <strong>{{ colliding_title }}</strong>, and two
+      campaigns there cannot share a title. Rename yours and share it again.
+    </div>
+  {% elif colliding_names %}
+    <div class="alert alert-danger">
+      The Library already has {{ colliding_names|length|pluralize:"a different quest,different quests" }} called
+      {% for name in colliding_names %}<strong>{{ name }}</strong>{% if not forloop.last %}, {% endif %}{% endfor %},
+      and two quests there cannot share a name. Rename
+      {{ colliding_names|length|pluralize:"the one,the ones" }} in this campaign and share it again.
+    </div>
   {% else %}
     <p>Please read and agree to the following license before sharing this campaign:</p>
 
@@ -38,9 +50,13 @@
     <form method="post" id="export-form">
       {% csrf_token %}
 
+      {% if licence_form.agree_license.errors %}
+        <div class="alert alert-danger">{{ licence_form.agree_license.errors.0 }}</div>
+      {% endif %}
+
       <div class="form-check mb-3">
-        <input type="checkbox" class="form-check-input" id="agreeLicense" name="agreeLicense" required />
-        <label class="form-check-label" for="agreeLicense">
+        <input type="checkbox" class="form-check-input" id="id_agree_license" name="agree_license" required />
+        <label class="form-check-label" for="id_agree_license">
           I agree to share this campaign and all its quests under the Creative Commons Attribution-ShareAlike 4.0 International License.*
         </label>
       </div>

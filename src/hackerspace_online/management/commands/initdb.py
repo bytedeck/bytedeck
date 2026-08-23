@@ -25,6 +25,15 @@ class Command(BaseCommand):
             '\nThis should only be run on a fresh db')
 
     def setup_shared_library(self):
+        """Create the Shared Library deck, give it its domain, and label its quests.
+
+        The Library is the tenant whose schema holds the cross-deck library of quests and
+        campaigns. This gets (or creates) that tenant, makes `library.<ROOT_DOMAIN>` its one
+        and only domain, and prefixes the names of any quests already in its schema with
+        `[Shared Library] - ` so they are recognisable wherever they are listed.
+
+        Takes no arguments and returns nothing; it writes its progress to the command's stdout.
+        """
         self.stdout.write('\n** Setting up shared library...')
         # Look up by the unique schema_name only (name is set on create). Matching
         # on name too would miss an existing 'library' tenant created with a
@@ -35,11 +44,18 @@ class Command(BaseCommand):
             defaults={'name': 'Shared Library'},
         )
 
-        if not created and not library_tenant.domains.filter(domain='library.' + settings.ROOT_DOMAIN).exists():
-            library_tenant.domains.create(
-                domain='library.' + settings.ROOT_DOMAIN,
-                is_primary=True
-            )
+        # Set the domain whether or not the tenant was just created. A new tenant already has
+        # one, because the post_save signal derives a domain from the tenant's *name*, and
+        # 'Shared Library' contains a space, so that domain can never be reached: on a fresh
+        # database the Library deck was unreachable at library.<ROOT_DOMAIN> until initdb was
+        # run a second time (#2382).
+        library_domain = 'library.' + settings.ROOT_DOMAIN
+        library_tenant.domains.exclude(domain=library_domain).delete()
+        domain, _ = library_tenant.domains.get_or_create(domain=library_domain)
+        # A domain that already existed may not be the primary one (the signal-derived domain
+        # was), and a tenant with no primary domain has no root URL, so claim it either way.
+        domain.is_primary = True
+        domain.save()
         from django.db import models
         from django.db.models.functions import Concat
         from quest_manager.models import Quest
@@ -152,7 +168,15 @@ class Command(BaseCommand):
 
 
 def get_homepage_content():
-    return """
+    """Return the HTML for the seeded public-tenant homepage flatpage.
+
+    Image ``src`` URLs are derived from ``settings.STATIC_URL`` rather than a
+    hardcoded CDN domain, so they resolve to the S3/CloudFront distribution in
+    production (``USE_S3=1``) and to ``/static/`` in local development. This
+    keeps the real production CDN out of committed source and seed content.
+    """
+    img = f"{settings.STATIC_URL}public/images/"
+    return f"""
 <!-- Heading Row-->
 
 <div class="BG-BD-White" id="top">
@@ -160,7 +184,7 @@ def get_homepage_content():
       <!-- <div class="col-lg-1"></div> -->
       <div class="col-lg-6 col-xl-5 BD-content1 ">
         <div class="BD-title BD-title-pixels">
-          <img class="bd-wordmark img-fluid" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/wordmark-v2.png">
+          <img class="bd-wordmark img-fluid" src="{img}wordmark-v2.png">
         </div>
         <p class="lead">ByteDeck is a learning management system created BY teachers and students FOR teachers and students.</p>
         <p class="lead">ByteDeck is different than other learning management systems. It's flexible in how teachers deliver content,
@@ -175,13 +199,13 @@ def get_homepage_content():
             <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#teachers" role="button">TEACHERS</a>
           </div>
           <div class="col-md-4">
-            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#contact" role="button">TRY IT</a>
+            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="/decks/request/" role="button">TRY IT</a>
           </div>
         </div>
         <!-- /row -->
       </div>
       <div class="col-lg-5 d-flex justify-content-center align-items-center">
-        <img class="BD-main-img img-fluid" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/undraw_press_play_revised2.png" alt="">
+        <img class="BD-main-img img-fluid" src="{img}undraw_press_play_revised2.png" alt="">
       </div>
       <!-- <div class="col-lg-1"></div> -->
     </div>
@@ -204,21 +228,21 @@ def get_homepage_content():
       <!-- <div class="col-lg-1 col-xl-2"></div> -->
 
       <div class="col-md-3 col-xl-2 text-center BD-content3">
-        <img class="img-center console-img-size-1 " src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/laptop-code-solid%201.png">
+        <img class="img-center console-img-size-1 " src="{img}laptop-code-solid%201.png">
         <h2 style="font-size:23px">Easy to Use</h2>
         <p style="font-size:16px">The interface is intuitive, responsive, and mobile-friendly. Students can use ByteDeck on any device,
         anywhere they have access to the internet.</p>
       </div>
 
       <div class="col-md-3 col-xl-2 offset-md-1 text-center BD-content3">
-        <img class="img-center gamepad-img-size-1 " src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/gamepad-solid%201.png">
+        <img class="img-center gamepad-img-size-1 " src="{img}gamepad-solid%201.png">
         <h2 style="font-size:23px">Quest-Based Learning</h2>
         <p style="font-size:16px">The quest format makes it easy for teachers to break learning into small chunks. Students are motivated
         to "level up" as they work through quests.</p>
       </div>
 
       <div class="col-md-3 col-xl-2 offset-md-1 text-center BD-content3">
-        <img class="img-center  apple-img-size-1" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/apple-alt-solid%201.png">
+        <img class="img-center  apple-img-size-1" src="{img}apple-alt-solid%201.png">
         <h2 style="font-size:23px">Flexibility and Choice</h2>
         <p style="font-size:16px">Students work through quests at their own pace. Create one learning path for all students, or multiple
         paths to provide students with more choice.</p>
@@ -241,7 +265,7 @@ def get_homepage_content():
             <div class="BD-title BD-title-pixels ">
               <h1-bd>HOW IT WORKS</h1-bd>
               <div>
-                <img class="BD-img-pixels-topright BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%203.png">
+                <img class="BD-img-pixels-topright BD-img-pixels" src="{img}pixels%203.png">
               </div>
             </div>
             <p class="lead">ByteDeck uses quest-based learning, an instructional design theory that leverages game mechanics to support
@@ -258,9 +282,9 @@ def get_homepage_content():
             open-ended, self-directed activities, where students can showcase their learning and creativity.</p>
             <div class="row">
               <div class="col-lg-4 BD-title-pixels">
-                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="#contact" role="button">TRY IT!</a>
+                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="/decks/request/" role="button">TRY IT!</a>
                 <!-- <div>
-                  <img class="students-pixels BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%203.png">
+                  <img class="students-pixels BD-img-pixels" src="{img}pixels%203.png">
                 </div> -->
               </div>
             </div> <!-- /button row -->
@@ -270,7 +294,7 @@ def get_homepage_content():
       <div class="col-lg-5 d-flex justify-content-center align-items-center order-xl-last order-lg-last order-first order-sm-first
       order-md-first BD-bg-White">
         <img class="img-fluid BD-undraw-img BD-undraw-img-right"
-        src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/undraw_video_game_night_rev.png" alt="">
+        src="{img}undraw_video_game_night_rev.png" alt="">
       </div>
     </div>
 
@@ -283,7 +307,7 @@ def get_homepage_content():
     <div class="row">
       <div class="col-lg-5 d-flex justify-content-center align-items-center BD-bg-White">
         <img class="img-fluid BD-undraw-img BD-undraw-img-left"
-        src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/undraw_teaching_revised2.png" alt="">
+        src="{img}undraw_teaching_revised2.png" alt="">
       </div>
       <div class="col-lg-7 BD-bg-Yellow">
         <div class="row">
@@ -291,7 +315,7 @@ def get_homepage_content():
             <div class="BD-title BD-title-pixels">
               <h1-bd>TEACHERS</h1-bd>
               <div>
-                <img class="BD-img-pixels-topright BD-img-pixels" src="https://d10ge8y4vx8iud.cloudfront.net/static/public/images/pixels%202.png">
+                <img class="BD-img-pixels-topright BD-img-pixels" src="{img}pixels%202.png">
               </div>
             </div>
             <p class="lead">As a teacher, you decide whether students will all follow a single learning pathway, or have access
@@ -302,7 +326,7 @@ def get_homepage_content():
             where they're at.</p>
             <div class="row">
               <div class="col-lg-4">
-                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="#contact" role="button">TRY IT!!</a>
+                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="/decks/request/" role="button">TRY IT!!</a>
               </div>
             </div>
           </div>

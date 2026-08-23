@@ -16,14 +16,21 @@ for {{user}}
   <p>Hello {{ user.profile.get_preferred_name }},
     {% if not courses %}
       I can't calculate your mark because you haven't joined a course for this
-      semester yet. Please <a href="{% url 'courses:create' %}">go here</a>
-      and join your course.</p>
+      semester yet.
+      {% if config.has_no_open_semester %}
+        No semester is open yet, so you can't join one: ask your teacher to open one.</p>
+      {% else %}
+        Please <a href="{% url 'courses:create' %}">go here</a>
+        and join your course.</p>
+      {% endif %}
     {% elif obj.semester.days_so_far < 0 %}
       I can't calculate your mark because semester hasn't started yet!  According
       to my records, the semester is scheduled to start on
       <strong>{{ obj.semester.first_day }}</strong>.</p>
     {% else %}
-      {% if num_courses == 1 %}
+      {% if no_course_uses_marks %}
+        here is what you have earned:
+      {% elif num_courses == 1 %}
         your current mark is:
       {% else %}
         your current marks are:
@@ -34,27 +41,45 @@ for {{user}}
           <tr>
             <td>{{ course.block }} Block</td>
             <td>{{ course.course }}</td>
-            <td><strong>{{ course.user.profile.mark|floatformat }}%</strong></td>
+            {# each registration's own mark: with XP attributed per course they differ (#2440) #}
+            {# a course run on XP alone has no mark at all, rather than a mark of zero (#403) #}
+            {% if course.course.uses_marks %}
+              <td><strong>{{ course.mark|floatformat }}%</strong></td>
+            {% else %}
+              <td><strong>{{ course.xp|floatformat }} XP</strong>, no percentage</td>
+            {% endif %}
           </tr>
         {% endfor %}
       </table>
+      {% if no_course_uses_marks %}
+        <p>
+          {% if num_courses == 1 %}Your course runs{% else %}Your courses run{% endif %} on XP alone, so
+          there is no percentage to work out. Keep earning XP.
+        </p>
+      {% else %}
       <h3>Explanation</h3>
       <p>
         Here is an explanation of how I calculated your mark. If you have any questions about this please ask!
+        {% comment %} Only when the charted course is not the one listed first, which is when a
+           reader would otherwise wonder why. Says nothing about the rest: some of them may use
+           marks too, and the table above already shows which. {% endcomment %}
+        {% if num_courses > 1 and obj.course != courses.first.course %}
+          It is about <strong>{{ obj.course }}</strong>, one of your courses that has a mark.
+        {% endif %}
       </p>
       <div>
         <ul>
           <li>
             {% if num_courses > 1 %}
-              You are a multicourse student currently registered in {{ num_courses }} courses.
-              Your <strong>{{user.profile.xp_cached}}</strong> total XP must be divided among each of your courses.  This gives you
+              You are a multicourse student currently registered in {{ num_courses }} courses, and this page is
+              about <strong>{{ obj.course }}</strong>. Of your <strong>{{ user.profile.xp_cached }}</strong> total XP,
               <a tabindex="0" data-toggle="popover" data-trigger="hover"
                  data-placement="top" data-html="true" href="#"
-                 data-content="You have a total of {{ user.profile.xp_cached }} XP
-            to be divided among {{ num_courses }} courses: <br/><br/>
-              <pre>{{ user.profile.xp_cached }}/{{ num_courses }} = {{ xp_per_course|floatformat }} XP</pre>
+                 data-content="Quests you said should count toward {{ obj.course }} count toward it in full,
+            and so do badges given to you for that course. Everything else is shared evenly between your
+            {{ num_courses }} courses.
             ">
-                <strong>{{ xp_per_course|floatformat }}</strong> XP</a> per course.
+                <strong>{{ xp_per_course|floatformat }}</strong> XP</a> counts toward it.
             {% else %}
               So far, you have earned <strong>{{ user.profile.xp_cached }}</strong> XP in your course.
             {% endif %}
@@ -80,15 +105,15 @@ for {{user}}
             by the end of the semester.
           </li>
           <li>
-            Your course is out of {{courses.first.course.xp_for_100_percent}} XP, which means that if you get {{courses.first.course.xp_for_100_percent}} XP, you'll have 100% in the course.
+            Your course is out of {{ obj.course.xp_for_100_percent }} XP, which means that if you get {{ obj.course.xp_for_100_percent }} XP, you'll have 100% in the course.
           </li>
           <li>
             This means that your mark is currently <a tabindex="0" data-toggle="popover" data-trigger="hover"
                data-placement="top" data-html="true"
                data-content="If you get {% widthratio xp_per_course obj.semester.fraction_complete 1 %} XP by the end of semester,
-               and your course is out of {{courses.first.course.xp_for_100_percent}} XP:<br/><br/>
-              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{courses.first.course.xp_for_100_percent}} = {{ obj.user.profile.mark|floatformat }} % </pre>
-            ">{{ obj.user.profile.mark|floatformat }}%</a>
+               and your course is out of {{ obj.course.xp_for_100_percent }} XP:<br/><br/>
+              <pre>{% widthratio xp_per_course obj.semester.fraction_complete 1 %}/{{ obj.course.xp_for_100_percent }} = {{ obj.mark|floatformat }} % </pre>
+            ">{{ obj.mark|floatformat }}%</a>
           </li>
         </ul>
       </div>
@@ -117,6 +142,7 @@ for {{user}}
           by the end of the semester.
         </li>
       </ul>
+      {% endif %}
 
       <h3>Charts</h3>
 
@@ -125,7 +151,10 @@ for {{user}}
 
         <ul class="nav nav-pills" role="tablist">
           <li role="presentation" class="active"><a href="#progress" role="tab" data-toggle="tab">XP Progress</a></li>
-          <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+          {# nothing to distribute when none of their courses has a mark (#403) #}
+          {% if not no_course_uses_marks %}
+            <li role="presentation"><a href="#distribution" role="tab" data-toggle="tab">Mark Distribution</a></li>
+          {% endif %}
           <li role="presentation"><a href="#tag-distribution" role="tab" data-toggle="tab">Tags Distribution</a></li>
         </ul>
 
@@ -134,6 +163,17 @@ for {{user}}
 
           {# == XP Progress == #}
           <div role="tabpanel" class="tab-pane active" id="progress">
+            {% comment %} One chart per course, since each holds its own XP and is out of its
+               own amount (#2453). Buttons rather than a second tab strip, so it reads as
+               "which course am I looking at" and not as another kind of chart. {% endcomment %}
+            {% if chart_per_course %}
+              <div class="btn-group xp-chart-courses" role="group" aria-label="Which course to chart">
+                {% for course in courses %}
+                  <button type="button" class="btn btn-default {% if forloop.first %}active{% endif %}"
+                          data-course="{{ course.course.id }}">{{ course.course }}</button>
+                {% endfor %}
+              </div>
+            {% endif %}
             <div class="well chart-container">
               <div class="loading">
                 <i class="fa fa-spinner fa-pulse fa-2x fa-fw"></i>
@@ -193,12 +233,6 @@ for {{user}}
 {% endblock %}
 
 {% block js %}
-  <script>
-      $(document).ready(function () {
-          $('[data-toggle="popover"]').popover(
-          )
-      });
-  </script>
   <script src="{% static 'js/Chart-2.9.4.min.js' %}"></script>
   {% include 'courses/chart_xp_progress.html' %}
   {% include 'courses/chart_mark_distribution.html' %}

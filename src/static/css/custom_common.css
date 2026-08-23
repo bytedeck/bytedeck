@@ -570,6 +570,7 @@ iframe.summernotewidget.form-control {
 .panel-summernote #div_id_attachments,
 .panel-summernote #div_id_award,
 .panel-summernote #div_id_awards,
+.panel-summernote #div_id_course,
 .panel-summernote #div_id_xp_requested {
     margin-left: 15px;
     margin-right: 15px;
@@ -789,6 +790,13 @@ h3.comment-heading {
     margin-top: 25px;
 }
 
+/* A popover's title is an h3, and bootstrap appends the popover beside its trigger, so a popover
+   opened inside a panel picks up the panel's h3 spacing above and opens with a band of empty
+   space over its title. Popovers set their own spacing. */
+.panel-body .popover-title {
+    margin-top: 0;
+}
+
 .comment-content {
     /* prevent long urls from breaking out of container or forcing a scrollbar */
     overflow-wrap: anywhere;
@@ -923,7 +931,41 @@ div.btn-group.action-btn-group {
     display: inline-block;
 }
 
+/* A dropdown item that posts instead of linking (e.g. Publish an announcement) is a button in a
+   form, so give it the layout Bootstrap gives `.dropdown-menu > li > a`. Colours are theme
+   specific, so they live in custom.css and custom_slate.css beside this rule. */
+.dropdown-menu > li > .dropdown-post-form {
+    margin: 0;
+}
+
+.dropdown-menu > li > .dropdown-post-form > .btn-link {
+    display: block;
+    width: 100%;
+    padding: 3px 20px;
+    clear: both;
+    font-weight: normal;
+    line-height: 1.42857143;
+    text-align: left;
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.dropdown-menu > li > .dropdown-post-form > .btn-link:hover,
+.dropdown-menu > li > .dropdown-post-form > .btn-link:focus {
+    text-decoration: none;
+}
+
 /*Make the container act like container-fluid at small and medium sizes*/
+
+/************ XP PROGRESS CHART **********************/
+
+/* The course picker above a multicourse student's progress chart (#2453): one button per
+   course, sitting between the chart's tab strip and the chart's own panel, so it needs a
+   little air on both sides to read as belonging to neither. */
+.xp-chart-courses {
+    margin: 8px 0;
+}
+
 
 /*LESS to mimic Bootstrap without importing the less files.*/
 /*@screen-xs-max: 767px;
@@ -1252,4 +1294,86 @@ table[data-toggle="table"].bt-reveal {
     color: #1a1a1a;
     font-size: 0.7em;
     top: 0.12em;
+}
+
+
+/* #2379: a server-side search box above a list (the Library's quest tab), as opposed to
+   bootstrap-table's own client-side box that lives inside .fixed-table-toolbar. It sits
+   right-aligned like the built-in one, so the two read as the same control wherever a
+   page has both, with a gap before the table beneath it. Reusable by any list that
+   searches on the server. */
+.list-search-form {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 10px;
+}
+/* wide enough for the placeholder naming what the box searches, which is the only
+   thing telling the reader that the search reaches past the quest names */
+.list-search-form .form-control {
+    min-width: 320px;
+}
+/* On a phone that minimum is wider than the screen once the search and clear buttons
+   are added, which pushes the page into a horizontal scroll, so let it shrink there. */
+@media (max-width: 480px) {
+    .list-search-form .input-group {
+        width: 100%;
+    }
+    .list-search-form .form-control {
+        min-width: 0;
+    }
+}
+
+
+/* Font Awesome icon picker widget (utilities.widgets.FontAwesomeIconPickerWidget,
+   static/js/fa_icon_picker.js). Theme-agnostic layout only: the panel uses
+   Bootstrap's .well for its themed background/border, so no colours are set here. */
+.fa-icon-picker-panel {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+.fa-icon-picker-grid {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+.fa-icon-picker-option {
+    width: 40px;
+    height: 34px;
+    margin: 2px;
+    padding: 6px 0;
+    text-align: center;
+}
+
+
+/* Font Awesome modifier picker (utilities.fa_icon_widget.FontAwesomeModifierPickerWidget,
+   static/js/fa_modifier_picker.js): a row of Bootstrap button groups. Theme-agnostic
+   spacing only; the buttons are themed .btn. */
+.fa-modifier-picker-controls {
+    margin-bottom: 8px;
+}
+.fa-modifier-picker-controls .btn-group {
+    margin-right: 8px;
+    margin-bottom: 4px;
+}
+/* The composed "fa-" class string is meaningless to most users, so the field the
+   toggle buttons drive is hidden: the buttons are the whole UI and the field just
+   carries the value the form submits. */
+.fa-modifier-picker-input {
+    display: none;
+}
+
+
+/* A question's file shown where it is read (questions/snippets/question_file.html): a
+   student's image, video or audio answer, and the teacher's solution file. Sized to sit in
+   the answer table without pushing the page wide, and to stay whole on a phone. */
+.question-media {
+    max-width: 100%;
+    max-height: 300px;
+    margin-bottom: 4px;
+}
+/* The same file in a narrow table cell (the Solution column of the question list), where it
+   stands in for its own download link rather than being read at full size. */
+.question-media-thumb {
+    max-width: 100%;
+    max-height: 40px;
 }

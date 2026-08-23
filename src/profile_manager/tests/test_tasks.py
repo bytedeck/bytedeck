@@ -52,7 +52,7 @@ class ProfleTasksTests(ByteDeckTenantTestCase):
         # Run the task for recalculating the current xp
         invalidate_profile_xp_cache_in_all_schemas.apply()
 
-        for profile in Profile.objects.all_for_active_semester():
+        for profile in Profile.objects.all_in_open_semesters():
             self.assertEqual(profile.xp_cached, 0)
             self.assertEqual(profile.mark_cached, 0)
 

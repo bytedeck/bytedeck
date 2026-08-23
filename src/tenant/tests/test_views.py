@@ -38,6 +38,8 @@ def view_accessible_by_non_public_only(request):
 
 
 class ViewsTest(ByteDeckTenantTestCase):
+    """Tests the public-only and non-public-only view guards on both the public and tenant schemas."""
+
     def setUp(self):
         """Build a request factory and an empty request for calling the views directly."""
         self.factory = RequestFactory()
@@ -113,8 +115,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
 
     def test_get__anonymous_denied_without_verified_deck_request(self):
         """Anonymous users without a verified deck request are denied access."""
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 403)
+        response = self.assert403("tenant:new")
         self.assertTemplateUsed(response, "tenant/deck_request_denied.html")
 
     def test_get__create_deck_page_extends_public_base_and_keeps_progress_modal(self):
@@ -124,8 +125,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         deck-generation progress modal that animates on submit. Staff bypass the
         email-verification gate, so the superuser can load the form directly."""
         self.client.force_login(self.superuser)
-        response = self.client.get(reverse("tenant:new"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("tenant:new")
         # rendered through the shared public base template (the extension), not standalone
         self.assertTemplateUsed(response, "tenant/tenant_form.html")
         self.assertTemplateUsed(response, "public/base.html")
@@ -215,8 +215,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         """The confirmation page renders through the public base template and lays
         out the 3-step onboarding workflow plus the validity window, single-use
         constraint, spam reminder, and resend cooldown."""
-        response = self.client.get(reverse("decks:request_new_deck_submitted"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck_submitted")
         self.assertTemplateUsed(response, "tenant/request_new_deck_submitted.html")
         self.assertTemplateUsed(response, "public/base.html")
 
@@ -253,8 +252,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         instead of showing a bare email form (maintainer request, 2026-08-08)."""
         from tenant.models import TRIAL_LENGTH_DAYS, TRIAL_MAX_ACTIVE_USERS
 
-        response = self.client.get(reverse("decks:request_new_deck"))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200("decks:request_new_deck")
         self.assertContains(response, "Verify your email")
         self.assertContains(response, "login credentials")
         self.assertContains(response, f"{TRIAL_LENGTH_DAYS} days")
@@ -690,8 +688,7 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
     def get_quests_page(self, user):
         """Return the quest-list page (which extends base.html) as the given user."""
         self.client.force_login(user)
-        response = self.client.get(reverse('quests:quests'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('quests:quests')
         return response
 
     def test_banner__renders_inside_messages_container(self):
@@ -859,6 +856,179 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=None)
 
 
+class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
+    """The owner's standing deletion request and its withdrawal (#2330): the
+    subscription page's request/cancel actions, their owner-only guard, the
+    operator notification email, and the page states around them."""
+
+    def setUp(self):
+        """Log in the deck owner (the only user the actions accept) on a deck
+        with a known live trial."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from model_bakery import baker
+
+        self.owner = SiteConfig.get().deck_owner
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.client.force_login(self.owner)
+        self.set_deck(
+            trial_end_date=localdate() + timedelta(days=30), paid_until=None,
+            deletion_requested_on=None, deletion_requested_by='')
+
+    def set_deck(self, **fields):
+        """Persist fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def request_deletion(self):
+        """POST the deletion request and return the response."""
+        return self.client.post(reverse('decks:request_deletion'))
+
+    def test_request_and_cancel__drop_the_cached_deck_row(self):
+        """Both actions write with a queryset update (no post_save signal), so they
+        must drop the hour-long cached row get_current_deck() serves; a cached
+        consumer must never see pre-action state (CodeRabbit find on the #2330
+        PR). The page itself reads the middleware-fresh request.tenant."""
+        from tenant.utils import get_current_deck, deck_cache_key
+
+        with patch("tenant.tasks.send_email_message.apply_async"):
+            get_current_deck()  # populate the cached row (no request standing)
+            self.client.post(reverse('decks:request_deletion'))
+            cached = get_current_deck()  # a fresh cache fill after the action
+            self.assertIsNotNone(cached.deletion_requested_on)
+
+            self.client.post(reverse('decks:cancel_deletion_request'))
+            self.assertIsNone(get_current_deck().deletion_requested_on)
+        cache.delete(deck_cache_key(self.tenant.schema_name))  # leave no cross-test residue
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__records_the_request_and_emails_the_operators(self, mock_apply_async):
+        """The owner's POST stamps who asked and when, queues ONE operator email
+        to SUPPORT_EMAIL naming the deck and requester, and redirects back with
+        the received-and-nothing-deleted confirmation."""
+        from django.utils.timezone import localdate
+
+        response = self.client.post(reverse('decks:request_deletion'), follow=True)
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.deletion_requested_on, localdate())
+        self.assertEqual(self.tenant.deletion_requested_by, self.owner.get_username())
+
+        mock_apply_async.assert_called_once()
+        kwargs = mock_apply_async.call_args.kwargs["kwargs"]
+        self.assertEqual(kwargs["recipient_list"], [settings.SUPPORT_EMAIL])
+        self.assertEqual(kwargs["subject"], f"Deck deletion request: {self.tenant.schema_name}")
+        self.assertIn(self.tenant.primary_domain_url, kwargs["message"])
+        self.assertIn(self.tenant.schema_name, kwargs["message"])
+        self.assertIn(self.owner.get_username(), kwargs["message"])
+        self.assertIn("Nothing happens on its own", kwargs["message"])
+        # addressed to the operators, so no user-facing footer: ByteDeck should
+        # not be inviting itself to "contact us" (review find on the #2330 PR)
+        self.assertIn("ByteDeck operations", kwargs["message"])
+        self.assertNotIn("contact us", kwargs["message"].lower())
+
+        messages_text = [m.message for m in response.context['messages']]
+        self.assertTrue(any("Nothing is deleted yet" in m for m in messages_text))
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__second_request_is_a_no_op(self, mock_apply_async):
+        """Requesting again while a request stands changes nothing and sends no
+        second operator email."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by='someone-earlier')
+        self.request_deletion()
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.deletion_requested_by, 'someone-earlier')
+        mock_apply_async.assert_not_called()
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__owner_only(self, mock_apply_async):
+        """Anonymous users are sent to login; students get 403; non-owner staff
+        are refused with an error naming the owner; none of them create a request."""
+        self.client.logout()
+        response = self.request_deletion()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+        self.client.force_login(self.student)
+        self.assertEqual(self.request_deletion().status_code, 403)
+
+        self.client.force_login(self.staff)
+        response = self.request_deletion()
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.deletion_requested_on)
+        mock_apply_async.assert_not_called()
+
+    def test_request__get_not_allowed(self):
+        """The action mutates state, so GET is refused (405) for both routes."""
+        self.assertEqual(self.client.get(reverse('decks:request_deletion')).status_code, 405)
+        self.assertEqual(self.client.get(reverse('decks:cancel_deletion_request')).status_code, 405)
+
+    def test_cancel__clears_the_request(self):
+        """The owner's cancel clears both request fields and confirms; canceling
+        with nothing pending is a friendly no-op."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.post(reverse('decks:cancel_deletion_request'))
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.deletion_requested_on)
+        self.assertEqual(self.tenant.deletion_requested_by, '')
+
+        response = self.client.post(reverse('decks:cancel_deletion_request'), follow=True)
+        messages_text = [m.message for m in response.context['messages']]
+        self.assertTrue(any("no deletion request" in m for m in messages_text))
+
+    def test_cancel__owner_only(self):
+        """Non-owner staff cannot withdraw the owner's request."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        self.client.force_login(self.staff)
+        self.client.post(reverse('decks:cancel_deletion_request'))
+        self.tenant.refresh_from_db()
+        self.assertIsNotNone(self.tenant.deletion_requested_on)
+
+    def test_page__shows_the_request_panel_and_pending_state(self):
+        """The subscription page offers the request to the owner (button + the
+        review-first explanation); once a request stands it shows who asked and
+        when, the nothing-deleted reassurance, and the cancel action instead."""
+        from django.utils.timezone import localdate
+
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Request deck deletion')
+        self.assertContains(response, 'reviews every request')
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Deletion requested')
+        self.assertContains(response, self.owner.get_username())
+        self.assertContains(response, 'Cancel deletion request')
+        self.assertNotContains(response, 'Request deck deletion')
+
+    def test_page__non_owner_staff_see_disabled_buttons(self):
+        """Other staff see the section with the action disabled and the owner
+        named in its popup, mirroring the manage-subscription button."""
+        from django.utils.timezone import localdate
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Request deck deletion')
+        self.assertContains(response, f'Only the deck owner, {self.owner.get_username()}, can request')
+
+        # with a request standing, the same staff see the disabled cancel action
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Cancel deletion request')
+        self.assertContains(response, f'Only the deck owner, {self.owner.get_username()}, can cancel')
+
+
 class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     """Access and rendering tests for the staff-facing Subscription details page
     (epic #1729 PR 6; maintainer-requested admin-menu page)."""
@@ -887,19 +1057,16 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
 
     def get_page(self):
         """GET the subscription page, asserting 200."""
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription')
         return response
 
     def test_page__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
-        response = self.client.get(reverse('decks:subscription'))
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('login', response.url)
+        self.assertRedirectsLogin('decks:subscription')
 
         self.client.force_login(self.student)
-        self.assertEqual(self.client.get(reverse('decks:subscription')).status_code, 403)
+        self.assert403('decks:subscription')
 
         self.client.force_login(self.staff)
         self.get_page()
@@ -1224,19 +1391,23 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         self.set_deck(stripe_customer_id='cus_9')
 
+        # Match the manage-subscription form by its action, so the shared navbar's own
+        # sign-out POST form (present on every authenticated page) is never miscounted.
+        manage_form = f'<form method="post" action="{reverse("decks:subscription")}">'
+
         # setUp's staff user is NOT the owner: disabled buttons, owner named in the popup
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
         self.assertContains(
             response, f'Only the deck owner, {owner.get_username()}, can manage the subscription.', count=2
         )
-        self.assertNotContains(response, '<form method="post"')
+        self.assertNotContains(response, manage_form)
 
         # the owner: two live forms, the help text riding on the buttons' title popups
         self.client.force_login(owner)
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
-        self.assertContains(response, '<form method="post"', count=2)
+        self.assertContains(response, manage_form, count=2)
         self.assertNotContains(response, 'disabled')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
@@ -1454,13 +1625,13 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
         with patch('tenant.billing.stripe.checkout.Session.create',
                    side_effect=stripe_lib.StripeError('boom')):
             response = self.client.post(reverse('decks:subscription'), follow=True)
-        self.assertContains(response, "couldn't be reached")
+        # No apostrophe in the needle: messages are escaped now, so it arrives as an entity.
+        self.assertContains(response, "be reached")
 
     def test_activating_page__renders_for_staff_with_polling_script(self):
         """The post-checkout page renders the activating message and polls the
         status endpoint."""
-        response = self.client.get(reverse('decks:subscription_activating'))
-        self.assertEqual(response.status_code, 200)
+        response = self.assert200('decks:subscription_activating')
         self.assertContains(response, 'Activating your subscription')
         self.assertContains(response, reverse('decks:subscription_status'))
         # polling is capped so an abandoned checkout can't hammer Stripe forever

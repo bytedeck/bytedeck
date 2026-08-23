@@ -17,6 +17,7 @@
     <tr>
       <th>Title</th>
       <th>XP for 100%</th>
+      <th>Marks</th>
       <th>Active</th>
       <th>Action</th>
     </tr>
@@ -26,6 +27,7 @@
     <tr {% if not object.active %} class="text-muted" {% endif %}>
       <td>{{ object.title }}</td>
       <td>{{ object.xp_for_100_percent }}</td>
+      <td>{% if object.uses_marks %}Percentages{% else %}XP only{% endif %}</td>
       <td>{{ object.active }}</td>
       <td>
         <a class="btn btn-warning" href="{% url 'courses:course_update' object.id %}" role="button" title="Edit this course">
