@@ -41,6 +41,8 @@ from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
 from utilities.sorting import apply_sort, resolve_sort
+
+from .listing import QUEST_SORT_COLUMNS, search_quests
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -931,6 +933,18 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     else:
         quests = available_quests
 
+    # The quest tabs are searched, ordered and paginated in the database, so all three
+    # cover the whole tab rather than the page the browser is holding (#2379, #2410).
+    # The counts above are taken first, so the tab badges keep reporting what the tab
+    # holds rather than what the current search matched.
+    search_term = request.GET.get('q', '').strip()
+    quests = search_quests(quests, search_term)
+    num_matching_quests = quests.count()
+
+    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS)
+    quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    quests = paginate(quests, page)
+
     # Used to explain why the "Available" tab is empty, if it is
     awaiting_approval = QuestSubmission.objects.filter(
         user=request.user, is_approved=False, is_completed=True
@@ -962,6 +976,13 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "sortable_columns": sortable_columns,
         "sort_column": sort_column,
         "sort_descending": sort_descending,
+        # The quest tabs (available, drafts, archived) carry their own search and order,
+        # since they list quests rather than submissions
+        "search_term": search_term,
+        "num_matching_quests": num_matching_quests,
+        "quest_sortable_columns": QUEST_SORT_COLUMNS,
+        "quest_sort_column": quest_sort_column,
+        "quest_sort_descending": quest_sort_descending,
     }
     return render(request, template, context)
 
