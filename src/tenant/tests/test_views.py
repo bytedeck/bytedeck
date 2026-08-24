@@ -995,7 +995,7 @@ class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
         self.tenant.refresh_from_db()
         self.assertIsNotNone(self.tenant.deletion_requested_on)
 
-    def test_page__shows_the_request_panel_and_pending_state(self):
+    def test_SubscriptionDetail__shows_the_request_panel_and_pending_state(self):
         """The subscription page offers the request to the owner (button + the
         review-first explanation); once a request stands it shows who asked and
         when, the nothing-deleted reassurance, and the cancel action instead."""
@@ -1012,7 +1012,7 @@ class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Cancel deletion request')
         self.assertNotContains(response, 'Request deck deletion')
 
-    def test_page__non_owner_staff_see_disabled_buttons(self):
+    def test_SubscriptionDetail__non_owner_staff_see_disabled_buttons(self):
         """Other staff see the section with the action disabled and the owner
         named in its popup, mirroring the manage-subscription button."""
         from django.utils.timezone import localdate
@@ -1060,7 +1060,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         response = self.assert200('decks:subscription')
         return response
 
-    def test_page__staff_only(self):
+    def test_SubscriptionDetail__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
         self.assertRedirectsLogin('decks:subscription')
@@ -1071,7 +1071,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.staff)
         self.get_page()
 
-    def test_page__auto_renewing_deck_reads_as_renewing_not_expiring(self):
+    def test_SubscriptionDetail__auto_renewing_deck_reads_as_renewing_not_expiring(self):
         """An auto-renewing subscription says what actually happens on its date:
         it renews and the card is charged, with the Dates row labelled "Renews
         on" rather than "Paid until" (#2586). The same deck set to cancel goes
@@ -1092,7 +1092,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Paid until')
         self.assertNotContains(response, 'Renews automatically on')
 
-    def test_page__shows_dates_seats_and_status(self):
+    def test_SubscriptionDetail__shows_dates_seats_and_status(self):
         """A subscribed deck shows its status, the governing date, days remaining,
         and the three seat rows (maximum / current / remaining)."""
         response = self.get_page()
@@ -1104,7 +1104,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Remaining students')
         self.assertContains(response, '30')
 
-    def test_page__dates_show_relative_time_in_every_state(self):
+    def test_SubscriptionDetail__dates_show_relative_time_in_every_state(self):
         """Every Dates row carries a relative phrase: time remaining while the date
         is ahead, or how long ago it passed -- for Paid until, the grace period's
         end, and Trial ends alike (maintainer request from staging live testing)."""
@@ -1143,7 +1143,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=30))  # final grace day
         self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
 
-    def test_page__dates_show_only_the_governing_deadline(self):
+    def test_SubscriptionDetail__dates_show_only_the_governing_deadline(self):
         """The Dates table shows ONE deadline row -- the governing (LATEST) clock's
         (#1734 B4): Paid until when the paid clock governs, Trial ends when the
         trial clock governs (even with both dates set), and a never-expires row
@@ -1169,7 +1169,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
-    def test_page__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+    def test_SubscriptionDetail__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
         """With BOTH dates set and the trial the LATER clock (an admin-extended
         trial on a deck whose paid period lapsed earlier), the grace status and
         the Dates table follow the governing trial clock: trial wording,
@@ -1188,7 +1188,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
-    def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
+    def test_SubscriptionDetail__remaining_seats_counts_down_and_clamps_at_zero(self):
         """Remaining students = cap minus the LIVE current-student count, clamped
         at 0 when over the limit; None (rendered "Unlimited") on unlimited decks."""
         from model_bakery import baker
@@ -1207,7 +1207,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1)
         self.assertIsNone(self.get_page().context['remaining_seats'])
 
-    def test_page__grace_period_states_suspension_ahead(self):
+    def test_SubscriptionDetail__grace_period_states_suspension_ahead(self):
         """A deck in its paid grace window gets its own DANGER "Grace period" label --
         never the green "Subscribed" badge (maintainer review find) -- and explains
         what follows: suspension, with only the deck owner able to sign in and the
@@ -1225,7 +1225,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
                       'and the 365-day countdown to deck deletion begins)', text)
 
-    def test_page__lapsed_trial_gets_the_same_grace_status(self):
+    def test_SubscriptionDetail__lapsed_trial_gets_the_same_grace_status(self):
         """A lapsed trial lands in the SAME grace state (#1734 B4): the danger
         "Grace period" label, trial-specific wording ("free trial ended",
         subscribe rather than renew), and the trial Dates rows with the grace
@@ -1243,7 +1243,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('subscribe to keep full access', text)
         self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
 
-    def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
+    def test_SubscriptionDetail__suspended_deck_states_owner_only_and_deletion_countdown(self):
         """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
         the seats table still shows the ADMIN-SET cap, whatever it is (the
@@ -1263,7 +1263,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         text = ' '.join(response.content.decode().split())
         self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
 
-    def test_page__lifecycle_overview_lists_every_stage(self):
+    def test_SubscriptionDetail__lifecycle_overview_lists_every_stage(self):
         """The "How subscriptions work" section walks the owner through the whole
         lifecycle -- valid subscription, grace period, suspension (owner-only
         sign-in + deletion countdown), deletion -- and pitches the Maintenance
@@ -1278,7 +1278,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('Only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
         self.assertIn('max 5 current students', text)  # the Maintenance pitch states the trial cap
 
-    def test_page__maintenance_subscription_gets_its_own_status(self):
+    def test_SubscriptionDetail__maintenance_subscription_gets_its_own_status(self):
         """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
         status label and copy (kept alive, capped, upgradable) instead of the
         plain green Subscribed badge -- while a paid deck with a higher cap keeps
@@ -1297,7 +1297,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         # the lifecycle overview always PITCHES Maintenance, so pin the status label only
         self.assertNotContains(response, 'Maintenance</span>')
 
-    def test_page__trial_suspended_and_manual_states(self):
+    def test_SubscriptionDetail__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""
         from datetime import date, timedelta
 
@@ -1312,12 +1312,12 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=None, paid_until=None)
         self.assertContains(self.get_page(), 'Managed manually')
 
-    def test_page__unlimited_cap_shown_as_unlimited(self):
+    def test_SubscriptionDetail__unlimited_cap_shown_as_unlimited(self):
         """The -1 unlimited sentinel renders as "Unlimited" rather than -1."""
         self.set_deck(max_active_users=-1)
         self.assertContains(self.get_page(), 'Unlimited')
 
-    def test_page__mid_trial_checkout_note_promises_no_lost_trial_time(self):
+    def test_SubscriptionDetail__mid_trial_checkout_note_promises_no_lost_trial_time(self):
         """While the deck is on trial (with enough trial left for checkout to
         preserve it), the subscribe button's help text says the card isn't
         charged until the trial ends; a paid deck gets the plain portal/checkout
@@ -1337,7 +1337,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
             text = ' '.join(self.get_page().content.decode().split())
             self.assertNotIn("won't cut your free trial short", text)
 
-    def test_page__not_configured_falls_back_to_public_subscribe_page(self):
+    def test_SubscriptionDetail__not_configured_falls_back_to_public_subscribe_page(self):
         """Without Stripe keys the page says billing isn't configured and links the
         public subscribe page instead of rendering the checkout form."""
         from tenant.utils import get_public_subscribe_url
@@ -1347,7 +1347,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, get_public_subscribe_url())
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__configured_shows_checkout_portal_or_manual_note(self):
+    def test_SubscriptionDetail__configured_shows_checkout_portal_or_manual_note(self):
         """With Stripe configured: an unlinked trial deck gets "Subscribe now", a
         linked deck gets "Manage subscription" (billing portal), and an unlinked
         deck still inside its paid period gets the managed-manually note instead
@@ -1367,7 +1367,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'managed manually')
         self.assertNotContains(response, 'Subscribe now')
 
-    def test_page__status_names_the_plan_after_the_subscribed_badge(self):
+    def test_SubscriptionDetail__status_names_the_plan_after_the_subscribed_badge(self):
         """A linked, subscribed deck's status line names the Stripe plan and its
         renewal terms after the badge -- "Subscribed to <product>, renewed
         annually at $75.00 per year. Paid through ..." (maintainer request,
@@ -1387,7 +1387,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
             text = ' '.join(self.get_page().content.decode().split())
         self.assertIn('Subscribed</span> Paid through', text)
 
-    def test_page__maintenance_status_names_the_plan_when_known(self):
+    def test_SubscriptionDetail__maintenance_status_names_the_plan_when_known(self):
         """A maintenance deck's status parenthesizes its plan when Stripe data is
         available: "on a maintenance subscription (<product>, renewed annually
         at $10.00 per year) through ..."."""
@@ -1402,7 +1402,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         )
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__manage_button_shows_at_top_and_bottom_owner_only(self):
+    def test_SubscriptionDetail__manage_button_shows_at_top_and_bottom_owner_only(self):
         """The manage action appears TWICE -- under Status and in Upgrade-or-renew
         (maintainer request, 2026-08-09). Staff who are not the deck owner get
         both copies disabled with a popup naming who can act; the owner gets the
@@ -1432,7 +1432,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'disabled')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__lapsed_linked_deck_button_says_renew(self):
+    def test_SubscriptionDetail__lapsed_linked_deck_button_says_renew(self):
         """A linked deck past its governing deadline (grace or suspended) labels
         the manage action "Renew subscription" with renewal help text: the POST
         routes such a deck to renewal, so the button says so up front
@@ -1457,7 +1457,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Renew subscription', count=2)
         self.assertNotContains(response, 'Manage subscription')
 
-    def test_page__contact_copy_links_the_support_address(self):
+    def test_SubscriptionDetail__contact_copy_links_the_support_address(self):
         """Copy that says to contact ByteDeck links the support address as a
         mailto (maintainer request, 2026-08-09): the managed-manually status, the
         manual-billing note, and the activating page's check-later copy."""
