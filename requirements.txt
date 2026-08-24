@@ -3,7 +3,7 @@ django-debug-toolbar>=7.1.1,<8.0
 
 # CLI
 coveralls>=4.1.0,<5.0  # includes coverage
-ruff==0.16.3  # 0.x lint tool: exact pin so CI, the pre-commit hook and a local venv can never lint with different rule sets. Dependabot proposes the bumps
+ruff==0.16.4  # 0.x lint tool: exact pin so CI, the pre-commit hook and a local venv can never lint with different rule sets. Dependabot proposes the bumps
 pipdeptree>=4.2.1,<5.0
 pre-commit>=4.6.2,<5.0
 
