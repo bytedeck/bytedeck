@@ -30,9 +30,13 @@
   <p><span class="label label-primary">{{ deck.subscription_status_label }}</span>
     This deck is on a maintenance subscription{% if plan_summary %}
     (<strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %}, {{ plan_summary.renewal_phrase }}{% endif %}){% endif %}
-    through <strong>{{ deck.paid_until }}</strong>
-    ({% if renews_phrase %}automatically {{ renews_phrase }}{% else %}{{ paid_until_phrase }}{% endif %}): it won't expire,
-    be suspended, or time out for deletion, but registration stays capped at the trial limit
+    {# "it won't expire" holds only while the subscription renews: one that has been cancelled runs out like any other (#2589) #}
+    {% if renews_phrase %}through <strong>{{ deck.paid_until }}</strong>
+    (automatically {{ renews_phrase }}): it won't expire, be suspended, or time out for deletion,
+    but registration stays capped{% else %}paid through <strong>{{ deck.paid_until }}</strong>
+    ({{ paid_until_phrase }}): unless it is renewed, the deck then gets the usual
+    {{ grace_days }}-day grace period and is suspended after that. Until then registration
+    stays capped{% endif %} at the trial limit
     (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
     Upgrade any time to raise the cap.</p>
 {% elif deck.subscription_status == 'subscribed' %}
