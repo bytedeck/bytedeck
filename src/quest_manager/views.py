@@ -2,6 +2,7 @@ import json
 import posixpath
 import re
 import uuid
+from datetime import datetime, timezone as dt_timezone
 
 from django.utils.html import format_html
 from django.utils.decorators import method_decorator
@@ -17,7 +18,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
+from django.db.models import (
+    Case, DateTimeField, F, ExpressionWrapper, fields, BooleanField, Count, Exists, IntegerField, OuterRef, Q, Sum, Value, When,
+)
+from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -36,6 +40,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.sorting import apply_sort, resolve_sort
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -892,15 +897,31 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         else available_quests.count()
     )
 
+    # The quest tabs show the campaign, and are the student's own submissions, so there is
+    # no user column. The in-progress tab's Status cell carries no time, so it offers no
+    # sort by it. The tabs that are not paginated offer nothing: their headings stay plain
+    # until they are paginated too.
+    sortable_columns = {}
+    sort_column, sort_descending = '', False
+
     if view_type == QuestListViewTabTypes.IN_PROGRESS:
-        in_progress_submissions = paginate(in_progress_submissions, page)
+        sortable_columns = submission_sort_columns(campaign=True, status=False)
+        in_progress_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, in_progress_submissions, sortable_columns, page,
+        )
         # available_quests = []
     elif view_type == QuestListViewTabTypes.COMPLETED:
         # completed_submissions_count = completed_submissions.count()
-        completed_submissions = paginate(completed_submissions, page)
+        sortable_columns = submission_sort_columns(campaign=True)
+        completed_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, completed_submissions, sortable_columns, page,
+        )
         # available_quests = []
     elif view_type == QuestListViewTabTypes.PAST:
-        past_submissions = paginate(past_submissions, page)
+        sortable_columns = submission_sort_columns(campaign=True)
+        past_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, past_submissions, sortable_columns, page,
+        )
         # available_quests = []
 
     if view_type == QuestListViewTabTypes.DRAFT:
@@ -937,6 +958,10 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
         "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
+        # Read by snippets/sortable_column_heading.html in the submission tabs' table
+        "sortable_columns": sortable_columns,
+        "sort_column": sort_column,
+        "sort_descending": sort_descending,
     }
     return render(request, template, context)
 
@@ -1538,6 +1563,113 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         return self.form_invalid()
 
 
+#: A returned submission whose `time_returned` was never recorded is treated as very old,
+#: so it sorts alongside the oldest rather than jumping to the front of a list ordered by
+#: Status. `snippets/submitted_status.html` calls the same case "Unknown time ago".
+RETURNED_LONG_AGO = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def submission_status_time():
+    """The time the Status column shows, as something the database can order by.
+
+    That column shows a different time depending on how far the submission got, following
+    the same chain as `quest_manager/snippets/submitted_status.html`: approved shows when
+    it was approved, awaiting approval shows when it was handed in, returned shows when it
+    was returned, and one still in progress has no time of its own.
+
+    A sort has to read the value the reader is looking at, so this mirrors that chain
+    rather than picking a single column and hoping the tab only holds one kind of row.
+
+    Returns:
+        Case: the timestamp for each submission, for `order_by`.
+    """
+    return Case(
+        When(is_approved=True, then=F('time_approved')),
+        # Reached only when not approved, so this is "awaiting approval"
+        When(is_completed=True, then=F('time_completed')),
+        # Reached only when not completed, so a time_completed here means it was returned
+        When(time_completed__isnull=False, then=Coalesce(F('time_returned'), Value(RETURNED_LONG_AGO))),
+        default=Now(),
+        output_field=DateTimeField(),
+    )
+
+
+def submission_displayed_xp():
+    """The XP the table shows, as something the database can order by.
+
+    The cell shows a different number depending on the submission, following the same
+    chain as the two tab templates: a skipped submission grants nothing and shows 0, a
+    quest whose XP the student enters shows the amount they asked for, and everything else
+    shows the quest's own XP.
+
+    Ordering by `quest__xp` alone would sort by a number that is not on screen for either
+    of the first two, which is the same trap the Status column has.
+
+    Returns:
+        Case: the XP for each submission, for `order_by`.
+    """
+    return Case(
+        When(do_not_grant_xp=True, then=Value(0)),
+        When(quest__xp_can_be_entered_by_students=True, then=F('xp_requested')),
+        default=F('quest__xp'),
+        output_field=IntegerField(),
+    )
+
+
+def submission_sort_columns(*, campaign=False, user=False, status=True):
+    """The columns a submission tab offers, mapped to what the database orders on.
+
+    Two columns are never offered, for the same reason the Library's quests tab does not
+    offer its tags (#2410): a submission's {group} blocks and its quest's tags are both
+    many-valued, so there is no one value to order a row by, and neither column can keep
+    the promise a sort control makes.
+
+    Args:
+        campaign (bool): whether this tab shows the quest's campaign.
+        user (bool): whether this tab shows whose submission it is.
+        status (bool): whether the Status column carries a time. The in-progress tabs show
+            no time there, so ordering by it would move nothing and still look like a sort.
+
+    Returns:
+        dict: the offered columns, keyed by the key the headings use.
+    """
+    columns = {
+        'name': 'quest__name',
+        'xp': submission_displayed_xp(),
+    }
+    if campaign:
+        columns['campaign'] = 'quest__campaign__title'
+    if user:
+        columns['user'] = 'user__username'
+    if status:
+        columns['status'] = submission_status_time()
+
+    return columns
+
+
+def sorted_submission_page(request, submissions, sort_columns, page):
+    """Order a tab's submissions by the chosen column, then cut the requested page out.
+
+    Ordering before paginating is the whole point: the browser only ever holds one page,
+    so a sort applied there answers a question about the page rather than about the tab
+    (#2582). `id` settles submissions that tie, so paging through shows each exactly once.
+
+    Args:
+        request (HttpRequest): the current request, for the `sort` parameter.
+        submissions (QuerySet[QuestSubmission]): the tab's submissions.
+        sort_columns (dict): the columns this tab offers.
+        page: the requested page.
+
+    Returns:
+        tuple[Page, str, bool]: the page, the column key applied ('' for none), and
+        whether it was reversed.
+    """
+    column, descending = resolve_sort(request, sort_columns)
+    submissions = apply_sort(submissions, sort_columns, column, descending, tie_break='id')
+
+    return paginate(submissions, page), column, descending
+
+
 def paginate(object_list, page, per_page=30):
     paginator = Paginator(object_list, per_page)
     try:
@@ -1607,22 +1739,32 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
     page = request.GET.get("page")
+    # The approvals tabs show whose submission it is, and no campaign column. The
+    # in-progress tab's Status cell carries no time, so it offers no sort by it.
+    sortable_columns = submission_sort_columns(user=True)
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if "/in-progress/" in request.path_info:
         view_type = ApprovalsViewTabTypes.INPROGRESS
+        sortable_columns = submission_sort_columns(user=True, status=False)
         in_progress_submissions = QuestSubmission.objects.all_not_completed().order_by(F("time_completed").desc(nulls_last=True))
-        in_progress_submissions = paginate(in_progress_submissions, page)
+        in_progress_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, in_progress_submissions, sortable_columns, page,
+        )
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only
         )
-        approved_submissions = paginate(approved_submissions, page)
+        approved_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, approved_submissions, sortable_columns, page,
+        )
     elif "/flagged/" in request.path_info:
         view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
-        flagged_submissions = paginate(flagged_submissions, page)
+        flagged_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, flagged_submissions, sortable_columns, page,
+        )
     else:  # default is /submitted/ (awaiting approval)
         view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
@@ -1632,7 +1774,9 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval(
             teacher=teacher
         )
-        submitted_submissions = paginate(submitted_submissions, page)
+        submitted_submissions, sort_column, sort_descending = sorted_submission_page(
+            request, submitted_submissions, sortable_columns, page,
+        )
 
     tab_list = [
         {
@@ -1687,6 +1831,10 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
+        # Read by snippets/sortable_column_heading.html in the tab's table
+        "sortable_columns": sortable_columns,
+        "sort_column": sort_column,
+        "sort_descending": sort_descending,
     }
     return render(request, template, context)
 
