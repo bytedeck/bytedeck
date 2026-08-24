@@ -47,10 +47,10 @@
       <tr class="panel-heading">
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
         {% comment %}
-          The headings link to the server rather than carrying data-sortable, so they order
-          the whole Library instead of the page the browser happens to hold (#2410). Tags
-          are not sortable: a quest carries any number of them, so there is no one value to
-          order it by, and the search box already finds the quests carrying a given one.
+          The headings link back to the view, so the ordering is applied to every quest in
+          the Library before the page is cut from it (#2410). Tags is not sortable: a quest
+          carries any number of them, so there is no one value to order it by, and the
+          search box already finds the quests carrying a given one.
         {% endcomment %}
         <th class="col-sm-5 col-xs-8" data-field="name">
           {% include "snippets/sortable_column_heading.html" with column="name" label="Quest" %}

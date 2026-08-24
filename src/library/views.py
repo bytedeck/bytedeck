@@ -640,9 +640,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         which is what the column headings promise the reader they can search by. Several
         words narrow the results rather than widening them: every word has to match
         something, though not all the same thing, so "recursion python" finds the quest
-        named "Recursion: base cases" that is tagged python. That is how the search box
-        behaved when it filtered rows in the browser, and it is the more useful of the two
-        readings once the Library is big enough to need narrowing.
+        named "Recursion: base cases" that is tagged python. Narrowing is the more useful
+        of the two readings once the Library is big enough to need searching at all.
 
         Args:
             search_term (str): what the user typed, or '' for no filtering.

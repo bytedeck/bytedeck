@@ -25,9 +25,8 @@ def search_quests(quests, search_term):
 
     Several words narrow the results rather than widening them: every word has to match
     something, though not all the same thing, so "recursion python" finds the quest named
-    "Recursion: base cases" that is tagged python. That is how the search behaved when it
-    filtered rows in the browser, and it is the more useful of the two readings once a
-    list is long enough to need narrowing.
+    "Recursion: base cases" that is tagged python. Narrowing is the more useful of the two
+    readings once a list is long enough to need searching at all.
 
     Args:
         quests (QuerySet[Quest]): the quests to narrow.

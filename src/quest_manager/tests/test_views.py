@@ -5182,9 +5182,9 @@ class ApproveViewTest(ByteDeckTenantTestCase):
 class QuestTabListingTests(ByteDeckTenantTestCase):
     """The available, drafts and archived tabs are read a page at a time.
 
-    Each was sent whole, so a deck with a few hundred quests rendered all of them into one
-    table on every request. Searching and ordering went with it: both now happen in the
-    database, so they cover the tab rather than the page the browser is holding.
+    Searching and ordering happen in the database, so each covers every quest in the tab
+    rather than the page that was sent to the browser. A deck with a few hundred quests
+    costs one page of rendering per request.
     """
 
     #: More quests than `paginate`'s default page, so the list spills onto a second page.
@@ -5234,7 +5234,8 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
     def test_quest_list__searching_finds_a_quest_that_is_not_on_this_page(self):
         """The search covers the whole tab, so it reaches page two.
 
-        Filtering in the browser could only ever match the rows already sent to it.
+        A match on a later page is exactly what a search confined to the rendered rows
+        cannot find, and the reader is told there is nothing rather than which page to try.
         """
         last = f'Zsort quest {self.QUEST_COUNT - 1:02d}'
         self.assertNotIn(last, self._names())
@@ -5281,8 +5282,12 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
                 self.assertEqual([q.name for q in response.context['quests']], default_order)
                 self.assertEqual(response.context['quest_sort_column'], '')
 
-    def test_quest_list__the_browser_no_longer_searches_or_sorts_the_page(self):
-        """bootstrap-table's own search and sort are gone, since they only saw one page."""
+    def test_quest_list__the_table_carries_no_client_side_search_or_sort(self):
+        """The tab's searching and ordering are the server's, so the table asks for neither.
+
+        bootstrap-table would filter and reorder the rows it holds, which is one page, and
+        answer a narrower question than the control appears to ask.
+        """
         response = self.client.get(reverse('quests:quests'))
 
         self.assertNotContains(response, 'data-sortable="true"')
