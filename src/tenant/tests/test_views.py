@@ -1297,6 +1297,24 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         # the lifecycle overview always PITCHES Maintenance, so pin the status label only
         self.assertNotContains(response, 'Maintenance</span>')
 
+    def test_SubscriptionDetail__maintenance_promises_no_expiry_only_while_it_renews(self):
+        """A maintenance subscription that renews is the one case where the page
+        can say the deck won't expire, be suspended, or time out for deletion.
+        Cancel it and that promise is false, so the page states what really
+        happens instead: paid through the date, then the grace period, then
+        suspension. The trial-limit cap applies either way (#2589)."""
+        self.set_deck(max_active_users=5, stripe_auto_renews=True)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'automatically renews in 100 days')
+        self.assertContains(response, "it won't expire")
+
+        self.set_deck(stripe_auto_renews=False)  # cancelled, or a renewal that started failing
+        response = self.get_page()
+        self.assertNotContains(response, "it won't expire")
+        self.assertContains(response, 'paid through')
+        self.assertContains(response, 'grace period and is suspended after that')
+        self.assertContains(response, 'capped at the trial limit')
+
     def test_SubscriptionDetail__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""
         from datetime import date, timedelta
@@ -1390,16 +1408,23 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     def test_SubscriptionDetail__maintenance_status_names_the_plan_when_known(self):
         """A maintenance deck's status parenthesizes its plan when Stripe data is
         available: "on a maintenance subscription (<product>, renewed annually
-        at $10.00 per year) through ..."."""
+        at $10.00 per year) paid through ..." (the renewing deck reads "through",
+        since its date is a renewal rather than an end, #2589)."""
         self.set_deck(max_active_users=5, stripe_customer_id='cus_9', stripe_subscription_id='sub_9')
         summary = {'name': 'Bytedeck Maintenance', 'renewal_phrase': 'renewed annually at $10.00 per year'}
         with patch('tenant.billing.subscription_plan_summary', return_value=summary):
             text = ' '.join(self.get_page().content.decode().split())
         self.assertIn(
             'maintenance subscription (<strong>Bytedeck Maintenance</strong>, '
-            'renewed annually at $10.00 per year) through',
+            'renewed annually at $10.00 per year) paid through',
             text,
         )
+
+        self.set_deck(stripe_auto_renews=True)
+        with patch('tenant.billing.subscription_plan_summary', return_value=summary):
+            text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn(
+            'renewed annually at $10.00 per year) through <strong>', text)
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
     def test_SubscriptionDetail__manage_button_shows_at_top_and_bottom_owner_only(self):
