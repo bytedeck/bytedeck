@@ -144,9 +144,13 @@ def evaluate_deck_notices(deck):
         # rolls forward, so the "renew or lose access" cadence was simply wrong
         # here (#2586). One notice per renewal, keyed to the date being renewed,
         # so next period's renewal gets its own.
-        days = deck.days_until_expiry
-        if days is not None and days <= RENEWAL_NOTICE_DAYS:
-            period_key = str(deck.governing_deadline)
+        # The clock is paid_until, the date Stripe bills on, NOT the governing
+        # deadline: a deck can carry a trial date that outlasts its paid period,
+        # and the charge lands when the subscription bills (#2588 review find).
+        # `auto_renews` guarantees paid_until is set and still ahead.
+        days = (deck.paid_until - today).days
+        if days <= RENEWAL_NOTICE_DAYS:
+            period_key = str(deck.paid_until)
             if _unfired(deck, DeckNotice.KIND_RENEWAL, 'upcoming', period_key):
                 due.append((DeckNotice.KIND_RENEWAL, 'upcoming', period_key))
     else:
@@ -246,7 +250,9 @@ def _notification_detail(deck, kind):
     if kind == DeckNotice.KIND_LIMIT:
         return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
     if kind == DeckNotice.KIND_RENEWAL:
-        return f'this deck renews automatically on {deadline}, with nothing for you to do.'
+        # the billing date, not the governing deadline: those differ on a deck
+        # whose trial date outlasts its paid period (#2588 review find)
+        return f'this deck renews automatically on {date_format(deck.paid_until)}, with nothing for you to do.'
     # expiry cadence: approaching the deadline, or already inside the grace window
     days = deck.days_until_expiry
     if days is not None and days < 0:
@@ -317,6 +323,11 @@ def _deliver(deck, kind):
     if kind == DeckNotice.KIND_RENEWAL:
         from tenant.billing import subscription_plan_summary
         context['plan_summary'] = subscription_plan_summary(deck)
+        # the renewal email counts to the BILLING date (paid_until), while `days`
+        # above counts to the governing deadline: the two differ on a deck whose
+        # trial date outlasts its paid period (#2588 review find)
+        context['renewal_date'] = deck.paid_until
+        context['renewal_days'] = (deck.paid_until - localdate()).days
 
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"

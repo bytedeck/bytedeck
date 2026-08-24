@@ -193,6 +193,18 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.set_deck(paid_until=next_renewal)
             self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(next_renewal))])
 
+    def test_evaluate__renewal_notice_counts_to_the_billing_date_not_a_longer_trial(self):
+        """On a deck carrying a trial date that outlasts its paid period, the
+        renewal notice follows paid_until: that is the day Stripe charges, while
+        the governing deadline (the trial) is only when access would end. It
+        fires in the window before the charge and is keyed to it, so the later
+        trial date neither delays the notice nor labels it (#2588 review find)."""
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        self.set_deck(
+            trial_end_date=TODAY + timedelta(days=90), paid_until=renews_on, stripe_auto_renews=True)
+        self.assertEqual(self.tenant.governing_deadline, TODAY + timedelta(days=90))  # the trial governs access
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(renews_on))])
+
     def test_evaluate__expiry_cadence_returns_when_the_subscription_stops_renewing(self):
         """Cancelling at period end (or a renewal that starts failing) clears the
         Stripe flag, and the deck goes straight back onto the expiry cadence so
@@ -302,17 +314,28 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     def test_process__renewal_email_says_it_renews_and_asks_for_nothing(self):
         """The renewal email states the date and that nothing is required, and
         carries none of the expiry cadence's "subscribe or lose access" pressure
-        (#2586). Its in-app notification says the same in one line."""
+        (#2586). Its in-app notification says the same in one line.
+
+        The deck here also carries a trial date that outlasts its paid period, so
+        the email has to keep the two straight: it renews on the BILLING date,
+        while cancelling would leave access running to the later governing
+        deadline (#2588 review find)."""
+        from django.utils.formats import date_format
+
         renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        access_until = TODAY + timedelta(days=90)
         Tenant.objects.filter(pk=self.tenant.pk).update(
-            trial_end_date=None, paid_until=renews_on, stripe_auto_renews=True, active_user_count=0)
+            trial_end_date=access_until, paid_until=renews_on, stripe_auto_renews=True, active_user_count=0)
         self.tenant.refresh_from_db()
 
         self.run_engine_with_inline_email()
 
         self.assertEqual(len(mail.outbox), 1)
         body = mail.outbox[0].body
-        self.assertIn('renews automatically', body)
+        text = ' '.join(body.split())  # textify hard-wraps lines
+        self.assertIn(f'renews automatically on {date_format(renews_on)}', text)
+        self.assertIn(f'({RENEWAL_NOTICE_DAYS} days from now)', text)
+        self.assertIn(f'stays fully available through {date_format(access_until)}', text)
         self.assertIn('nothing you need to do', body)
         # none of the expiry cadence's act-or-lose-access pressure (those emails say
         # "to keep full access" / "Subscribe here to restore access"); this email
@@ -320,7 +343,10 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertNotIn('to keep full access', body)
         self.assertNotIn('Subscribe here', body)
         self.assertNotIn('to restore access', body)
-        self.assertTrue(Notification.objects.filter(verb__contains='renewal reminder').exists())
+        # the in-app line names the billing date too, not the deck's longer trial
+        notification = Notification.objects.get(
+            recipient=SiteConfig.get().deck_owner, verb__contains='renewal reminder')
+        self.assertIn(f'renews automatically on {date_format(renews_on)}', notification.verb)
 
     def test_process__report_only_by_default_sends_and_records_nothing(self):
         """With DECK_NOTICES_ENABLED off (the default), the engine only reports."""

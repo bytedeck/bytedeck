@@ -463,9 +463,8 @@ class Tenant(TenantMixin):
         The latest-clock rule matters because trial_end_date is set at creation and
         never cleared when a deck subscribes: a lapsed subscriber should read as
         "expired N days ago" relative to its recent paid_until, not its ancient trial
-        date. Negative once the deadline has passed (the reminder cadence keeps firing
-        through the grace window); None when the deck has no dates at all
-        (comped/legacy decks).
+        date. Negative once the deadline has passed (the deck is then inside its
+        grace window); None when the deck has no dates at all (comped/legacy decks).
         """
         deadline = self.governing_deadline
         if deadline is None:
@@ -494,15 +493,19 @@ class Tenant(TenantMixin):
         surface should say "renews" rather than "expires" (#2586).
 
         ``stripe_auto_renews`` is what Stripe last told us; this adds the sanity
-        check that the deadline has not already passed. A renewal that never
-        landed (a payment failing while its webhook is late, or a webhook
-        outage) would otherwise leave the flag set on a deck whose paid period
-        is history, and that deck really is expiring: it falls back to the
+        check that the date Stripe charges on has not already passed. A renewal
+        that never landed (a payment failing while its webhook is late, or a
+        webhook outage) would otherwise leave the flag set on a deck whose paid
+        period is history, and that deck really is expiring: it falls back to the
         expiry cadence, the grace-window banner, and eventually suspension
         rather than sitting reassured and silent.
+
+        The clock is ``paid_until`` specifically, never the governing deadline:
+        a deck can carry a trial date that outlasts its paid period (an
+        admin-extended trial), and the trial running on says nothing about
+        whether the subscription billed (#2588 review find).
         """
-        days = self.days_until_expiry
-        return self.stripe_auto_renews and days is not None and days >= 0
+        return bool(self.stripe_auto_renews and self.paid_until is not None and self.paid_until >= localdate())
 
     @property
     def is_expiring_soon(self):
@@ -685,9 +688,12 @@ class Tenant(TenantMixin):
 
             # tracked on every sync, not just while granting access: a renewal
             # that starts failing (past_due) or an owner's "cancel at period end"
-            # must both put the deck back on the expiry cadence (#2586)
+            # must both put the deck back on the expiry cadence (#2586). Only from
+            # a payload that identifies itself, though: the identity guard above
+            # cannot vet an id-less payload, and this flag is state a bogus event
+            # could otherwise lower, exactly like the unlink below (review find)
             auto_renews = subscription_auto_renews(subscription)
-            if auto_renews != current.stripe_auto_renews:
+            if sub_id and auto_renews != current.stripe_auto_renews:
                 updates['stripe_auto_renews'] = auto_renews
 
             if status in ('canceled', 'incomplete_expired'):

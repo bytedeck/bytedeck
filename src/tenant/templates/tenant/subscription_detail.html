@@ -31,7 +31,7 @@
     This deck is on a maintenance subscription{% if plan_summary %}
     (<strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %}, {{ plan_summary.renewal_phrase }}{% endif %}){% endif %}
     through <strong>{{ deck.paid_until }}</strong>
-    ({% if renews_phrase %}{{ renews_phrase }} automatically{% else %}{{ paid_until_phrase }}{% endif %}): it won't expire,
+    ({% if renews_phrase %}automatically {{ renews_phrase }}{% else %}{{ paid_until_phrase }}{% endif %}): it won't expire,
     be suspended, or time out for deletion, but registration stays capped at the trial limit
     (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
     Upgrade any time to raise the cap.</p>
