@@ -1,4 +1,3 @@
-from django.utils.safestring import mark_safe
 
 from django.contrib.auth import get_user_model
 from django.db import models
@@ -8,6 +7,7 @@ from url_or_relative_url_field.fields import URLOrRelativeURLField
 
 # http://stackoverflow.com/questions/2472422/django-file-upload-size-limit
 # https://github.com/mixkorshun/django-safe-filefield/blob/master/safe_filefield/models.py
+from utilities.fa_icon import FA_ICON_HELP_TEXT, FA_ICON_VALIDATOR, fa_icon_class
 from utilities.fields import RestrictedFileFormField
 
 User = get_user_model()
@@ -66,10 +66,11 @@ class VideoResource(models.Model):
 class MenuItem(models.Model):
 
     label = models.CharField(max_length=25, help_text="This is the text that will appear for the menu item.")
+    # __str__ below builds the menu link's HTML and the navbar renders it |safe, so the
+    # icon name is held to safe Font Awesome tokens by the validator every icon field shares.
     fa_icon = models.CharField(max_length=50, default="link",
-                               help_text=mark_safe("The Font Awesome icon to display beside the text. E.g. 'star-o'. "
-                                                   "Options from <a target='_blank'"
-                                                   "href='http://fontawesome.com/v4.7.0/icons/'>Font Awesome</a>."))
+                               validators=[FA_ICON_VALIDATOR],
+                               help_text=FA_ICON_HELP_TEXT)
     url = URLOrRelativeURLField(help_text="Relative URLs will work too.  E.g. '/courses/ranks/'", verbose_name="URL")
     open_link_in_new_tab = models.BooleanField()
     sort_order = models.IntegerField(default=0, help_text="Lowest will be at the top.")
@@ -78,8 +79,13 @@ class MenuItem(models.Model):
     class Meta:
         ordering = ["sort_order"]
 
+    @property
+    def fa_icon_class(self):
+        """The Font Awesome class list to drop into ``<i class="...">``: ``fa fa-<name>``."""
+        return fa_icon_class(self.fa_icon)
+
     def __str__(self):
         target = 'target="_blank"' if self.open_link_in_new_tab else ''
         return '<a href="{}" {} class="menuitem">' \
-               '<i class="fa fa-fw fa-{}"></i>&nbsp;&nbsp;{}' \
-               '</a>'.format(self.url, target, self.fa_icon, self.label)
+               '<i class="fa-fw {}"></i>&nbsp;&nbsp;{}' \
+               '</a>'.format(self.url, target, self.fa_icon_class, self.label)
