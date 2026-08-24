@@ -20,6 +20,7 @@ from badges.models import BadgeAssertion
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
+from utilities.fa_icon import FA_ICON_HELP_TEXT, FA_ICON_VALIDATOR, fa_icon_class
 from utilities.signals import disable_for_loaddata
 
 
@@ -281,19 +282,17 @@ class Rank(IsAPrereqMixin, models.Model):
                              help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
     # Both fields are staff-editable and flow, unescaped, into the rank-up
     # notification's icon HTML (rendered |safe), so they are validated down to safe
-    # Font Awesome class tokens: a single bare name here (no "fa-" prefix, no spaces),
-    # and space-separated modifier classes below. This keeps markup/quotes out and
-    # keeps fa_icon a bare name (typing "fa fa-star" or "fa-star" would render wrong).
+    # Font Awesome class tokens: a single bare name here (the shared FA_ICON_VALIDATOR
+    # every icon field uses), and space-separated modifier classes below. This keeps
+    # markup/quotes out and keeps fa_icon a bare name.
     fa_icon = models.TextField(
         null=True, blank=True,
-        validators=[RegexValidator(
-            r'^(?!fa-)[a-z0-9-]*$',
-            'Enter a single Font Awesome icon name in lowercase, e.g. "star" (no "fa-" prefix, no spaces).')],
-        help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
+        validators=[FA_ICON_VALIDATOR],
+        help_text=FA_ICON_HELP_TEXT)
     fa_icon_modifiers = models.CharField(
         max_length=100, blank=True, default='',
         validators=[RegexValidator(
-            r'^[a-z0-9\s-]*$',
+            r'^[a-z0-9\\s-]*$',
             'Enter Font Awesome modifier classes in lowercase, e.g. "fa-rotate-270".')],
         help_text='Optional extra Font Awesome classes applied to the icon, e.g. "fa-rotate-270" to rotate it.')
 
@@ -317,14 +316,8 @@ class Rank(IsAPrereqMixin, models.Model):
     @property
     def fa_icon_class(self):
         """The Font Awesome class list to drop into ``<i class="...">``:
-        ``fa fa-<name>`` plus any ``fa_icon_modifiers``. Returns '' when no icon
-        is set, so a template renders a bare ``<i>`` instead of a stray "fa fa-"."""
-        name = (self.fa_icon or '').strip()
-        if not name:
-            return ''
-        classes = 'fa fa-' + name
-        modifiers = (self.fa_icon_modifiers or '').strip()
-        return classes + ' ' + modifiers if modifiers else classes
+        ``fa fa-<name>`` plus any ``fa_icon_modifiers``."""
+        return fa_icon_class(self.fa_icon, self.fa_icon_modifiers)
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
