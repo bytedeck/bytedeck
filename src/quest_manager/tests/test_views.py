@@ -5352,6 +5352,9 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
 
         cls.campaign_a = baker.make('quest_manager.Category', title='Aardvark Campaign')
         cls.campaign_z = baker.make('quest_manager.Category', title='Zebra Campaign')
+        # all_completed() reads the student's own registration, so their completed tab is
+        # empty without one however many submissions they have
+        baker.make('courses.CourseStudent', user=cls.student, semester=semester)
 
         cls.submissions = []
         for i in range(cls.SUBMISSION_COUNT):
@@ -5517,6 +5520,8 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['sort_column'], 'campaign')
         campaigns = [s.quest.campaign.title for s in response.context['completed_submissions']]
+        # Asserted non-empty: an ordering check passes vacuously on an empty tab
+        self.assertGreater(len(campaigns), 1)
         self.assertEqual(campaigns, sorted(campaigns))
 
     def test_quest_list__a_tab_that_is_not_paginated_offers_no_sort(self):
@@ -5530,6 +5535,169 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.context['sortable_columns'], {})
         self.assertEqual(response.context['sort_column'], '')
+
+
+class SubmissionTabSearchTests(ByteDeckTenantTestCase):
+    """The approvals and submissions tabs search the whole tab, not the page on screen.
+
+    Each searches what its own columns show: the approvals tabs name the student, and the
+    submissions tabs name the campaign and tags. A match the reader cannot see in any
+    column would look like the list ignoring what they typed (#2597).
+    """
+
+    #: More submissions than `paginate`'s default page, so a match can sit on page two.
+    SUBMISSION_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Fill a queue with submissions, and put one distinctive student at the end of it.
+
+        The queue runs newest first, so the student handed in longest ago is on page two:
+        a search confined to the rendered rows could not reach them.
+        """
+        cls.teacher = User.objects.create_user('search_tab_teacher', is_staff=True)
+        cls.filler_student = User.objects.create_user('search_tab_filler')
+        semester = SiteConfig.get().active_semester
+        now = timezone.now()
+
+        cls.campaign = baker.make('quest_manager.Category', title='Cartography Campaign')
+
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(cls.SUBMISSION_COUNT):
+            quest = baker.make(Quest, name=f'Zfiller quest {i:02d}', campaign=cls.campaign)
+            baker.make(
+                QuestSubmission, quest=quest, user=cls.filler_student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=now - timedelta(minutes=i),
+            )
+
+        # Last in, so oldest, so on the far side of the first page
+        cls.needle_student = User.objects.create_user(
+            'zzoldest', first_name='Ignatius', last_name='Featherstonehaugh',
+        )
+        cls.needle_student.profile.preferred_name = 'Iggy'
+        cls.needle_student.profile.save()
+        # all_completed() reads the student's own registration, so the completed tab is
+        # empty without one however many submissions they have
+        baker.make('courses.CourseStudent', user=cls.needle_student, semester=semester)
+        cls.needle_quest = baker.make(Quest, name='Astrolabe Assembly', campaign=cls.campaign)
+        cls.needle_quest.tags.add('navigation')
+        cls.needle = baker.make(
+            QuestSubmission, quest=cls.needle_quest, user=cls.needle_student, semester=semester,
+            is_completed=True, is_approved=False, time_completed=now - timedelta(days=2),
+        )
+        # A second submission of theirs that matches none of the search terms, so the
+        # student's own tab has something for the search to leave out
+        cls.decoy_quest = baker.make(Quest, name='Sundial Basics', campaign=None)
+        cls.decoy = baker.make(
+            QuestSubmission, quest=cls.decoy_quest, user=cls.needle_student, semester=semester,
+            is_completed=True, is_approved=False, time_completed=now - timedelta(days=3),
+        )
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name='quests:submitted_all', **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.quest.name for submission in tab['submissions']]
+
+    def test_approvals__searching_finds_a_submission_that_is_not_on_this_page(self):
+        """The search covers the queue, so it reaches a submission on a later page."""
+        self.assertNotIn('Astrolabe Assembly', self._names())
+
+        self.assertEqual(self._names(q='Astrolabe'), ['Astrolabe Assembly'])
+
+    def test_approvals__searching_matches_every_name_the_user_column_shows(self):
+        """The username and the preferred full name under it are all searchable.
+
+        A teacher types whichever of them they know, so a surname has to find the student
+        whether or not they set a preferred name.
+        """
+        # Searching a student turns up everything of theirs in the queue, not one row
+        for term in ('zzoldest', 'Iggy', 'Featherstonehaugh'):
+            with self.subTest(term=term):
+                self.assertEqual(sorted(self._names(q=term)), ['Astrolabe Assembly', 'Sundial Basics'])
+
+    def test_approvals__searching_matches_the_account_first_name_behind_a_preferred_one(self):
+        """A student's account first name still matches when a preferred name is set.
+
+        `Ignatius` is not on screen, `Iggy` is, but a teacher who only knows the roll can
+        reasonably type either.
+        """
+        self.assertEqual(sorted(self._names(q='Ignatius')), ['Astrolabe Assembly', 'Sundial Basics'])
+
+    def test_approvals__several_words_narrow_the_queue(self):
+        """Every word has to match something, so adding a word cannot widen the results."""
+        self.assertEqual(self._names(q='Astrolabe Iggy'), ['Astrolabe Assembly'])
+        self.assertEqual(self._names(q='Astrolabe Nobody'), [])
+
+    def test_approvals__a_column_this_tab_does_not_show_is_not_searched(self):
+        """The approvals tabs have no campaign or tag column, so neither is searched.
+
+        Matching on something the reader cannot see in any column reads as the list
+        returning rows at random.
+        """
+        self.assertEqual(self._names(q='Cartography'), [])
+        self.assertEqual(self._names(q='navigation'), [])
+
+    def test_quest_list__the_submissions_tab_searches_its_campaign_and_tag_columns(self):
+        """The student's own tabs show campaign and tags, so those are searchable there."""
+        self.client.force_login(self.needle_student)
+        QuestSubmission.objects.filter(pk__in=[self.needle.pk, self.decoy.pk]).update(is_approved=True)
+
+        unsearched = self.client.get(reverse('quests:completed'))
+        self.assertEqual(len(unsearched.context['completed_submissions']), 2)
+
+        for term in ('Astrolabe', 'Cartography', 'navigation'):
+            with self.subTest(term=term):
+                response = self.client.get(reverse('quests:completed'), {'q': term})
+                names = [s.quest.name for s in response.context['completed_submissions']]
+                self.assertEqual(names, ['Astrolabe Assembly'])
+
+    def test_approvals__a_search_that_matches_nothing_says_so_and_keeps_the_box(self):
+        """An empty result explains itself, and the box keeps what was typed to clear it."""
+        response = self.client.get(reverse('quests:submitted_all'), {'q': 'Nothingmatchesthis'})
+
+        self.assertContains(response, 'No submissions in this tab match')
+        self.assertContains(response, 'Nothingmatchesthis')
+        self.assertEqual(response.context['num_matching_submissions'], 0)
+
+    def test_approvals__the_match_count_agrees_with_its_number(self):
+        """One result reads "1 submission matches", not "1 submission match"."""
+        response = self.client.get(reverse('quests:submitted_all'), {'q': 'Astrolabe'})
+
+        self.assertContains(response, '1 submission matches')
+
+    def test_approvals__the_table_carries_no_client_side_search(self):
+        """The tab's searching is the server's, so the table asks bootstrap-table for none.
+
+        bootstrap-table would filter the rows it holds, which is one page, and report
+        nothing found for a student sitting on the next one.
+        """
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotContains(response, 'data-custom-search="multiKeywordSearch"')
+        self.assertNotContains(response, 'data-search="true"')
+        self.assertContains(response, 'name="q"')
+
+    def test_approvals__a_search_and_a_sort_apply_together(self):
+        """Ordering a search reorders its results rather than dropping the search."""
+        names = self._names(q='Zfiller', sort='name')
+
+        self.assertEqual(names[0], 'Zfiller quest 00')
+        for name in names:
+            self.assertTrue(name.startswith('Zfiller quest'), f'{name} is not one of the searched-for quests')
 
 
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
@@ -5618,7 +5786,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions
         appear here
         """
-        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:submitted'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -5632,7 +5800,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__submitted_all_tab(self):
         """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block)
         """
-        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:submitted_all'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -5657,7 +5825,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__approved_tab(self):
         """ Completed quests (submissions) that have been approved by a teacher """
 
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -5725,7 +5893,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
 
     def test_approvals__flagged_tab(self):
         """The flagged tab lists flagged submissions and activates the Flagged tab."""
-        with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -5738,7 +5906,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__approved_for_quest(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved_for_quest', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -5750,7 +5918,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
 
     def test_approvals__approved_for_quest_all(self):
         """The 'all' variant shows approvals of this quest across all semesters (past_approvals_all=True)."""
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved_for_quest_all', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['quest'], self.quest)

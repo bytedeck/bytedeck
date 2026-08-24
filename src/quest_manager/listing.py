@@ -1,9 +1,12 @@
-"""Searching and ordering shared by the quest lists that are paginated a page at a time.
+"""Searching and ordering for the quest lists that are paginated a page at a time.
 
 The deck's quest tabs and the Library's quests tab list the same model through the same
-columns, so they search and order it the same way. Both are paginated, which is why this
-happens in the database: a page is all the browser holds, so filtering or ordering there
-answers a question about the page rather than about the list (#2379, #2410, #2582).
+columns, so they search and order it the same way. The approvals and submissions tabs list
+submissions of those quests, and search them by what their own columns show.
+
+All of it happens in the database because all of these lists are paginated: a page is what
+the browser holds, so filtering or ordering there answers a question about the page rather
+than about the list (#2379, #2410, #2582, #2597).
 """
 from django.db.models import Q
 
@@ -47,3 +50,50 @@ def search_quests(quests, search_term):
         quests = quests.distinct()
 
     return quests
+
+
+def search_submissions(submissions, search_term, *, campaign=False, user=False):
+    """Narrow a submission list to those matching every word of a search term.
+
+    Each tab searches what its own columns show, which is why the two flags exist: the
+    approvals tabs name the student and the submissions tabs name the campaign and tags.
+    Searching a column a tab does not display would return rows whose match the reader
+    cannot see, which reads as the list ignoring what they typed.
+
+    The student is matched on the two things the User column shows: their username, and
+    the preferred full name under it, which is `preferred_name` (falling back to the
+    account's first name) plus the last name. All four are searched, so a teacher who
+    types a surname finds the submission whether or not that student set a preferred name.
+
+    Several words narrow the results rather than widening them, matching the quest lists.
+
+    Args:
+        submissions (QuerySet[QuestSubmission]): the submissions to narrow.
+        search_term (str): what the user typed, or '' for no filtering.
+        campaign (bool): whether this tab shows the quest's campaign and tags.
+        user (bool): whether this tab shows whose submission it is.
+
+    Returns:
+        QuerySet[QuestSubmission]: the matching submissions.
+    """
+    for word in search_term.split():
+        matches = Q(quest__name__icontains=word)
+
+        if campaign:
+            matches |= Q(quest__campaign__title__icontains=word) | Q(quest__tags__name__icontains=word)
+
+        if user:
+            matches |= (
+                Q(user__username__icontains=word)
+                | Q(user__profile__preferred_name__icontains=word)
+                | Q(user__first_name__icontains=word)
+                | Q(user__last_name__icontains=word)
+            )
+
+        submissions = submissions.filter(matches)
+
+    if search_term and campaign:
+        # distinct() because the tags join multiplies a submission by its matching tags
+        submissions = submissions.distinct()
+
+    return submissions

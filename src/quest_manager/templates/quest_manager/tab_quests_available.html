@@ -35,7 +35,7 @@
 </form>
 
 {% if search_term %}
-  <p class="text-muted">{{ num_matching_quests }} quest{{ num_matching_quests|pluralize }} match "{{ search_term }}".</p>
+  <p class="text-muted">{{ num_matching_quests }} quest{{ num_matching_quests|pluralize }} match{{ num_matching_quests|pluralize:"es," }} "{{ search_term }}".</p>
 {% endif %}
 
 {% if bulk_edit_mode %}
