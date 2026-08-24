@@ -13,10 +13,15 @@ from prerequisites.admin import PrereqInline
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from quest_manager.models import Quest
 
+from utilities.fa_icon import bare_icon_name
+from .forms import BadgeRarityForm
 from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion, BadgeRarity
 
 
 class BadgeRarityAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    # The admin is the only place rarities are edited, so the icon picker is wired
+    # in here rather than on a site form.
+    form = BadgeRarityForm
     list_display = ('name', 'percentile', 'color', 'fa_icon')
 
 
@@ -130,7 +135,9 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
         bt_icon = row['badge_type_icon']
 
         if bt_name:
-            defaults = {'fa_icon': bt_icon}
+            # A CSV exported by a deck running an older version carries the icon with
+            # its "fa-" prefix, so it is reduced to the bare name the field holds now.
+            defaults = {'fa_icon': bare_icon_name(bt_icon)}
 
             # if bt_sort is None badge creation will throw an error
             if bt_sort:
