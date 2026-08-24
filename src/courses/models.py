@@ -292,7 +292,7 @@ class Rank(IsAPrereqMixin, models.Model):
     fa_icon_modifiers = models.CharField(
         max_length=100, blank=True, default='',
         validators=[RegexValidator(
-            r'^[a-z0-9\\s-]*$',
+            r'^[a-z0-9\s-]*$',
             'Enter Font Awesome modifier classes in lowercase, e.g. "fa-rotate-270".')],
         help_text='Optional extra Font Awesome classes applied to the icon, e.g. "fa-rotate-270" to rotate it.')
 
