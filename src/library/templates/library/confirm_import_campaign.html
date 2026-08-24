@@ -21,19 +21,39 @@
       </p>
     </div>
   {% else %}
-    <form action="" method="post">
+    <form action="" method="post" id="import-form">
       {% csrf_token %}
       <a href="{% url 'library:category_list' %}"
          role="button"
          class="btn btn-info">Cancel</a>
       <input type="submit" value="Import" class="btn btn-success" />
     </form>
-    {% if local_quest_import_ids %}
-      <div class="alert alert-danger panel-top">
-        <strong>Warning:</strong> One or more quests in this campaign already exist in your deck;
-        they are indicated with this icon <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the quest list below.
-        Importing this campaign will <strong>overwrite</strong> those existing quests with the versions from the library.
-        You will lose any local changes.
+    {% if preservable_quests %}
+      <div class="alert alert-warning panel-top">
+        <strong>Your deck already has {{ preservable_quests|length|pluralize:"this quest,these quests" }}</strong>
+        (marked with <i class="icon-spacing fa fa-fw fa-exclamation-triangle"></i> in the list below).
+        Importing replaces the wording, name, {{ config.custom_name_for_tag|lower }}s and questions of
+        {{ preservable_quests|length|pluralize:"your copy,your copies" }} with the Library's version. Your own
+        prerequisites, and whether you had published
+        {{ preservable_quests|length|pluralize:"it,them" }}, are kept either way.
+        <p class="panel-top">
+          Tick any you would rather keep exactly as they are:
+        </p>
+        <ul class="list-unstyled">
+          {% for quest in preservable_quests %}
+            <li>
+              <label class="form-check-label">
+                <input type="checkbox" name="preserve" value="{{ quest.import_id }}" form="import-form" />
+                Keep my version of <strong>{{ quest.name }}</strong>
+              </label>
+            </li>
+          {% endfor %}
+        </ul>
+        <p>
+          Whichever you keep still joins this campaign, so it is not left out of it. The campaign
+          arrives unpublished, and quests in an unpublished campaign are hidden from students, so a
+          quest you keep will disappear from them until you publish the campaign.
+        </p>
       </div>
     {% endif %}
     {% if colliding_names %}
