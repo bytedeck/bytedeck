@@ -5,7 +5,7 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import F, Q
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -25,6 +25,7 @@ from quest_manager.models import Quest, Category
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.tasks import send_email_message
+from utilities.sorting import apply_sort, resolve_sort
 
 from notifications.signals import notify
 
@@ -610,38 +611,19 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     def get_sort(self):
         """The column the list is ordered by and its direction, from the `sort` parameter.
 
-        A leading '-' asks for the reverse, which is Django's own `order_by` spelling and
-        what the heading links carry. A column this tab does not offer is ignored rather
-        than refused, so a stale or hand-made link falls back to the Library's own order
-        instead of erroring.
-
         Returns:
             tuple[str, bool]: the column key, '' when none applies, and whether it was
             asked for in reverse.
         """
-        requested = self.request.GET.get('sort', '')
-        descending = requested.startswith('-')
-        column = requested[1:] if descending else requested
-
-        if column not in self.SORT_COLUMNS:
-            return '', False
-
-        return column, descending
+        return resolve_sort(self.request, self.SORT_COLUMNS)
 
     def sort_library_quests(self, quests, column, descending):
         """Order the quests by the chosen column, before the page is cut from them.
 
         Ordering has to happen here rather than in the browser, because the browser only
         holds one page: sorting there answers a question about the page, not about the
-        Library.
-
-        `name` is appended as a tie-break so the ordering is total. Without it, rows
-        sharing an XP value have no defined order between them, and Postgres is free to
-        return them differently on each query, which lets a quest appear on two pages or
-        on neither as the reader pages through.
-
-        Quests with no campaign sort last either way, rather than filling the first page
-        with blanks when the reader asked to see the list by campaign.
+        Library. `name` settles quests that tie, so paging through a sorted Library shows
+        each one exactly once, and quests with no campaign sort last either way.
 
         Args:
             quests (QuerySet[Quest]): the quests to order.
@@ -651,13 +633,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         Returns:
             QuerySet[Quest]: the ordered quests.
         """
-        if not column:
-            return quests
-
-        field = F(self.SORT_COLUMNS[column])
-        ordering = field.desc(nulls_last=True) if descending else field.asc(nulls_last=True)
-
-        return quests.order_by(ordering, 'name')
+        return apply_sort(quests, self.SORT_COLUMNS, column, descending, tie_break='name')
 
     def get_library_quests(self, search_term):
         """The listable Library quests, narrowed by the search term.
