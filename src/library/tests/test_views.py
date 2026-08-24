@@ -642,7 +642,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:import_category', args=[self.library_category.import_id])
         self.assert200('library:category_detail_view', args=[self.library_category.import_id])
 
-    def test_import_campaign___already_exists(self):
+    def test_ImportCampaignView__already_exists(self):
         """Importing a campaign already present on the deck shows a matching-name warning."""
         self.client.force_login(self.test_teacher)
         with library_schema_context():
@@ -657,7 +657,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign__post_when_campaign_exists_locally_is_refused(self):
+    def test_ImportCampaignView__post_when_campaign_exists_locally_is_refused(self):
         """POSTing to import a campaign whose import_id already exists on the local deck imports nothing.
 
         The refusal is a redirect carrying an explanation rather than a 403, since the deck
@@ -690,7 +690,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertEqual(response.context['quest_info'], [])
         self.assertEqual(list(response.context['category_displayed_quests']), [])
 
-    def test_import_campaign___success(self):
+    def test_ImportCampaignView__success(self):
         """Importing a library campaign copies it and its quests as unpublished onto the deck."""
         self.client.force_login(self.test_teacher)
         # Capture baseline to assert relative change after import
@@ -726,7 +726,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
-    def test_import_campaign_get__identifies_existing_local_quests(self):
+    def test_ImportCampaignView__get_identifies_existing_local_quests(self):
         """
         Ensure the import campaign view correctly identifies which quests from the
         selected library campaign already exist locally and includes their import IDs
@@ -812,7 +812,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         if campaign:
             self.assertContains(response, campaign.name)
 
-    def test_import_campaign__preserves_local_quest_visibility(self):
+    def test_ImportCampaignView__preserves_local_quest_visibility(self):
         """
         Tests that importing a campaign preserves the local visibility state of existing quests.
 
@@ -926,7 +926,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertContains(response, published_campaign.title)
         self.assertNotContains(response, unpublished_campaign.title)
 
-    def test_import_campaign_view__shows_only_current_quests(self):
+    def test_ImportCampaignView__shows_only_current_quests(self):
         """
         Only current quests (published and not archived) should be shown when confirming a campaign import.
         """
@@ -1553,7 +1553,7 @@ class SharedLibraryDisabledTests(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists())
 
-    def test_import_campaign_post__does_nothing_when_shared_library_disabled(self):
+    def test_ImportCampaignView__post_does_nothing_when_shared_library_disabled(self):
         """A POST to the campaign import URL cannot pull content onto an opted-out deck."""
         response = self.client.post(reverse('library:import_category', args=[self.library_campaign.import_id]))
 
@@ -1609,14 +1609,14 @@ class UnreviewedLibraryContentTests(LibraryTenantTestCaseMixin):
         self.assertRedirects(response, reverse('library:quest_list'))
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.pending_quest.import_id).exists())
 
-    def test_import_campaign_get__redirects_when_campaign_awaits_review(self):
+    def test_ImportCampaignView__get_redirects_when_campaign_awaits_review(self):
         """The confirmation page for an unpublished Library campaign sends the user back with a warning."""
         response = self.client.get(reverse('library:import_category', args=[self.pending_campaign.import_id]))
 
         self.assertRedirects(response, reverse('library:category_list'))
         self.assertWarningMessage(response)
 
-    def test_import_campaign_post__refuses_a_campaign_awaiting_review(self):
+    def test_ImportCampaignView__post_refuses_a_campaign_awaiting_review(self):
         """Posting the import URL for an unpublished Library campaign imports nothing, quests included."""
         response = self.client.post(reverse('library:import_category', args=[self.pending_campaign.import_id]))
 
@@ -1919,7 +1919,7 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
             f'href="{reverse("quests:quest_prereqs_update", args=[imported.id])}">prerequisite</a>', message
         )
 
-    def test_import_campaign_post__tells_the_user_to_publish_and_add_a_prerequisite(self):
+    def test_ImportCampaignView__post_tells_the_user_to_publish_and_add_a_prerequisite(self):
         """The campaign import message names both remaining steps."""
         response = self.client.post(
             reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True
