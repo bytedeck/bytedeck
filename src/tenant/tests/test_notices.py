@@ -11,7 +11,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 from siteconfig.models import SiteConfig
 from tenant.models import GRACE_PERIOD_DAYS, DeckNotice, Tenant
-from tenant.notices import evaluate_deck_notices, process_deck_notices
+from tenant.notices import RENEWAL_NOTICE_DAYS, evaluate_deck_notices, process_deck_notices
 from tenant.utils import deck_cache_key
 
 # Frozen mid-day UTC so timezone.localdate() (America/Vancouver) is the same calendar date.
@@ -55,22 +55,28 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=TODAY + timedelta(days=10))
         self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd14', str(TODAY + timedelta(days=10)))])
 
-    def test_evaluate__daily_inside_final_week_and_through_grace(self):
-        """After the milestones, one notice per day fires inside the final week, and keeps
-        firing through the paid grace window (negative days)."""
+    def test_evaluate__d1_is_the_last_notice_and_the_grace_window_is_quiet(self):
+        """d1 is the end of the cadence: the day before the deadline is the last
+        reminder, and the deck hears nothing more about that deadline, neither on
+        the days between milestones nor through the grace window that follows."""
         deadline = TODAY + timedelta(days=3)
         self.set_deck(trial_end_date=None, paid_until=deadline)
         process_deck_notices(self.tenant)  # consumes d7 (and only d7)
         self.assertEqual(DeckNotice.objects.filter(tenant=self.tenant).count(), 1)
 
-        with freeze_time("2026-08-16 20:00:00"):
-            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(deadline))])
-            process_deck_notices(self.tenant)
-            self.assertEqual(self.due(), [])  # once per day only
+        with freeze_time("2026-08-16 20:00:00"):  # 2 days out: inside d7, already sent
+            self.assertEqual(self.due(), [])
 
-        # 10 days after the deadline: in grace (30-day window), daily continues
+        with freeze_time("2026-08-17 20:00:00"):  # 1 day out: the final milestone
+            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd1', str(deadline))])
+            process_deck_notices(self.tenant)
+            self.assertEqual(self.due(), [])
+
+        # 10 days past the deadline, inside the 30-day grace window: still quiet.
+        # The deck is fully usable in there, and the suspension notice covers the
+        # moment that stops being true.
         with freeze_time("2026-08-28 20:00:00"):
-            self.assertIn((DeckNotice.KIND_EXPIRY, 'daily-2026-08-28', str(deadline)), self.due())
+            self.assertEqual(self.due(), [])
 
     def test_evaluate__beat_outage_catches_up_with_one_notice(self):
         """If beat is down for days, the next run sends one catch-up notice, not a backlog."""
@@ -78,7 +84,7 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         # no runs happen for 4 days...
         with freeze_time("2026-08-19 20:00:00"):
             due = self.due()
-            self.assertEqual(len(due), 1)  # just d7 (unfired), not four daily notices
+            self.assertEqual(len(due), 1)  # just d7 (the unfired milestone), never a backlog
 
     def test_evaluate__renewal_re_arms_the_cadence(self):
         """Advancing paid_until (a renewal) re-arms the milestones via the new period_key."""
@@ -155,6 +161,61 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=TODAY + timedelta(days=90))
         self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
 
+    def test_evaluate__auto_renewing_deck_gets_one_renewal_notice_not_the_expiry_cadence(self):
+        """An auto-renewing deck never gets the "renew or lose access" cadence:
+        nothing is expiring on it. It gets exactly ONE heads-up inside the
+        renewal window, and silence on every later day of that period (#2586)."""
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        self.set_deck(trial_end_date=None, paid_until=renews_on, stripe_auto_renews=True)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(renews_on))])
+
+        process_deck_notices(self.tenant)
+        self.assertEqual(self.due(), [])  # exactly one per renewal
+
+        # every remaining day before the charge stays quiet, including the day itself
+        with freeze_time(f"{renews_on} 20:00:00"):  # the renewal day itself
+            self.assertEqual(self.due(), [])
+
+    def test_evaluate__renewal_notice_waits_for_its_window_and_re_arms_next_period(self):
+        """Outside the window a renewing deck hears nothing at all (no d30/d14
+        milestones), and the next period's renewal gets its own notice because
+        the ledger key is the date being renewed."""
+        self.set_deck(trial_end_date=None, paid_until=TODAY + timedelta(days=30), stripe_auto_renews=True)
+        self.assertEqual(self.due(), [])  # d30 would have fired for a non-renewing deck
+
+        self.set_deck(paid_until=TODAY + timedelta(days=RENEWAL_NOTICE_DAYS))
+        process_deck_notices(self.tenant)
+        self.assertEqual(self.due(), [])
+
+        # a year on, the renewed period comes back around
+        next_renewal = TODAY + timedelta(days=372)
+        with freeze_time("2027-08-15 20:00:00"):
+            self.set_deck(paid_until=next_renewal)
+            self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(next_renewal))])
+
+    def test_evaluate__renewal_notice_counts_to_the_billing_date_not_a_longer_trial(self):
+        """On a deck carrying a trial date that outlasts its paid period, the
+        renewal notice follows paid_until: that is the day Stripe charges, while
+        the governing deadline (the trial) is only when access would end. It
+        fires in the window before the charge and is keyed to it, so the later
+        trial date neither delays the notice nor labels it (#2588 review find)."""
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        self.set_deck(
+            trial_end_date=TODAY + timedelta(days=90), paid_until=renews_on, stripe_auto_renews=True)
+        self.assertEqual(self.tenant.governing_deadline, TODAY + timedelta(days=90))  # the trial governs access
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(renews_on))])
+
+    def test_evaluate__expiry_cadence_returns_when_the_subscription_stops_renewing(self):
+        """Cancelling at period end (or a renewal that starts failing) clears the
+        Stripe flag, and the deck goes straight back onto the expiry cadence so
+        its owner is warned before access ends."""
+        deadline = TODAY + timedelta(days=7)
+        self.set_deck(trial_end_date=None, paid_until=deadline, stripe_auto_renews=True)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_RENEWAL, 'upcoming', str(deadline))])
+
+        self.set_deck(stripe_auto_renews=False)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(deadline))])
+
     def test_evaluate__unlimited_deck_gets_no_limit_warnings(self):
         """The -1 unlimited sentinel disables limit warnings entirely."""
         self.set_deck(max_active_users=-1, paid_until=TODAY + timedelta(days=90), active_user_count=999)
@@ -187,15 +248,16 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
             self.assertEqual(self.due(), [])  # still just the one
 
     def test_evaluate__lapsed_trial_stays_on_expiry_cadence_through_grace(self):
-        """A lapsed trial inside its grace window is NOT suspended: it stays on the
-        expiry-reminder cadence (daily after the milestone), exactly like a lapsed
-        paid deck (#1734 B4)."""
+        """A lapsed trial inside its grace window is NOT suspended: it is still on
+        the expiry cadence, exactly like a lapsed paid deck (#1734 B4), so a deck
+        that was never reminded still gets the final milestone (d1). Once that is
+        spent the grace window runs out quietly."""
         lapsed = TODAY - timedelta(days=10)
         self.set_deck(trial_end_date=lapsed, paid_until=None)
-        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd7', str(lapsed))])  # no suspension notice
+        self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd1', str(lapsed))])  # no suspension notice
         process_deck_notices(self.tenant)
         with freeze_time("2026-08-16 20:00:00"):
-            self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'daily-2026-08-16', str(lapsed))])
+            self.assertEqual(self.due(), [])
 
 
 @freeze_time(NOW)
@@ -247,6 +309,44 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         if config.deck_ai == config.deck_owner:
             config.deck_ai = get_user_model().objects.create(username='deck_ai_bot', is_staff=True)
             config.save()
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process__renewal_email_says_it_renews_and_asks_for_nothing(self):
+        """The renewal email states the date and that nothing is required, and
+        carries none of the expiry cadence's "subscribe or lose access" pressure
+        (#2586). Its in-app notification says the same in one line.
+
+        The deck here also carries a trial date that outlasts its paid period, so
+        the email has to keep the two straight: it renews on the BILLING date,
+        while cancelling would leave access running to the later governing
+        deadline (#2588 review find)."""
+        from django.utils.formats import date_format
+
+        renews_on = TODAY + timedelta(days=RENEWAL_NOTICE_DAYS)
+        access_until = TODAY + timedelta(days=90)
+        Tenant.objects.filter(pk=self.tenant.pk).update(
+            trial_end_date=access_until, paid_until=renews_on, stripe_auto_renews=True, active_user_count=0)
+        self.tenant.refresh_from_db()
+
+        self.run_engine_with_inline_email()
+
+        self.assertEqual(len(mail.outbox), 1)
+        body = mail.outbox[0].body
+        text = ' '.join(body.split())  # textify hard-wraps lines
+        self.assertIn(f'renews automatically on {date_format(renews_on)}', text)
+        self.assertIn(f'({RENEWAL_NOTICE_DAYS} days from now)', text)
+        self.assertIn(f'stays fully available through {date_format(access_until)}', text)
+        self.assertIn('nothing you need to do', body)
+        # none of the expiry cadence's act-or-lose-access pressure (those emails say
+        # "to keep full access" / "Subscribe here to restore access"); this email
+        # mentions suspension only to explain what cancelling would eventually lead to
+        self.assertNotIn('to keep full access', body)
+        self.assertNotIn('Subscribe here', body)
+        self.assertNotIn('to restore access', body)
+        # the in-app line names the billing date too, not the deck's longer trial
+        notification = Notification.objects.get(
+            recipient=SiteConfig.get().deck_owner, verb__contains='renewal reminder')
+        self.assertIn(f'renews automatically on {date_format(renews_on)}', notification.verb)
 
     def test_process__report_only_by_default_sends_and_records_nothing(self):
         """With DECK_NOTICES_ENABLED off (the default), the engine only reports."""

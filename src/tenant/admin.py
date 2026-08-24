@@ -156,7 +156,7 @@ class TenantAdmin(PublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     )
     # the request fields are written by the owner's subscription-page actions, so
     # the admin shows them for review without offering to edit them
-    readonly_fields = ('deletion_requested_on', 'deletion_requested_by')
+    readonly_fields = ('deletion_requested_on', 'deletion_requested_by', 'stripe_auto_renews')
 
     class Media:
         """Extra assets for the changelist: the Subscription column's badge

@@ -1071,6 +1071,27 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.staff)
         self.get_page()
 
+    def test_page__auto_renewing_deck_reads_as_renewing_not_expiring(self):
+        """An auto-renewing subscription says what actually happens on its date:
+        it renews and the card is charged, with the Dates row labelled "Renews
+        on" rather than "Paid until" (#2586). The same deck set to cancel goes
+        back to expiry wording."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(paid_until=localdate() + timedelta(days=10), stripe_auto_renews=True)
+        response = self.get_page()
+        self.assertContains(response, 'Renews automatically on')
+        self.assertContains(response, 'Renews on')
+        self.assertContains(response, 'renews in 10 days')
+        self.assertNotContains(response, 'Paid until')
+
+        self.set_deck(stripe_auto_renews=False)  # cancelled at period end
+        response = self.get_page()
+        self.assertContains(response, 'Paid until')
+        self.assertNotContains(response, 'Renews automatically on')
+
     def test_page__shows_dates_seats_and_status(self):
         """A subscribed deck shows its status, the governing date, days remaining,
         and the three seat rows (maximum / current / remaining)."""
