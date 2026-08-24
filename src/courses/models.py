@@ -20,6 +20,7 @@ from badges.models import BadgeAssertion
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
+from utilities.signals import disable_for_loaddata
 
 
 def split_xp_between_registrations(registrations, total, xp_by_course):
@@ -1307,6 +1308,7 @@ class CourseStudent(models.Model):
 
 
 @receiver(post_save, sender=CourseStudent)
+@disable_for_loaddata
 def coursestudent_post_save_callback(instance, **kwargs):
     """Work out the student's cached XP and mark again, because their registrations decide both.
 
@@ -1328,6 +1330,7 @@ def coursestudent_post_save_callback(instance, **kwargs):
 
 
 @receiver(post_save, sender=CourseStudent)
+@disable_for_loaddata
 def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     """Bring the quests a student had on the go into the semester they have just joined.
 
@@ -1336,12 +1339,9 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     of their in-progress list, which is their new semester's, and out of their available
     list, which drops a quest they already have a submission of.
 
-    Deserializing a fixture is sat out: Django sends raw=True for those saves, and the
-    submissions this moves are read from the database, which is only part loaded then.
+    Deserializing a fixture is sat out (issue #2548): the submissions this moves are read
+    from a database that is only part loaded then.
     """
-    if kwargs.get('raw'):
-        return
-
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if created and instance.semester_id is not None and instance.semester.is_open:
@@ -1349,6 +1349,7 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
 
 
 @receiver(post_save, sender=Semester)
+@disable_for_loaddata
 def semester_adopt_unstamped_work_callback(instance, **kwargs):
     """Bring the work a pre-registered student had on the go into their semester as it opens.
 
@@ -1364,13 +1365,10 @@ def semester_adopt_unstamped_work_callback(instance, **kwargs):
     be started from the admin as well as through SiteConfig.set_active_semester(), and
     adopting when there is nothing left to adopt moves no rows.
 
-    Deserializing a fixture is sat out, the same as its counterpart above: Django sends
-    raw=True for those saves, and both the registrations this reads and the submissions it
-    moves come from a database that is only part loaded then.
+    Deserializing a fixture is sat out, the same as its counterpart above (issue #2548):
+    both the registrations this reads and the submissions it moves come from a database
+    that is only part loaded then.
     """
-    if kwargs.get('raw'):
-        return
-
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if instance.is_open:

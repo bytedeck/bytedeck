@@ -13,6 +13,7 @@ from prerequisites.tasks import (
 )
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
+from utilities.signals import disable_for_loaddata
 
 User = get_user_model()
 
@@ -43,6 +44,7 @@ def _delete_originated_from_user(origin):
 
 
 @receiver([post_save, post_delete], dispatch_uid="prerequisites.signals.update_cache_triggered_by_task_completion")
+@disable_for_loaddata
 def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs):
     """ When a user completes a task (e.g. earns a badge, has a quest submission approved or rejected, or joins a course)
     Recalculate what is available to them.
@@ -84,11 +86,13 @@ def update_cache_triggered_by_task_completion(sender, instance, *args, **kwargs)
 
 # @receiver([post_save, post_delete], sender=Prereq)
 @receiver([post_save, post_delete], sender=Badge, dispatch_uid="prerequisites.signals.update_conditions_met")
+@disable_for_loaddata
 def update_conditions_met(sender, instance, *args, **kwargs):
     update_quest_conditions_all_users.apply_async(args=[1], queue='default', countdown=settings.CONDITIONS_UPDATE_COUNTDOWN)
 
 
 @receiver([post_save], sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quest_without_prereqs")
+@disable_for_loaddata
 def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest does not contain any prerequisites
@@ -98,6 +102,7 @@ def update_cache_triggered_by_quest_without_prereqs(sender, instance, *args, **k
 
 
 @receiver(post_save, sender=Quest, dispatch_uid="prerequisites.signals.update_cache_triggered_by_quests_available_outside_course")
+@disable_for_loaddata
 def update_cache_triggered_by_quests_available_outside_course(sender, instance, created, update_fields, *args, **kwargs):
     """
     Handle a specific case where available quests is not updated if the Quest is available outside a course
@@ -107,6 +112,7 @@ def update_cache_triggered_by_quests_available_outside_course(sender, instance, 
 
 
 @receiver([post_save, post_delete], sender=Prereq, dispatch_uid="prerequisites.signals.update_cache_triggered_by_prereq")
+@disable_for_loaddata
 def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
     """ Update the cache of available quests (PreqAllConditionsMet) for relevant users when Prereq objects are changed,
     If the parent of the Prereq object is a quest. (i.e a quest's prereqs were changed)
@@ -124,6 +130,7 @@ def update_cache_triggered_by_prereq(sender, instance, *args, **kwargs):
 
 
 @receiver(post_save, sender=Prereq)
+@disable_for_loaddata
 def on_quest_badge_save_with_rank_prereq(sender, instance, *args, **kwargs):
     """ Handles the post-save signal for Prereq objects to ensure the creation of a CytoScape map if certain conditions are met.
 

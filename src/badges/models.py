@@ -18,6 +18,7 @@ from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
 from notifications.models import notify_rank_up
+from utilities.signals import disable_for_loaddata
 
 
 # Create your models here.
@@ -676,6 +677,7 @@ class BadgeAssertion(models.Model):
 
 # only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
+@disable_for_loaddata
 def post_save_receiver(sender, **kwargs):
     assertion = kwargs["instance"]
     if kwargs["created"]:
