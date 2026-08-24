@@ -40,7 +40,7 @@ from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 User = get_user_model()
@@ -5177,6 +5177,211 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         # no button returns 404
         response = self.client.post(**post_request)
         self.assertEqual(response.status_code, 404)
+
+
+class SubmissionTabSortTests(ByteDeckTenantTestCase):
+    """The approvals and submissions tabs order the whole tab, not one page of it.
+
+    Both are paginated, so the browser holds a page rather than the list. A sort applied
+    there answers a question about that page: which of these thirty was handed in first,
+    rather than which submission in the queue was (#2582).
+    """
+
+    #: More submissions than `paginate`'s default page, so the list spills onto a second page.
+    SUBMISSION_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Hand in one submission per quest, each a minute earlier than the last.
+
+        The queue's own order is newest first, so the oldest submissions are the ones left
+        on page two. XP climbs with age, which puts the highest-XP submissions there too:
+        a sort that only reached the current page could not bring them forward.
+        """
+        cls.teacher = User.objects.create_user('sort_tab_teacher', is_staff=True)
+        cls.student = User.objects.create_user('sort_tab_student')
+        semester = SiteConfig.get().active_semester
+
+        cls.campaign_a = baker.make('quest_manager.Category', title='Aardvark Campaign')
+        cls.campaign_z = baker.make('quest_manager.Category', title='Zebra Campaign')
+
+        cls.submissions = []
+        for i in range(cls.SUBMISSION_COUNT):
+            quest = baker.make(
+                Quest,
+                name=f'Zsort quest {i:02d}',
+                # From 5 up, so a skipped submission's 0 and a small requested amount
+                # are both below every quest here rather than tying with one
+                xp=i + 5,
+                campaign=cls.campaign_a if i % 2 else cls.campaign_z,
+            )
+            cls.submissions.append(baker.make(
+                QuestSubmission,
+                quest=quest,
+                user=cls.student,
+                semester=semester,
+                is_completed=True,
+                is_approved=False,
+                time_completed=timezone.now() - timedelta(minutes=i),
+            ))
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name, **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.quest.name for submission in tab['submissions']]
+
+    def test_approvals__sorting_reaches_submissions_that_are_not_on_the_current_page(self):
+        """Sorting by XP brings the queue's highest-XP submissions onto the first page.
+
+        Those sit on page two in the default order, so a sort confined to the rows the
+        browser holds could never surface them.
+        """
+        default_first_page = self._names('quests:submitted_all')
+        highest_xp_first = self._names('quests:submitted_all', sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_approvals__a_sort_applies_ascending_and_reverses_with_a_leading_minus(self):
+        """`?sort=name` runs A to Z and `?sort=-name` runs the other way."""
+        ascending = self._names('quests:submitted_all', sort='name')
+        descending = self._names('quests:submitted_all', sort='-name')
+
+        self.assertEqual(ascending[0], 'Zsort quest 00')
+        self.assertEqual(descending[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+
+    def test_approvals__sorting_by_status_orders_by_the_time_the_column_shows(self):
+        """The Status column shows when a submission was handed in, and sorts by that.
+
+        The fixture hands each one in a minute earlier than the last, so ordering by status
+        ascending puts the oldest first, which is the order a teacher works a queue in.
+        """
+        oldest_first = self._names('quests:submitted_all', sort='status')
+
+        self.assertEqual(oldest_first[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+
+    def test_approvals__the_in_progress_tab_offers_no_sort_by_status(self):
+        """In progress submissions show no time under Status, so it is not a sort link.
+
+        Offering it would move nothing while still looking like a control that works.
+        """
+        response = self.client.get(reverse('quests:in_progress'))
+
+        self.assertNotIn('status', response.context['sortable_columns'])
+        self.assertNotContains(response, 'sort=status')
+
+    def test_approvals__the_many_valued_columns_are_not_sort_links(self):
+        """A submission's blocks have no single value to order by, so that column is plain.
+
+        The same reasoning the Library's quests tab applied to its tags (#2410).
+        """
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotIn('group_name', response.context['sortable_columns'])
+        self.assertNotContains(response, 'sort=group_name')
+        # bootstrap-table's own sort would reorder the page underneath the links
+        self.assertNotContains(response, 'data-sortable="true"')
+
+    def test_approvals__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
+        default_order = self._names('quests:submitted_all')
+
+        for unknown in ('group_name', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('quests:submitted_all'), {'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self._names('quests:submitted_all', sort=unknown), default_order)
+                self.assertEqual(response.context['sort_column'], '')
+                self.assertFalse(response.context['sort_descending'])
+
+    def test_approvals__a_skipped_submission_sorts_by_the_zero_it_shows(self):
+        """A skipped submission grants no XP and shows 0, so it sorts as 0, not as its quest's XP.
+
+        Its quest is worth more than any other here, so ordering by `quest__xp` would put
+        it last ascending, while the reader is looking at a 0 in that cell.
+        """
+        rich_quest = baker.make(Quest, name='Zsort skipped quest', xp=999)
+        baker.make(
+            QuestSubmission, quest=rich_quest, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, do_not_grant_xp=True,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort skipped quest')
+
+    def test_approvals__a_student_entered_xp_submission_sorts_by_what_was_requested(self):
+        """A quest whose XP the student enters sorts by the requested amount it shows.
+
+        The quest is worth 999 but the student asked for 1, and 1 is what the cell shows.
+        """
+        student_priced = baker.make(
+            Quest, name='Zsort requested quest', xp=999, xp_can_be_entered_by_students=True,
+        )
+        baker.make(
+            QuestSubmission, quest=student_priced, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, xp_requested=1,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+        highest_xp_first = self._names('quests:submitted_all', sort='-xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort requested quest')
+        self.assertNotEqual(highest_xp_first[0], 'Zsort requested quest')
+
+    def test_approvals__the_headings_link_to_the_server_and_start_a_new_first_page(self):
+        """A heading is a link carrying `sort=`, and drops the page it was clicked from.
+
+        Page 2 of a queue by name holds different submissions than page 2 of it by XP.
+        """
+        response = self.client.get(reverse('quests:submitted_all'), {'page': 2})
+
+        self.assertContains(response, 'sort=xp')
+        self.assertNotContains(response, 'sort=xp&amp;page=2')
+
+    def test_quest_list__the_completed_tab_sorts_by_campaign(self):
+        """A student's own submissions tab sorts on the server too, campaign included."""
+        self.client.force_login(self.student)
+        for submission in self.submissions:
+            QuestSubmission.objects.filter(pk=submission.pk).update(is_approved=True)
+
+        response = self.client.get(reverse('quests:completed'), {'sort': 'campaign'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['sort_column'], 'campaign')
+        campaigns = [s.quest.campaign.title for s in response.context['completed_submissions']]
+        self.assertEqual(campaigns, sorted(campaigns))
+
+    def test_quest_list__a_tab_that_is_not_paginated_offers_no_sort(self):
+        """The available tab's headings stay plain until that tab is paginated too.
+
+        Its list is sent whole, so its client-side sort still reaches every row it holds.
+        """
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.context['sortable_columns'], {})
+        self.assertEqual(response.context['sort_column'], '')
 
 
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
