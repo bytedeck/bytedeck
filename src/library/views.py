@@ -5,7 +5,6 @@ from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -25,6 +24,7 @@ from quest_manager.models import Quest, Category
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.tasks import send_email_message
+from quest_manager.listing import QUEST_SORT_COLUMNS, search_quests
 from utilities.sorting import apply_sort, resolve_sort
 
 from notifications.signals import notify
@@ -571,14 +571,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     #: Quests per page, matching the campaigns tab.
     paginate_by = 15
 
-    #: The columns this tab can be ordered by, mapped to the field the database orders on.
-    #: Tags are deliberately absent: a quest carries any number of them, so there is no one
-    #: value to order it by, and the search box already finds the quests carrying a given one.
-    SORT_COLUMNS = {
-        'name': 'name',
-        'xp': 'xp',
-        'campaign': 'campaign__title',
-    }
+    #: The columns this tab can be ordered by, shared with the deck's own quest tabs since
+    #: both list the same model through the same columns.
+    SORT_COLUMNS = QUEST_SORT_COLUMNS
 
     def get_search_term(self):
         """The search term the user typed, from the `q` query parameter.
@@ -645,9 +640,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         which is what the column headings promise the reader they can search by. Several
         words narrow the results rather than widening them: every word has to match
         something, though not all the same thing, so "recursion python" finds the quest
-        named "Recursion: base cases" that is tagged python. That is how the search box
-        behaved when it filtered rows in the browser, and it is the more useful of the two
-        readings once the Library is big enough to need narrowing.
+        named "Recursion: base cases" that is tagged python. Narrowing is the more useful
+        of the two readings once the Library is big enough to need searching at all.
 
         Args:
             search_term (str): what the user typed, or '' for no filtering.
@@ -657,18 +651,7 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         quests = library_listable_quests().select_related('campaign').prefetch_related('tags')
 
-        for word in search_term.split():
-            quests = quests.filter(
-                Q(name__icontains=word)
-                | Q(campaign__title__icontains=word)
-                | Q(tags__name__icontains=word)
-            )
-
-        if search_term:
-            # distinct() because the tags join multiplies a quest by its matching tags
-            quests = quests.distinct()
-
-        return quests
+        return search_quests(quests, search_term)
 
     def get_context_data(self, **kwargs):
         """

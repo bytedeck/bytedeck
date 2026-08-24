@@ -23,10 +23,10 @@
       <tr class="panel-heading">
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
         {% comment %}
-          The headings link to the server rather than carrying data-sortable, so they order
-          the whole tab instead of the page the browser happens to hold (#2582). A column
-          only becomes a link when this tab offers it: the {group} blocks and the quest's
-          tags are many-valued, and the in-progress tabs show no time under Status.
+          The headings link back to the view, so the ordering is applied to every submission
+          in the tab before the page is cut from it (#2582). A column only becomes a link
+          when this tab offers it: the {group} blocks and the quest's tags are many-valued,
+          and the in-progress tabs show no time under Status.
         {% endcomment %}
         <th class="col-sm-4 col-xs-5" data-field="name">
           {% if "name" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="name" label="Quest" %}{% else %}Quest{% endif %}

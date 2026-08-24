@@ -5179,6 +5179,154 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class QuestTabListingTests(ByteDeckTenantTestCase):
+    """The available, drafts and archived tabs are read a page at a time.
+
+    Searching and ordering happen in the database, so each covers every quest in the tab
+    rather than the page that was sent to the browser. A deck with a few hundred quests
+    costs one page of rendering per request.
+    """
+
+    #: More quests than `paginate`'s default page, so the list spills onto a second page.
+    QUEST_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a tab's worth of quests whose names and XP run opposite ways.
+
+        Named so they sort into creation order and given XP that climbs with the name, so
+        the highest-XP quests are exactly the ones the default order leaves on page two.
+        """
+        cls.teacher = User.objects.create_user('tab_listing_teacher', is_staff=True)
+        cls.campaign = baker.make('quest_manager.Category', title='Aardvark Campaign')
+
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(cls.QUEST_COUNT):
+            baker.make(Quest, name=f'Zsort quest {i:02d}', xp=i, campaign=cls.campaign)
+
+    def setUp(self):
+        """Sign the teacher in: the available tab shows every published quest to staff."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name='quests:quests', **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        return [quest.name for quest in response.context['quests']]
+
+    def test_quest_list__the_available_tab_sends_one_page_of_quests(self):
+        """The tab carries a page rather than every quest the deck has published."""
+        response = self.client.get(reverse('quests:quests'))
+
+        page = response.context['quests']
+        self.assertEqual(len(page), 30)
+        self.assertGreater(page.paginator.count, 30)
+        self.assertContains(response, 'page=2')
+
+    def test_quest_list__searching_finds_a_quest_that_is_not_on_this_page(self):
+        """The search covers the whole tab, so it reaches page two.
+
+        A match on a later page is exactly what a search confined to the rendered rows
+        cannot find, and the reader is told there is nothing rather than which page to try.
+        """
+        last = f'Zsort quest {self.QUEST_COUNT - 1:02d}'
+        self.assertNotIn(last, self._names())
+
+        self.assertEqual(self._names(q=last), [last])
+
+    def test_quest_list__searching_matches_name_campaign_and_tag(self):
+        """A quest matches on its own name, its campaign's title, or one of its tags."""
+        tagged = baker.make(Quest, name='Recursion base cases', campaign=self.campaign)
+        tagged.tags.add('python')
+
+        self.assertIn('Recursion base cases', self._names(q='Recursion'))
+        self.assertIn('Recursion base cases', self._names(q='python'))
+        self.assertIn('Recursion base cases', self._names(q='Aardvark'))
+        # Every word has to match something, though not all the same thing
+        self.assertIn('Recursion base cases', self._names(q='recursion python'))
+        self.assertNotIn('Recursion base cases', self._names(q='recursion ruby'))
+
+    def test_quest_list__sorting_reaches_quests_that_are_not_on_the_current_page(self):
+        """Ordering by XP brings the tab's highest-XP quests onto the first page."""
+        default_first_page = self._names()
+        highest_xp_first = self._names(sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_quest_list__a_search_and_a_sort_apply_together(self):
+        """Ordering a search reorders its results rather than dropping the search."""
+        names = self._names(q='Zsort', sort='-xp')
+
+        self.assertEqual(names[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        for name in names:
+            self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
+
+    def test_quest_list__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
+        default_order = self._names()
+
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('quests:quests'), {'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([q.name for q in response.context['quests']], default_order)
+                self.assertEqual(response.context['quest_sort_column'], '')
+
+    def test_quest_list__the_table_carries_no_client_side_search_or_sort(self):
+        """The tab's searching and ordering are the server's, so the table asks for neither.
+
+        bootstrap-table would filter and reorder the rows it holds, which is one page, and
+        answer a narrower question than the control appears to ask.
+        """
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertNotContains(response, 'data-sortable="true"')
+        self.assertNotContains(response, 'data-custom-search="multiKeywordSearch"')
+        self.assertContains(response, 'name="q"')
+
+    def test_quest_list__the_drafts_and_archived_tabs_are_paginated_and_searchable(self):
+        """The other two quest tabs get the same treatment, since they share the template."""
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(self.QUEST_COUNT):
+            baker.make(Quest, name=f'Zdraft quest {i:02d}', published=False)
+
+        for url_name in ('quests:drafts', 'quests:archived'):
+            with self.subTest(tab=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'name="q"')
+
+        drafts = self._names('quests:drafts')
+        self.assertEqual(len(drafts), 30)
+        self.assertEqual(self._names('quests:drafts', q='Zdraft quest 34'), ['Zdraft quest 34'])
+
+    def test_quest_list__the_badge_count_reports_the_tab_not_the_search(self):
+        """The tab's badge keeps counting what the tab holds while a search narrows it.
+
+        A count that moved with the search would leave the reader unable to tell how much
+        the tab has without clearing what they typed.
+        """
+        # The deck is seeded with quests of its own, so the badge is measured rather than
+        # assumed: what matters is that searching does not move it
+        unsearched = self.client.get(reverse('quests:quests'))
+        searched = self.client.get(reverse('quests:quests'), {'q': 'Zsort quest 00'})
+
+        self.assertEqual(searched.context['num_available'], unsearched.context['num_available'])
+        self.assertEqual(searched.context['num_matching_quests'], 1)
+        self.assertGreater(searched.context['num_available'], 1)
+
+
 class SubmissionTabSortTests(ByteDeckTenantTestCase):
     """The approvals and submissions tabs order the whole tab, not one page of it.
 
