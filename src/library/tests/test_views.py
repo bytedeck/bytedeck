@@ -2879,6 +2879,168 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         )
 
 
+class LibraryQuestSortTests(LibraryTenantTestCaseMixin):
+    """The quests tab's column headings order the whole Library, not one page of it.
+
+    The list is paginated, so the browser holds a page rather than the Library. A sort
+    applied there answers a question about that page: which of these fifteen is worth the
+    most XP, rather than which quests in the Library are (#2410). Every assertion below
+    narrows to this class's own quests with the search box, because the Library tenant is
+    seeded with quests of its own.
+    """
+
+    #: Enough quests to fill a page and spill onto a second one.
+    QUEST_COUNT = LibraryQuestListView.paginate_by + 5
+
+    @classmethod
+    def setUpTestData(cls):
+        """Fill the Library with quests whose name order is the reverse of their XP order.
+
+        Named so they sort into the order they were created and given ascending XP, so the
+        highest-XP quests are exactly the ones the default order pushes onto page two. A
+        sort that only reached the current page could not bring them forward.
+        """
+        cls.test_teacher = User.objects.create_user('sort_teacher', is_staff=True)
+
+        with library_schema_context():
+            cls.campaign = baker.make(Category, title="Sortable Campaign", published=True)
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(cls.QUEST_COUNT):
+                baker.make(
+                    Quest, name=f'Zsort quest {i:02d}', campaign=cls.campaign, published=True, xp=i,
+                )
+
+    def _sorted_names(self, **params):
+        """The names on the first page of this class's quests, in the order rendered.
+
+        Args:
+            **params: query parameters, added to the `q=Zsort` that narrows the list.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        params.setdefault('q', 'Zsort')
+        response = self.client.get(reverse('library:quest_list'), params)
+        return [quest.name for quest in response.context['library_quests']]
+
+    def setUp(self):
+        """Sign the teacher in, since every quests-tab request needs staff."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+    def test_LibraryQuestListView__sorting_reaches_quests_that_are_not_on_the_current_page(self):
+        """Sorting by XP brings the Library's highest-XP quests onto the first page.
+
+        This is the whole point of the issue: those quests sit on page two in the default
+        order, so a sort confined to the rows the browser holds could never surface them.
+        """
+        default_first_page = self._sorted_names()
+        highest_xp_first = self._sorted_names(sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_LibraryQuestListView__a_sort_applies_ascending_and_reverses_with_a_leading_minus(self):
+        """`?sort=xp` runs lowest first and `?sort=-xp` highest first."""
+        ascending = self._sorted_names(sort='xp')
+        descending = self._sorted_names(sort='-xp')
+
+        self.assertEqual(ascending[0], 'Zsort quest 00')
+        self.assertEqual(descending[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+
+    def test_LibraryQuestListView__sorting_keeps_the_search_applied(self):
+        """Reordering a search shows the same quests in a new order, not the whole Library."""
+        names = self._sorted_names(sort='-xp')
+
+        self.assertEqual(len(names), LibraryQuestListView.paginate_by)
+        for name in names:
+            self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
+
+    def test_LibraryQuestListView__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the Library's own order, not an error.
+
+        Tags are the live case: the column is rendered but deliberately not sortable, so a
+        link someone kept from elsewhere names a column this tab will not order by.
+        """
+        default_order = self._sorted_names()
+
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([quest.name for quest in response.context['library_quests']], default_order)
+                self.assertEqual(response.context['sort_column'], '')
+                self.assertFalse(response.context['sort_descending'])
+
+    def test_LibraryQuestListView__quests_with_no_campaign_sort_last_in_both_directions(self):
+        """A quest with no campaign goes to the end whichever way the campaign column runs.
+
+        Postgres orders NULLs first on a descending sort, which would fill the first page
+        with blanks for a reader who asked to see the Library by campaign.
+        """
+        # Named to sort first by name, which is both the Library's default order and the
+        # tie-break here, so landing last can only come from the campaign ordering itself
+        with library_schema_context():
+            baker.make(Quest, name='Zsort AAA no campaign', campaign=None, published=True, xp=1)
+
+        self.assertEqual(self._sorted_names()[0], 'Zsort AAA no campaign')
+
+        for direction in ('campaign', '-campaign'):
+            with self.subTest(sort=direction):
+                names = self._sorted_names(sort=direction, page=2)
+
+                self.assertEqual(names[-1], 'Zsort AAA no campaign')
+
+    def test_LibraryQuestListView__paging_a_sorted_list_shows_each_quest_exactly_once(self):
+        """Quests sharing a sort value keep a settled order, so paging neither skips nor repeats.
+
+        Ordering by a column alone leaves rows that tie in no defined order, and the
+        database is free to return them differently per query, which is what lets a quest
+        show up on two pages or on neither.
+        """
+        # Enough to span three pages, so the tie is carried across two page boundaries
+        tie_count = LibraryQuestListView.paginate_by * 2 + 5
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(tie_count):
+                baker.make(Quest, name=f'Ztie quest {i:02d}', campaign=self.campaign, published=True, xp=7)
+
+        seen = []
+        for page in (1, 2, 3):
+            seen += self._sorted_names(q='Ztie', sort='xp', page=page)
+
+        self.assertEqual(len(seen), tie_count)
+        self.assertEqual(sorted(seen), sorted(set(seen)), 'a quest appeared on more than one page')
+
+    def test_LibraryQuestListView__the_headings_link_to_the_server_and_start_a_new_first_page(self):
+        """A heading is a link carrying `sort=`, keeping the search and dropping the page.
+
+        Page 3 of the Library by name holds different quests than page 3 of it by XP, so
+        carrying the number across would land the reader somewhere they did not ask to be.
+        """
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'page': 2})
+
+        self.assertContains(response, 'sort=xp')
+        self.assertContains(response, 'q=Zsort')
+        self.assertNotContains(response, 'sort=xp&amp;page=2')
+        # bootstrap-table's own sort would reorder the page underneath the link
+        self.assertNotContains(response, 'data-sortable="true"')
+
+    def test_LibraryQuestListView__the_applied_heading_offers_the_reverse(self):
+        """Once a column is applied, its heading links to the same column reversed."""
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': 'xp'})
+
+        self.assertEqual(response.context['sort_column'], 'xp')
+        self.assertFalse(response.context['sort_descending'])
+        self.assertContains(response, 'sort=-xp')
+
+        reversed_response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': '-xp'})
+
+        self.assertEqual(reversed_response.context['sort_column'], 'xp')
+        self.assertTrue(reversed_response.context['sort_descending'])
+
+
 class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
     """The Library lists what it holds, not what the sharing deck's timetable allows.
 
