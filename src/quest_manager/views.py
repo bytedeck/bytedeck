@@ -19,7 +19,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, DateTimeField, F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum, Value, When,
+    Case, DateTimeField, F, ExpressionWrapper, fields, BooleanField, Count, Exists, IntegerField, OuterRef, Q, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -1594,6 +1594,28 @@ def submission_status_time():
     )
 
 
+def submission_displayed_xp():
+    """The XP the table shows, as something the database can order by.
+
+    The cell shows a different number depending on the submission, following the same
+    chain as the two tab templates: a skipped submission grants nothing and shows 0, a
+    quest whose XP the student enters shows the amount they asked for, and everything else
+    shows the quest's own XP.
+
+    Ordering by `quest__xp` alone would sort by a number that is not on screen for either
+    of the first two, which is the same trap the Status column has.
+
+    Returns:
+        Case: the XP for each submission, for `order_by`.
+    """
+    return Case(
+        When(do_not_grant_xp=True, then=Value(0)),
+        When(quest__xp_can_be_entered_by_students=True, then=F('xp_requested')),
+        default=F('quest__xp'),
+        output_field=IntegerField(),
+    )
+
+
 def submission_sort_columns(*, campaign=False, user=False, status=True):
     """The columns a submission tab offers, mapped to what the database orders on.
 
@@ -1613,7 +1635,7 @@ def submission_sort_columns(*, campaign=False, user=False, status=True):
     """
     columns = {
         'name': 'quest__name',
-        'xp': 'quest__xp',
+        'xp': submission_displayed_xp(),
     }
     if campaign:
         columns['campaign'] = 'quest__campaign__title'

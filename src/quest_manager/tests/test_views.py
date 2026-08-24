@@ -5210,7 +5210,9 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
             quest = baker.make(
                 Quest,
                 name=f'Zsort quest {i:02d}',
-                xp=i,
+                # From 5 up, so a skipped submission's 0 and a small requested amount
+                # are both below every quest here rather than tying with one
+                xp=i + 5,
                 campaign=cls.campaign_a if i % 2 else cls.campaign_z,
             )
             cls.submissions.append(baker.make(
@@ -5306,6 +5308,45 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
                 self.assertEqual(self._names('quests:submitted_all', sort=unknown), default_order)
                 self.assertEqual(response.context['sort_column'], '')
                 self.assertFalse(response.context['sort_descending'])
+
+    def test_approvals__a_skipped_submission_sorts_by_the_zero_it_shows(self):
+        """A skipped submission grants no XP and shows 0, so it sorts as 0, not as its quest's XP.
+
+        Its quest is worth more than any other here, so ordering by `quest__xp` would put
+        it last ascending, while the reader is looking at a 0 in that cell.
+        """
+        rich_quest = baker.make(Quest, name='Zsort skipped quest', xp=999)
+        baker.make(
+            QuestSubmission, quest=rich_quest, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, do_not_grant_xp=True,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort skipped quest')
+
+    def test_approvals__a_student_entered_xp_submission_sorts_by_what_was_requested(self):
+        """A quest whose XP the student enters sorts by the requested amount it shows.
+
+        The quest is worth 999 but the student asked for 1, and 1 is what the cell shows.
+        """
+        student_priced = baker.make(
+            Quest, name='Zsort requested quest', xp=999, xp_can_be_entered_by_students=True,
+        )
+        baker.make(
+            QuestSubmission, quest=student_priced, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, xp_requested=1,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+        highest_xp_first = self._names('quests:submitted_all', sort='-xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort requested quest')
+        self.assertNotEqual(highest_xp_first[0], 'Zsort requested quest')
 
     def test_approvals__the_headings_link_to_the_server_and_start_a_new_first_page(self):
         """A heading is a link carrying `sort=`, and drops the page it was clicked from.
