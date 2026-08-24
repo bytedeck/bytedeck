@@ -6,7 +6,8 @@ from courses.forms import XPCourseChoiceMixin
 from courses.models import CourseStudent
 from profile_manager.models import Profile
 from tags.forms import BootstrapTaggitSelect2Widget
-from .models import Badge, BadgeAssertion
+from utilities.fa_icon_widget import FontAwesomeAdminFormMixin, FontAwesomeIconPickerWidget
+from .models import Badge, BadgeAssertion, BadgeRarity, BadgeType
 
 
 class BadgeForm(forms.ModelForm):
@@ -102,3 +103,47 @@ class BulkBadgeAssertionForm(forms.Form):
         required=True,
         widget=ProfileMultiSelectWidget(attrs={'data-theme': 'bootstrap'}),
     )
+
+
+class BadgeTypeForm(forms.ModelForm):
+    """Badge type add/edit form.
+
+    The Font Awesome icon field uses the searchable icon picker
+    (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), the same one the
+    rank form uses, so a teacher can browse the icon set instead of having to know a
+    name by heart.
+    """
+
+    class Meta:
+        """Binds the icon picker and a plain-language label onto the badge type's icon field."""
+
+        model = BadgeType
+        fields = ('name', 'sort_order', 'fa_icon')
+        widgets = {
+            'fa_icon': FontAwesomeIconPickerWidget(),
+        }
+        labels = {
+            # "Fa icon" is jargon; call it what it is.
+            'fa_icon': 'Icon',
+        }
+
+
+class BadgeRarityForm(FontAwesomeAdminFormMixin, forms.ModelForm):
+    """Badge rarity add/edit form for the Django admin, which is the only place
+    rarities are edited.
+
+    Same icon picker as the site's icon forms, plus the stylesheets the admin does not
+    load on its own (see :class:`utilities.fa_icon_widget.FontAwesomeAdminFormMixin`).
+    """
+
+    class Meta:
+        """Binds the icon picker and a plain-language label onto the rarity's icon field."""
+
+        model = BadgeRarity
+        fields = '__all__'
+        widgets = {
+            'fa_icon': FontAwesomeIconPickerWidget(),
+        }
+        labels = {
+            'fa_icon': 'Icon',
+        }
