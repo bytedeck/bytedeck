@@ -2,6 +2,7 @@ import json
 import posixpath
 import re
 import uuid
+from collections import namedtuple
 from datetime import datetime, timezone as dt_timezone
 
 from django.utils.html import format_html
@@ -42,7 +43,7 @@ from questions.utils import discard_draft_question_submissions, save_draft_file_
 from courses.models import Block, CourseStudent
 from utilities.sorting import apply_sort, resolve_sort
 
-from .listing import QUEST_SORT_COLUMNS, search_quests
+from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -901,29 +902,24 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
 
     # The quest tabs show the campaign, and are the student's own submissions, so there is
     # no user column. The in-progress tab's Status cell carries no time, so it offers no
-    # sort by it. The tabs that are not paginated offer nothing: their headings stay plain
-    # until they are paginated too.
-    sortable_columns = {}
-    sort_column, sort_descending = '', False
+    # sort by it. A quest tab leaves this empty: it has its own search and ordering below.
+    submission_tab = SubmissionTab(
+        page=None, sortable_columns={}, sort_column='', sort_descending=False,
+        search_term='', num_matching=0,
+    )
 
     if view_type == QuestListViewTabTypes.IN_PROGRESS:
-        sortable_columns = submission_sort_columns(campaign=True, status=False)
-        in_progress_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, in_progress_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, in_progress_submissions, page, campaign=True, status=False)
+        in_progress_submissions = submission_tab.page
         # available_quests = []
     elif view_type == QuestListViewTabTypes.COMPLETED:
         # completed_submissions_count = completed_submissions.count()
-        sortable_columns = submission_sort_columns(campaign=True)
-        completed_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, completed_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, completed_submissions, page, campaign=True)
+        completed_submissions = submission_tab.page
         # available_quests = []
     elif view_type == QuestListViewTabTypes.PAST:
-        sortable_columns = submission_sort_columns(campaign=True)
-        past_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, past_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, past_submissions, page, campaign=True)
+        past_submissions = submission_tab.page
         # available_quests = []
 
     if view_type == QuestListViewTabTypes.DRAFT:
@@ -972,10 +968,12 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
         "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
-        # Read by snippets/sortable_column_heading.html in the submission tabs' table
-        "sortable_columns": sortable_columns,
-        "sort_column": sort_column,
-        "sort_descending": sort_descending,
+        # Read by the submission tabs' table and its search box
+        "sortable_columns": submission_tab.sortable_columns,
+        "sort_column": submission_tab.sort_column,
+        "sort_descending": submission_tab.sort_descending,
+        "submission_search_term": submission_tab.search_term,
+        "num_matching_submissions": submission_tab.num_matching,
         # The quest tabs (available, drafts, archived) carry their own search and order,
         # since they list quests rather than submissions
         "search_term": search_term,
@@ -1668,27 +1666,50 @@ def submission_sort_columns(*, campaign=False, user=False, status=True):
     return columns
 
 
-def sorted_submission_page(request, submissions, sort_columns, page):
-    """Order a tab's submissions by the chosen column, then cut the requested page out.
+#: What a submission tab needs to render itself once its page has been cut: the page, the
+#: columns it offers, the ordering applied, and the search it was narrowed by.
+SubmissionTab = namedtuple(
+    'SubmissionTab',
+    'page sortable_columns sort_column sort_descending search_term num_matching',
+)
 
-    Ordering before paginating is the whole point: the browser only ever holds one page,
-    so a sort applied there answers a question about the page rather than about the tab
-    (#2582). `id` settles submissions that tie, so paging through shows each exactly once.
+
+def submission_tab_page(request, submissions, page, *, campaign=False, user=False, status=True):
+    """Narrow, order and cut a page from one tab's submissions.
+
+    All three happen here, before the page is taken, because the browser only ever holds
+    one page: a search or a sort applied there answers a question about that page rather
+    than about the tab (#2582, #2597). `id` settles submissions that tie on the chosen
+    column, so paging through a sorted tab shows each of them exactly once.
 
     Args:
-        request (HttpRequest): the current request, for the `sort` parameter.
+        request (HttpRequest): the current request, for the `q` and `sort` parameters.
         submissions (QuerySet[QuestSubmission]): the tab's submissions.
-        sort_columns (dict): the columns this tab offers.
         page: the requested page.
+        campaign (bool): whether this tab shows the quest's campaign and tags.
+        user (bool): whether this tab shows whose submission it is.
+        status (bool): whether the Status column carries a time to order by.
 
     Returns:
-        tuple[Page, str, bool]: the page, the column key applied ('' for none), and
-        whether it was reversed.
+        SubmissionTab: the page and everything the template reads beside it.
     """
-    column, descending = resolve_sort(request, sort_columns)
-    submissions = apply_sort(submissions, sort_columns, column, descending, tie_break='id')
+    sortable_columns = submission_sort_columns(campaign=campaign, user=user, status=status)
 
-    return paginate(submissions, page), column, descending
+    search_term = request.GET.get('q', '').strip()
+    submissions = search_submissions(submissions, search_term, campaign=campaign, user=user)
+    num_matching = submissions.count()
+
+    column, descending = resolve_sort(request, sortable_columns)
+    submissions = apply_sort(submissions, sortable_columns, column, descending, tie_break='id')
+
+    return SubmissionTab(
+        page=paginate(submissions, page),
+        sortable_columns=sortable_columns,
+        sort_column=column,
+        sort_descending=descending,
+        search_term=search_term,
+        num_matching=num_matching,
+    )
 
 
 def paginate(object_list, page, per_page=30):
@@ -1760,32 +1781,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
     page = request.GET.get("page")
-    # The approvals tabs show whose submission it is, and no campaign column. The
-    # in-progress tab's Status cell carries no time, so it offers no sort by it.
-    sortable_columns = submission_sort_columns(user=True)
+    # The approvals tabs show whose submission it is, and no campaign column, so that is
+    # what they search and order by. The in-progress tab's Status cell carries no time.
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if "/in-progress/" in request.path_info:
         view_type = ApprovalsViewTabTypes.INPROGRESS
-        sortable_columns = submission_sort_columns(user=True, status=False)
         in_progress_submissions = QuestSubmission.objects.all_not_completed().order_by(F("time_completed").desc(nulls_last=True))
-        in_progress_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, in_progress_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, in_progress_submissions, page, user=True, status=False)
+        in_progress_submissions = submission_tab.page
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only
         )
-        approved_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, approved_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, approved_submissions, page, user=True)
+        approved_submissions = submission_tab.page
     elif "/flagged/" in request.path_info:
         view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
-        flagged_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, flagged_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, flagged_submissions, page, user=True)
+        flagged_submissions = submission_tab.page
     else:  # default is /submitted/ (awaiting approval)
         view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
@@ -1795,9 +1811,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval(
             teacher=teacher
         )
-        submitted_submissions, sort_column, sort_descending = sorted_submission_page(
-            request, submitted_submissions, sortable_columns, page,
-        )
+        submission_tab = submission_tab_page(request, submitted_submissions, page, user=True)
+        submitted_submissions = submission_tab.page
 
     tab_list = [
         {
@@ -1852,10 +1867,12 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
-        # Read by snippets/sortable_column_heading.html in the tab's table
-        "sortable_columns": sortable_columns,
-        "sort_column": sort_column,
-        "sort_descending": sort_descending,
+        # Read by the tab's table and its search box
+        "sortable_columns": submission_tab.sortable_columns,
+        "sort_column": submission_tab.sort_column,
+        "sort_descending": submission_tab.sort_descending,
+        "submission_search_term": submission_tab.search_term,
+        "num_matching_submissions": submission_tab.num_matching,
     }
     return render(request, template, context)
 
