@@ -207,21 +207,21 @@ def create_initial_badge_types():
         sort_order=1,
         description="Talents are badges that are automatically granted by completing a specific set of prerequisites.",
         repeatable=True,
-        fa_icon="fa-hand-spock-o"
+        fa_icon="hand-spock-o"
     )
     BadgeType.objects.create(
         name="Award",
         sort_order=2,
         description="Awards are badges that are manually granted by teachers.",
         repeatable=True,
-        fa_icon="fa-diamond"
+        fa_icon="diamond"
     )
     BadgeType.objects.create(
         name="Team",
         sort_order=3,
         description="Teams categorize students into groups for collaboration on projects, access to special quests, etc.",
         repeatable=True,
-        fa_icon="fa-handshake-o"
+        fa_icon="handshake-o"
     )
 
 
@@ -230,37 +230,37 @@ def create_initial_badge_rarities():
         name="Common",
         percentile=100.0,
         color="gray",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Uncommon",
         percentile=30.0,
         color="green",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Rare",
         percentile=16.0,
         color="royalblue",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Epic",
         percentile=4.0,
         color="purple",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Legendary",
         percentile=1.0,
         color="orangered",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
     BadgeRarity.objects.create(
         name="Mythic",
         percentile=0.25,
         color="gold",
-        fa_icon="fa-certificate"
+        fa_icon="certificate"
     )
 
 

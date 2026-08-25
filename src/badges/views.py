@@ -31,7 +31,7 @@ from djcytoscape.views import UpdateMapMessageMixin
 
 from prerequisites.tasks import grant_badge_assertions_for_badge
 
-from .forms import BadgeAssertionForm, BadgeForm, BulkBadgeAssertionForm
+from .forms import BadgeAssertionForm, BadgeForm, BadgeTypeForm, BulkBadgeAssertionForm
 from .models import Badge, BadgeAssertion, BadgeType
 
 
@@ -252,7 +252,7 @@ class BadgeTypeList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ('name', 'sort_order', 'fa_icon')
+    form_class = BadgeTypeForm
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
 
@@ -266,7 +266,7 @@ class BadgeTypeCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name='dispatch')
 class BadgeTypeUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ('name', 'sort_order', 'fa_icon')
+    form_class = BadgeTypeForm
     model = BadgeType
     success_url = reverse_lazy('badges:badge_types')
 
