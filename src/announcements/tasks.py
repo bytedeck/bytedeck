@@ -1,7 +1,5 @@
-from email.utils import formataddr
 from urllib.parse import urlsplit
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.mail import EmailMultiAlternatives
 from django.shortcuts import get_object_or_404
@@ -15,6 +13,7 @@ from hackerspace_online.celery import app
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 from profile_manager.models import Profile
+from utilities.mail import deck_from_email
 
 User = get_user_model()
 
@@ -80,8 +79,8 @@ def send_announcement_emails(content, root_url, absolute_url):
 
     # Show the deck's domain as the sender name so a recipient can tell which deck an email is
     # from at a glance, keeping the actual sending address (the one the mail server is
-    # authorised for) unchanged (#2338). Fall back to the default sender when unconfigured.
-    from_email = formataddr((deck_domain, settings.DEFAULT_FROM_EMAIL)) if settings.DEFAULT_FROM_EMAIL else None
+    # authorised for) unchanged (#2338).
+    from_email = deck_from_email(deck_domain)
     email_msg = EmailMultiAlternatives(
         subject,
         body=text_content,
