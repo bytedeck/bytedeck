@@ -17,6 +17,10 @@ def save_draft_file_answers(question_formset, uploaded_files):
     not upload to this time are skipped, so an earlier file is never overwritten by a
     re-submit that left the field alone.
 
+    Each write touches the file column and nothing else, so a save that lands after the
+    student's submit has published these answers adds the file they chose to the published
+    answer rather than reverting the row to a draft (#2565).
+
     Args:
         question_formset: the bound answer formset, with validation already run.
         uploaded_files: the request's ``FILES``, used to tell a fresh upload from an untouched
@@ -36,15 +40,21 @@ def save_draft_file_answers(question_formset, uploaded_files):
             continue
 
         row = form.instance
-        # Defensive: the formset is only ever built over this submission's own unpublished
-        # draft rows, so a saved-but-published row cannot reach here. Guarded anyway so that
-        # widening the caller's queryset can never overwrite a finished cycle's answer.
+        # This reads the snapshot the formset was built from, so it catches a row that was
+        # already published when this request started, not one published since: the formset
+        # is only ever built over this submission's own unpublished draft rows, so that
+        # cannot happen unless a caller widens the queryset. A row published in the meantime
+        # is what `update_fields` on the save below is for.
         if not row.pk or row.comment_id is not None:  # pragma: no cover
             continue
 
         row.response_file = upload
         row.full_clean()
-        row.save()
+        # Only the file, never the whole row. This instance was loaded before the request
+        # that is now publishing these answers ran, so its `comment` is a snapshot: a full
+        # save would write that stale NULL back over a `comment_id` the student's submit
+        # has just set, quietly unpublishing an answer they did submit (#2565).
+        row.save(update_fields=["response_file", "datetime_last_edit"])
         saved += 1
     return saved
 
