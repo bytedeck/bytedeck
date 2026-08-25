@@ -326,7 +326,7 @@
                 // have chosen a different file in the same input. The response speaks about
                 // the file that went out, so it is only allowed to touch an input still
                 // holding it (#2563).
-                var sentFiles = chosen_file_names_by_input();
+                var sentFiles = chosen_files_by_input();
                 formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
                 formData.set('comment', draftComment);
                 formData.set('submission_id', '{{ submission.id }}');
@@ -358,22 +358,28 @@
 
         }
 
-        function chosen_file_names(input) {
-            // The file names an input currently holds, as one string, so a selection can be
-            // compared with the one a request went out with. Several names can be selected at
-            // once in the comment's Attach files field, so all of them count.
-            return Array.prototype.map.call((input && input.files) || [], function(file) {
-                return file.name;
-            }).join('\n');
+        function chosen_files(input) {
+            // The File objects an input currently holds. Identity is what is compared later,
+            // not the names: choosing a file always produces new File objects, so this notices
+            // a replacement even when the student picked another file of the same name. The
+            // comment's Attach files field takes several at once, so the whole list counts.
+            return Array.prototype.slice.call((input && input.files) || []);
         }
 
-        function chosen_file_names_by_input() {
+        function chosen_files_by_input() {
             // Every file input on the form, keyed by name, ready to compare against later.
-            var names = {};
+            var chosen = {};
             $('#submission-main-form input[type="file"]').each(function() {
-                names[this.name] = chosen_file_names(this);
+                chosen[this.name] = chosen_files(this);
             });
-            return names;
+            return chosen;
+        }
+
+        function same_files(current, sent) {
+            // Whether an input still holds exactly what it sent. An untracked input (no
+            // snapshot) counts as changed, which is the safe answer: it means leave it alone.
+            if (!sent || current.length !== sent.length) return false;
+            return current.every(function(file, index) { return file === sent[index]; });
         }
 
         function show_saved_files(json, sentFiles) {
@@ -405,7 +411,7 @@
             // clearing it would throw that newer file away, and the note would name one they
             // have moved on from (or blame it for the older file's error). Leave both alone;
             // the next save reports the new file in the ordinary way (#2563).
-            if (chosen_file_names(input[0]) !== ((sentFiles || {})[input.attr('name')] || '')) return;
+            if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
             var note = input.closest('.form-group').find('.draft-file-note');
             if (!note.length) {
