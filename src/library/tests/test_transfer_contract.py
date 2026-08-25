@@ -34,6 +34,7 @@ from library.utils import library_schema_context
 from prerequisites.models import IsAPrereqMixin, Prereq
 from badges.models import Badge
 from courses.models import Block, Course, Grade, Rank
+from comments.models import Comment
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from questions.models import Question, QuestionSubmission, QuestionType
 
@@ -720,13 +721,13 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
         self.assertEqual([question.ordinal for question in imported.question_set.all()], [1, 3])
 
     def test_re_import__keeps_a_reordered_question_on_its_own_row(self):
-        """Reordering a question upstream moves it here; it does not overwrite the question
-        that used to sit in its place.
+        """A question keeps its own row when the author reorders the quest upstream: it
+        changes ordinal here, it does not take over the row of the question it passed.
 
-        Reordering swaps ordinals (`QuestionMoveView._swap_ordinals`), so matching arriving
-        questions to existing rows by ordinal handed each row the other question's content.
-        Students' answers point at those rows, so the marking view showed answers under the
-        wrong prompts (#2566). Matching on import_id is what keeps a row one question.
+        A row is one question for as long as the quest exists, because the answers students
+        gave point at it. Ordinal cannot carry that identity: reordering swaps ordinals
+        (`QuestionMoveView._swap_ordinals`), so the row at a given ordinal here and the
+        question arriving at that ordinal are not the same question (#2566). import_id is.
         """
         quest = self._quest_with_questions()
         imported = self._push_and_pull(quest)
@@ -742,19 +743,24 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
         self.assertEqual([first.ordinal, second.ordinal], [2, 1])
 
     def test_re_import__keeps_a_published_answer_with_the_question_it_answered(self):
-        """A student's answer still reads as an answer to the question they were asked.
+        """A published answer stays attached to the question whose text it answers, across
+        a reorder upstream and a re-import.
 
-        The end of the same bug: the marking view renders each answer's question live off
-        the FK, so a row repainted with another question's content silently re-labels work
-        the student already submitted (#2566).
+        The marking view renders each answer's question live off the FK, so what that row
+        holds is what the marker reads the student's work as answering. Keeping the row one
+        question is what keeps the pairing true (#2566).
         """
         quest = self._quest_with_questions()
         imported = self._push_and_pull(quest)
         answered = imported.question_set.get(ordinal=1)
         submission = baker.make(QuestSubmission, quest=imported)
-        answer = QuestionSubmission.objects.create(
-            quest_submission=submission, question=answered, response_text="Rocket Car",
+        comment = Comment.objects.create_comment(
+            user=submission.user, path=submission.get_absolute_url(), text="Done!", target=submission,
         )
+        answer = QuestionSubmission.objects.create(
+            quest_submission=submission, question=answered, response_text="Rocket Car", comment=comment,
+        )
+        self.assertTrue(answer.is_published)
 
         self._swap_library_ordinals(quest, 1, 2)
         import_quest_to(destination_schema=connection.schema_name, quest_import_id=quest.import_id)
