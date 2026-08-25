@@ -34,8 +34,8 @@ from library.utils import library_schema_context
 from prerequisites.models import IsAPrereqMixin, Prereq
 from badges.models import Badge
 from courses.models import Block, Course, Grade, Rank
-from quest_manager.models import Category, CommonData, Quest
-from questions.models import Question, QuestionType
+from quest_manager.models import Category, CommonData, Quest, QuestSubmission
+from questions.models import Question, QuestionSubmission, QuestionType
 
 # The fields a Quest carries into the Library and back, as of today. This is not a wish
 # list: it is what the transfer currently moves, verified by `test_quest_field_inventory__every_field_is_classified`.
@@ -71,7 +71,7 @@ CATEGORY_FIELDS_NOT_TRANSFERRED = {
 
 QUESTION_FIELDS_TRANSFERRED = frozenset({
     'type', 'ordinal', 'required', 'instructions', 'solution_text', 'solution_file',
-    'allowed_file_type', 'marker_notes',
+    'allowed_file_type', 'marker_notes', 'import_id',
 })
 
 QUESTION_FIELDS_NOT_TRANSFERRED = {
@@ -718,6 +718,69 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
 
         imported = Quest.objects.all_including_archived().get(import_id=quest.import_id)
         self.assertEqual([question.ordinal for question in imported.question_set.all()], [1, 3])
+
+    def test_re_import__keeps_a_reordered_question_on_its_own_row(self):
+        """Reordering a question upstream moves it here; it does not overwrite the question
+        that used to sit in its place.
+
+        Reordering swaps ordinals (`QuestionMoveView._swap_ordinals`), so matching arriving
+        questions to existing rows by ordinal handed each row the other question's content.
+        Students' answers point at those rows, so the marking view showed answers under the
+        wrong prompts (#2566). Matching on import_id is what keeps a row one question.
+        """
+        quest = self._quest_with_questions()
+        imported = self._push_and_pull(quest)
+        first, second = imported.question_set.get(ordinal=1), imported.question_set.get(ordinal=2)
+
+        self._swap_library_ordinals(quest, 1, 2)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.instructions, "<p>What is the title of your project?</p>")
+        self.assertEqual(second.instructions, "<p>Describe your process.</p>")
+        self.assertEqual([first.ordinal, second.ordinal], [2, 1])
+
+    def test_re_import__keeps_a_published_answer_with_the_question_it_answered(self):
+        """A student's answer still reads as an answer to the question they were asked.
+
+        The end of the same bug: the marking view renders each answer's question live off
+        the FK, so a row repainted with another question's content silently re-labels work
+        the student already submitted (#2566).
+        """
+        quest = self._quest_with_questions()
+        imported = self._push_and_pull(quest)
+        answered = imported.question_set.get(ordinal=1)
+        submission = baker.make(QuestSubmission, quest=imported)
+        answer = QuestionSubmission.objects.create(
+            quest_submission=submission, question=answered, response_text="Rocket Car",
+        )
+
+        self._swap_library_ordinals(quest, 1, 2)
+        import_quest_to(destination_schema=connection.schema_name, quest_import_id=quest.import_id)
+
+        answer.refresh_from_db()
+        self.assertEqual(answer.response_text, "Rocket Car")
+        self.assertEqual(answer.question.instructions, "<p>What is the title of your project?</p>")
+
+    def _swap_library_ordinals(self, quest, one, other):
+        """Swap two of the Library copy's question ordinals, as reordering upstream would.
+
+        Written straight to the database, via a parking ordinal so the (quest, ordinal)
+        unique constraint holds at every statement, which is what the reorder view does too.
+
+        Args:
+            quest (Quest): the local quest, named by import_id.
+            one (int): one ordinal to swap.
+            other (int): the ordinal to swap it with.
+        """
+        with library_schema_context():
+            questions = Question.objects.filter(quest__import_id=quest.import_id)
+            first, second = questions.get(ordinal=one), questions.get(ordinal=other)
+            parking = questions.order_by("-ordinal").first().ordinal + 1
+            Question.objects.filter(pk=first.pk).update(ordinal=parking)
+            Question.objects.filter(pk=second.pk).update(ordinal=one)
+            Question.objects.filter(pk=first.pk).update(ordinal=other)
 
     def test_export_campaign_and_copy_quests__carries_questions_on_the_conflict_copy(self):
         """A quest copied in beside the Library's existing version brings its questions.
