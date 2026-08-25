@@ -2082,10 +2082,9 @@ def complete(request, submission_id):
     # Whether the student actually answered at least one question (a BaseFormSet is always
     # truthy, so `if question_formset:` alone would treat a set of only-blank optional
     # answers as content and wrongly bypass the verification-required check below).
-    answered_a_question = bool(question_formset) and any(
-        f.cleaned_data.get("response_text") or f.cleaned_data.get("response_file")
-        for f in question_formset.forms
-    )
+    # Each form decides for itself what counts as answered, since an untouched summernote
+    # editor posts markup rather than an empty string (#2560).
+    answered_a_question = bool(question_formset) and any(f.has_answer() for f in question_formset.forms)
 
     # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
     # then need to check if we should bother handling this form submission

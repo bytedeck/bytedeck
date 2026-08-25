@@ -198,6 +198,46 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(QuestionSubmission.objects.filter(
             quest_submission=self.submission, comment__isnull=False).exists())
 
+    def test_complete__required_long_answer_left_untouched_blocks_completion(self):
+        """An editor a student typed nothing into does not satisfy a required long answer.
+
+        End to end, this is the symptom of #2560: the student clicks into the editor and
+        presses space or enter, summernote posts markup rather than an empty string, and the
+        quest used to complete with a blank answer. The marker's answer table renders that
+        markup through |safe as an empty cell, so nobody could tell it had happened.
+        """
+        self.long_question.required = True
+        self.long_question.save()
+
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>",
+                  **self.formset_data(long_text="<p>&nbsp;</p>")})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must provide a text response")
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+
+    def test_complete__long_answer_that_is_only_a_picture_completes(self):
+        """A long answer made entirely of a pasted image is a real answer and completes.
+
+        The other half of #2560: stripping the tags out of this answer also leaves nothing,
+        so an emptiness test that judged only on text would reject a student who answered
+        "show me your work" the way the question invites.
+        """
+        self.long_question.required = True
+        self.long_question.save()
+
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "",
+                  **self.formset_data(long_text='<p><img src="/media/screenshot.png"></p>')})
+
+        self.assertRedirects(response, reverse("quests:quests"))
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+
     def test_complete__uploaded_file_survives_a_failed_submit(self):
         """A file attached alongside a blank required answer is kept, not silently dropped (#2165).
 
@@ -1075,7 +1115,7 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
 
     def test_complete__optional_blank_answers_still_require_comment_when_verification_required(self):
         """A verification-required quest whose only questions are optional and left blank
-        still demands a comment or attachment — answers-that-aren't-answers aren't content."""
+        still demands a comment or attachment: answers-that-aren't-answers aren't content."""
         # replace the fixture questions with a single optional one
         Question.objects.filter(quest=self.quest).delete()
         optional = baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
@@ -1097,6 +1137,41 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertRedirects(response, self.submission.get_absolute_url())
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
+
+    def test_complete__untouched_long_answer_editor_is_not_content_when_verification_required(self):
+        """An untouched editor cannot stand in for the comment or attachment a teacher asked for.
+
+        The second half of #2560. On a verification-required quest, answering a question is
+        what excuses the student from also commenting or attaching something, so markup an
+        editor produced by itself must not count: otherwise the quest completes with no
+        content at all, and the teacher has nothing to verify.
+        """
+        # replace the fixture questions with a single optional long answer
+        Question.objects.filter(quest=self.quest).delete()
+        optional = baker.make(Question, quest=self.quest, ordinal=1, type="long_answer", required=False)
+        rows = list(sync_draft_question_submissions(self.submission))
+        self.assertEqual(rows[0].question_id, optional.id)
+        data = {
+            "question_submissions-TOTAL_FORMS": "1",
+            "question_submissions-INITIAL_FORMS": "1",
+            "question_submissions-MIN_NUM_FORMS": "0",
+            "question_submissions-MAX_NUM_FORMS": "1000",
+            "question_submissions-0-id": str(rows[0].id),
+            "question_submissions-0-response_text": "<p>&nbsp;</p>",
+        }
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **data})
+
+        # bounced by the attach-or-comment rule, not completed
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        self.assertIn(
+            "You are expected to attach something or comment",
+            " ".join(str(m) for m in get_messages(response.wsgi_request)),
+        )
 
 
 class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):
