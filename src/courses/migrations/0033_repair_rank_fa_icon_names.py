@@ -85,7 +85,7 @@ def repair_rank_fa_icon_names(apps, schema_editor):
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("courses", "0031_course_uses_marks"),
+        ("courses", "0032_alter_rank_fa_icon"),
     ]
 
     operations = [

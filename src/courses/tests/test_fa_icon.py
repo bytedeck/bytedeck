@@ -24,7 +24,7 @@ split_fa_icon_value = import_module(
 ).split_fa_icon_value
 
 # Same for the repair migration that undoes the icons 0030 filed as modifiers.
-repair_migration = import_module("courses.migrations.0032_repair_rank_fa_icon_names")
+repair_migration = import_module("courses.migrations.0033_repair_rank_fa_icon_names")
 recover_icon_name = repair_migration.recover_icon_name
 
 User = get_user_model()
