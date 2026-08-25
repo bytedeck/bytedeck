@@ -916,19 +916,43 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(sub.xp_requested, 0)
 
     def test_ajax_save_draft__leaves_the_stored_xp_alone_for_an_unusable_value(self):
-        """Blank, non-numeric and negative values leave what is already stored.
+        """Blank, non-numeric, zero and negative values leave what is already stored.
 
         The page sends '' whenever the field is absent, and xp_requested is a
-        PositiveIntegerField, so a negative cannot be stored at all.
+        PositiveIntegerField, so a negative cannot be stored at all. Zero is this app's
+        sentinel for "no custom XP requested", so storing it would say the same thing as
+        storing nothing while destroying the number the student had already saved. An
+        autosave lands mid-typing, so a box holding '0' for one keystroke is routine.
         """
         sub = self._draft_xp_submission()
         self._save_draft_xp(sub, '50')
 
-        for unusable in ('', 'lots', '-5'):
+        for unusable in ('', 'lots', '-5', '0'):
             with self.subTest(xp_requested=unusable):
                 self._save_draft_xp(sub, unusable)
                 sub.refresh_from_db()
                 self.assertEqual(sub.xp_requested, 50)
+
+    def test_ajax_save_draft__zero_xp_does_not_come_back_as_the_quest_default(self):
+        """Storing zero would read back as the quest's XP, so it is never stored.
+
+        The submission form seeds the field with `sub.xp_requested or sub.quest.xp`, so a
+        stored zero is indistinguishable from never having chosen an XP: the student would
+        be shown the quest's default rather than the zero they typed. Leaving the field
+        alone reaches the same screen without discarding a real saved value on the way.
+        """
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '0')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0, "nothing was stored, so the field is still at its default")
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:submission', args=[sub.id]))
+        self.assertEqual(
+            response.context['submission_form'].initial['xp_requested'], sub.quest.xp,
+            "a zero reads back as the quest default, which is why it is not worth storing",
+        )
 
     def test_ajax_save_draft__non_numeric_submission_id_returns_404(self):
         """A non-numeric submission id is a 404, not the ValueError the pk lookup would raise (a 500)."""

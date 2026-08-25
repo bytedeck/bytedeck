@@ -2466,10 +2466,9 @@ def ajax_save_draft(request):
             response_data["result"] = "Draft saved"
             draft_comment.save()
 
-        # The page sends the custom XP with every draft save, so save it. Without this a
-        # student set their XP, watched the draft report itself saved, and came back to find
-        # the field showing the quest's default again: the submission form seeds from
-        # sub.xp_requested, which only completing the quest ever wrote (#2562).
+        # The page sends the custom XP with every draft save, so store it: the submission
+        # form seeds that field from sub.xp_requested, so storing it is what brings the
+        # student's own number back when they return to a half-finished quest (#2562).
         #
         # Guarded on exactly the condition the page builds the field under, so a request
         # cannot set XP on a quest that does not offer it, or on an approved submission.
@@ -2479,8 +2478,12 @@ def ajax_save_draft(request):
             except (TypeError, ValueError):
                 # absent, blank, or not a number: leave whatever is stored alone
                 xp_requested = None
-            # the field is a PositiveIntegerField, so a negative is refused rather than stored
-            if xp_requested is not None and xp_requested >= 0 and xp_requested != sub.xp_requested:
+            # Zero and below are left alone rather than stored. Zero is this app's sentinel
+            # for "no custom XP requested" (`sub.xp_requested or sub.quest.xp` here and in
+            # the approval path), so storing it says the same thing as storing nothing while
+            # destroying a real number the student had already saved. A box holding "0" for
+            # a keystroke, or emptied to be retyped, is exactly what an autosave lands in.
+            if xp_requested is not None and xp_requested > 0 and xp_requested != sub.xp_requested:
                 sub.xp_requested = xp_requested
                 # this field only: a draft save must not write back the rest of a row it
                 # read a moment ago (#2565)
