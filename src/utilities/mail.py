@@ -14,9 +14,10 @@ def deck_from_email(deck_domain):
     Only the address part of ``DEFAULT_FROM_EMAIL`` is used, because it can legitimately be
     configured either as a bare address (``contact@example.com``) or with a display name of
     its own (``Byte Deck <contact@example.com>``), which is the shape Django's own
-    documentation shows. Handing the whole of the second shape to ``formataddr`` builds a
-    nested ``"deck.example.com" <Byte Deck <contact@example.com>>``, which is not a valid
-    address: Django's ``sanitize_address`` raises ``ValueError`` and the send fails.
+    documentation shows. ``formataddr`` puts whatever it is given straight into the address
+    slot, so it has to be handed an address and nothing else: a header carrying two display
+    names, ``"deck.example.com" <Byte Deck <contact@example.com>>``, is not a valid address,
+    and Django's ``sanitize_address`` raises ``ValueError`` rather than sending it.
 
     Args:
         deck_domain (str): the deck's domain, e.g. "deckname.bytedeck.com".

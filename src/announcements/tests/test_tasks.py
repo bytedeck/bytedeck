@@ -130,8 +130,9 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
     @override_settings(DEFAULT_FROM_EMAIL="Byte Deck <contact@bytedeck.com>")
     def test_send_announcement_emails__from_when_the_setting_carries_its_own_name(self):
         """DEFAULT_FROM_EMAIL is configured with a display name in production, so only its
-        address is spliced under the deck's domain. Nesting the whole value made the send
-        raise ValueError in the Celery task instead of delivering the announcement."""
+        address goes under the deck's domain. A header carrying both names is not a valid
+        address, and the send raises ValueError in the Celery task instead of delivering the
+        announcement."""
         mail.outbox = []
         tasks.send_announcement_emails.apply(
             kwargs={

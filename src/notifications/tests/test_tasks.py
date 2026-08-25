@@ -317,8 +317,9 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
     @override_settings(DEFAULT_FROM_EMAIL="Byte Deck <contact@bytedeck.com>")
     def test_generate_notification_email__from_when_the_setting_carries_its_own_name(self):
         """DEFAULT_FROM_EMAIL is configured with a display name in production, so only its
-        address is spliced under the deck's domain. Nesting the whole value made every
-        nightly digest raise ValueError in the Celery task instead of being delivered."""
+        address goes under the deck's domain. A header carrying both names is not a valid
+        address, and the nightly digest raises ValueError in the Celery task instead of
+        being delivered."""
         baker.make(
             Notification, recipient=self.test_student1,
             sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,

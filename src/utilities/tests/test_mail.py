@@ -30,9 +30,10 @@ class DeckFromEmailTest(SimpleTestCase):
     def test_deck_from_email__is_an_address_django_will_send(self):
         """The composed header survives the check the SMTP backend runs on the way out.
 
-        This is the production failure it fixes: a nested
-        '"deck" <Byte Deck <contact@bytedeck.com>>' made sanitize_address raise ValueError,
-        so every notification digest and announcement email died in the Celery task.
+        This is the check that decides whether the mail is sent at all: sanitize_address
+        raises ValueError on a header carrying two display names, such as
+        '"deck" <Byte Deck <contact@bytedeck.com>>', which would take down every
+        notification digest and announcement email inside its Celery task.
         """
         sanitized = sanitize_address(deck_from_email("adventure.bytedeck.com"), "utf-8")
         self.assertEqual(parseaddr(sanitized)[1], "contact@bytedeck.com")
