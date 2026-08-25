@@ -320,6 +320,13 @@
                 // management form, row ids and files) come from the form itself.
                 var mainForm = document.getElementById('submission-main-form');
                 var formData = mainForm ? new FormData(mainForm) : new FormData();
+                // What each file input is sending, captured with the snapshot above. The
+                // response arrives later (a file answer may be 16 MiB, and the 60s autosave
+                // starts these uploads with no action from the student), and by then they may
+                // have chosen a different file in the same input. The response speaks about
+                // the file that went out, so it is only allowed to touch an input still
+                // holding it (#2563).
+                var sentFiles = chosen_file_names_by_input();
                 formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
                 formData.set('comment', draftComment);
                 formData.set('submission_id', '{{ submission.id }}');
@@ -335,7 +342,7 @@
 
                     // handle a successful response
                     success : function(json) {
-                      show_saved_files(json);
+                      show_saved_files(json, sentFiles);
                       hide_check_show_text();
                     },
 
@@ -351,7 +358,25 @@
 
         }
 
-        function show_saved_files(json) {
+        function chosen_file_names(input) {
+            // The file names an input currently holds, as one string, so a selection can be
+            // compared with the one a request went out with. Several names can be selected at
+            // once in the comment's Attach files field, so all of them count.
+            return Array.prototype.map.call((input && input.files) || [], function(file) {
+                return file.name;
+            }).join('\n');
+        }
+
+        function chosen_file_names_by_input() {
+            // Every file input on the form, keyed by name, ready to compare against later.
+            var names = {};
+            $('#submission-main-form input[type="file"]').each(function() {
+                names[this.name] = chosen_file_names(this);
+            });
+            return names;
+        }
+
+        function show_saved_files(json, sentFiles) {
             // A saved file is stored with the draft, so its input is cleared: the file no
             // longer needs re-choosing, and the next autosave must not upload it again. A
             // note under the input says where it went. A rejected file is cleared too, with
@@ -359,22 +384,28 @@
             $.each(json.saved_answer_files || {}, function(field_name, file_name) {
                 file_note($('[name="' + field_name + '"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             });
             if ((json.saved_attachments || []).length) {
                 var names = json.saved_attachments.map(function(name) { return $('<i>').text(name).html(); });
                 file_note($('#submission-main-form input[name="attachments"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + names.join(', ') +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             }
             $.each(json.file_errors || {}, function(field_name, error_text) {
                 file_note($('[name="' + field_name + '"]'),
-                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>');
+                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>', sentFiles);
             });
         }
 
-        function file_note(input, html) {
+        function file_note(input, html, sentFiles) {
             if (!input.length) return;
+            // The response describes the file this input sent. If the input now holds a
+            // different choice, the student replaced it while the request was in flight:
+            // clearing it would throw that newer file away, and the note would name one they
+            // have moved on from (or blame it for the older file's error). Leave both alone;
+            // the next save reports the new file in the ordinary way (#2563).
+            if (chosen_file_names(input[0]) !== ((sentFiles || {})[input.attr('name')] || '')) return;
             input.val('');
             var note = input.closest('.form-group').find('.draft-file-note');
             if (!note.length) {
