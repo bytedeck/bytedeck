@@ -210,6 +210,99 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": "An answer"}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
+    def test_clean__required_long_answer_rejects_an_untouched_editor(self):
+        """A required long answer refuses the markup an editor posts when nothing was typed.
+
+        The summernote editor never posts an empty string, so these are what a student who
+        clicked into the box and pressed space or enter actually sends. Each is truthy, so
+        before #2560 every one of them satisfied the required check and the quest completed
+        with a blank answer nobody was told about.
+
+        The widget catches two exact strings of its own before the form ever sees them (see
+        the test below), which is why they are not repeated here: these are the ones that
+        got past it.
+        """
+        for value in ("<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>", "<p><br/></p><p><br/></p>"):
+            with self.subTest(value=value):
+                form = QuestionSubmissionForm(data={"response_text": value}, instance=self.long_answer)
+                self.assertFalse(form.is_valid())
+                self.assertIn("You must provide a text response", str(form.errors))
+
+    def test_clean__required_long_answer_rejects_the_widget_empty_sentinels(self):
+        """The two strings django-summernote itself treats as empty are refused as well.
+
+        `SummernoteWidgetBase.value_from_datadict` maps exactly `<p><br></p>` and
+        `<p><br/></p>` to None, so the required check already refused those two before #2560.
+        Asserted here so that a summernote upgrade dropping or narrowing that list shows up
+        as a failure rather than as blank answers being accepted again.
+        """
+        for value in ("<p><br></p>", "<p><br/></p>"):
+            with self.subTest(value=value):
+                form = QuestionSubmissionForm(data={"response_text": value}, instance=self.long_answer)
+                self.assertFalse(form.is_valid())
+                self.assertIn("This field is required", str(form.errors))
+
+    def test_clean__required_long_answer_accepts_typed_text(self):
+        """A required long answer with text in it is still accepted, wrapped as the editor sends it."""
+        form = QuestionSubmissionForm(data={"response_text": "<p>An answer</p>"}, instance=self.long_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_clean__required_long_answer_accepts_an_answer_that_is_only_a_picture(self):
+        """A pasted screenshot answers the question even though it contains no text.
+
+        "Show me your work" is often answered with an image and nothing else. Stripping tags
+        leaves an empty string, so this is exactly the case the emptiness test must not treat
+        as a blank answer.
+        """
+        form = QuestionSubmissionForm(
+            data={"response_text": '<p><img src="/media/screenshot.png"></p>'}, instance=self.long_answer,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_clean__required_short_answer_accepts_a_tag_the_student_typed(self):
+        """A short answer that is literally an HTML tag is a real answer, not a blank one.
+
+        "Which tag makes text bold?" is answered with `<b>`, which sanitization keeps as
+        markup, so a strip-the-tags emptiness test would read it as nothing and reject a
+        correct answer. Short answers are a plain text input and cannot produce an untouched
+        editor's markup, so they are judged on the text itself.
+        """
+        form = QuestionSubmissionForm(data={"response_text": "<b>"}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_has_answer__optional_long_answer_left_untouched(self):
+        """An optional long answer nobody typed in reports itself unanswered.
+
+        Nothing rejects it (it is optional), but the complete view asks each form this to
+        decide whether the submission has content of its own, so an untouched editor must not
+        count as an answer (#2560).
+        """
+        optional_question = baker.make(
+            Question, quest=self.quest, ordinal=4, type="long_answer", required=False,
+        )
+        optional_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=optional_question,
+        )
+
+        form = QuestionSubmissionForm(data={"response_text": "<p>&nbsp;</p>"}, instance=optional_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.has_answer())
+
+        form = QuestionSubmissionForm(data={"response_text": "<p>Something</p>"}, instance=optional_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.has_answer())
+
+    def test_has_answer__file_upload_reports_the_attached_file(self):
+        """A file question is answered when a file was attached, and not when it wasn't."""
+        form = QuestionSubmissionForm(data={}, files={}, instance=self.file_answer)
+        self.assertFalse(form.is_valid())
+        self.assertFalse(form.has_answer())
+
+        video = SimpleUploadedFile("file.mp4", b"file_content", content_type="video/mp4")
+        form = QuestionSubmissionForm(data={}, files={"response_file": video}, instance=self.file_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.has_answer())
+
     def test_clean__short_answer_limit_is_on_raw_input_not_escaped_length(self):
         """The 200-character short-answer limit is on the raw text the student types (matching the
         input's maxlength), enforced server-side by the field's max_length before sanitization:

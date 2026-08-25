@@ -9,6 +9,7 @@ from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget,
 from comments.sanitize import sanitize_comment_html
 from quest_manager.models import QuestSubmission
 from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
+from utilities.html import is_empty_html
 
 from .models import Question, QuestionSubmission, QuestionType
 
@@ -303,6 +304,33 @@ class QuestionSubmissionForm(forms.ModelForm):
         """
         return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 
+    def has_answer(self):
+        """Whether the student actually answered this question.
+
+        The single definition of "answered", so the required check below and the complete
+        view's decision about whether a submission has any content of its own cannot drift
+        apart and disagree about the same answer.
+
+        A long answer comes from the Summernote editor, which posts markup rather than an
+        empty string for an untouched editor, so emptiness there is a question about what the
+        markup renders as (#2560). The other two types have no such gap: a short answer is a
+        plain text input whose CharField already strips whitespace-only input, and a file is
+        either attached or it isn't.
+
+        Only call this once validation has run: it reads ``cleaned_data``, and a field that
+        failed its own validation is absent from it and so reads as unanswered.
+
+        Returns:
+            bool: True when this form carries an answer with content in it.
+        """
+        if self.question.type == QuestionType.FILE_UPLOAD:
+            return bool(self.cleaned_data.get("response_file"))
+
+        response_text = self.cleaned_data.get("response_text")
+        if self.question.type == QuestionType.LONG_ANSWER:
+            return not is_empty_html(response_text)
+        return bool(response_text)
+
     def clean(self):
         """Enforce required answers per question type, and fail cleanly on stale rows."""
         cleaned_data = super().clean()
@@ -312,16 +340,10 @@ class QuestionSubmissionForm(forms.ModelForm):
                 "This answer no longer matches one of the quest's questions. Please reload the page and try again."
             )
 
-        response_text = cleaned_data.get('response_text')
-        response_file = cleaned_data.get('response_file')
-
-        if self.question.type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
-            if self.question.required and not response_text:
-                raise ValidationError('You must provide a text response for this type of question.')
-        else:
-            # only FILE_UPLOAD can reach here: __init__ raises NotImplementedError for any other type
-            if self.question.required and not response_file:
+        if self.question.required and not self.has_answer():
+            if self.question.type == QuestionType.FILE_UPLOAD:
                 raise ValidationError('You must upload a file for this type of question.')
+            raise ValidationError('You must provide a text response for this type of question.')
 
         return cleaned_data
 
