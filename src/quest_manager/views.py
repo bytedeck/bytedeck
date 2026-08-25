@@ -2485,6 +2485,7 @@ def ajax_save_draft(request):
             # a keystroke, or emptied to be retyped, is exactly what an autosave lands in.
             if xp_requested is not None and xp_requested > 0 and xp_requested != sub.xp_requested:
                 sub.xp_requested = xp_requested
+                sub.full_clean()
                 # this field only: a draft save must not write back the rest of a row it
                 # read a moment ago (#2565)
                 sub.save(update_fields=["xp_requested"])
