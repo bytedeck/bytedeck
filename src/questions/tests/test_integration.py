@@ -125,6 +125,40 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
 
         self.assertEqual(content.count("summernote.min.js"), 1)
 
+    def test_submission_page__summernote_assets_load_when_a_short_answer_comes_first(self):
+        """The editor assets are found however the quest orders its questions.
+
+        `BaseFormSet.media` reads only `forms[0]`, on the assumption that a formset's forms
+        are alike. These are not: each answer form builds a widget for its own question type.
+        The page therefore asks every form, so a long answer sitting behind a short one still
+        gets its editor (#2608).
+        """
+        Question.objects.filter(quest=self.quest).delete()
+        baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
+        baker.make(Question, quest=self.quest, ordinal=2, type="long_answer", required=False)
+
+        content = self.assert200("quests:submission", args=[self.submission.id]).content.decode()
+
+        self.assertEqual(content.count("summernote.min.js"), 1)
+
+    def test_complete__failed_submit_rerenders_with_the_editor_assets(self):
+        """A submission bounced back for a validation error still loads the editors (#2608).
+
+        The POST path builds `SubmissionQuickReplyFormStudent`, whose `comment_text` is a
+        plain textarea carrying no summernote assets. The answer editors are summernote
+        widgets, and crispy is told not to emit their media inline, so the page's head is the
+        only place those assets can come from: without them every editor on the re-rendered
+        page falls back to a raw textarea showing the student their own answer as markup.
+        """
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **self.formset_data(short_text="")})
+
+        self.assertEqual(response.status_code, 200, "expected the validation-error re-render")
+        content = response.content.decode()
+        self.assertContains(response, "You must provide a text response")
+        self.assertEqual(content.count("summernote.min.js"), 1)
+
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
         plain_quest = baker.make(Quest)

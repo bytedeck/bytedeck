@@ -1352,6 +1352,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission": self.submission,
             # "comments": comments,
             "submission_form": self.form,
+            "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
             # "reply_comment_form": reply_comment_form,
         }
@@ -1922,6 +1923,39 @@ def unarchive(request, quest_id):
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
+def _submission_page_media(form, question_formset=None):
+    """The assets the submission page's head needs, combined into one ``Media``.
+
+    The page carries editors from two different forms: the comment box on ``form``, and one
+    per long-answer question on ``question_formset``. Both need the summernote library, and
+    only a single ``Media`` object de-duplicates the shared files: two separate renders in
+    the template would emit the whole asset set twice (#2169). The answer forms set crispy's
+    ``include_media = False`` for that reason and depend on this being emitted for them.
+
+    Every form in the formset is asked, not the formset itself. ``BaseFormSet.media`` reads
+    only ``forms[0]`` on the assumption that a formset's forms are alike, which is not true
+    here: each answer form builds a widget for its own question type, so a quest whose first
+    question is a short answer would otherwise report no editor assets at all.
+
+    The comment form does not always carry them either. The POST path builds
+    ``SubmissionQuickReplyFormStudent``, whose ``comment_text`` is a plain textarea, so
+    without the formset's half a submission bounced back for a validation error loads no
+    summernote and every editor on the page degrades to a raw textarea (#2608).
+
+    Args:
+        form: the page's comment form.
+        question_formset: the answer formset, or None when the quest has no questions (or
+            the page is not showing them).
+
+    Returns:
+        Media: the combined assets, ready to render in the template's head.
+    """
+    media = form.media
+    for answer_form in question_formset.forms if question_formset else ():
+        media = media + answer_form.media
+    return media
+
+
 def _keep_posted_uploads(request, form, question_formset, submission, followup=""):
     """Save the POST's uploads that pass their own validation, and tell the student.
 
@@ -2071,6 +2105,7 @@ def complete(request, submission_id):
             "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
             "submission_form": form,
             "question_formset": question_formset,
+            "form_media": _submission_page_media(form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
         }
         return render(request, "quest_manager/submission.html", context)
@@ -2687,6 +2722,7 @@ def submission(request, submission_id=None, quest_id=None):
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         "submission_form": main_comment_form,
         "question_formset": question_formset,
+        "form_media": _submission_page_media(main_comment_form, question_formset),
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         # A quest can become unpublished (drafted) after a student has already submitted it.
