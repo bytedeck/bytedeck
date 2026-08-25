@@ -553,6 +553,27 @@ def subscription_period_end_date(subscription):
     return timezone.localtime(datetime.fromtimestamp(period_end, tz=dt_timezone.utc)).date()
 
 
+def subscription_auto_renews(subscription):
+    """Whether this subscription will bill again on its own when its period ends.
+
+    A live subscription renews unless its end is already scheduled: the owner
+    turned on "cancel at period end" in the billing portal, or an operator set an
+    explicit ``cancel_at``. Only a paying status counts as renewing: a
+    ``past_due`` subscription is a renewal that IS ALREADY FAILING, and such a
+    deck needs its expiry reminders back rather than a reassuring "renews
+    automatically".
+
+    Args:
+        subscription (dict): A Stripe Subscription object (or test double).
+
+    Returns:
+        bool: True when the deck can expect this subscription to bill again.
+    """
+    if subscription.get('status') not in ('active', 'trialing'):
+        return False
+    return not subscription.get('cancel_at_period_end') and not subscription.get('cancel_at')
+
+
 def reconcile_checkout_session(deck, session_id):
     """Link the deck to its just-completed Checkout Session, if it completed.
 
@@ -597,6 +618,10 @@ def reconcile_checkout_session(deck, session_id):
     paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
+    # this write path bypasses sync_from_stripe_subscription, so it carries the
+    # auto-renew fact itself: a deck fresh from checkout renews on its own, and
+    # the lifecycle copy must say so from the first page load
+    updates['stripe_auto_renews'] = subscription_auto_renews(subscription)
     # stamp only on a fresh link, so repeat polls of the status endpoint don't
     # re-write the customer on every poll
     newly_linked = bool(updates['stripe_customer_id']) and deck.stripe_customer_id != updates['stripe_customer_id']

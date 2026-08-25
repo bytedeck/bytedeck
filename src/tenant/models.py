@@ -145,6 +145,12 @@ class Tenant(TenantMixin):
         max_length=255, blank=True, default='',
         help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
     )
+    stripe_auto_renews = models.BooleanField(
+        default=False, editable=False,
+        help_text="Whether Stripe says the linked subscription bills again on its own. Cleared when the "
+                  "owner sets it to cancel at period end, when a renewal starts failing, and on decks "
+                  "with no Stripe subscription. Synced from Stripe, never edited here."
+    )
     stripe_portal_configuration_id = models.CharField(
         max_length=255, blank=True, default='',
         help_text="The Billing Portal configuration (bpc_...) whose headline names this deck, created "
@@ -457,9 +463,8 @@ class Tenant(TenantMixin):
         The latest-clock rule matters because trial_end_date is set at creation and
         never cleared when a deck subscribes: a lapsed subscriber should read as
         "expired N days ago" relative to its recent paid_until, not its ancient trial
-        date. Negative once the deadline has passed (the reminder cadence keeps firing
-        through the grace window); None when the deck has no dates at all
-        (comped/legacy decks).
+        date. Negative once the deadline has passed (the deck is then inside its
+        grace window); None when the deck has no dates at all (comped/legacy decks).
         """
         deadline = self.governing_deadline
         if deadline is None:
@@ -483,15 +488,37 @@ class Tenant(TenantMixin):
         return self.get_active_user_count() > self.effective_max_active_users
 
     @property
+    def auto_renews(self):
+        """Whether this deck's paid access renews on its own, so every lifecycle
+        surface should say "renews" rather than "expires" (#2586).
+
+        ``stripe_auto_renews`` is what Stripe last told us; this adds the sanity
+        check that the date Stripe charges on has not already passed. A renewal
+        that never landed (a payment failing while its webhook is late, or a
+        webhook outage) would otherwise leave the flag set on a deck whose paid
+        period is history, and that deck really is expiring: it falls back to the
+        expiry cadence, the grace-window banner, and eventually suspension
+        rather than sitting reassured and silent.
+
+        The clock is ``paid_until`` specifically, never the governing deadline:
+        a deck can carry a trial date that outlasts its paid period (an
+        admin-extended trial), and the trial running on says nothing about
+        whether the subscription billed (#2588 review find).
+        """
+        return bool(self.stripe_auto_renews and self.paid_until is not None and self.paid_until >= localdate())
+
+    @property
     def is_expiring_soon(self):
         """Whether the governing deadline is within EXPIRY_WARNING_DAYS (or already
         past, while still in the paid grace window) -- i.e. the status banner should
         escalate from "info" to "warning".
 
-        False for suspended decks (they get the suspension banner instead) and for
-        unmanaged/comped decks (no deadline at all).
+        False for suspended decks (they get the suspension banner instead), for
+        auto-renewing decks (nothing is expiring: the card is charged and the
+        period rolls forward, #2586), and for unmanaged/comped decks (no
+        deadline at all).
         """
-        if self.is_suspended:
+        if self.is_suspended or self.auto_renews:
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
@@ -619,7 +646,10 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import (
+            clear_plan_summary_cache, subscription_auto_renews, subscription_max_active_users,
+            subscription_period_end_date,
+        )
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -655,6 +685,16 @@ class Tenant(TenantMixin):
                 cap = subscription_max_active_users(subscription)
                 if cap is not None and cap != current.max_active_users:
                     updates['max_active_users'] = cap
+
+            # tracked on every sync, not just while granting access: a renewal
+            # that starts failing (past_due) or an owner's "cancel at period end"
+            # must both put the deck back on the expiry cadence (#2586). Only from
+            # a payload that identifies itself, though: the identity guard above
+            # cannot vet an id-less payload, and this flag is state a bogus event
+            # could otherwise lower, exactly like the unlink below (review find)
+            auto_renews = subscription_auto_renews(subscription)
+            if sub_id and auto_renews != current.stripe_auto_renews:
+                updates['stripe_auto_renews'] = auto_renews
 
             if status in ('canceled', 'incomplete_expired'):
                 # unlink strictly on an id match: with the identity guard above this
@@ -853,11 +893,13 @@ class DeckNotice(models.Model):
     outages catch-up-safe: late, never duplicated.
     """
     KIND_EXPIRY = 'expiry'
+    KIND_RENEWAL = 'renewal'
     KIND_LIMIT = 'limit'
     KIND_SUSPENDED = 'suspended'
     KIND_PAYMENT_FAILED = 'payment_failed'  # reserved for the Stripe webhook phase (plan PR 7)
     KIND_CHOICES = [
         (KIND_EXPIRY, 'Trial/subscription expiry reminder'),
+        (KIND_RENEWAL, 'Subscription auto-renewal reminder'),
         (KIND_LIMIT, 'Current-student limit warning'),
         (KIND_SUSPENDED, 'Deck suspended'),
         (KIND_PAYMENT_FAILED, 'Payment failed'),
@@ -867,7 +909,7 @@ class DeckNotice(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.CharField(
         max_length=20,
-        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7', 'daily-YYYY-MM-DD', 'pct80'/'pct100', or 'suspended'."
+        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7'/'d1', 'upcoming', 'pct80'/'pct100', 'suspended', or 'invoice'."
     )
     period_key = models.CharField(
         max_length=32,

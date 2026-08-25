@@ -18,6 +18,8 @@ from library.models import IsLibraryContentMixin
 from prerequisites.models import Prereq, IsAPrereqMixin, HasPrereqsMixin
 from tags.models import TagsModelMixin
 from notifications.models import notify_rank_up
+from utilities.fa_icon import FA_ICON_HELP_TEXT, FA_ICON_VALIDATOR, fa_icon_class
+from utilities.signals import disable_for_loaddata
 
 
 # Create your models here.
@@ -111,11 +113,13 @@ class BadgeRarity(models.Model):
         default='gray',
         help_text='An HTML color name "gray" or hex value in the format: "#7b7b7b;"',
     )
+    # Flows, unescaped, into the rarity icon HTML below (rendered |safe), so it is
+    # held to a safe bare Font Awesome name by the validator every icon field shares.
     fa_icon = models.CharField(
         max_length=50,
-        default='fa-certificate',
-        help_text='A font-awesome icon to represent this rarity, should begin with "fa-".  See here for \
-            options: "https://faicons.com"'
+        default='certificate',
+        validators=[FA_ICON_VALIDATOR],
+        help_text=FA_ICON_HELP_TEXT,
     )
 
     objects = BadgeRarityManager()
@@ -128,9 +132,16 @@ class BadgeRarity(models.Model):
     def __str__(self):
         return self.name
 
+    @property
+    def fa_icon_class(self):
+        """The Font Awesome class list to drop into ``<i class="...">``: ``fa fa-<name>``."""
+        return fa_icon_class(self.fa_icon)
+
     def get_icon_html(self):
-        icon = "<i class='fa {} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
-            self.fa_icon,
+        """The coloured, labelled icon that stands for this rarity wherever a badge's
+        rarity is shown (the badge page and its popover, both of which render it |safe)."""
+        icon = "<i class='{} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
+            self.fa_icon_class,
             self.name,
             self.name,
             self.color,
@@ -145,8 +156,17 @@ class BadgeType(models.Model):
     description = models.TextField(blank=True, null=True)
     repeatable = models.BooleanField(default=True)
     # manual_only = models.BooleanField(default = False)
+    # Flows, unescaped, into the badge-granted notification's icon HTML (rendered
+    # |safe), so it is held to a safe bare Font Awesome name like every other icon field.
     fa_icon = models.CharField(max_length=50, blank=True, null=True,
-                               help_text="Name of a font-awesome icon, e.g.'fa-gift'")
+                               validators=[FA_ICON_VALIDATOR],
+                               help_text=FA_ICON_HELP_TEXT)
+
+    @property
+    def fa_icon_class(self):
+        """The Font Awesome class list to drop into ``<i class="...">``: ``fa fa-<name>``,
+        or '' when this type has no icon of its own."""
+        return fa_icon_class(self.fa_icon)
 
     def __str__(self):
         return self.name
@@ -676,6 +696,7 @@ class BadgeAssertion(models.Model):
 
 # only receive signals from BadgeAssertion model
 @receiver(post_save, sender=BadgeAssertion)
+@disable_for_loaddata
 def post_save_receiver(sender, **kwargs):
     assertion = kwargs["instance"]
     if kwargs["created"]:
@@ -684,14 +705,10 @@ def post_save_receiver(sender, **kwargs):
         if sender is None:
             sender = User.objects.filter(is_staff=True).first()
 
-        fa_icon = assertion.badge.badge_type.fa_icon
-
-        if not fa_icon:
-            fa_icon = "fa-certificate"
-
-        icon = "<i class='text-warning fa fa-lg fa-fw "
-        icon += fa_icon
-        icon += "'></i>"
+        # The badge type's own icon, falling back to the generic badge icon for a
+        # type that has none.
+        fa_classes = assertion.badge.badge_type.fa_icon_class or "fa fa-certificate"
+        icon = f"<i class='text-warning fa-lg fa-fw {fa_classes}'></i>"
 
         notify.send(
             sender,

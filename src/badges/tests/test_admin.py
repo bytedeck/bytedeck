@@ -35,12 +35,12 @@ class BadgeResourceDehydrateTest(ByteDeckTenantTestCase):
 
     def test_dehydrate_badge_type_fields__return_type_attributes_for_saved_badge(self):
         """For a saved badge the helpers surface its badge type's name, sort order and icon."""
-        badge_type = baker.make(BadgeType, name='Gold', sort_order=3, fa_icon='fa-star')
+        badge_type = baker.make(BadgeType, name='Gold', sort_order=3, fa_icon='star')
         badge = baker.make(Badge, badge_type=badge_type)
 
         self.assertEqual(self.resource.dehydrate_badge_type_name(badge), str(badge_type))
         self.assertEqual(self.resource.dehydrate_badge_type_sort(badge), 3)
-        self.assertEqual(self.resource.dehydrate_badge_type_icon(badge), 'fa-star')
+        self.assertEqual(self.resource.dehydrate_badge_type_icon(badge), 'star')
 
     def test_dehydrate_prereq_import_ids__lists_quest_and_badge_prereqs(self):
         """The exported prereq string is an &-joined list of prerequisite import_ids."""
@@ -78,14 +78,23 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
 
     def test_generate_badge_type__creates_badge_type_and_sets_row(self):
         """A row naming a new badge type creates it and rewrites row['badge_type'] to its id."""
-        row = {'badge_type_name': 'Platinum', 'badge_type_sort': 5, 'badge_type_icon': 'fa-gem'}
+        row = {'badge_type_name': 'Platinum', 'badge_type_sort': 5, 'badge_type_icon': 'gem'}
 
         self.resource.generate_badge_type(row)
 
         badge_type = BadgeType.objects.get(name='Platinum')
         self.assertEqual(row['badge_type'], badge_type.id)
         self.assertEqual(badge_type.sort_order, 5)
-        self.assertEqual(badge_type.fa_icon, 'fa-gem')
+        self.assertEqual(badge_type.fa_icon, 'gem')
+
+    def test_generate_badge_type__accepts_a_prefixed_icon_name(self):
+        """A CSV naming the icon "fa-gem" creates a badge type storing the bare "gem" the
+        field holds."""
+        row = {'badge_type_name': 'Platinum', 'badge_type_sort': 5, 'badge_type_icon': 'fa-gem'}
+
+        self.resource.generate_badge_type(row)
+
+        self.assertEqual(BadgeType.objects.get(name='Platinum').fa_icon, 'gem')
 
     def test_generate_badge_type__reuses_existing_badge_type(self):
         """An existing badge type of the same name is reused rather than duplicated."""

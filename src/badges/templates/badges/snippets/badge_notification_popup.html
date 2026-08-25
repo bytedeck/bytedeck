@@ -11,7 +11,7 @@
         <div class="modal-body">
           {% for type, badges in new_badges_by_type.items %}
             <div class="list-group-item list-group-item-info">
-                <i class="pull-right fa fa-fw {{type.fa_icon}}"></i>
+                <i class="pull-right fa-fw {{ type.fa_icon_class }}"></i>
                 {{type.name}}s
             </div>
 

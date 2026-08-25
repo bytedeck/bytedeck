@@ -1,0 +1,38 @@
+/* Font Awesome icon picker and modifier picker (utilities.fa_icon_widget:
+   FontAwesomeIconPickerWidget and FontAwesomeModifierPickerWidget, behaviour in
+   static/js/fa_icon_picker.js and static/js/fa_modifier_picker.js).
+
+   Loaded through the widgets' own Media, so it follows them wherever they render:
+   the site's icon forms and the Django admin alike. Theme-agnostic layout only: on
+   the site the panel uses Bootstrap's .well for its themed background/border and the
+   options are themed .btn, so no colours are set here. The admin has no Bootstrap,
+   and stands in for it with static/css/fa_icon_picker_admin.css. */
+.fa-icon-picker-panel {
+    margin-top: 6px;
+    margin-bottom: 0;
+}
+.fa-icon-picker-grid {
+    max-height: 220px;
+    overflow-y: auto;
+    margin-top: 8px;
+}
+.fa-icon-picker-option {
+    width: 40px;
+    height: 34px;
+    margin: 2px;
+    padding: 6px 0;
+    text-align: center;
+}
+.fa-modifier-picker-controls {
+    margin-bottom: 8px;
+}
+.fa-modifier-picker-controls .btn-group {
+    margin-right: 8px;
+    margin-bottom: 4px;
+}
+/* The composed "fa-" class string is meaningless to most users, so the field the
+   toggle buttons drive is hidden: the buttons are the whole UI and the field just
+   carries the value the form submits. */
+.fa-modifier-picker-input {
+    display: none;
+}

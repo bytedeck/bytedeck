@@ -9,6 +9,35 @@
 -->
 {% load static %}
 
+{% comment %}
+  Searching is done by the server so it covers the whole tab, not just the quests on this
+  page. Submitting drops any ?page=, so a new search starts at its own first page. This
+  sits above the bulk-edit form rather than inside it: nested forms are not valid HTML.
+{% endcomment %}
+<form class="form-inline list-search-form" method="get" action="">
+  <div class="form-group">
+    <label class="sr-only" for="quest-search">Search quests</label>
+    <div class="input-group">
+      <input type="search" class="form-control" id="quest-search" name="q"
+             value="{{ search_term }}" placeholder="Search quests, campaigns and {{ config.custom_name_for_tag|lower }}s">
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="submit" title="Search every quest in this tab">
+          <i class="fa fa-fw fa-search"></i>
+        </button>
+        {% if search_term %}
+          <a class="btn btn-default" href="{% querystring q=None page=None %}" role="button" title="Clear this search">
+            <i class="fa fa-fw fa-times"></i>
+          </a>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</form>
+
+{% if search_term %}
+  <p class="text-muted">{{ num_matching_quests }} quest{{ num_matching_quests|pluralize }} match{{ num_matching_quests|pluralize:"es," }} "{{ search_term }}".</p>
+{% endif %}
+
 {% if bulk_edit_mode %}
   <script src="{% static 'quest_manager/js/custom-quest.js' %}"></script>
 
@@ -46,20 +75,31 @@
          data-classes="table table-hover table-responsive"
          data-toggle="table"
          data-detail-view="true"
-         data-unique-id="id"
-         data-search="true"
-         data-trim-on-search="false"
-         data-custom-search="multiKeywordSearch">
+         data-unique-id="id">
     <thead>
       <tr class="panel-heading">
         {% if bulk_edit_mode %}
-          <th><input type="checkbox" id="select-all-checkbox" onclick="toggleAllCheckboxes(this)"></th>
+          {% comment %} Ticks the rows on this page, which is what the reader can see {% endcomment %}
+          <th><input type="checkbox" id="select-all-checkbox" onclick="toggleAllCheckboxes(this)"
+                     title="Select every quest on this page"></th>
         {% endif %}
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
-        <th class="col-sm-5 col-xs-8" data-field="name" data-sortable="true">Quest</th>
-        <th class="col-sm-1 text-right col-xs-2" data-field="xp" data-sortable="true">XP</th>
-        <th class="col-sm-2 text-right hidden-xs" data-field="campaign" data-sortable="true">Campaign</th>
-        <th class="col-sm-1 text-center hidden-xs" data-field="tags" data-sortable="true">{{ config.custom_name_for_tag }}s</th>
+        {% comment %}
+          The headings link back to the view, so the ordering is applied to every quest in
+          the tab before the page is cut from it (#2410, #2582). Tags is not sortable: a
+          quest carries any number of them, so there is no one value to order it by, and
+          the search box already finds the quests carrying a given one.
+        {% endcomment %}
+        <th class="col-sm-5 col-xs-8" data-field="name">
+          {% include "snippets/sortable_column_heading.html" with column="name" label="Quest" sort_column=quest_sort_column sort_descending=quest_sort_descending %}
+        </th>
+        <th class="col-sm-1 text-right col-xs-2" data-field="xp">
+          {% include "snippets/sortable_column_heading.html" with column="xp" label="XP" sort_column=quest_sort_column sort_descending=quest_sort_descending %}
+        </th>
+        <th class="col-sm-2 text-right hidden-xs" data-field="campaign">
+          {% include "snippets/sortable_column_heading.html" with column="campaign" label="Campaign" sort_column=quest_sort_column sort_descending=quest_sort_descending %}
+        </th>
+        <th class="col-sm-1 text-center hidden-xs" data-field="tags">{{ config.custom_name_for_tag }}s</th>
         <th class="col-sm-2 hidden-xs" data-field="status_icons"><!-- status_icons --></th>
       </tr>
     </thead>
@@ -132,6 +172,11 @@
       </ul>
     </div>
   {% endfor %}
+  {% with items=quests %}
+    {% include "quest_manager/pagination_controls.html" %}
+  {% endwith %}
+{% elif search_term %}
+  <p>No quests in this tab match "{{ search_term }}".</p>
 {% else %}
   <p>No quests are available.</p>
 {% endif %}

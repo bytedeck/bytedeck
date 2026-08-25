@@ -9,6 +9,7 @@ from courses.models import Rank
 from prerequisites.models import Prereq
 
 from djcytoscape.tasks import regenerate_map
+from utilities.signals import disable_for_loaddata
 
 
 def regenerate_related_maps(instance):
@@ -31,12 +32,14 @@ def regenerate_related_maps(instance):
 @receiver([post_save, post_delete], sender=Badge)
 @receiver([post_save, post_delete], sender=Quest)
 @receiver([post_save, post_delete], sender=Rank)
+@disable_for_loaddata
 def badge_regenerate_related_maps(sender, instance, **kwargs):
     """ Regenerates any related map(s) when either a badge, quest, or rank is saved/deleted. """
     regenerate_related_maps(instance)
 
 
 @receiver([post_save, post_delete], sender=Prereq)
+@disable_for_loaddata
 def prereq_regenerate_related_maps(sender, instance, **kwargs):
     """ Regenerates any related map(s) when a prereq is saved or deleted. """
 
