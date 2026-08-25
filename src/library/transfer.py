@@ -226,8 +226,9 @@ def _snapshot_questions(quest):
 
     A question is part of the quest's content, not of the deck it was written on: a quest
     whose instructions say "answer the questions below" is a different quest without them,
-    so they travel with it (#2162). They have no identity of their own to travel under, so
-    they ride inside the quest's snapshot and are matched on the far side by ordinal.
+    so they travel with it (#2162). They ride inside the quest's snapshot rather than
+    travelling on their own, and each carries its `import_id`, which is what pairs it with
+    the right row on the far side (`_write_questions`).
 
     Must be called from within the source schema context.
 
@@ -470,13 +471,19 @@ def _find_prereq_target(import_id):
 def _write_questions(quest, questions):
     """Make this deck's copy of a quest ask exactly the questions it travelled with.
 
-    Matched by ordinal, which is the only identity a question has across schemas: it
-    carries no import_id, and the model already holds one question per ordinal per quest.
-    A question at an ordinal the quest already uses is updated in place rather than
+    Matched by `import_id`, the identity a question keeps across schemas and across a
+    reorder. A question the destination already has is updated in place rather than
     replaced, so answers students gave stay attached to the question they answered.
 
-    Ordinals the arriving quest does not use are deleted, which is what makes re-sharing a
-    quest whose author removed a question actually remove it here. Answers to a deleted
+    Ordinal cannot serve as that identity, because reordering is implemented as swapping
+    ordinals (`QuestionMoveView._swap_ordinals`): after the author reorders a shared quest,
+    the row sitting at a given ordinal here is a different question than the one arriving
+    with it, and updating it in place would leave every answer already published against it
+    displayed under another question's text (#2566). Ordinal now only decides the order
+    students answer in.
+
+    Questions the arriving quest no longer asks are deleted, which is what makes re-sharing
+    a quest whose author removed a question actually remove it here. Answers to a deleted
     question survive it (`QuestionSubmission.question` is SET_NULL) and show in the marking
     view as answers to a question that is gone.
 
@@ -494,10 +501,29 @@ def _write_questions(quest, questions):
     Raises:
         LibraryTransferError: if a question cannot be written.
     """
-    superseded = {question.ordinal: question for question in Question.objects.filter(quest=quest)}
+    existing = {question.import_id: question for question in Question.objects.filter(quest=quest)}
+    arriving = {fields['import_id'] for fields in questions}
+
+    Question.objects.filter(
+        pk__in=[question.pk for import_id, question in existing.items() if import_id not in arriving]
+    ).delete()
+
+    # Every ordinal is about to be reassigned, and (quest, ordinal) is unique, so a question
+    # that keeps its row but changes place would collide with whichever row is still standing
+    # there. Parking the rows being kept above every ordinal in play empties the range first.
+    # A plain UPDATE, not a validated save: this is bookkeeping between two writes of the same
+    # field, and the value is deliberately outside the range the quest ends up using.
+    kept = [question for import_id, question in existing.items() if import_id in arriving]
+    if kept:
+        parking = max(
+            [question.ordinal for question in existing.values()]
+            + [fields['ordinal'] for fields in questions]
+        ) + 1
+        for offset, question in enumerate(kept):
+            Question.objects.filter(pk=question.pk).update(ordinal=parking + offset)
 
     for fields in questions:
-        question = superseded.pop(fields['ordinal'], None) or Question(quest=quest)
+        question = existing.get(fields['import_id']) or Question(quest=quest)
         for name, value in fields.items():
             setattr(question, name, value)
 
@@ -513,8 +539,6 @@ def _write_questions(quest, questions):
             raise LibraryTransferError(
                 f"'{quest.name}' could not be copied: question {fields['ordinal']}: {error}"
             ) from error
-
-    Question.objects.filter(pk__in=[question.pk for question in superseded.values()]).delete()
 
 
 def write_quests(writes, *, with_campaign, refresh_matched_prereqs=False):
