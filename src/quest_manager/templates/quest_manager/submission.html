@@ -348,10 +348,10 @@
 
                     // handle a non-successful response
                     error : function(xhr,errmsg,err) {
-                        // Put the button back first. save_draft() only runs while #draft-text is
-                        // visible, so leaving the spinner up after a failure stops every later
-                        // autosave tick and every click from saving at all, for the rest of the
-                        // page's life, with no sign of why (#2561).
+                        // Put the button back first: save_draft() only runs while #draft-text is
+                        // visible, so restoring it is what lets the next autosave tick, or a
+                        // click, attempt the save again. #draft-error stays up alongside it
+                        // until a save succeeds, so the failure is visible meanwhile (#2561).
                         $('#draft-spin').hide();
                         $('#draft-check').hide();
                         $('#draft-text').show();
@@ -359,8 +359,8 @@
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
                         if (pressed) {
                             // The student asked for this save, so tell them it did not happen.
-                            // The timer's own failures stay in #draft-error: now that they retry,
-                            // a modal would interrupt a whole lesson, once a minute.
+                            // A timer's failure is reported only in #draft-error: it retries by
+                            // itself, and a modal once a minute would interrupt a whole lesson.
                             alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
                         }
                     }
