@@ -2452,7 +2452,6 @@ def ajax_save_draft(request):
             submission_id = int(request.POST.get("submission_id", ""))
         except (TypeError, ValueError):
             raise Http404("No valid submission id provided.")
-        # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
         # if there is no draft comment, then the quest is not in progress
@@ -2463,9 +2462,33 @@ def ajax_save_draft(request):
 
         if submission_comment is not None and draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
-            # sub.xp_requested = xp_requested
             response_data["result"] = "Draft saved"
             draft_comment.save()
+
+        # The page sends the custom XP with every draft save, so store it: the submission
+        # form seeds that field from sub.xp_requested, so storing it is what brings the
+        # student's own number back when they return to a half-finished quest (#2562).
+        #
+        # Guarded on exactly the condition the page builds the field under, so a request
+        # cannot set XP on a quest that does not offer it, or on an approved submission.
+        if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
+            try:
+                xp_requested = int(request.POST.get("xp_requested", ""))
+            except (TypeError, ValueError):
+                # absent, blank, or not a number: leave whatever is stored alone
+                xp_requested = None
+            # Zero and below are left alone rather than stored. Zero is this app's sentinel
+            # for "no custom XP requested" (`sub.xp_requested or sub.quest.xp` here and in
+            # the approval path), so storing it says the same thing as storing nothing while
+            # destroying a real number the student had already saved. A box holding "0" for
+            # a keystroke, or emptied to be retyped, is exactly what an autosave lands in.
+            if xp_requested is not None and xp_requested > 0 and xp_requested != sub.xp_requested:
+                sub.xp_requested = xp_requested
+                sub.full_clean()
+                # this field only: a draft save must not write back the rest of a row it
+                # read a moment ago (#2565)
+                sub.save(update_fields=["xp_requested"])
+                response_data["result"] = "Draft saved"
 
         # Autosave draft answers to the quest's questions. Text answers arrive as a JSON
         # object of the formset's field names, pairing each row's hidden id with its
