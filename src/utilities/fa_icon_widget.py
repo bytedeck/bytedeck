@@ -43,13 +43,17 @@ class FontAwesomeIconPickerWidget(forms.TextInput):
         return context
 
     class Media:
-        """The shared icon list then the picker that reads it.
+        """The widget's own stylesheet, then the shared icon list and the picker that
+        reads it.
 
-        Vanilla JS (no jQuery), so include order relative to jQuery does not matter;
-        the icon list only has to load before the picker, which this ordering
-        guarantees.
+        The stylesheet travels with the widget rather than living in the site-wide
+        sheets, so the picker is laid out wherever it is rendered, the Django admin
+        included. The JS is vanilla (no jQuery), so include order relative to jQuery
+        does not matter; the icon list only has to load before the picker, which this
+        ordering guarantees.
         """
 
+        css = {"all": ("css/fa_icon_picker.css",)}
         js = ("js/fa_icons_4.7.0.js", "js/fa_icon_picker.js")
 
 
@@ -76,6 +80,24 @@ class FontAwesomeModifierPickerWidget(forms.TextInput):
         super().__init__(attrs)
 
     class Media:
-        """The vanilla-JS behaviour that turns the toggle buttons into the class string."""
+        """The shared picker stylesheet (which hides this widget's raw field) and the
+        vanilla-JS behaviour that turns the toggle buttons into the class string."""
 
+        css = {"all": ("css/fa_icon_picker.css",)}
         js = ("js/fa_modifier_picker.js",)
+
+
+class FontAwesomeAdminFormMixin:
+    """Mix into a Django-admin ``ModelForm`` that uses :class:`FontAwesomeIconPickerWidget`.
+
+    The admin loads neither Font Awesome nor Bootstrap, so on its own the picker grid
+    would be a wall of blank boxes in an unstyled column. This adds the vendored Font
+    Awesome 4.7.0 stylesheet so the icons are visible, and a small admin-only sheet that
+    stands in for the Bootstrap layout the widget's markup expects. Both are admin-only:
+    the site already loads Font Awesome and Bootstrap for every page.
+    """
+
+    class Media:
+        """Font Awesome itself, then the admin stand-ins for Bootstrap's layout."""
+
+        css = {"all": ("css/font-awesome-4.7.0.min.css", "css/fa_icon_picker_admin.css")}

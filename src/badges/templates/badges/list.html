@@ -15,7 +15,7 @@
 
   <div class="panel-heading">
     <h3 class="panel-title">
-      <i class="pull-right fa {{badge_type.fa_icon}}"></i>
+      <i class="pull-right {{ badge_type.fa_icon_class }}"></i>
       {{badge_type.name}}s
       {% if request.user.is_staff %}
         &nbsp;&nbsp;<a class="btn btn-xs btn-warning"

@@ -13,10 +13,15 @@ from prerequisites.admin import PrereqInline
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
 from quest_manager.models import Quest
 
+from utilities.fa_icon import bare_icon_name
+from .forms import BadgeRarityForm
 from .models import Badge, BadgeType, BadgeSeries, BadgeAssertion, BadgeRarity
 
 
 class BadgeRarityAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
+    # The admin is the only place rarities are edited, so the icon picker is wired
+    # in here rather than on a site form.
+    form = BadgeRarityForm
     list_display = ('name', 'percentile', 'color', 'fa_icon')
 
 
@@ -124,13 +129,20 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
          + badge_type_icon
         If badge type doesn't exist, it creates it.
         If staff cancels import anything created here will be rolled back automatically.
+        The icon column is reduced to the bare name the field holds, so a CSV naming it
+        "fa-gem" imports as well as one naming it "gem". Returns nothing: the row is
+        edited in place.
         """
         bt_name = row['badge_type_name']
         bt_sort = row['badge_type_sort']
         bt_icon = row['badge_type_icon']
 
         if bt_name:
-            defaults = {'fa_icon': bt_icon}
+            # A CSV can name the icon with its "fa-" prefix, so it is reduced to the
+            # bare name the field holds. No form runs here, so this is also what keeps
+            # an imported value from reaching the badge-granted notification, which is
+            # rendered |safe: bare_icon_name drops anything the field would refuse.
+            defaults = {'fa_icon': bare_icon_name(bt_icon)}
 
             # if bt_sort is None badge creation will throw an error
             if bt_sort:

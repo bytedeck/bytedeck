@@ -220,7 +220,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
             'url': reverse('courses:ranks'),
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -236,7 +236,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'New Menu Item',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
             'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -253,7 +253,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
         # set label and icon to something they wouldn't normally be
         data = {
             'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
             'url': reverse('courses:ranks'),
             'open_link_in_new_tab': False,
             'sort_order': 0,
@@ -269,7 +269,7 @@ class MenuItemViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'label': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
             'url': reverse('courses:ranks')[1:],
             'open_link_in_new_tab': False,
             'sort_order': 0,
