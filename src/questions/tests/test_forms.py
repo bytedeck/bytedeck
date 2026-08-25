@@ -214,13 +214,13 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         """A required long answer refuses the markup an editor posts when nothing was typed.
 
         The summernote editor never posts an empty string, so these are what a student who
-        clicked into the box and pressed space or enter actually sends. Each is truthy, so
-        before #2560 every one of them satisfied the required check and the quest completed
-        with a blank answer nobody was told about.
+        clicked into the box and pressed space or enter actually sends. Every one of them is
+        truthy, which is why a plain `not response_text` test cannot decide this: emptiness
+        here is a question about what the markup renders as, not about the string.
 
         The widget catches two exact strings of its own before the form ever sees them (see
         the test below), which is why they are not repeated here: these are the ones that
-        got past it.
+        reach the form's own check.
         """
         for value in ("<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>", "<p><br/></p><p><br/></p>"):
             with self.subTest(value=value):
@@ -232,9 +232,10 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         """The two strings django-summernote itself treats as empty are refused as well.
 
         `SummernoteWidgetBase.value_from_datadict` maps exactly `<p><br></p>` and
-        `<p><br/></p>` to None, so the required check already refused those two before #2560.
-        Asserted here so that a summernote upgrade dropping or narrowing that list shows up
-        as a failure rather than as blank answers being accepted again.
+        `<p><br/></p>` to None, so these two are caught by the field's own required check
+        rather than by the content test the test above covers. Asserted here so that a
+        summernote upgrade dropping or narrowing that list shows up as a failure here rather
+        than as blank answers reaching a marker.
         """
         for value in ("<p><br></p>", "<p><br/></p>"):
             with self.subTest(value=value):

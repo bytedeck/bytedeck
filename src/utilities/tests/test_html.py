@@ -302,6 +302,20 @@ class IsEmptyHtmlTests(SimpleTestCase):
             with self.subTest(tag=tag):
                 self.assertFalse(is_empty_html(f"<p><{tag} src='x'></{tag}></p>"))
 
+    def test_is_empty_html__media_child_tags_are_not_content_on_their_own(self):
+        """A bare `<source>` or `<track>` renders nothing, so it does not count as an answer.
+
+        Both only configure a `<video>` or `<audio>` parent, and that parent is content in
+        its own right, so a real embed is still recognised by the parent tag.
+        """
+        for value in ("<p><source src='a.mp4'></p>", "<p><track src='a.vtt'></p>"):
+            with self.subTest(value=value):
+                self.assertTrue(is_empty_html(value))
+
+        for value in ("<video><source src='a.mp4'></video>", "<audio><track src='a.vtt'></audio>"):
+            with self.subTest(value=value):
+                self.assertFalse(is_empty_html(value))
+
     def test_is_empty_html__embed_tag_is_matched_however_it_is_written(self):
         """Whitespace and capitals inside a tag don't hide it from the content check."""
         for value in ("<P><  IMG SRC='x'></P>", "<p><Iframe src='x'></Iframe></p>"):

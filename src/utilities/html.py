@@ -12,8 +12,12 @@ from django.utils.html import strip_tags
 # Tags that are content in their own right, with no text of their own. A student can answer a
 # question with nothing but a pasted screenshot or an embedded video, so `is_empty_html` has to
 # see those as an answer even though stripping the tags leaves an empty string behind.
+#
+# Only tags that render something by themselves belong here. `<source>` and `<track>` do not:
+# they configure a `<video>` or `<audio>` parent, which is listed already, and one on its own
+# shows the reader nothing.
 EMBEDDED_CONTENT_TAGS = frozenset({
-    "img", "iframe", "video", "audio", "source", "track", "embed", "object", "svg", "canvas", "math",
+    "img", "iframe", "video", "audio", "embed", "object", "svg", "canvas", "math",
 })
 
 # The name of each opening tag in a fragment, e.g. "<p><img src='x'>" -> ["p", "img"]. Only text

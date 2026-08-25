@@ -201,10 +201,11 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
     def test_complete__required_long_answer_left_untouched_blocks_completion(self):
         """An editor a student typed nothing into does not satisfy a required long answer.
 
-        End to end, this is the symptom of #2560: the student clicks into the editor and
-        presses space or enter, summernote posts markup rather than an empty string, and the
-        quest used to complete with a blank answer. The marker's answer table renders that
-        markup through |safe as an empty cell, so nobody could tell it had happened.
+        End to end: the student clicks into the editor and presses space or enter, summernote
+        posts markup rather than an empty string, and the submission is blocked with the
+        question's error instead of completing. That markup renders as nothing, so a quest
+        allowed to complete on it hands the marker an empty cell in the answer table with
+        nothing to say the question went unanswered.
         """
         self.long_question.required = True
         self.long_question.save()
