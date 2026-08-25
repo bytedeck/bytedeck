@@ -29,8 +29,8 @@ class BareIconNameTest(SimpleTestCase):
     Pure function, so no database is needed."""
 
     def test_bare_icon_name__handles_every_stored_shape(self):
-        """Bare names pass through, the older "fa-" and "fa fa-" shapes are reduced,
-        surrounding whitespace is trimmed, and empty values stay empty."""
+        """Bare names pass through, the "fa-" and "fa fa-" shapes are reduced, surrounding
+        whitespace is trimmed, and empty values stay empty."""
         cases = [
             ("star", "star"),
             ("star-o", "star-o"),
@@ -44,6 +44,14 @@ class BareIconNameTest(SimpleTestCase):
         for raw, expected in cases:
             with self.subTest(raw=raw):
                 self.assertEqual(bare_icon_name(raw), expected)
+
+    def test_bare_icon_name__drops_a_value_the_field_would_refuse(self):
+        """A value that never went through a form (a CSV import, a row edited straight in
+        the database) is held to the same names the validator accepts, so markup, quotes
+        and a doubled prefix all give "" rather than reaching the class attribute."""
+        for bad in ['x"onmouseover=alert(1)', "'></i><script>alert(1)</script>", "Star", "star;", "fa-fa-star"]:
+            with self.subTest(bad=bad):
+                self.assertEqual(bare_icon_name(bad), "")
 
 
 class FaIconClassTest(SimpleTestCase):
@@ -67,10 +75,15 @@ class FaIconClassTest(SimpleTestCase):
         """Whitespace around the name and the modifiers is trimmed."""
         self.assertEqual(fa_icon_class("  gift  ", "   "), "fa fa-gift")
 
-    def test_fa_icon_class__renders_a_value_that_kept_its_prefix(self):
-        """A value that reached the database with its "fa-" prefix (a CSV import from a
-        deck on an older version, say) still renders the icon rather than "fa fa-fa-gift"."""
+    def test_fa_icon_class__renders_a_value_that_carries_its_prefix(self):
+        """A stored value carrying the "fa-" prefix (a CSV import, say) renders the icon
+        with a single prefix rather than "fa fa-fa-gift"."""
         self.assertEqual(fa_icon_class("fa-gift"), "fa fa-gift")
+
+    def test_fa_icon_class__drops_modifier_tokens_that_are_not_class_names(self):
+        """Templates render the composed list inside class="...", so a modifier value
+        carrying a quote is dropped and the real modifier beside it is kept."""
+        self.assertEqual(fa_icon_class("gift", 'fa-lg x"onmouseover=alert(1)'), "fa fa-gift fa-lg")
 
 
 class FaIconValidatorTest(SimpleTestCase):
@@ -117,10 +130,12 @@ class FontAwesomeIconPickerWidgetMediaTest(SimpleTestCase):
 class MenuItemBareFaIconNameMigrationTest(SimpleTestCase):
     """The frozen splitter behind the menu item data migration. Pure function, no database."""
 
-    def test_bare_fa_icon_name__handles_every_historical_shape(self):
+    def test_bare_fa_icon_name__handles_every_stored_shape(self):
         """Prefixed values, whole class lists, sizing classes and unparseable values all
-        reduce as documented, and real icon names that merely start like a modifier class
-        ("fa-spinner", "fa-life-ring") survive."""
+        reduce as documented, real icon names that merely start like a modifier class
+        ("fa-spinner", "fa-life-ring") survive, and anything whose name the field would
+        refuse (an underscore, an accent, a doubled prefix) gives "" rather than a junk
+        value."""
         cases = [
             ("fa-star", "star"),
             ("fa fa-star", "star"),
@@ -136,6 +151,9 @@ class MenuItemBareFaIconNameMigrationTest(SimpleTestCase):
             ("", ""),
             (None, ""),
             ("foo bar", ""),
+            ("fa-user_name", ""),
+            ("fa-\u00e9clair", ""),
+            ("fa-fa-star", ""),
         ]
         for raw, expected in cases:
             with self.subTest(raw=raw):
@@ -144,7 +162,7 @@ class MenuItemBareFaIconNameMigrationTest(SimpleTestCase):
 
 class MenuItemFaIconTest(ByteDeckTenantTestCase):
     """A menu item renders its icon through the shared helper, and the data migration
-    reduces any value that kept the "fa-" prefix a user typed."""
+    reduces a value carrying the "fa-" prefix a user typed."""
 
     def test_fa_icon_class__composes_the_class_list(self):
         """The stored bare name becomes ``fa fa-<name>``."""

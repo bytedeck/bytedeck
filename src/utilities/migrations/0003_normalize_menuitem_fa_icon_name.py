@@ -6,8 +6,17 @@ import django.core.validators
 from django.db import migrations, models
 
 
-# Every "fa-<x>" class token in a value.
-_FA_TOKEN_RE = re.compile(r"fa-[\w-]+")
+# A whole "fa-<x>" class token, made of the ASCII lowercase letters, digits and
+# hyphens every Font Awesome 4.7.0 class name is made of, and not running on into a
+# longer word. Found anywhere in the value, so a whole <i class='fa fa-star'></i>
+# someone pasted into the field still yields its icon; the trailing guard is what
+# keeps a value like "fa-user_name" from being read as the class "fa-user".
+_FA_TOKEN_RE = re.compile(r"fa-[a-z0-9-]+(?![\w-])")
+
+# The shape the field accepts, the pattern its validator carries, requiring a name.
+# The reduced name is checked against it, so this migration cannot leave a value the
+# field would refuse.
+_ICON_NAME_RE = re.compile(r"(?!fa-)[a-z0-9-]+")
 
 # Font Awesome 4.7.0 classes that modify an icon rather than name one, so a value
 # like "fa fa-fw fa-star" is read as the icon "star" and not as "fw". Matched whole,
@@ -39,25 +48,23 @@ def bare_fa_icon_name(raw):
     ``"fa-gift"`` -> ``"gift"``, ``"fa fa-gift"`` -> ``"gift"``, an already-bare
     ``"gift"`` -> ``"gift"``, and a value carrying sizing classes ``"fa-star fa-lg"``
     -> ``"star"`` (these fields have never had anywhere to keep modifier classes, so
-    they are dropped). Empty or unparseable values give ``""``.
+    they are dropped). Empty values, unparseable ones, and any whose name the field
+    would refuse (``"fa-user_name"``, ``"fa-fa-gift"``) give ``""``.
     """
-    raw = (raw or "").strip()
-    if not raw:
-        return ""
+    fa_tokens = _FA_TOKEN_RE.findall(raw or "")
 
-    fa_tokens = _FA_TOKEN_RE.findall(raw)
     if not fa_tokens:
         # No "fa-" token: an already-bare name like "star-o" (ignore a stray "fa").
         # Only accept a lone, clean token; anything else is left unset rather than
         # writing a junk value into the field.
-        words = [word for word in raw.split() if word and word != "fa"]
-        if len(words) == 1 and re.fullmatch(r"[a-z0-9-]+", words[0]):
-            return words[0]
-        return ""
+        words = [word for word in (raw or "").split() if word != "fa"]
+        return words[0] if len(words) == 1 and _ICON_NAME_RE.fullmatch(words[0]) else ""
 
     for token in fa_tokens:
         if not _is_modifier(token):
-            return token[len("fa-"):]
+            name = token[len("fa-"):]
+            # A doubled prefix ("fa-fa-gift") would leave a name the field refuses.
+            return name if _ICON_NAME_RE.fullmatch(name) else ""
     return ""
 
 

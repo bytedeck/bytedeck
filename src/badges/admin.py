@@ -129,14 +129,19 @@ class BadgeResource(NonPublicSchemaOnlyAdminAccessMixin, resources.ModelResource
          + badge_type_icon
         If badge type doesn't exist, it creates it.
         If staff cancels import anything created here will be rolled back automatically.
+        The icon column is reduced to the bare name the field holds, so a CSV naming it
+        "fa-gem" imports as well as one naming it "gem". Returns nothing: the row is
+        edited in place.
         """
         bt_name = row['badge_type_name']
         bt_sort = row['badge_type_sort']
         bt_icon = row['badge_type_icon']
 
         if bt_name:
-            # A CSV exported by a deck running an older version carries the icon with
-            # its "fa-" prefix, so it is reduced to the bare name the field holds now.
+            # A CSV can name the icon with its "fa-" prefix, so it is reduced to the
+            # bare name the field holds. No form runs here, so this is also what keeps
+            # an imported value from reaching the badge-granted notification, which is
+            # rendered |safe: bare_icon_name drops anything the field would refuse.
             defaults = {'fa_icon': bare_icon_name(bt_icon)}
 
             # if bt_sort is None badge creation will throw an error

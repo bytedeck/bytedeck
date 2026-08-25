@@ -27,10 +27,11 @@ User = get_user_model()
 class BadgeBareFaIconNameMigrationTest(SimpleTestCase):
     """The frozen splitter behind the badge data migration. Pure function, no database."""
 
-    def test_bare_fa_icon_name__handles_every_historical_shape(self):
-        """The "fa-" prefixed values these fields used to hold, whole class lists and
-        sizing classes all reduce as documented, and real icon names that merely start
-        like a modifier class ("fa-spinner", "fa-life-ring") survive."""
+    def test_bare_fa_icon_name__handles_every_stored_shape(self):
+        """Prefixed values, whole class lists and sizing classes all reduce as documented,
+        real icon names that merely start like a modifier class ("fa-spinner",
+        "fa-life-ring") survive, and anything whose name the field would refuse (an
+        underscore, an accent, a doubled prefix) gives "" rather than a junk value."""
         cases = [
             ("fa-gift", "gift"),
             ("fa-certificate", "certificate"),
@@ -46,6 +47,9 @@ class BadgeBareFaIconNameMigrationTest(SimpleTestCase):
             ("", ""),
             (None, ""),
             ("not an icon", ""),
+            ("fa-user_name", ""),
+            ("fa-\u00e9clair", ""),
+            ("fa-fa-gift", ""),
         ]
         for raw, expected in cases:
             with self.subTest(raw=raw):
@@ -93,8 +97,8 @@ class BadgeFaIconDataMigrationTest(ByteDeckTenantTestCase):
         self.assertEqual(rarity.fa_icon, "certificate")
 
     def test_restore_fa_icon_prefixes__puts_the_prefix_back(self):
-        """Unapplying the migration returns both fields to the "fa-" shape the older code
-        rendered, so the field round-trips."""
+        """Unapplying the migration puts the "fa-" prefix back on both fields, so a stored
+        value round-trips."""
         badge_type = baker.make(BadgeType, fa_icon="gift")
         rarity = baker.make(BadgeRarity, fa_icon="certificate", percentile=44.0)
         blank = baker.make(BadgeType, fa_icon="")
@@ -163,6 +167,23 @@ class BadgeGrantedNotificationIconTest(ByteDeckTenantTestCase):
         self.assertIn("fa fa-certificate", notification.font_icon)
         self.assertNotIn("fa fa fa-", notification.font_icon)
 
+    def test_post_save_receiver__cannot_carry_markup_from_an_imported_icon(self):
+        """A badge CSV is imported without a form, so a crafted icon column would otherwise
+        reach this notification, which is rendered |safe in the notification list. The name
+        is dropped on import, so the notification shows the generic certificate instead."""
+        row = {"badge_type_name": "Crafted", "badge_type_sort": 1,
+               "badge_type_icon": 'x"onmouseover=alert(1)'}
+        BadgeResource().generate_badge_type(row)
+        badge_type = BadgeType.objects.get(name="Crafted")
+        self.assertEqual(badge_type.fa_icon, "")
+
+        badge = baker.make(Badge, badge_type=badge_type)
+        BadgeAssertion.objects.create_assertion(self.student, badge, issued_by=self.teacher)
+
+        notification = Notification.objects.all_for_user(self.student).last()
+        self.assertNotIn("onmouseover", notification.font_icon)
+        self.assertIn("fa fa-certificate", notification.font_icon)
+
 
 class BadgeTypeFormIconPickerTest(ByteDeckTenantTestCase):
     """The badge type form offers the icon picker and holds the field to a bare name."""
@@ -175,8 +196,8 @@ class BadgeTypeFormIconPickerTest(ByteDeckTenantTestCase):
         """The field reads "Icon", not the "Fa icon" Django would derive from its name."""
         self.assertEqual(BadgeTypeForm().fields["fa_icon"].label, "Icon")
 
-    def test_form__rejects_the_prefixed_name_this_field_used_to_hold(self):
-        """Typing "fa-gift", the shape the old help text asked for, now fails validation."""
+    def test_form__rejects_a_prefixed_icon_name(self):
+        """The field holds a bare name, so typing "fa-gift" fails validation."""
         form = BadgeTypeForm(data={"name": "Picker Badge Type", "sort_order": 1, "fa_icon": "fa-gift"})
         self.assertFalse(form.is_valid())
         self.assertIn("fa_icon", form.errors)
@@ -215,8 +236,8 @@ class BadgeRarityFormIconPickerTest(ByteDeckTenantTestCase):
         self.assertIn("css/fa_icon_picker_admin.css", media)
         self.assertIn("js/fa_icon_picker.js", media)
 
-    def test_form__rejects_the_prefixed_name_this_field_used_to_hold(self):
-        """Typing "fa-certificate", the shape the old help text asked for, now fails."""
+    def test_form__rejects_a_prefixed_icon_name(self):
+        """The rarity field holds a bare name, so typing "fa-certificate" fails validation."""
         form = BadgeRarityForm(data={"name": "Picker Rarity", "percentile": 47.0, "color": "gold",
                                      "fa_icon": "fa-certificate"})
         self.assertFalse(form.is_valid())
@@ -260,8 +281,8 @@ class BadgeTypeIconRoundTripTest(ByteDeckTenantTestCase):
     """A badge CSV keeps working across the change of format."""
 
     def test_badge_type_icon__round_trips_through_export_and_import(self):
-        """An icon exported from a deck on this version imports back unchanged, and one
-        exported by a deck on an older version arrives with its prefix dropped."""
+        """A bare icon name exported from a deck imports back unchanged, and a CSV naming
+        it with the "fa-" prefix arrives with the prefix dropped."""
         resource = BadgeResource()
         badge_type = baker.make(BadgeType, name="Gold", fa_icon="star")
         badge = baker.make(Badge, badge_type=badge_type)

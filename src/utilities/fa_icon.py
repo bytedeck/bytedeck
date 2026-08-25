@@ -10,6 +10,8 @@ help text and render helper they share, so the four fields cannot drift apart
 again.
 """
 
+import re
+
 from django.core.validators import RegexValidator
 from django.utils.safestring import mark_safe
 
@@ -31,25 +33,36 @@ FA_ICON_HELP_TEXT = mark_safe(
     'A Font Awesome icon name, e.g. "star". Use the picker to browse the options, or see the full list of '
     '<a target="_blank" rel="noopener" href="https://fontawesome.com/v4.7.0/icons/">Font Awesome 4.7.0 icons</a>.')
 
+#: A single Font Awesome class token, which is what every 4.7.0 class name looks
+#: like. Used on the modifier classes that ride alongside the icon name, so they
+#: are held to the same shape the validator holds the name to.
+_CLASS_TOKEN_RE = re.compile(r'[a-z0-9-]+')
+
 
 def bare_icon_name(value):
     """Return the bare Font Awesome icon name held in a stored ``fa_icon`` value.
 
     Bare names are what the fields hold, so this is usually just a trim. It also
-    accepts the older ``fa-star`` and ``fa fa-star`` shapes, because a value can
-    still arrive that way from outside a form: a badge CSV exported by a deck
-    running an older version, or a row edited straight in the database.
+    accepts the ``fa-star`` and ``fa fa-star`` shapes, because a value can arrive
+    that way from outside a form: a badge CSV exported by a deck running an older
+    version, or a row edited straight in the database.
 
     ``"star"``, ``"  star  "``, ``"fa-star"`` and ``"fa fa-star"`` all give
     ``"star"``; ``""`` and ``None`` give ``""``. A whole class list that puts a
     sizing class first (``"fa fa-fw fa-star"``) is beyond it: untangling those is
     the job of the one-time data migrations that normalized these fields, which
     carry their own frozen table of which classes are modifiers.
+
+    Anything that is not a name :data:`FA_ICON_VALIDATOR` would accept gives
+    ``""``. Only a form runs that validator, so this is what holds the guarantee
+    for the paths that skip one, and it means a value carrying quotes or angle
+    brackets cannot reach the ``class`` attribute :func:`fa_icon_class` builds.
     """
     for token in (value or '').split():
         if token == 'fa':
             continue
-        return token[len('fa-'):] if token.startswith('fa-') else token
+        name = token[len('fa-'):] if token.startswith('fa-') else token
+        return name if FA_ICON_VALIDATOR.regex.search(name) else ''
     return ''
 
 
@@ -58,11 +71,13 @@ def fa_icon_class(value, modifiers=''):
     followed by any modifier classes (rotations, flips, ...).
 
     Returns '' when no icon is set, so a template renders a bare ``<i>`` rather
-    than a stray "fa fa-".
+    than a stray "fa fa-". Modifier tokens that are not shaped like a CSS class
+    are dropped, holding the whole class list to the same safe shape
+    :func:`bare_icon_name` holds the name to.
     """
     name = bare_icon_name(value)
     if not name:
         return ''
-    classes = 'fa fa-' + name
-    modifiers = (modifiers or '').strip()
-    return classes + ' ' + modifiers if modifiers else classes
+    classes = ['fa', 'fa-' + name]
+    classes += [token for token in (modifiers or '').split() if _CLASS_TOKEN_RE.fullmatch(token)]
+    return ' '.join(classes)

@@ -85,6 +85,11 @@ class MenuItem(models.Model):
         return fa_icon_class(self.fa_icon)
 
     def __str__(self):
+        """Return the navbar link's HTML: an anchor to ``url`` carrying the icon and label.
+
+        The navbar renders this with ``|safe``, so the icon class list comes from
+        ``fa_icon_class``, which holds it to Font Awesome class tokens.
+        """
         target = 'target="_blank"' if self.open_link_in_new_tab else ''
         return '<a href="{}" {} class="menuitem">' \
                '<i class="fa-fw {}"></i>&nbsp;&nbsp;{}' \

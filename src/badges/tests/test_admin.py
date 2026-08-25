@@ -87,9 +87,9 @@ class BadgeResourceGenerateBadgeTypeTest(ByteDeckTenantTestCase):
         self.assertEqual(badge_type.sort_order, 5)
         self.assertEqual(badge_type.fa_icon, 'gem')
 
-    def test_generate_badge_type__accepts_the_prefixed_icon_an_older_export_carries(self):
-        """A CSV exported by a deck running an older version names the icon "fa-gem"; the
-        badge type it creates stores the bare "gem" the field holds now."""
+    def test_generate_badge_type__accepts_a_prefixed_icon_name(self):
+        """A CSV naming the icon "fa-gem" creates a badge type storing the bare "gem" the
+        field holds."""
         row = {'badge_type_name': 'Platinum', 'badge_type_sort': 5, 'badge_type_icon': 'fa-gem'}
 
         self.resource.generate_badge_type(row)
