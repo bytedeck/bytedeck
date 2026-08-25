@@ -835,6 +835,101 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def _draft_xp_submission(self, xp_can_be_entered_by_students=True, **submission_kwargs):
+        """A logged-in student mid-submission on a quest worth 10 XP.
+
+        Args:
+            xp_can_be_entered_by_students (bool): whether the quest offers the custom XP field.
+            **submission_kwargs: extra fields for the QuestSubmission (is_approved, ...).
+
+        Returns:
+            QuestSubmission: the submission to draft-save against.
+        """
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="Custom XP Quest", xp=10,
+                           xp_can_be_entered_by_students=xp_can_be_entered_by_students)
+        return baker.make(
+            QuestSubmission, user=self.test_student1, quest=quest,
+            draft_comment=baker.make(Comment, text="draft"), **submission_kwargs,
+        )
+
+    def _save_draft_xp(self, sub, xp_requested):
+        """POST a draft save carrying an xp_requested, as the submission page does.
+
+        Args:
+            sub (QuestSubmission): the submission being drafted.
+            xp_requested: the value to send, as the page would send it (a string).
+
+        Returns:
+            HttpResponse: the view's response.
+        """
+        return self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'comment': "draft", 'submission_id': sub.id, 'xp_requested': xp_requested},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_save_draft__saves_the_custom_xp_the_student_entered(self):
+        """A drafted XP is stored, so it is still there when the student comes back.
+
+        The submission form seeds the field from sub.xp_requested, so an XP the draft did not
+        store reappears as the quest's default and can be submitted without the student
+        noticing it changed (#2562).
+        """
+        sub = self._draft_xp_submission()
+
+        response = self._save_draft_xp(sub, '50')
+
+        self.assertEqual(response.status_code, 200)
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 50)
+
+    def test_ajax_save_draft__custom_xp_survives_to_the_reloaded_form(self):
+        """The point of storing it: the submission page shows the drafted XP, not the default."""
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '50')
+
+        response = self.client.get(reverse('quests:submission', args=[sub.id]))
+
+        self.assertEqual(response.context['submission_form'].initial['xp_requested'], 50)
+
+    def test_ajax_save_draft__ignores_custom_xp_when_the_quest_does_not_offer_it(self):
+        """A quest whose XP students cannot enter keeps its own value whatever is posted.
+
+        The field is only built for quests that offer it, so a request carrying one is not
+        coming from the page as rendered.
+        """
+        sub = self._draft_xp_submission(xp_can_be_entered_by_students=False)
+
+        self._save_draft_xp(sub, '999')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0)
+
+    def test_ajax_save_draft__ignores_custom_xp_once_the_submission_is_approved(self):
+        """An approved submission's XP is settled, and the page stops offering the field."""
+        sub = self._draft_xp_submission(is_approved=True)
+
+        self._save_draft_xp(sub, '999')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0)
+
+    def test_ajax_save_draft__leaves_the_stored_xp_alone_for_an_unusable_value(self):
+        """Blank, non-numeric and negative values leave what is already stored.
+
+        The page sends '' whenever the field is absent, and xp_requested is a
+        PositiveIntegerField, so a negative cannot be stored at all.
+        """
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '50')
+
+        for unusable in ('', 'lots', '-5'):
+            with self.subTest(xp_requested=unusable):
+                self._save_draft_xp(sub, unusable)
+                sub.refresh_from_db()
+                self.assertEqual(sub.xp_requested, 50)
+
     def test_ajax_save_draft__non_numeric_submission_id_returns_404(self):
         """A non-numeric submission id is a 404, not the ValueError the pk lookup would raise (a 500)."""
         self.client.force_login(self.test_student1)
