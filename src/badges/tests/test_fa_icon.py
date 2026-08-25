@@ -188,28 +188,28 @@ class BadgeGrantedNotificationIconTest(ByteDeckTenantTestCase):
 class BadgeTypeFormIconPickerTest(ByteDeckTenantTestCase):
     """The badge type form offers the icon picker and holds the field to a bare name."""
 
-    def test_form__uses_the_icon_picker_widget(self):
+    def test_BadgeTypeForm__uses_the_icon_picker_widget(self):
         """The icon field is the searchable picker rather than a plain text box."""
         self.assertIsInstance(BadgeTypeForm().fields["fa_icon"].widget, FontAwesomeIconPickerWidget)
 
-    def test_form__labels_the_icon_field_in_plain_language(self):
+    def test_BadgeTypeForm__labels_the_icon_field_in_plain_language(self):
         """The field reads "Icon", not the "Fa icon" Django would derive from its name."""
         self.assertEqual(BadgeTypeForm().fields["fa_icon"].label, "Icon")
 
-    def test_form__rejects_a_prefixed_icon_name(self):
+    def test_BadgeTypeForm__rejects_a_prefixed_icon_name(self):
         """The field holds a bare name, so typing "fa-gift" fails validation."""
         form = BadgeTypeForm(data={"name": "Picker Badge Type", "sort_order": 1, "fa_icon": "fa-gift"})
         self.assertFalse(form.is_valid())
         self.assertIn("fa_icon", form.errors)
 
-    def test_form__rejects_markup(self):
+    def test_BadgeTypeForm__rejects_markup(self):
         """A value carrying markup cannot reach the notification icon HTML."""
         form = BadgeTypeForm(data={"name": "Picker Badge Type", "sort_order": 1,
                                    "fa_icon": "'></i><script>alert(1)</script>"})
         self.assertFalse(form.is_valid())
         self.assertIn("fa_icon", form.errors)
 
-    def test_form__accepts_a_bare_icon_name(self):
+    def test_BadgeTypeForm__accepts_a_bare_icon_name(self):
         """A bare name, which is what the picker writes, validates."""
         form = BadgeTypeForm(data={"name": "Picker Badge Type", "sort_order": 1, "fa_icon": "gift"})
         self.assertTrue(form.is_valid(), form.errors)
@@ -219,15 +219,15 @@ class BadgeRarityFormIconPickerTest(ByteDeckTenantTestCase):
     """The admin-only rarity form offers the same picker, plus the stylesheets the admin
     does not load on its own."""
 
-    def test_form__uses_the_icon_picker_widget(self):
+    def test_BadgeRarityForm__uses_the_icon_picker_widget(self):
         """The icon field is the searchable picker rather than a plain text box."""
         self.assertIsInstance(BadgeRarityForm().fields["fa_icon"].widget, FontAwesomeIconPickerWidget)
 
-    def test_form__labels_the_icon_field_in_plain_language(self):
+    def test_BadgeRarityForm__labels_the_icon_field_in_plain_language(self):
         """The field reads "Icon", not the "Fa icon" Django would derive from its name."""
         self.assertEqual(BadgeRarityForm().fields["fa_icon"].label, "Icon")
 
-    def test_form_media__loads_font_awesome_and_both_picker_stylesheets(self):
+    def test_BadgeRarityForm_media__loads_font_awesome_and_both_picker_stylesheets(self):
         """The form's media carries the picker's own assets and the admin extras, so the
         icon grid is visible and laid out inside the admin."""
         media = str(BadgeRarityForm().media)
@@ -236,14 +236,14 @@ class BadgeRarityFormIconPickerTest(ByteDeckTenantTestCase):
         self.assertIn("css/fa_icon_picker_admin.css", media)
         self.assertIn("js/fa_icon_picker.js", media)
 
-    def test_form__rejects_a_prefixed_icon_name(self):
+    def test_BadgeRarityForm__rejects_a_prefixed_icon_name(self):
         """The rarity field holds a bare name, so typing "fa-certificate" fails validation."""
         form = BadgeRarityForm(data={"name": "Picker Rarity", "percentile": 47.0, "color": "gold",
                                      "fa_icon": "fa-certificate"})
         self.assertFalse(form.is_valid())
         self.assertIn("fa_icon", form.errors)
 
-    def test_form__accepts_a_bare_icon_name(self):
+    def test_BadgeRarityForm__accepts_a_bare_icon_name(self):
         """A bare name, which is what the picker writes, validates."""
         form = BadgeRarityForm(data={"name": "Picker Rarity", "percentile": 47.0, "color": "gold",
                                      "fa_icon": "certificate"})

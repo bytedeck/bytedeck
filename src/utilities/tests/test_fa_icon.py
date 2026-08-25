@@ -198,16 +198,16 @@ class MenuItemFaIconTest(ByteDeckTenantTestCase):
 class MenuItemFormIconPickerTest(ByteDeckTenantTestCase):
     """The menu item form offers the icon picker and holds the field to a bare name."""
 
-    def test_form__uses_the_icon_picker_widget(self):
+    def test_MenuItemForm__uses_the_icon_picker_widget(self):
         """The icon field is the searchable picker rather than a plain text box."""
         form = MenuItemForm()
         self.assertIsInstance(form.fields["fa_icon"].widget, FontAwesomeIconPickerWidget)
 
-    def test_form__labels_the_icon_field_in_plain_language(self):
+    def test_MenuItemForm__labels_the_icon_field_in_plain_language(self):
         """The field reads "Icon", not the "Fa icon" Django would derive from its name."""
         self.assertEqual(MenuItemForm().fields["fa_icon"].label, "Icon")
 
-    def test_form__rejects_a_prefixed_icon_name(self):
+    def test_MenuItemForm__rejects_a_prefixed_icon_name(self):
         """Typing "fa-star" fails validation: the field stores the bare name."""
         form = MenuItemForm(data={
             "label": "Ranks", "fa_icon": "fa-star", "url": "/courses/ranks/",
@@ -216,7 +216,7 @@ class MenuItemFormIconPickerTest(ByteDeckTenantTestCase):
         self.assertFalse(form.is_valid())
         self.assertIn("fa_icon", form.errors)
 
-    def test_form__accepts_a_bare_icon_name(self):
+    def test_MenuItemForm__accepts_a_bare_icon_name(self):
         """A bare name, which is what the picker writes, validates."""
         form = MenuItemForm(data={
             "label": "Ranks", "fa_icon": "star-o", "url": "/courses/ranks/",
