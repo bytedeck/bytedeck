@@ -1,9 +1,10 @@
 """Tests for the Rank Font Awesome icon: the bare-name + modifiers storage, the
 ``fa_icon_class`` render helper, the legacy-value splitter behind the data
-migration, field validation, the icon-picker widget/form, and the rank-up
-notification icon."""
+migration, the repair migration that gives back the icons that splitter misfiled,
+field validation, the icon-picker widget/form, and the rank-up notification icon."""
 from importlib import import_module
 
+from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
 from django.shortcuts import reverse
 from django.test import SimpleTestCase
@@ -21,6 +22,10 @@ from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeMod
 split_fa_icon_value = import_module(
     "courses.migrations.0030_rank_fa_icon_modifiers_alter_rank_fa_icon"
 ).split_fa_icon_value
+
+# Same for the repair migration that undoes the icons 0030 filed as modifiers.
+repair_migration = import_module("courses.migrations.0033_repair_rank_fa_icon_names")
+recover_icon_name = repair_migration.recover_icon_name
 
 User = get_user_model()
 
@@ -50,6 +55,114 @@ class SplitFaIconValueTest(SimpleTestCase):
         for raw, expected in cases:
             with self.subTest(raw=raw):
                 self.assertEqual(split_fa_icon_value(raw), expected)
+
+
+class RecoverIconNameTest(SimpleTestCase):
+    """``recover_icon_name`` pulls a stranded icon name back out of a modifiers
+    value. Pure function, so no database is needed."""
+
+    def test_recover_icon_name__rescues_every_icon_0030_read_as_a_modifier(self):
+        """0030 matched modifier classes by prefix, and three of those prefixes
+        ("fa-li", "fa-spin", "fa-stack") also begin real 4.7.0 icon names. Each of
+        those names is read as an icon here, alone or among genuine modifiers."""
+        cases = [
+            ("fa-list", ("list", "")),
+            ("fa-list-ol", ("list-ol", "")),
+            ("fa-link", ("link", "")),
+            ("fa-linkedin-square", ("linkedin-square", "")),
+            ("fa-linux", ("linux", "")),
+            ("fa-life-ring", ("life-ring", "")),
+            ("fa-lightbulb-o", ("lightbulb-o", "")),
+            ("fa-line-chart", ("line-chart", "")),
+            ("fa-spinner", ("spinner", "")),
+            ("fa-stack-overflow", ("stack-overflow", "")),
+            ("fa-stack-exchange", ("stack-exchange", "")),
+            ("fa-fw fa-list", ("list", "fa-fw")),
+            ("fa-list fa-rotate-90", ("list", "fa-rotate-90")),
+            ("fa-lg fa-spinner fa-flip-vertical", ("spinner", "fa-lg fa-flip-vertical")),
+        ]
+        for modifiers, expected in cases:
+            with self.subTest(modifiers=modifiers):
+                self.assertEqual(recover_icon_name(modifiers), expected)
+
+    def test_recover_icon_name__leaves_genuine_modifiers_alone(self):
+        """A value holding only real modifier classes has no icon to give back, so it
+        comes back unchanged and its rank is left as it is. This is the case the
+        prefixes themselves are for: a rank really modified with "fa-li" keeps it."""
+        for modifiers in ["fa-rotate-270", "fa-lg", "fa-fw fa-rotate-90", "fa-li", "fa-spin",
+                          "fa-stack", "fa-stack-2x", "fa-pull-left", "fa-flip-horizontal", ""]:
+            with self.subTest(modifiers=modifiers):
+                self.assertEqual(recover_icon_name(modifiers), ("", modifiers))
+
+    def test_recover_icon_name__skips_a_token_the_icon_field_would_refuse(self):
+        """``fa_icon`` is validated down to one bare lowercase name, so a token that
+        would not pass (an uppercase letter, an underscore, a doubled prefix) is left
+        where it is rather than written into the field."""
+        for modifiers in ["fa-fa-list", "fa-User", "fa-list_alt"]:
+            with self.subTest(modifiers=modifiers):
+                self.assertEqual(recover_icon_name(modifiers), ("", modifiers))
+
+
+class RankFaIconRepairMigrationTest(ByteDeckTenantTestCase):
+    """The repair migration gives back the icon to the ranks 0030 stranded, and
+    leaves every other rank untouched."""
+
+    def test_repair_rank_fa_icon_names__moves_a_stranded_icon_back(self):
+        """A rank that went into 0030 as "fa fa-list" came out with an empty fa_icon and
+        the name in fa_icon_modifiers, so it rendered no icon. It gets "list" back and
+        renders again."""
+        rank = baker.make(Rank, fa_icon="", fa_icon_modifiers="fa-list")
+        self.assertEqual(rank.fa_icon_class, "")
+
+        repair_migration.repair_rank_fa_icon_names(django_apps, None)
+
+        rank.refresh_from_db()
+        self.assertEqual(rank.fa_icon, "list")
+        self.assertEqual(rank.fa_icon_modifiers, "")
+        self.assertEqual(rank.fa_icon_class, "fa fa-list")
+
+    def test_repair_rank_fa_icon_names__keeps_the_genuine_modifiers_beside_it(self):
+        """A stranded name sitting among real modifier classes takes only itself out of
+        the field; the modifiers that belong there stay and still apply."""
+        rank = baker.make(Rank, fa_icon="", fa_icon_modifiers="fa-lg fa-spinner fa-rotate-90")
+
+        repair_migration.repair_rank_fa_icon_names(django_apps, None)
+
+        rank.refresh_from_db()
+        self.assertEqual(rank.fa_icon, "spinner")
+        self.assertEqual(rank.fa_icon_modifiers, "fa-lg fa-rotate-90")
+        self.assertEqual(rank.fa_icon_class, "fa fa-spinner fa-lg fa-rotate-90")
+
+    def test_repair_rank_fa_icon_names__repairs_a_null_fa_icon_too(self):
+        """fa_icon is nullable, so a stranded rank can hold NULL rather than "";
+        both are picked up."""
+        rank = baker.make(Rank, fa_icon=None, fa_icon_modifiers="fa-link")
+
+        repair_migration.repair_rank_fa_icon_names(django_apps, None)
+
+        rank.refresh_from_db()
+        self.assertEqual(rank.fa_icon, "link")
+
+    def test_repair_rank_fa_icon_names__leaves_a_rank_that_kept_its_icon_alone(self):
+        """A rank 0030 split correctly already has its name, so neither field moves."""
+        rank = baker.make(Rank, fa_icon="forward", fa_icon_modifiers="fa-rotate-270")
+
+        repair_migration.repair_rank_fa_icon_names(django_apps, None)
+
+        rank.refresh_from_db()
+        self.assertEqual(rank.fa_icon, "forward")
+        self.assertEqual(rank.fa_icon_modifiers, "fa-rotate-270")
+
+    def test_repair_rank_fa_icon_names__leaves_a_rank_with_no_icon_alone(self):
+        """A rank with no icon and only real modifiers has nothing to recover, so it is
+        not given one it never had."""
+        rank = baker.make(Rank, fa_icon="", fa_icon_modifiers="fa-lg")
+
+        repair_migration.repair_rank_fa_icon_names(django_apps, None)
+
+        rank.refresh_from_db()
+        self.assertEqual(rank.fa_icon, "")
+        self.assertEqual(rank.fa_icon_modifiers, "fa-lg")
 
 
 class RankFaIconClassTest(ByteDeckTenantTestCase):
