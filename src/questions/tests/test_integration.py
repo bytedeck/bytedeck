@@ -1,5 +1,6 @@
 import json
 import re
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
@@ -10,9 +11,9 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
-from questions.forms import SHORT_ANSWER_MAX_LENGTH
+from questions.forms import QuestionSubmissionFormsetFactory, SHORT_ANSWER_MAX_LENGTH
 from questions.models import Question, QuestionSubmission
-from questions.utils import sync_draft_question_submissions
+from questions.utils import save_draft_file_answers, sync_draft_question_submissions
 
 User = get_user_model()
 
@@ -631,6 +632,89 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(payload["saved_answer_files"], {})
         self.submission.draft_comment.refresh_from_db()
         self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
+
+
+class DraftSaveRacesSubmitTest(QuestionSubmissionFlowTestBase):
+    """A draft save that lands while the student's submit is publishing writes only the
+    answer it carries, so it cannot revert a published answer to a draft (#2565).
+
+    Both draft-save legs read their answer rows, then write them back a moment later. In
+    between, the submit request can publish those rows by setting `comment`. Whether the
+    page still shows the student's work therefore depends on the write touching only the
+    column it came to change.
+    """
+
+    def publish_answers(self):
+        """Publish this submission's draft answers, as completing the quest does.
+
+        Returns:
+            Comment: the comment the answers were published against.
+        """
+        comment = self.submission.draft_comment
+        QuestionSubmission.objects.filter(
+            quest_submission=self.submission, comment__isnull=True, question__isnull=False
+        ).update(comment=comment)
+        return comment
+
+    def test_save_draft_file_answers__keeps_an_answer_published_when_a_submit_beats_it(self):
+        """The file leg holds instances loaded before the submit, so its write is the one
+        that lands last: the answer stays published, and gains the file the student chose."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(file_question)
+        upload = SimpleUploadedFile("sketch.png", b"file_content", content_type="image/png")
+
+        # The autosave request reaches the point where it has read the rows and validated
+        # the upload, which is where it takes its snapshot of `comment`.
+        formset = QuestionSubmissionFormsetFactory(
+            self.formset_data(), {field_name: upload},
+            instance=self.submission, queryset=sync_draft_question_submissions(self.submission),
+        )
+        formset.is_valid()
+
+        # The student's submit lands in that gap and publishes the answers.
+        comment = self.publish_answers()
+
+        save_draft_file_answers(formset, {field_name: upload})
+
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertEqual(row.comment_id, comment.id, "the published answer must stay published")
+        self.assertIn("sketch", row.response_file.name)
+
+    def test_ajax_save_draft__keeps_a_text_answer_published_when_a_submit_beats_it(self):
+        """The text leg re-reads `comment` when it selects the row, which leaves a smaller
+        gap before the write, not none: a submit publishing inside it must still stand.
+
+        `full_clean` runs between the read and the write, so publishing from there puts the
+        submit exactly in that gap without depending on real request timing.
+        """
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        comment = self.submission.draft_comment
+
+        def publish_between_the_read_and_the_write(instance, *args, **kwargs):
+            QuestionSubmission.objects.filter(pk=instance.pk).update(comment=comment)
+
+        with patch.object(QuestionSubmission, "full_clean", autospec=True,
+                          side_effect=publish_between_the_read_and_the_write):
+            self.client.post(
+                reverse("quests:ajax_save_draft"),
+                data={
+                    "submission_id": self.submission.id,
+                    "comment": "<p>draft words</p>",
+                    "answers": json.dumps({
+                        "question_submissions-0-id": str(row.id),
+                        "question_submissions-0-response_text": "my website",
+                    }),
+                },
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        row.refresh_from_db()
+        self.assertEqual(row.comment_id, comment.id, "the published answer must stay published")
+        self.assertEqual(row.response_text, "my website")
 
 
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):

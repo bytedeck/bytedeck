@@ -2515,7 +2515,10 @@ def ajax_save_draft(request):
                 if row and row.response_text != text:
                     row.response_text = text
                     row.full_clean()
-                    row.save()
+                    # Only the answer, never the whole row: the filter above read `comment`
+                    # before this save, so a submit publishing in between would otherwise
+                    # have that stale NULL written back over it (#2565).
+                    row.save(update_fields=["response_text", "datetime_last_edit"])
                     response_data["result"] = "Draft saved"
 
         # Draft-save any files in the POST (#1459). The Save Draft button posts the whole
