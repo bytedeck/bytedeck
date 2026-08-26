@@ -11,11 +11,13 @@ from siteconfig.models import SiteConfig
 from tenant.utils import get_root_url
 
 from .models import Announcement
+from utilities.signals import disable_for_loaddata
 
 User = get_user_model()
 
 
 @receiver(post_save, sender=Announcement)
+@disable_for_loaddata
 def save_announcement_signal(sender, instance, **kwargs):
     """ After an announcement is saved, check if it's a draft and that it should auto-publish the results.
     If it should, then check if there is already a beat task scheduled and replace it, or create a new schedule

@@ -9,27 +9,65 @@
 {% load crispy_forms_tags %}
 {% load utility_tags %}
 
+{% comment %}
+  Searching is done by the server so it covers the whole tab, not just the submissions on
+  this page. Submitting drops any ?page=, so a new search starts at its own first page.
+{% endcomment %}
+<form class="form-inline list-search-form" method="get" action="">
+  <div class="form-group">
+    <label class="sr-only" for="approvals-search-{{ tab.name|slugify }}">Search submissions</label>
+    <div class="input-group">
+      <input type="search" class="form-control" id="approvals-search-{{ tab.name|slugify }}" name="q"
+             value="{{ submission_search_term }}" placeholder="Search by quest or student">
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="submit" title="Search every submission in this tab">
+          <i class="fa fa-fw fa-search"></i>
+        </button>
+        {% if submission_search_term %}
+          <a class="btn btn-default" href="{% querystring q=None page=None %}" role="button" title="Clear this search">
+            <i class="fa fa-fw fa-times"></i>
+          </a>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</form>
+
+{% if submission_search_term %}
+  <p class="text-muted">
+    {{ num_matching_submissions }} submission{{ num_matching_submissions|pluralize }} match{{ num_matching_submissions|pluralize:"es," }} "{{ submission_search_term }}".
+  </p>
+{% endif %}
+
 {% if tab.submissions %}
   {% include 'snippets/table_loading.html' %}
   <table id="accordion-available"
          class="accordian-table"
          data-classes="table table-hover"
          data-toggle="table"
-         data-detail-view="true"
-         data-search="true"
-         data-trim-on-search="false"
-         data-custom-search="multiKeywordSearch">
+         data-detail-view="true">
     <thead>
       <tr class="panel-heading">
         <th class="col-sm-1 col-xs-2 col-icon" data-field="icon"></th>
-        <th class="col-sm-4 col-xs-5" data-field="name" data-sortable="true">Quest</th>
-        <th class="col-sm-1 col-xs-2" data-field="xp" data-sortable="true">XP</th>
-        <th class="col-sm-1 hidden-xs" data-field="group_name" data-sortable="true">{% group_name %}</th>
-        <th class="col-sm-2 col-xs-3 hidden-xs" data-field="user" data-sortable="true">User</th>
-        <!-- Uses `status_timestamps` for sorting the status column by the submission time -->
-        <th class="col-sm-3 hidden-xs" data-field="status" data-sortable="true" data-sort-name="status_timestamps">Status</th>
-        <th data-field="status_timestamps" data-switchable="false" data-visible="false"></th>
-        <!-- End sorting group -->
+        {% comment %}
+          The headings link back to the view, so the ordering is applied to every submission
+          in the tab before the page is cut from it (#2582). A column only becomes a link
+          when this tab offers it: the {group} blocks and the quest's tags are many-valued,
+          and the in-progress tabs show no time under Status.
+        {% endcomment %}
+        <th class="col-sm-4 col-xs-5" data-field="name">
+          {% if "name" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="name" label="Quest" %}{% else %}Quest{% endif %}
+        </th>
+        <th class="col-sm-1 col-xs-2" data-field="xp">
+          {% if "xp" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="xp" label="XP" %}{% else %}XP{% endif %}
+        </th>
+        <th class="col-sm-1 hidden-xs" data-field="group_name">{% group_name %}</th>
+        <th class="col-sm-2 col-xs-3 hidden-xs" data-field="user">
+          {% if "user" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="user" label="User" %}{% else %}User{% endif %}
+        </th>
+        <th class="col-sm-3 hidden-xs" data-field="status">
+          {% if "status" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="status" label="Status" %}{% else %}Status{% endif %}
+        </th>
       </tr>
     </thead>
     <tbody class="panel-group panel-group-packed" role="tablist" aria-multiselectable="true">
@@ -63,11 +101,6 @@
           <td class="col-sm-3 hidden-xs">
             {% include "quest_manager/snippets/submitted_status.html" %}
           </td>
-          <!-- `status_timestamps` -->
-          <td>
-            {% include "quest_manager/snippets/submission_status_timestamp.html" %}
-          </td>
-          <!-- end `status_timestamps` -->
         </tr>
         {% endfor %}
       </tbody>
@@ -114,6 +147,8 @@
     {% include "quest_manager/pagination_controls.html" %}
   {% endwith %}
 
+{% elif submission_search_term %}
+  <p>No submissions in this tab match "{{ submission_search_term }}".</p>
 {% elif user.block_set.count == 0 %}
   <p>You are not assigned as the teacher for any {{ config.custom_name_for_group|lower }}s yet.</p>
   <a class="btn btn-info" href="{% url 'courses:block_list' %}">Join a {{ config.custom_name_for_group|lower }}</a>

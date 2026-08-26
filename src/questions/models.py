@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 from django.urls import reverse
 
@@ -105,12 +107,24 @@ class Question(models.Model):
     type = models.CharField(
         max_length=20, choices=QuestionType.choices, default=QuestionType.SHORT_ANSWER
     )
+    import_id = models.UUIDField(
+        default=uuid.uuid4,
+        help_text=(
+            "Identifies this question within its quest wherever the quest is shared, so "
+            "re-importing the quest updates this question rather than a different one. "
+            "Only change this if you want to disconnect it from the shared version."
+        ),
+    )
 
     class Meta:
         ordering = ["ordinal"]
         constraints = [
             # ensure two questions in the same quest cannot have the same ordinal
             models.UniqueConstraint(fields=["quest", "ordinal"], name="unique_ordinals"),
+            # A question's import_id identifies it within its quest, not across the whole
+            # deck: two copies of a quest are two quests, and their questions legitimately
+            # share the identity they were copied from.
+            models.UniqueConstraint(fields=["quest", "import_id"], name="unique_question_import_ids"),
         ]
 
     def __str__(self):

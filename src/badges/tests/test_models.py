@@ -532,13 +532,13 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
 
     def test_post_save_receiver__uses_badge_type_fa_icon_when_set(self):
         """The granted notification uses the badge type's own fa_icon when it has one, rather
-        than the default fa-certificate (the non-default branch of post_save_receiver)."""
-        badge_type = baker.make(BadgeType, fa_icon='fa-trophy')
+        than the default certificate (the non-default branch of post_save_receiver)."""
+        badge_type = baker.make(BadgeType, fa_icon='trophy')
         badge = baker.make(Badge, badge_type=badge_type)
         # Creating the assertion fires post_save_receiver, which builds the notification icon.
         BadgeAssertion.objects.create_assertion(self.student, badge, issued_by=self.teacher)
         notification = Notification.objects.all_for_user(self.student).last()
-        self.assertIn('fa-trophy', notification.font_icon)
+        self.assertIn('fa fa-trophy', notification.font_icon)
 
     def test_calculate_xp_to_date__sums_granted_badge_xp(self):
         """calculate_xp_to_date() totals the XP of the badges granted to the user by a date."""

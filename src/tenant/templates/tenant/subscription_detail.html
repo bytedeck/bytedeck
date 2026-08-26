@@ -30,9 +30,13 @@
   <p><span class="label label-primary">{{ deck.subscription_status_label }}</span>
     This deck is on a maintenance subscription{% if plan_summary %}
     (<strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %}, {{ plan_summary.renewal_phrase }}{% endif %}){% endif %}
-    through <strong>{{ deck.paid_until }}</strong>
-    ({{ paid_until_phrase }}): it won't expire,
-    be suspended, or time out for deletion, but registration stays capped at the trial limit
+    {# "it won't expire" holds only while the subscription renews: one that has been cancelled runs out like any other (#2589) #}
+    {% if renews_phrase %}through <strong>{{ deck.paid_until }}</strong>
+    (automatically {{ renews_phrase }}): it won't expire, be suspended, or time out for deletion,
+    but registration stays capped{% else %}paid through <strong>{{ deck.paid_until }}</strong>
+    ({{ paid_until_phrase }}): unless it is renewed, the deck then gets the usual
+    {{ grace_days }}-day grace period and is suspended after that. Until then registration
+    stays capped{% endif %} at the trial limit
     (max {{ deck.effective_max_active_users }} current student{{ deck.effective_max_active_users|pluralize }}).
     Upgrade any time to raise the cap.</p>
 {% elif deck.subscription_status == 'subscribed' %}
@@ -40,8 +44,11 @@
   <p><span class="label label-success">{{ deck.subscription_status_label }}</span>
     {% if plan_summary %}to <strong>{{ plan_summary.name }}</strong>{% if plan_summary.renewal_phrase %},
     {{ plan_summary.renewal_phrase }}{% endif %}.{% endif %}
-    Paid through <strong>{{ deck.paid_until }}</strong>
-    ({{ paid_until_phrase }}).</p>
+    {# an auto-renewing subscription is not counting down to anything: say what actually happens on the date (#2586) #}
+    {% if renews_phrase %}Renews automatically on <strong>{{ deck.paid_until }}</strong>
+    ({{ renews_phrase }}); your card is charged then and the deck carries on.{% else %}Paid through
+    <strong>{{ deck.paid_until }}</strong>
+    ({{ paid_until_phrase }}).{% endif %}</p>
 {% elif deck.subscription_status == 'trial' %}
   <p><span class="label label-info">{{ deck.subscription_status_label }}</span>
     Ends <strong>{{ deck.trial_end_date }}</strong>
@@ -64,7 +71,11 @@
     <tr><th>Trial ends</th><td>{{ deck.trial_end_date }} ({{ trial_end_phrase }})</td></tr>
     <tr><th>Grace period</th><td>extends {{ grace_days }} days after your trial ends ({{ grace_end_phrase }})</td></tr>
   {% elif deck.paid_until %}
-    <tr><th>Paid until</th><td>{{ deck.paid_until }} ({{ paid_until_phrase }})</td></tr>
+    {% if renews_phrase %}
+      <tr><th>Renews on</th><td>{{ deck.paid_until }} ({{ renews_phrase }})</td></tr>
+    {% else %}
+      <tr><th>Paid until</th><td>{{ deck.paid_until }} ({{ paid_until_phrase }})</td></tr>
+    {% endif %}
     <tr><th>Grace period</th><td>extends {{ grace_days }} days after your subscription ends ({{ grace_end_phrase }})</td></tr>
   {% else %}
     <tr><th>Expires</th><td>Never (this deck is managed manually)</td></tr>

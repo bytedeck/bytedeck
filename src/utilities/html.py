@@ -4,7 +4,56 @@ HTML utilities suitable for global use, matching `django.utils.html` naming conv
 # html2text is a python script that converts a page of HTML into clean, easy-to-read plain ASCII text
 import html2text
 import bleach
+import html as html_module
 import re
+
+from django.utils.html import strip_tags
+
+# Tags that are content in their own right, with no text of their own. A student can answer a
+# question with nothing but a pasted screenshot or an embedded video, so `is_empty_html` has to
+# see those as an answer even though stripping the tags leaves an empty string behind.
+EMBEDDED_CONTENT_TAGS = frozenset({
+    "img", "iframe", "video", "audio", "source", "track", "embed", "object", "svg", "canvas", "math",
+})
+
+# The name of each opening tag in a fragment, e.g. "<p><img src='x'>" -> ["p", "img"]. Only text
+# outside a tag can be escaped, so an `&lt;img&gt;` the user typed is never matched here.
+_OPENING_TAG_RE = re.compile(r"<\s*([a-zA-Z][a-zA-Z0-9:-]*)")
+
+
+def is_empty_html(value):
+    """Whether a fragment of user-authored HTML holds nothing a reader would see.
+
+    The Summernote editor never submits an empty string: an editor a student clicked into and
+    left alone posts ``<p><br></p>``, and one they typed a space into posts ``<p>&nbsp;</p>``.
+    Both are truthy, so a plain ``if not value`` check reads them as content and lets a blank
+    answer through a required field (#2560). Tags and entities are removed and the remainder
+    tested for any non-whitespace character (``&nbsp;`` decodes to ``\xa0``, which ``strip()``
+    counts as whitespace).
+
+    The question asked is deliberately "is this definitely empty?", not "is this content?".
+    Anything uncertain is reported as non-empty, because refusing an answer a student really
+    gave is far worse than accepting a blank one: hence `EMBEDDED_CONTENT_TAGS`, which answers
+    False for a fragment whose whole content is a picture or an embed.
+
+    Args:
+        value: HTML from a rich-text editor, or None/empty for a field never filled in.
+
+    Returns:
+        bool: True when the fragment would render as nothing.
+    """
+    if not value:
+        return True
+
+    text = str(value)
+
+    tags = {name.lower() for name in _OPENING_TAG_RE.findall(text)}
+    if tags & EMBEDDED_CONTENT_TAGS:
+        return False
+
+    # unescape after stripping, so an entity standing alone ("&nbsp;") is judged as the
+    # character it renders as rather than as the seven literal characters that spell it
+    return not html_module.unescape(strip_tags(text)).strip()
 
 
 def textify(html):

@@ -668,7 +668,7 @@ class BadgeTypeViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         data = {
             'name': 'New badge type',
-            'fa_icon': 'fa-gift',
+            'fa_icon': 'gift',
         }
         response = self.client.post(reverse('badges:badge_type_create'), data=data)
         self.assertRedirects(response, reverse('badges:badge_types'))
@@ -682,7 +682,7 @@ class BadgeTypeViewTests(ByteDeckTenantTestCase):
         # set name and icon to something they wouldn't normally be
         data = {
             'name': 'My Updated Name',
-            'fa_icon': 'fa-bath',
+            'fa_icon': 'bath',
         }
         response = self.client.post(reverse('badges:badge_type_update', args=[self.badge_type.pk]), data=data)
         self.assertRedirects(response, reverse('badges:badge_types'))
