@@ -113,7 +113,10 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
             xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
         )
 
-        return queryset
+        # An aggregate annotation groups the query, and Django emits no ORDER BY at all for a
+        # grouped query, so Category.Meta.ordering is lost and Postgres returns the campaigns
+        # in whatever order it finds them. Ask for the title back explicitly (#2624).
+        return queryset.order_by('title')
 
     def get_context_data(self, *args, **kwargs):
         """Add the tab state and the campaign table's flags to the deck's campaign list.
@@ -938,7 +941,11 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     quests = search_quests(quests, search_term)
     num_matching_quests = quests.count()
 
-    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS)
+    # Sorted by name unless a heading was clicked. Quest.Meta.ordering leads with sort_order
+    # and the expiry date, none of which this table shows, so a deck where some quests carry
+    # an expiry gets those first and the rest alphabetically after them, which reads as no
+    # order at all (#2623). The name is the column the reader is looking at.
+    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS, default='name')
     quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
     quests = paginate(quests, page)
 

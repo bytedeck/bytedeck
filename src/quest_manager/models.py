@@ -80,7 +80,7 @@ class CategoryManager(models.Manager):
     def all_published_with_importable_quests(self):
         """
         Returns a queryset of published campaigns (categories) in the library schema
-        that have at least one importable quest — meaning a quest that is published and not archived.
+        that have at least one importable quest: one that is published and not archived.
 
         Each returned campaign is annotated with:
         - quest_count: the number of importable quests in the campaign
@@ -112,7 +112,10 @@ class CategoryManager(models.Manager):
         # Exclude campaigns without any qualifying quests
         qs = qs.filter(quest_count__gt=0)
 
-        return qs
+        # The aggregate annotation above groups the query, and Django emits no ORDER BY at all
+        # for a grouped query, so Category.Meta.ordering is lost and the Library's campaigns
+        # tab comes up in whatever order Postgres finds them. Ask for the title back (#2624).
+        return qs.order_by('title')
 
 
 class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):

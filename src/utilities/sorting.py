@@ -9,29 +9,36 @@ them.
 from django.db.models import F
 
 
-def resolve_sort(request, sort_columns):
+def resolve_sort(request, sort_columns, default=''):
     """The column a list is ordered by and its direction, from the `sort` query parameter.
 
     A leading '-' asks for the reverse, which is Django's own `order_by` spelling and what
     the column headings put in their links. A column the list does not offer is ignored
-    rather than refused, so a stale link, or one somebody typed, falls back to the list's
-    own order instead of erroring.
+    rather than refused, so a stale link, or one somebody typed, falls back to `default`
+    instead of erroring.
+
+    `default` is the column the list comes up sorted by before anyone clicks a heading. A
+    list that names one is sorted by something the reader can see and can be told about,
+    since the heading for the returned column draws its arrow (#2623, #2624). Leaving it
+    empty keeps the model's own `Meta.ordering` instead, for a list whose natural order is
+    the useful one.
 
     Args:
         request (HttpRequest): the current request.
         sort_columns (dict): the columns this list offers, keyed by the key its headings
             use, valued by what `apply_sort` should order on.
+        default (str): the column key to fall back on, or '' to keep the list's own order.
 
     Returns:
-        tuple[str, bool]: the column key, '' when none applies, and whether it was asked
-        for in reverse.
+        tuple[str, bool]: the column key, `default` when none applies, and whether it was
+        asked for in reverse.
     """
     requested = request.GET.get('sort', '')
     descending = requested.startswith('-')
     column = requested[1:] if descending else requested
 
     if column not in sort_columns:
-        return '', False
+        return default, False
 
     return column, descending
 

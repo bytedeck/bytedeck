@@ -40,7 +40,7 @@ from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 
 User = get_user_model()
@@ -3654,6 +3654,40 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         # should now see the quest
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
 
+    def test_quest_list__available_tab_is_sorted_by_name(self):
+        """The quest tabs come up in alphabetical order (#2623).
+
+        `Quest.Meta.ordering` leads with `sort_order` and the expiry date, none of which the
+        table shows, so a deck where some quests carry either gets an order the reader cannot
+        account for. These three are created so that the model's own ordering would put them
+        in exactly the opposite order to their names.
+        """
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Alpha", sort_order=9)
+        baker.make(Quest, name="Bravo", date_expired=date(2030, 1, 2))
+        baker.make(Quest, name="Charlie", date_expired=date(2030, 1, 1))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual([quest.name for quest in response.context['quests']], ["Alpha", "Bravo", "Charlie"])
+        # and the heading says so, rather than leaving the reader to work the order out
+        self.assertEqual(response.context['quest_sort_column'], 'name')
+        self.assertFalse(response.context['quest_sort_descending'])
+
+    def test_quest_list__a_chosen_sort_still_wins_over_the_default(self):
+        """Clicking a column heading orders by it, so the default is only a starting point."""
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Alpha", xp=30)
+        baker.make(Quest, name="Bravo", xp=10)
+        baker.make(Quest, name="Charlie", xp=20)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'), {'sort': 'xp'})
+
+        self.assertEqual([quest.name for quest in response.context['quests']], ["Bravo", "Charlie", "Alpha"])
+        self.assertEqual(response.context['quest_sort_column'], 'xp')
+
     def test_quest_list__student_sees_quests_available_outside_course(self):
         """A quest flagged available_outside_course appears for a student not in a course."""
         self.client.force_login(self.test_student)
@@ -4207,6 +4241,46 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:categories'))
         self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
+
+    def test_CategoryList_view__lists_campaigns_in_alphabetical_order(self):
+        """The campaign list comes up sorted by title (#2624).
+
+        The list annotates a quest count and an XP sum, and an aggregate annotation groups the
+        query, for which Django emits no ORDER BY at all: `Category.Meta.ordering` is dropped
+        and the database returns the rows however it finds them. These are created in an order
+        that is not alphabetical, so a queryset that lost its ordering fails this.
+        """
+        for title in ("Zebra Robotics", "Intro to Python", "Animation", "Music Production"):
+            baker.make(Category, title=title, published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        titles = [campaign.title for campaign in response.context['object_list']]
+        self.assertEqual(titles, sorted(titles))
+
+    def test_CategoryList_view__loads_the_bootstrap_table_stylesheet(self):
+        """The campaigns page keeps the stylesheet its table is styled by (#2624).
+
+        The page used to blank the `head` block it inherits, which is where
+        `quest_manager/base.html` loads bootstrap-table's CSS. Without it the headings carry
+        the sortable classes but nothing draws the arrow or reserves room for it, so the table
+        offered a sort with no way to see which column it was on.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, 'bootstrap-table-1.20.2.min.css')
+
+    def test_CategoryList_view__table_names_the_column_it_is_sorted_by(self):
+        """The campaigns table declares its default sort, so a heading shows the arrow (#2624)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, "data-sort-name='title'")
+        self.assertContains(response, "data-sort-order='asc'")
 
     def test_CategoryList_view__shows_the_decks_own_campaign_actions(self):
         """The deck's campaign list offers the local actions (details, edit, delete), not the
@@ -5511,7 +5585,11 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
             self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
 
     def test_quest_list__a_column_this_tab_does_not_offer_is_ignored(self):
-        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
+        """A stale or hand-made `?sort=` falls back to the tab's default column, not an error.
+
+        The fallback is the name, the same column an unsorted visit lands on, so the heading
+        still says what the list is ordered by rather than showing no column at all (#2623).
+        """
         default_order = self._names()
 
         for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
@@ -5520,7 +5598,7 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual([q.name for q in response.context['quests']], default_order)
-                self.assertEqual(response.context['quest_sort_column'], '')
+                self.assertEqual(response.context['quest_sort_column'], 'name')
 
     def test_quest_list__the_table_carries_no_client_side_search_or_sort(self):
         """The tab's searching and ordering are the server's, so the table asks for neither.
