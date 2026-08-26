@@ -458,6 +458,27 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
 
+    def test_submission_view__both_forms_warn_about_unsaved_changes(self):
+        """The student's form and the marker's form opt into the unsaved-changes guard (#2572).
+
+        Answers, the comment box and marking feedback all sit in a form that only reaches the
+        server on a submit or the 60-second autosave, so leaving the page in between loses
+        whatever was typed since. `data-warn-unsaved` is the attribute the site-wide
+        warn-unsaved-changes.js binds to.
+
+        Matched inside a form tag, not anywhere on the page: base.html names the attribute in
+        the HTML comment above the script, so a plain substring assertion passes on every page
+        in the site whether or not any form opted in.
+        """
+        guarded_form = r"<form[^>]*\sdata-warn-unsaved"
+        url = reverse('quests:submission', args=[self.sub1.pk])
+
+        self.client.force_login(self.test_student1)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
+
+        self.client.force_login(self.test_teacher)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
+
     def test_submission_view__quest_quick_reply_button_shown_when_set(self):
         """When a quest has quick_reply text, staff reviewing a submission of it get a quest-specific quick-reply button (#161)."""
         self.quest1.quick_reply = "Reminder: attach a screenshot of your working code."

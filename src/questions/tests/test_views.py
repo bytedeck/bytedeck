@@ -12,6 +12,12 @@ from questions.models import Question
 User = get_user_model()
 
 
+# A <form> that opted into warn-unsaved-changes.js. Matching the tag rather than the bare
+# attribute name matters: base.html mentions `data-warn-unsaved` in the comment above the
+# script tag, so a plain substring is present on every page in the site (#2572).
+GUARDED_FORM = r"<form[^>]*\sdata-warn-unsaved"
+
+
 class QuestionCRUDViewTest(ByteDeckTenantTestCase):
     """Tests for the staff-only question CRUD views (list/create/update/delete)."""
 
@@ -177,6 +183,27 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         self.assert200(
             "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+
+    def test_create__form_warns_about_unsaved_changes(self):
+        """Creating or editing a question opts into the unsaved-changes guard (#2572).
+
+        A teacher part way through writing a question's instructions, solution and marker
+        notes loses all of it to a stray click on the navbar, with nothing saved anywhere
+        until they submit. `data-warn-unsaved` is the attribute warn-unsaved-changes.js binds.
+
+        Matched inside a form tag, not anywhere on the page: base.html names the attribute in
+        the HTML comment above the script, so a plain substring assertion passes on every page
+        in the site whether or not any form opted in.
+        """
+        self.client.force_login(self.test_teacher)
+
+        created = self.assert200(
+            "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+        updated = self.assert200(
+            "questions:update", kwargs={"quest_id": self.quest.id, "pk": self.question1.id})
+
+        self.assertRegex(created.content.decode(), GUARDED_FORM)
+        self.assertRegex(updated.content.decode(), GUARDED_FORM)
 
     def test_create__invalid_type_404(self):
         """Creating a question with an unsupported type in the URL is a 404 (not a crash)."""

@@ -95,10 +95,14 @@
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>
     <div class="panel-body panel-summernote">
+      {% comment %} data-warn-unsaved opts both forms into warn-unsaved-changes.js, so leaving the
+         page with answer, comment or marking text that has not reached the server draws the
+         browser's "Leave site?" prompt (#2572). The comment box is a div, not a nested form, so
+         the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}">
+        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
       {% else %}
-        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}">
+        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}" data-warn-unsaved>
       {% endif %}
 
         {% csrf_token %}
@@ -333,6 +337,7 @@
                 // the file that went out, so it is only allowed to touch an input still
                 // holding it (#2563).
                 var sentFiles = chosen_files_by_input();
+                var sentEdits = edits_so_far();
                 formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
                 formData.set('comment', draftComment);
                 formData.set('submission_id', '{{ submission.id }}');
@@ -350,6 +355,7 @@
                     success : function(json) {
                       $('#draft-error').hide();
                       show_saved_files(json, sentFiles);
+                      mark_draft_saved(sentEdits);
                       hide_check_show_text();
                     },
 
@@ -374,6 +380,28 @@
                 });
             }
 
+        }
+
+        function unsaved_guard() {
+            // The guard warn-unsaved-changes.js attaches to a form carrying data-warn-unsaved.
+            // Absent if that script has not run, which must leave saving working regardless.
+            var form = document.getElementById('submission-main-form');
+            return form && form.warnUnsaved;
+        }
+
+        function edits_so_far() {
+            // How many edits the guard has counted, read before a draft save leaves. Snapshotted
+            // for the same reason chosen_files_by_input() is: what comes back can only be said to
+            // have saved the edits that were there when it was sent.
+            var guard = unsaved_guard();
+            return guard ? guard.edits() : 0;
+        }
+
+        function mark_draft_saved(sentEdits) {
+            // The server has the draft as it stood at sentEdits, so stop warning about those
+            // edits. Anything typed while the request was in flight keeps the guard armed.
+            var guard = unsaved_guard();
+            if (guard) guard.saved(sentEdits);
         }
 
         function chosen_files(input) {
