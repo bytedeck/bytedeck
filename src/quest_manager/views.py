@@ -2555,7 +2555,15 @@ def ajax_save_draft(request):
             saved_attachments = []
             file_errors = {}
 
-            if sub.quest.question_set.exists():
+            # Same state gate as the page GET and complete(): building the formset calls
+            # sync_draft_question_submissions, which creates a draft row per question when
+            # none exists. On a submission that is finished those rows can never be
+            # published or rendered, so they would be invisible and permanent, and on a
+            # skipped quest they would undo the discard the skip flow just performed
+            # (#2164, #2567). The page still offers Save Draft on a completed submission,
+            # and the draft comment the GET creates is enough to reach this, so the guard
+            # has to be here rather than relying on the button being hidden.
+            if not sub.is_completed and not sub.is_approved and sub.quest.question_set.exists():
                 question_formset = QuestionSubmissionFormsetFactory(
                     request.POST, request.FILES,
                     instance=sub, queryset=sync_draft_question_submissions(sub),

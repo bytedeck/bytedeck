@@ -509,6 +509,69 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
 
+    def test_save_draft__no_draft_rows_created_on_a_completed_submission(self):
+        """Draft-saving a file on a finished submission does not spawn answer rows (#2567).
+
+        The page still offers Save Draft on a completed submission, and `submission()` creates
+        a draft comment for any owner view, so the endpoint is reachable. Building the answer
+        formset there would call sync and create a row per question that can never be
+        published or rendered: invisible and permanent. Comment attachments still save, which
+        the test below covers.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        # Build the payload while the submission is still in progress: the helpers call sync
+        # themselves, so capturing the POST first is what keeps this test measuring the view.
+        field_name = self.file_field_name(file_question)
+        payload = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+            field_name: SimpleUploadedFile("late.png", b"file_content", content_type="image/png"),
+        }
+        # clear the drafts and finish the submission, as completing the quest does
+        QuestionSubmission.objects.filter(quest_submission=self.submission).delete()
+        self.submission.is_completed = True
+        self.submission.save()
+
+        self.client.post(
+            reverse("quests:ajax_save_draft"), data=payload,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(
+            QuestionSubmission.objects.filter(quest_submission=self.submission).count(), 0,
+            "a finished submission must not gain draft answer rows",
+        )
+
+    def test_save_draft__comment_attachment_still_saves_on_a_completed_submission(self):
+        """The state gate is on the answer formset only: a comment attachment still saves.
+
+        A student commenting on a quest they already finished is a normal thing to do, and
+        the file they attach belongs to that comment rather than to any answer row.
+        """
+        payload = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+            "attachments": SimpleUploadedFile("receipt.png", b"file_content", content_type="image/png"),
+        }
+        self.submission.is_completed = True
+        self.submission.save()
+
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"), data=payload,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertTrue(
+            any("receipt" in name for name in payload["saved_attachments"]),
+            f"the comment attachment should still be saved, got {payload['saved_attachments']}",
+        )
+
     def test_save_draft__stores_a_file_answer(self):
         """A file chosen on a file-upload question is stored on its draft row by Save Draft,
         unpublished, and the response names it so the page can show it was kept."""
@@ -982,6 +1045,47 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         short_rows = rows.filter(question=self.short_question)
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().id, contentful.id)
+
+
+    def test_sync__unpublished_answer_to_a_deleted_question_is_removed(self):
+        """A draft answer whose question was deleted is cleaned up rather than left forever.
+
+        `question` is SET_NULL, so deleting a question leaves the row behind with no way for
+        anything to reach it: answers render only through `comment.question_submissions`,
+        which a NULL comment excludes, and this function's own queryset filters on
+        `question__isnull=False`. Kept, it would sit in the schema indefinitely along with an
+        uploaded file of up to 16 MiB (#2567).
+        """
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        row.response_text = "answered before the question was deleted"
+        row.save()
+        self.short_question.delete()
+        row.refresh_from_db()
+        self.assertIsNone(row.question_id, "SET_NULL should have orphaned the row")
+
+        sync_draft_question_submissions(self.submission)
+
+        self.assertFalse(QuestionSubmission.objects.filter(id=row.id).exists())
+
+    def test_sync__published_answer_to_a_deleted_question_is_kept(self):
+        """A published answer survives its question being deleted: it is part of the record.
+
+        It still renders with the comment it was published against, so unlike the draft above
+        it is neither invisible nor unreachable, and deleting it would remove work a student
+        actually submitted.
+        """
+        comment = baker.make("comments.Comment", target_object_id=self.submission.id)
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        row.response_text = "submitted work"
+        row.comment = comment
+        row.save()
+        self.short_question.delete()
+
+        sync_draft_question_submissions(self.submission)
+
+        row.refresh_from_db()
+        self.assertIsNone(row.question_id)
+        self.assertEqual(row.response_text, "submitted work")
 
 
 class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
