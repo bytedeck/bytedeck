@@ -2004,6 +2004,19 @@ def complete(request, submission_id):
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
     - If the quest is automatically approved, then the submission is also marked as approved
+
+    Args:
+        request: the POST carrying the comment, any files, the answer formset, and which
+            button was pressed ("complete" or "comment").
+        submission_id: pk of the submission being completed or commented on.
+
+    Returns:
+        HttpResponse: a redirect once the submission is accepted, or the re-rendered
+        submission page (status 200) when the form or the answer formset has errors to show.
+
+    Raises:
+        Http404: on a GET, an unrecognized submit button, or a submission with no draft
+            comment that is not already completed.
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
@@ -2664,6 +2677,31 @@ def drop(request, submission_id):
 @non_public_only_view
 @login_required
 def submission(request, submission_id=None, quest_id=None):
+    """Show one submission: the student's work on a quest, and the form to add to it.
+
+    Serves both roles. A student sees their own in-progress submission with the comment box,
+    the answer formset for the quest's questions, and their draft comment (created here on
+    first visit, since the draft-save endpoint needs one to write to). Staff see the same
+    submission with the approval form instead, which carries the extra fields for granting
+    badges. Anyone who is neither the owner nor staff is redirected away.
+
+    The answer formset is only built while the submission can still be worked on. Once it is
+    completed or approved the answers are published and shown with their comment instead.
+
+    Args:
+        request: the HTTP request; ``request.user`` decides which form and whose submission.
+        submission_id: pk of the submission to show. A submission whose quest has since
+            become unavailable is still found, through the user's completed submissions.
+        quest_id: unused. No URL pattern routes to this view with it, and nothing in the
+            body reads it; kept so existing callers passing it do not break.
+
+    Returns:
+        HttpResponse: the rendered submission page, or a redirect to the quest list when the
+        requesting user may not see this submission.
+
+    Raises:
+        Http404: if no submission with this pk is visible to the requesting user.
+    """
     try:
         sub = QuestSubmission.objects.get(pk=submission_id)
     except QuestSubmission.DoesNotExist:

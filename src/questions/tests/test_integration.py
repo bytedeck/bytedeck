@@ -134,12 +134,15 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         gets its editor (#2608).
         """
         Question.objects.filter(quest=self.quest).delete()
-        baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
+        short_first = baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
         baker.make(Question, quest=self.quest, ordinal=2, type="long_answer", required=False)
 
-        content = self.assert200("quests:submission", args=[self.submission.id]).content.decode()
+        response = self.assert200("quests:submission", args=[self.submission.id])
 
-        self.assertEqual(content.count("summernote.min.js"), 1)
+        # the assertion below only means anything while the first form is the short answer,
+        # since that is the one `BaseFormSet.media` would have reported on by itself
+        self.assertEqual(response.context["question_formset"].forms[0].question, short_first)
+        self.assertEqual(response.content.decode().count("summernote.min.js"), 1)
 
     def test_complete__failed_submit_rerenders_with_the_editor_assets(self):
         """A submission bounced back for a validation error still loads the editors (#2608).
