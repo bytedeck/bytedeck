@@ -5,8 +5,8 @@
 {% load comment_tags %}
 
 {% block head %}
-    {# the comment box is a summernote editor too, so its media covers the answer editors #}
-    {{ submission_form.media }}
+    {# the comment form's assets combined with the answer editors', de-duplicated in the view #}
+    {{ form_media }}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
