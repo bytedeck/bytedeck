@@ -1,3 +1,4 @@
+import os
 import uuid
 
 from django.db import models
@@ -219,3 +220,23 @@ class QuestionSubmission(models.Model):
     def is_published(self):
         """Whether this answer has been published with a completion comment (vs still a draft)."""
         return self.comment_id is not None
+
+    @property
+    def is_valid_portfolio_type(self):
+        """Whether this answer's file is one a portfolio can show (#2573).
+
+        Mirrors ``comments.Document.is_valid_portfolio_type``, so a file answer offers the
+        same Add to Portfolio action as the same file attached to the comment box. The import
+        is local for the reason that one gives: portfolios' views reach back into comments,
+        and importing them at module scope would close the circle.
+
+        Returns:
+            bool: True for an image or video file, False for anything else, including an
+            answer that is text or has no file at all.
+        """
+        if not self.response_file:
+            return False
+        # import here to prevent circular imports!
+        from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
+        filename = os.path.basename(self.response_file.name)
+        return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
