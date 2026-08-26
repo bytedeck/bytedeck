@@ -126,9 +126,10 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         """The page's copy matches how often a draft actually saves (#2571).
 
         A draft is written by a 60-second timer and by the Save Draft button, and by nothing
-        else: there is no keystroke, change or unload handler. Copy promising that text saves
-        as the student types has a teacher telling students their typing is safe when up to a
-        minute of it is not, so the sentence names the interval and the button instead.
+        else: there is no keystroke, change or unload handler. So the sentence names the
+        interval and the button, and must not say answers save "as they type", which the third
+        assertion guards: a teacher reading that tells students their typing is safe when up to
+        a minute of it is not.
         """
         self.client.force_login(self.test_teacher)
 
