@@ -1,10 +1,8 @@
 import logging
 import smtplib
 from datetime import timedelta
-from email.utils import formataddr
 from urllib.parse import urlsplit
 
-from django.conf import settings
 from django.urls import reverse
 from django.utils import timezone
 from django.contrib.auth import get_user_model
@@ -18,6 +16,7 @@ from quest_manager.models import QuestSubmission
 from notifications.models import Notification
 
 from profile_manager.models import Profile
+from utilities.mail import deck_from_email
 
 User = get_user_model()
 
@@ -197,9 +196,8 @@ def generate_notification_email(user, root_url):
         })
         # Show the deck's domain as the sender name so a recipient can tell which deck an
         # email is from at a glance, while keeping the actual sending address (the one the
-        # mail server is authorised for) unchanged (#2338). Fall back to the default sender
-        # when DEFAULT_FROM_EMAIL isn't configured.
-        from_email = formataddr((deck_domain, settings.DEFAULT_FROM_EMAIL)) if settings.DEFAULT_FROM_EMAIL else None
+        # mail server is authorised for) unchanged (#2338).
+        from_email = deck_from_email(deck_domain)
         email_msg = EmailMultiAlternatives(subject, text_content, from_email=from_email, to=[to_email_address])
         email_msg.attach_alternative(html_content, "text/html")
 

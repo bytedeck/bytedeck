@@ -1,8 +1,10 @@
 import json
 import re
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -10,9 +12,9 @@ from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
-from questions.forms import SHORT_ANSWER_MAX_LENGTH
+from questions.forms import QuestionSubmissionFormsetFactory, SHORT_ANSWER_MAX_LENGTH
 from questions.models import Question, QuestionSubmission
-from questions.utils import sync_draft_question_submissions
+from questions.utils import save_draft_file_answers, sync_draft_question_submissions
 
 User = get_user_model()
 
@@ -124,6 +126,43 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
 
         self.assertEqual(content.count("summernote.min.js"), 1)
 
+    def test_submission_page__summernote_assets_load_when_a_short_answer_comes_first(self):
+        """The editor assets are found however the quest orders its questions.
+
+        `BaseFormSet.media` reads only `forms[0]`, on the assumption that a formset's forms
+        are alike. These are not: each answer form builds a widget for its own question type.
+        The page therefore asks every form, so a long answer sitting behind a short one still
+        gets its editor (#2608).
+        """
+        Question.objects.filter(quest=self.quest).delete()
+        short_first = baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
+        baker.make(Question, quest=self.quest, ordinal=2, type="long_answer", required=False)
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        # the assertion below only means anything while the first form is the short answer,
+        # since that is the one `BaseFormSet.media` would have reported on by itself
+        self.assertEqual(response.context["question_formset"].forms[0].question, short_first)
+        self.assertEqual(response.content.decode().count("summernote.min.js"), 1)
+
+    def test_complete__failed_submit_rerenders_with_the_editor_assets(self):
+        """A submission bounced back for a validation error still loads the editors (#2608).
+
+        The POST path builds `SubmissionQuickReplyFormStudent`, whose `comment_text` is a
+        plain textarea carrying no summernote assets. The answer editors are summernote
+        widgets, and crispy is told not to emit their media inline, so the page's head is the
+        only place those assets can come from: without them every editor on the re-rendered
+        page falls back to a raw textarea showing the student their own answer as markup.
+        """
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **self.formset_data(short_text="")})
+
+        self.assertEqual(response.status_code, 200, "expected the validation-error re-render")
+        content = response.content.decode()
+        self.assertContains(response, "You must provide a text response")
+        self.assertEqual(content.count("summernote.min.js"), 1)
+
     def test_submission_page__no_formset_without_questions(self):
         """A quest with no questions renders no formset."""
         plain_quest = baker.make(Quest)
@@ -196,6 +235,46 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         self.assertFalse(self.submission.is_completed)
         self.assertFalse(QuestionSubmission.objects.filter(
             quest_submission=self.submission, comment__isnull=False).exists())
+
+    def test_complete__required_long_answer_left_untouched_blocks_completion(self):
+        """An editor a student typed nothing into does not satisfy a required long answer.
+
+        End to end, this is the symptom of #2560: the student clicks into the editor and
+        presses space or enter, summernote posts markup rather than an empty string, and the
+        quest used to complete with a blank answer. The marker's answer table renders that
+        markup through |safe as an empty cell, so nobody could tell it had happened.
+        """
+        self.long_question.required = True
+        self.long_question.save()
+
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>",
+                  **self.formset_data(long_text="<p>&nbsp;</p>")})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "You must provide a text response")
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+
+    def test_complete__long_answer_that_is_only_a_picture_completes(self):
+        """A long answer made entirely of a pasted image is a real answer and completes.
+
+        The other half of #2560: stripping the tags out of this answer also leaves nothing,
+        so an emptiness test that judged only on text would reject a student who answered
+        "show me your work" the way the question invites.
+        """
+        self.long_question.required = True
+        self.long_question.save()
+
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "",
+                  **self.formset_data(long_text='<p><img src="/media/screenshot.png"></p>')})
+
+        self.assertRedirects(response, reverse("quests:quests"))
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
 
     def test_complete__uploaded_file_survives_a_failed_submit(self):
         """A file attached alongside a blank required answer is kept, not silently dropped (#2165).
@@ -468,6 +547,69 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
             HTTP_X_REQUESTED_WITH="XMLHttpRequest",
         )
 
+    def test_save_draft__no_draft_rows_created_on_a_completed_submission(self):
+        """Draft-saving a file on a finished submission does not spawn answer rows (#2567).
+
+        The page still offers Save Draft on a completed submission, and `submission()` creates
+        a draft comment for any owner view, so the endpoint is reachable. Building the answer
+        formset there would call sync and create a row per question that can never be
+        published or rendered: invisible and permanent. Comment attachments still save, which
+        the test below covers.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        # Build the payload while the submission is still in progress: the helpers call sync
+        # themselves, so capturing the POST first is what keeps this test measuring the view.
+        field_name = self.file_field_name(file_question)
+        payload = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+            field_name: SimpleUploadedFile("late.png", b"file_content", content_type="image/png"),
+        }
+        # clear the drafts and finish the submission, as completing the quest does
+        QuestionSubmission.objects.filter(quest_submission=self.submission).delete()
+        self.submission.is_completed = True
+        self.submission.save()
+
+        self.client.post(
+            reverse("quests:ajax_save_draft"), data=payload,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(
+            QuestionSubmission.objects.filter(quest_submission=self.submission).count(), 0,
+            "a finished submission must not gain draft answer rows",
+        )
+
+    def test_save_draft__comment_attachment_still_saves_on_a_completed_submission(self):
+        """The submission-state condition covers the answer formset only: an attachment still saves.
+
+        A student commenting on a quest they already finished is a normal thing to do, and
+        the file they attach belongs to that comment rather than to any answer row.
+        """
+        payload = {
+            "comment": "<p>draft words</p>",
+            "submission_id": self.submission.id,
+            **self.formset_data(short_text="draft title"),
+            "attachments": SimpleUploadedFile("receipt.png", b"file_content", content_type="image/png"),
+        }
+        self.submission.is_completed = True
+        self.submission.save()
+
+        response = self.client.post(
+            reverse("quests:ajax_save_draft"), data=payload,
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        payload = json.loads(response.content)
+        self.assertTrue(
+            any("receipt" in name for name in payload["saved_attachments"]),
+            f"the comment attachment should still be saved, got {payload['saved_attachments']}",
+        )
+
     def test_save_draft__stores_a_file_answer(self):
         """A file chosen on a file-upload question is stored on its draft row by Save Draft,
         unpublished, and the response names it so the page can show it was kept."""
@@ -631,6 +773,89 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(payload["saved_answer_files"], {})
         self.submission.draft_comment.refresh_from_db()
         self.assertEqual(self.submission.draft_comment.text, "<p>still saves</p>")
+
+
+class DraftSaveRacesSubmitTest(QuestionSubmissionFlowTestBase):
+    """A draft save that lands while the student's submit is publishing writes only the
+    answer it carries, so it cannot revert a published answer to a draft (#2565).
+
+    Both draft-save legs read their answer rows, then write them back a moment later. In
+    between, the submit request can publish those rows by setting `comment`. Whether the
+    page still shows the student's work therefore depends on the write touching only the
+    column it came to change.
+    """
+
+    def publish_answers(self):
+        """Publish this submission's draft answers, as completing the quest does.
+
+        Returns:
+            Comment: the comment the answers were published against.
+        """
+        comment = self.submission.draft_comment
+        QuestionSubmission.objects.filter(
+            quest_submission=self.submission, comment__isnull=True, question__isnull=False
+        ).update(comment=comment)
+        return comment
+
+    def test_save_draft_file_answers__keeps_an_answer_published_when_a_submit_beats_it(self):
+        """The file leg holds instances loaded before the submit, so its write is the one
+        that lands last: the answer stays published, and gains the file the student chose."""
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        sync_draft_question_submissions(self.submission)
+        field_name = self.file_field_name(file_question)
+        upload = SimpleUploadedFile("sketch.png", b"file_content", content_type="image/png")
+
+        # The autosave request reaches the point where it has read the rows and validated
+        # the upload, which is where it takes its snapshot of `comment`.
+        formset = QuestionSubmissionFormsetFactory(
+            self.formset_data(), {field_name: upload},
+            instance=self.submission, queryset=sync_draft_question_submissions(self.submission),
+        )
+        formset.is_valid()
+
+        # The student's submit lands in that gap and publishes the answers.
+        comment = self.publish_answers()
+
+        save_draft_file_answers(formset, {field_name: upload})
+
+        row = QuestionSubmission.objects.get(quest_submission=self.submission, question=file_question)
+        self.assertEqual(row.comment_id, comment.id, "the published answer must stay published")
+        self.assertIn("sketch", row.response_file.name)
+
+    def test_ajax_save_draft__keeps_a_text_answer_published_when_a_submit_beats_it(self):
+        """The text leg re-reads `comment` when it selects the row, which leaves a smaller
+        gap before the write, not none: a submit publishing inside it must still stand.
+
+        `full_clean` runs between the read and the write, so publishing from there puts the
+        submit exactly in that gap without depending on real request timing.
+        """
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        comment = self.submission.draft_comment
+
+        def publish_between_the_read_and_the_write(instance, *args, **kwargs):
+            QuestionSubmission.objects.filter(pk=instance.pk).update(comment=comment)
+
+        with patch.object(QuestionSubmission, "full_clean", autospec=True,
+                          side_effect=publish_between_the_read_and_the_write):
+            self.client.post(
+                reverse("quests:ajax_save_draft"),
+                data={
+                    "submission_id": self.submission.id,
+                    "comment": "<p>draft words</p>",
+                    "answers": json.dumps({
+                        "question_submissions-0-id": str(row.id),
+                        "question_submissions-0-response_text": "my website",
+                    }),
+                },
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        row.refresh_from_db()
+        self.assertEqual(row.comment_id, comment.id, "the published answer must stay published")
+        self.assertEqual(row.response_text, "my website")
 
 
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
@@ -831,7 +1056,7 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
     """sync_draft_question_submissions heals duplicate draft rows for the same question."""
 
-    def test_sync__duplicate_draft_rows_healed_keeping_content(self):
+    def test_sync_draft_question_submissions__duplicate_draft_rows_healed_keeping_content(self):
         """When duplicate draft rows exist for one question (concurrency race, or a deleted
         published comment reverting answers into an active cycle), sync keeps the row with
         content and deletes the empty duplicates."""
@@ -846,7 +1071,7 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().response_text, "keep me")
 
-    def test_sync__duplicate_dropped_when_keeper_has_content(self):
+    def test_sync_draft_question_submissions__duplicate_dropped_when_keeper_has_content(self):
         """When the most recently edited duplicate is the contentful one, the older empty
         duplicate is simply dropped."""
         # older empty duplicate first, then the contentful row (edited last = the keeper)
@@ -858,6 +1083,74 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         short_rows = rows.filter(question=self.short_question)
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().id, contentful.id)
+
+
+    def test_sync_draft_question_submissions__unpublished_answer_to_a_deleted_question_is_removed(self):
+        """A draft answer whose question was deleted is cleaned up rather than left forever.
+
+        `question` is SET_NULL, so deleting a question leaves the row behind with no way for
+        anything to reach it: answers render only through `comment.question_submissions`,
+        which a NULL comment excludes, and this function's own queryset filters on
+        `question__isnull=False`. Kept, it would sit in the schema indefinitely along with an
+        uploaded file of up to 16 MiB (#2567).
+        """
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        row.response_text = "answered before the question was deleted"
+        row.save()
+        self.short_question.delete()
+        row.refresh_from_db()
+        self.assertIsNone(row.question_id, "SET_NULL should have orphaned the row")
+
+        sync_draft_question_submissions(self.submission)
+
+        self.assertFalse(QuestionSubmission.objects.filter(id=row.id).exists())
+
+    def test_sync_draft_question_submissions__deleted_orphan_takes_its_uploaded_file_with_it(self):
+        """The uploaded file goes when its orphaned row does, rather than being stranded.
+
+        Django has not deleted a FileField's storage on row delete since 1.3, so removing
+        the row alone would leave the file on disk with nothing in the database naming it:
+        worse than the orphan this cleans up, since the row at least pointed at the file a
+        sweep could have found (#2567).
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        row = sync_draft_question_submissions(self.submission).get(question=file_question)
+        row.response_file = SimpleUploadedFile("orphaned.png", b"file_content", content_type="image/png")
+        row.save()
+        stored_name = row.response_file.name
+        self.assertTrue(row.response_file.storage.exists(stored_name))
+        file_question.delete()
+
+        sync_draft_question_submissions(self.submission)
+
+        self.assertFalse(QuestionSubmission.objects.filter(id=row.id).exists())
+        self.assertFalse(
+            default_storage.exists(stored_name),
+            "the uploaded file should not outlive the row that named it",
+        )
+
+    def test_sync_draft_question_submissions__published_answer_to_a_deleted_question_is_kept(self):
+        """A published answer survives its question being deleted: it is part of the record.
+
+        It still renders with the comment it was published against, so unlike the draft above
+        it is neither invisible nor unreachable, and deleting it would remove work a student
+        actually submitted.
+        """
+        comment = baker.make("comments.Comment", target_object_id=self.submission.id)
+        row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
+        row.response_text = "submitted work"
+        row.comment = comment
+        row.save()
+        self.short_question.delete()
+
+        sync_draft_question_submissions(self.submission)
+
+        row.refresh_from_db()
+        self.assertIsNone(row.question_id)
+        self.assertEqual(row.response_text, "submitted work")
 
 
 class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
@@ -991,7 +1284,7 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
 
     def test_complete__optional_blank_answers_still_require_comment_when_verification_required(self):
         """A verification-required quest whose only questions are optional and left blank
-        still demands a comment or attachment — answers-that-aren't-answers aren't content."""
+        still demands a comment or attachment: answers-that-aren't-answers aren't content."""
         # replace the fixture questions with a single optional one
         Question.objects.filter(quest=self.quest).delete()
         optional = baker.make(Question, quest=self.quest, ordinal=1, type="short_answer", required=False)
@@ -1013,6 +1306,41 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         self.assertRedirects(response, self.submission.get_absolute_url())
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
+
+    def test_complete__untouched_long_answer_editor_is_not_content_when_verification_required(self):
+        """An untouched editor cannot stand in for the comment or attachment a teacher asked for.
+
+        The second half of #2560. On a verification-required quest, answering a question is
+        what excuses the student from also commenting or attaching something, so markup an
+        editor produced by itself must not count: otherwise the quest completes with no
+        content at all, and the teacher has nothing to verify.
+        """
+        # replace the fixture questions with a single optional long answer
+        Question.objects.filter(quest=self.quest).delete()
+        optional = baker.make(Question, quest=self.quest, ordinal=1, type="long_answer", required=False)
+        rows = list(sync_draft_question_submissions(self.submission))
+        self.assertEqual(rows[0].question_id, optional.id)
+        data = {
+            "question_submissions-TOTAL_FORMS": "1",
+            "question_submissions-INITIAL_FORMS": "1",
+            "question_submissions-MIN_NUM_FORMS": "0",
+            "question_submissions-MAX_NUM_FORMS": "1000",
+            "question_submissions-0-id": str(rows[0].id),
+            "question_submissions-0-response_text": "<p>&nbsp;</p>",
+        }
+
+        response = self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **data})
+
+        # bounced by the attach-or-comment rule, not completed
+        self.assertRedirects(response, self.submission.get_absolute_url())
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        self.assertIn(
+            "You are expected to attach something or comment",
+            " ".join(str(m) for m in get_messages(response.wsgi_request)),
+        )
 
 
 class SkipDiscardsDraftAnswersTest(QuestionSubmissionFlowTestBase):

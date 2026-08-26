@@ -20,6 +20,8 @@ from badges.models import BadgeAssertion
 from prerequisites.models import IsAPrereqMixin
 from quest_manager.models import QuestSubmission
 from siteconfig.models import SiteConfig
+from utilities.fa_icon import FA_ICON_HELP_TEXT, FA_ICON_VALIDATOR, fa_icon_class
+from utilities.signals import disable_for_loaddata
 
 
 def split_xp_between_registrations(registrations, total, xp_by_course):
@@ -280,15 +282,13 @@ class Rank(IsAPrereqMixin, models.Model):
                              help_text="A backup where fa_icon can't be used.  E.g. in the quest maps.")
     # Both fields are staff-editable and flow, unescaped, into the rank-up
     # notification's icon HTML (rendered |safe), so they are validated down to safe
-    # Font Awesome class tokens: a single bare name here (no "fa-" prefix, no spaces),
-    # and space-separated modifier classes below. This keeps markup/quotes out and
-    # keeps fa_icon a bare name (typing "fa fa-star" or "fa-star" would render wrong).
+    # Font Awesome class tokens: a single bare name here (the shared FA_ICON_VALIDATOR
+    # every icon field uses), and space-separated modifier classes below. This keeps
+    # markup/quotes out and keeps fa_icon a bare name.
     fa_icon = models.TextField(
         null=True, blank=True,
-        validators=[RegexValidator(
-            r'^(?!fa-)[a-z0-9-]*$',
-            'Enter a single Font Awesome icon name in lowercase, e.g. "star" (no "fa-" prefix, no spaces).')],
-        help_text='A Font Awesome icon name, e.g. "star". Use the picker to browse the options.')
+        validators=[FA_ICON_VALIDATOR],
+        help_text=FA_ICON_HELP_TEXT)
     fa_icon_modifiers = models.CharField(
         max_length=100, blank=True, default='',
         validators=[RegexValidator(
@@ -316,14 +316,8 @@ class Rank(IsAPrereqMixin, models.Model):
     @property
     def fa_icon_class(self):
         """The Font Awesome class list to drop into ``<i class="...">``:
-        ``fa fa-<name>`` plus any ``fa_icon_modifiers``. Returns '' when no icon
-        is set, so a template renders a bare ``<i>`` instead of a stray "fa fa-"."""
-        name = (self.fa_icon or '').strip()
-        if not name:
-            return ''
-        classes = 'fa fa-' + name
-        modifiers = (self.fa_icon_modifiers or '').strip()
-        return classes + ' ' + modifiers if modifiers else classes
+        ``fa fa-<name>`` plus any ``fa_icon_modifiers``."""
+        return fa_icon_class(self.fa_icon, self.fa_icon_modifiers)
 
     def condition_met_as_prerequisite(self, user, num_required):
         # num_required is not used for this one
@@ -1307,6 +1301,7 @@ class CourseStudent(models.Model):
 
 
 @receiver(post_save, sender=CourseStudent)
+@disable_for_loaddata
 def coursestudent_post_save_callback(instance, **kwargs):
     """Work out the student's cached XP and mark again, because their registrations decide both.
 
@@ -1328,6 +1323,7 @@ def coursestudent_post_save_callback(instance, **kwargs):
 
 
 @receiver(post_save, sender=CourseStudent)
+@disable_for_loaddata
 def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     """Bring the quests a student had on the go into the semester they have just joined.
 
@@ -1336,12 +1332,9 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
     of their in-progress list, which is their new semester's, and out of their available
     list, which drops a quest they already have a submission of.
 
-    Deserializing a fixture is sat out: Django sends raw=True for those saves, and the
-    submissions this moves are read from the database, which is only part loaded then.
+    Deserializing a fixture is sat out (issue #2548): the submissions this moves are read
+    from a database that is only part loaded then.
     """
-    if kwargs.get('raw'):
-        return
-
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if created and instance.semester_id is not None and instance.semester.is_open:
@@ -1349,6 +1342,7 @@ def coursestudent_adopt_unstamped_work_callback(instance, created, **kwargs):
 
 
 @receiver(post_save, sender=Semester)
+@disable_for_loaddata
 def semester_adopt_unstamped_work_callback(instance, **kwargs):
     """Bring the work a pre-registered student had on the go into their semester as it opens.
 
@@ -1364,13 +1358,10 @@ def semester_adopt_unstamped_work_callback(instance, **kwargs):
     be started from the admin as well as through SiteConfig.set_active_semester(), and
     adopting when there is nothing left to adopt moves no rows.
 
-    Deserializing a fixture is sat out, the same as its counterpart above: Django sends
-    raw=True for those saves, and both the registrations this reads and the submissions it
-    moves come from a database that is only part loaded then.
+    Deserializing a fixture is sat out, the same as its counterpart above (issue #2548):
+    both the registrations this reads and the submissions it moves come from a database
+    that is only part loaded then.
     """
-    if kwargs.get('raw'):
-        return
-
     from quest_manager.models import QuestSubmission  # locally, since quest_manager imports this module
 
     if instance.is_open:
