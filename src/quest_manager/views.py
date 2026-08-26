@@ -97,6 +97,16 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return self.request.path in [reverse('quest_manager:categories'), reverse('quest_manager:categories_available')]
 
     def get_queryset(self):
+        """The campaigns for the tab being viewed, counted, summed and ordered by title.
+
+        Which tab is showing decides whether the published or the unpublished campaigns are
+        listed, and the two annotations give the template its per-campaign figures without a
+        query each.
+
+        Returns:
+            QuerySet[Category]: the tab's campaigns, alphabetical by title, each carrying
+            `quest_count_annotated` and `xp_sum_annotated` for its current quests.
+        """
         queryset = super().get_queryset()
 
         if self.inactive_tab_active:
@@ -819,6 +829,25 @@ class QuestListViewTabTypes:
 @non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
+    """Render the quest tabs: available, in progress, completed, past, drafts and archived.
+
+    Which tab is shown comes from the path, or from `quest_id`, which opens the Available tab
+    with that quest expanded. Every tab is counted in full for its badge, then searched,
+    ordered and cut to a page in the database, so each of those three answers a question about
+    the whole tab rather than about the page the browser is holding (#2379, #2410, #2582).
+
+    A staff member sees every published quest; a student sees the ones available to them, plus
+    the repeatable ones still inside their cooldown window, shown as available again soon.
+
+    Args:
+        request (HttpRequest): the request, whose path picks the tab and whose query string
+            carries the page, the search term and the sort.
+        quest_id (int): a quest to open on the Available tab, or None for the tab alone.
+        template (str): the template to render.
+
+    Returns:
+        HttpResponse: the rendered quest list.
+    """
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
