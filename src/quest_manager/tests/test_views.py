@@ -1715,6 +1715,27 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
 
+    def test_complete__no_notification_for_an_empty_looking_comment(self):
+        """No teacher notification for a comment box the student typed nothing into (#2609).
+
+        On an auto-approved quest a comment is the only reason to notify a teacher, since the
+        quest never reaches the approvals tab. The editor posts markup rather than an empty
+        string, so each of these looked like a comment and sent the teacher to read one that
+        renders as blank space. Every payload here got through, the exact `<p><br></p>`
+        included: the POST path builds SubmissionQuickReplyFormStudent, whose comment_text is
+        a plain Textarea, so summernote's own empty-string handling never runs.
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                Notification.objects.all().delete()
+                self.post_complete(submission_comment=empty)
+
+                notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+                self.assertEqual(notifications.count(), 0)
+
     def test_complete__specific_teacher_is_own_teacher_no_notification(self):
         """
         If a quest has a specific teacher set to notify and that teacher is also the student's current teacher,

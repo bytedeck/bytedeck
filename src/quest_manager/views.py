@@ -1538,6 +1538,23 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, submission_id, *args, **kwargs):
+        """Act on a teacher's decision about one submission, and tell the student.
+
+        Which decision it is comes from the button the form carries (approve, return, comment,
+        skip), which `handle_form_button` reads; that also supplies the wording to store when
+        the teacher wrote no comment of their own. Any badge granted alongside is appended to
+        the comment, uploaded files are attached to it, and the student is notified.
+
+        Args:
+            request: the POST carrying the teacher's comment, any files, any badge, and which
+                button was pressed.
+            submission_id: pk of the submission being acted on.
+
+        Returns:
+            HttpResponse: `form_valid`'s redirect to the approvals tab, or a JsonResponse when
+            the request was made by ajax. An invalid form returns `form_invalid` instead,
+            which re-renders the submission page (or a 400 for ajax).
+        """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
 
@@ -2093,8 +2110,12 @@ def complete(request, submission_id):
 
     # Whether the student left a comment at all. The editor posts markup rather than an empty
     # string for a box nobody typed in, so this asks what that markup renders as (#2609); a
-    # comment that is only a pasted image counts as content and takes the other branch.
-    if is_empty_html(comment_text):
+    # comment that is only a pasted image counts as content. Answered once, here, because the
+    # branches below overwrite comment_text with placeholder text, and the teacher
+    # notification further down still needs to know whether there was ever a real comment.
+    has_comment = not is_empty_html(comment_text)
+
+    if not has_comment:
 
         # If the student answered at least one question, those answers are the submission's
         # content, so don't demand an additional comment or attachment on top of them.
@@ -2192,10 +2213,10 @@ def complete(request, submission_id):
 
         # Send notification to current teachers when a comment is left on an auto-approved quest
         # since these quests don't appear in the approvals tab, teacher would never know about the comment.
-        if (
-            form.cleaned_data.get("comment_text")
-            and not submission.quest.verification_required
-        ):
+        # has_comment rather than the posted value: an editor nobody typed in posts markup, and
+        # notifying a teacher to come and read a comment that renders as blank space wastes the
+        # trip (#2609).
+        if has_comment and not submission.quest.verification_required:
             affected_users.extend(request.user.profile.current_teachers())
 
         # Record which course the student said this counts toward, before the XP is granted so
