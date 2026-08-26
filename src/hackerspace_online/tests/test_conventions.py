@@ -40,7 +40,11 @@ _EM_DASHES = ("\u2014", "&mdash;")
 _EM_DASH_SUFFIXES = (".py", ".html", ".css", ".js", ".md", ".txt")
 
 # A line asserting an em dash is absent has to contain one to say so.
-_ASSERTS_ABSENCE = ("assertNotContains", "assertNotIn")
+#: Written on a line that has to carry an em dash to do its job, which in practice means a
+#: test asserting the character is absent from a page. The marker is what exempts the line,
+#: rather than the name of the assertion on it: a line can assert an absence and still carry
+#: an em dash of its own somewhere else, and that one is a violation like any other.
+_EM_DASH_ALLOWED_MARKER = "em-dash-ok"
 
 # src/ directory (this file is src/hackerspace_online/tests/test_conventions.py).
 _SRC_ROOT = Path(__file__).resolve().parents[2]
@@ -82,7 +86,7 @@ def _em_dash_violations(path):
     """
     problems = []
     for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        if any(marker in line for marker in _ASSERTS_ABSENCE):
+        if _EM_DASH_ALLOWED_MARKER in line:
             continue
         if any(dash in line for dash in _EM_DASHES):
             problems.append(f"{number}: {line.strip()}")
@@ -107,8 +111,9 @@ class TestNoEmDashes(SimpleTestCase):
         """No source file in EM_DASH_CHECKED_DIRS contains an em dash, in either spelling.
 
         The rule covers comments and docstrings as much as anything a user reads, so this
-        scans lines rather than only rendered strings. A line asserting an em dash is absent
-        is skipped, since it has to name one to do that.
+        scans lines rather than only rendered strings. A line that genuinely has to carry the
+        character, such as one asserting a page does not contain it, says so with an
+        ``em-dash-ok`` marker and is skipped.
         """
         failures = {}
         for rel, path in _iter_em_dash_sources():

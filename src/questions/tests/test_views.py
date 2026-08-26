@@ -105,8 +105,9 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
 
         response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
 
-        self.assertNotContains(response, "—")
-        self.assertNotContains(response, "&mdash;")
+        # each of these names the character it is asserting is absent, hence the markers
+        self.assertNotContains(response, "—")  # em-dash-ok
+        self.assertNotContains(response, "&mdash;")  # em-dash-ok
 
     def test_list__help_text_says_files_save_with_the_draft(self):
         """The page's copy matches how draft saving works (#2551).
