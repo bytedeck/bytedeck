@@ -268,6 +268,31 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
                 with self.assertRaises(ValidationError):
                     field.validate_file(spoofed)
 
+    def test_validate_file__a_declared_script_capable_type_needs_a_matching_name(self):
+        """An HTML upload named `.png` is refused even where HTML is allowed (#2559).
+
+        The two spellings have to agree because different readers downstream trust different
+        halves: this app's media serving guesses the Content-Type from the stored name, while
+        django-storages sets S3's from the declared type, and the answer display reads the
+        name again. `payload.png` declared `text/html` is stored under a name that says image
+        and served by S3 as a page, which is the combination that leaves an executable file
+        on the public CDN with the answer table linking straight at it.
+        """
+        field = RestrictedFileFormField(script_capable_types=ALL_SCRIPT_CAPABLE_TYPES)
+
+        # the honest versions, which the opt-in exists for
+        field.validate_file(SimpleNamespace(content_type="text/html", size=1, name="index.html"))
+        field.validate_file(SimpleNamespace(content_type="image/svg+xml", size=1, name="logo.svg"))
+
+        for mismatched in (
+            SimpleNamespace(content_type="text/html", size=1, name="payload.png"),
+            SimpleNamespace(content_type="image/svg+xml", size=1, name="payload.jpg"),
+            SimpleNamespace(content_type="text/html", size=1, name="payload"),  # no extension at all
+        ):
+            with self.subTest(name=mismatched.name):
+                with self.assertRaises(ValidationError):
+                    field.validate_file(mismatched)
+
     def test_validate_file__script_capable_types_still_enforces_size_and_types(self):
         """Opting in lifts the script-capable refusal and nothing else.
 
