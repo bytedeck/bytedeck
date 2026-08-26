@@ -216,8 +216,15 @@ class QuestionSubmissionForm(forms.ModelForm):
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
+            # No visible label (the question's instructions directly above serve as one), so
+            # without an aria-label the editor announces nothing at all, while the short answer
+            # beside it announces "Response to question N". The widget's attrs are applied to a
+            # wrapper div; bytedeck_summernote's template forwards aria-label from there onto
+            # .note-editable, which is the element that takes focus (#2570).
             self.fields["response_text"] = forms.CharField(
-                label="", required=self.question.required, widget=AnswerSummernoteWidget()
+                label="",
+                required=self.question.required,
+                widget=AnswerSummernoteWidget(attrs={"aria-label": self._response_aria_label()}),
             )
         elif self.question.type == QuestionType.FILE_UPLOAD:
             del self.fields["response_text"]
@@ -243,7 +250,11 @@ class QuestionSubmissionForm(forms.ModelForm):
                 required=self.question.required,
                 content_types=mime_types,
                 max_upload_size=MAX_RESPONSE_FILE_SIZE,
-                widget=forms.ClearableFileInput(attrs={"multiple": False}),
+                # The visible label is the same on every file question, so several of them on
+                # one page are indistinguishable by name. The aria-label adds the question number
+                # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)
+                # requires of a control whose visible label is text (#2570).
+                widget=forms.ClearableFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
                 label="Attach files",
                 help_text=help_text,
             )
@@ -263,23 +274,49 @@ class QuestionSubmissionForm(forms.ModelForm):
             form_fields,
         )
 
-    def _response_aria_label(self):
-        """Return a per-question aria-label for the short-answer input.
+    def _question_position(self):
+        """Return this question's 1-based position on the submission page, or None.
 
-        Several short-answer inputs on one page would otherwise all announce the identical
-        "Response", so screen-reader users couldn't tell them apart. The form's formset prefix
-        is "question_submissions-<i>" (0-based); i + 1 matches the visible "Question N:" heading
-        rendered just above the input in submission.html. Falls back to "Response" if the form
-        isn't in a formset (no numeric prefix, e.g. the formset's empty_form placeholder).
+        The form's formset prefix is "question_submissions-<i>" (0-based); i + 1 matches the
+        visible "Question N:" heading rendered just above the answer field in submission.html.
 
         Returns:
-            str: the aria-label for this input, e.g. "Response to question 2".
+            int | None: the question number, or None if the form isn't in a formset (no numeric
+            prefix, e.g. the formset's empty_form placeholder).
         """
         try:
-            position = int(self.prefix.rsplit("-", 1)[-1]) + 1
+            return int(self.prefix.rsplit("-", 1)[-1]) + 1
         except (AttributeError, ValueError):
+            return None
+
+    def _response_aria_label(self):
+        """Return a per-question aria-label for the short-answer input or long-answer editor.
+
+        Several answer fields on one page would otherwise all announce the identical "Response"
+        (or, for the editor, nothing at all), so screen-reader users couldn't tell them apart.
+
+        Returns:
+            str: the aria-label for this field, e.g. "Response to question 2".
+        """
+        position = self._question_position()
+        if position is None:
             return "Response"
         return f"Response to question {position}"
+
+    def _file_aria_label(self):
+        """Return a per-question aria-label for the file input.
+
+        Keeps the visible label's own words and adds the question number: WCAG 2.5.3 (Label in
+        Name) asks that a control's accessible name contain its visible label text, so that
+        someone driving the page by voice can still say "attach files" to reach it.
+
+        Returns:
+            str: the aria-label for this input, e.g. "Attach files for question 3".
+        """
+        position = self._question_position()
+        if position is None:
+            return "Attach files"
+        return f"Attach files for question {position}"
 
     def clean_response_text(self):
         """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).
