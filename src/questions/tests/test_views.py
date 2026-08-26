@@ -310,7 +310,16 @@ class QuestionTableMoveArrowsTest(ByteDeckTenantTestCase):
         cls.q2 = baker.make(Question, quest=cls.quest, ordinal=2, instructions="Second question")
 
     def _render_snippet(self, **extra):
-        """Render the question table snippet directly, with `extra` merged into its context."""
+        """Render the question table snippet on its own, outside any page that includes it.
+
+        Args:
+            **extra: context merged over the quest and its questions, so a test can render
+                the snippet the way a given caller would (`can_reorder_questions=True` for
+                one that binds the move handler).
+
+        Returns:
+            str: the rendered table HTML.
+        """
         return render_to_string(
             "questions/snippets/question_table.html",
             {"quest": self.quest, "questions": Question.objects.filter(quest=self.quest), **extra},

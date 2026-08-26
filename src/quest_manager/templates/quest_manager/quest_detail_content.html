@@ -92,11 +92,11 @@
     {# only this management panel and the solutions/marker notes are staff-only #}
     <h3 class="panel-title">Submission Questions <small>(students answer these when submitting)</small>
       {% comment %}
-        What questions are and how they behave, on demand rather than as a wall of text above
-        every quest's table. Click to open, click away to dismiss (bootstrap's "focus"
-        trigger), which suits a paragraph better than a tooltip that vanishes on mouse-out.
-        The site-wide initializer in javascript.html binds every [data-toggle="popover"], and
-        data-container="body" keeps it from being clipped by the panel heading.
+        What questions are and how they behave, on demand. The "focus" trigger needs the
+        tabindex to be focusable at all, and gives click to open and click anywhere to
+        dismiss, which a paragraph this long wants. The site-wide initializer in
+        javascript.html binds every [data-toggle="popover"], so this needs no script of its
+        own, and data-container="body" keeps the popover from being clipped by the heading.
       {% endcomment %}
       <a tabindex="0" role="button" class="bt-help-popover"
          data-toggle="popover"
