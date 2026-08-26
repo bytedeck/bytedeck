@@ -41,6 +41,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.html import is_empty_html
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -1550,7 +1551,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # handle comment text
             # if staff didnt write any text for comment use blank_comment_text
             comment_text = self.form.cleaned_data.get("comment_text")
-            if not comment_text or comment_text == "<p><br></p>":
+            # An editor the teacher typed nothing into posts markup, not an empty string, so
+            # what counts as "no comment" is a question about what that markup renders as
+            # rather than about the string (#2609). An image on its own is a real comment and
+            # is kept: is_empty_html treats embedded media as content.
+            if is_empty_html(comment_text):
                 comment_text = blank_comment_text
 
             comment_new = Comment.objects.create_comment(
@@ -2086,9 +2091,10 @@ def complete(request, submission_id):
     # editor posts markup rather than an empty string (#2560).
     answered_a_question = bool(question_formset) and any(f.has_answer() for f in question_formset.forms)
 
-    # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
-    # then need to check if we should bother handling this form submission
-    if not comment_text or comment_text == "<p><br></p>":
+    # Whether the student left a comment at all. The editor posts markup rather than an empty
+    # string for a box nobody typed in, so this asks what that markup renders as (#2609); a
+    # comment that is only a pasted image counts as content and takes the other branch.
+    if is_empty_html(comment_text):
 
         # If the student answered at least one question, those answers are the submission's
         # content, so don't demand an additional comment or attachment on top of them.
