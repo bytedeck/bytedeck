@@ -72,7 +72,7 @@ CATEGORY_FIELDS_NOT_TRANSFERRED = {
 
 QUESTION_FIELDS_TRANSFERRED = frozenset({
     'type', 'ordinal', 'required', 'instructions', 'solution_text', 'solution_file',
-    'allowed_file_type', 'marker_notes', 'import_id',
+    'allowed_file_type', 'allow_script_capable_files', 'marker_notes', 'import_id',
 })
 
 QUESTION_FIELDS_NOT_TRANSFERRED = {
@@ -588,6 +588,9 @@ class LibraryTransferQuestionContractTests(LibraryTenantTestCaseMixin):
         )
         Question.objects.create(
             quest=quest, ordinal=3, type=QuestionType.FILE_UPLOAD, allowed_file_type="image",
+            # a graphic design question asking for a vector logo: what it accepts is part of
+            # what it asks for, so the opt-in has to arrive with it (#2559)
+            allow_script_capable_files=True,
             instructions="<p>Upload a photo.</p>",
             solution_file="quest/question/solution/2026/08/16/example.png",
             marker_notes="<p>Any photo of the build</p>",
