@@ -2630,7 +2630,7 @@ def ajax_save_draft(request):
             saved_attachments = []
             file_errors = {}
 
-            # Same state gate as the page GET and complete(): building the formset calls
+            # Same submission-state condition as the page GET and complete(): building the formset calls
             # sync_draft_question_submissions, which creates a draft row per question when
             # none exists. On a submission that is finished those rows can never be
             # published or rendered, so they would be invisible and permanent, and on a

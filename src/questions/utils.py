@@ -110,9 +110,20 @@ def sync_draft_question_submissions(quest_submission):
     # Unpublished answers to a question that has since been deleted: invisible to every
     # code path and reachable by none, so this is their only chance to be cleaned up
     # (#2567). Published ones are untouched: those still render with their comment.
-    QuestionSubmission.objects.filter(
+    #
+    # The uploaded file goes first, and has to. Django has not deleted a FileField's
+    # storage on row delete since 1.3, so dropping the row alone would leave the file on
+    # disk with nothing left in the database pointing at it: worse than the orphan being
+    # fixed, because the row at least named the file a sweep could find. Deleted one row at
+    # a time rather than through the queryset, since QuerySet.delete() never opens the
+    # files. save=False because the row is about to be deleted anyway.
+    orphans = QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=True, question__isnull=True
-    ).delete()
+    )
+    for orphan in orphans:
+        if orphan.response_file:
+            orphan.response_file.delete(save=False)
+    orphans.delete()
 
     drafts = QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=True, question__isnull=False

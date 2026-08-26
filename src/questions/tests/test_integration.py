@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
+from django.core.files.storage import default_storage
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 
@@ -584,7 +585,7 @@ class DraftFileSaveTest(QuestionSubmissionFlowTestBase):
         )
 
     def test_save_draft__comment_attachment_still_saves_on_a_completed_submission(self):
-        """The state gate is on the answer formset only: a comment attachment still saves.
+        """The submission-state condition covers the answer formset only: an attachment still saves.
 
         A student commenting on a quest they already finished is a normal thing to do, and
         the file they attach belongs to that comment rather than to any answer row.
@@ -1055,7 +1056,7 @@ class QuestDetailEntryPointTest(QuestionSubmissionFlowTestBase):
 class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
     """sync_draft_question_submissions heals duplicate draft rows for the same question."""
 
-    def test_sync__duplicate_draft_rows_healed_keeping_content(self):
+    def test_sync_draft_question_submissions__duplicate_draft_rows_healed_keeping_content(self):
         """When duplicate draft rows exist for one question (concurrency race, or a deleted
         published comment reverting answers into an active cycle), sync keeps the row with
         content and deletes the empty duplicates."""
@@ -1070,7 +1071,7 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(short_rows.count(), 1)
         self.assertEqual(short_rows.first().response_text, "keep me")
 
-    def test_sync__duplicate_dropped_when_keeper_has_content(self):
+    def test_sync_draft_question_submissions__duplicate_dropped_when_keeper_has_content(self):
         """When the most recently edited duplicate is the contentful one, the older empty
         duplicate is simply dropped."""
         # older empty duplicate first, then the contentful row (edited last = the keeper)
@@ -1084,7 +1085,7 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(short_rows.first().id, contentful.id)
 
 
-    def test_sync__unpublished_answer_to_a_deleted_question_is_removed(self):
+    def test_sync_draft_question_submissions__unpublished_answer_to_a_deleted_question_is_removed(self):
         """A draft answer whose question was deleted is cleaned up rather than left forever.
 
         `question` is SET_NULL, so deleting a question leaves the row behind with no way for
@@ -1104,7 +1105,34 @@ class DraftRowHealingTest(QuestionSubmissionFlowTestBase):
 
         self.assertFalse(QuestionSubmission.objects.filter(id=row.id).exists())
 
-    def test_sync__published_answer_to_a_deleted_question_is_kept(self):
+    def test_sync_draft_question_submissions__deleted_orphan_takes_its_uploaded_file_with_it(self):
+        """The uploaded file goes when its orphaned row does, rather than being stranded.
+
+        Django has not deleted a FileField's storage on row delete since 1.3, so removing
+        the row alone would leave the file on disk with nothing in the database naming it:
+        worse than the orphan this cleans up, since the row at least pointed at the file a
+        sweep could have found (#2567).
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload",
+            required=False, allowed_file_type="all",
+        )
+        row = sync_draft_question_submissions(self.submission).get(question=file_question)
+        row.response_file = SimpleUploadedFile("orphaned.png", b"file_content", content_type="image/png")
+        row.save()
+        stored_name = row.response_file.name
+        self.assertTrue(row.response_file.storage.exists(stored_name))
+        file_question.delete()
+
+        sync_draft_question_submissions(self.submission)
+
+        self.assertFalse(QuestionSubmission.objects.filter(id=row.id).exists())
+        self.assertFalse(
+            default_storage.exists(stored_name),
+            "the uploaded file should not outlive the row that named it",
+        )
+
+    def test_sync_draft_question_submissions__published_answer_to_a_deleted_question_is_kept(self):
         """A published answer survives its question being deleted: it is part of the record.
 
         It still renders with the comment it was published against, so unlike the draft above
