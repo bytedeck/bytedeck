@@ -731,6 +731,25 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
         self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
         self.assertNotIn(f'href="{answer.response_file.url}"', html)
 
+    def test_display__a_deleted_question_does_not_bring_the_direct_link_back(self):
+        """A stored HTML answer keeps its download link after its question is deleted (#2559).
+
+        ``QuestionSubmission.question`` is ``SET_NULL``, so the answer outlives the question,
+        and a teacher can also move a question off the "web" file type after the fact. Deciding
+        from the question would start linking the stored file at its storage URL again in both
+        cases, which is exactly the stored XSS this feature exists to prevent, so the stored
+        file decides instead.
+        """
+        answer = self.answer()
+        answer.question.delete()
+        answer.refresh_from_db()
+        self.assertIsNone(answer.question, "the answer must outlive its question")
+
+        html = self.render_answers(answer)
+
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
     def test_display__an_ordinary_file_answer_is_unchanged(self):
         """A question on any other file type still renders through question_file.html.
 

@@ -43,13 +43,15 @@
       </td>
       <td class="col-sm-7">
         {% if answer.response_file %}
-          {% if answer.question.accepts_web_files %}
-            {% comment %} A web-file answer is HTML or SVG, which runs whatever script it carries
-               if a browser navigates to it, so it is never linked at its storage URL: this link
-               goes through a view that responds with Content-Disposition: attachment, and the
-               file is saved rather than opened in the marker's session (#2559). An SVG is shown
-               as well, through an <img>, where browsers run no script at all, so a graphic design
-               answer can still be looked at. {% endcomment %}
+          {% if answer.response_file_is_script_capable %}
+            {% comment %} HTML and SVG run whatever script they carry if a browser navigates to
+               them, so such an answer is never linked at its storage URL: this link goes through
+               a view that responds with Content-Disposition: attachment, and the file is saved
+               rather than opened in the marker's session (#2559). An SVG is shown as well,
+               through an <img>, where browsers run no script at all, so a graphic design answer
+               can still be looked at. The stored file decides this, not the question, so a
+               question that is later deleted or retyped cannot bring the direct link back.
+               {% endcomment %}
             {% if answer.response_file|is_displayable_svg %}
               <img class="question-media" src="{{ answer.response_file.url }}"
                    alt="{{ answer.response_file|filename|striptags }}">

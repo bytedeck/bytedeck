@@ -1,10 +1,11 @@
+import os
 import uuid
 
 from django.db import models
 from django.urls import reverse
 
 from comments.models import Comment
-from utilities.fields import FILE_MIME_TYPES
+from utilities.fields import FILE_MIME_TYPES, UNSAFE_UPLOAD_EXTENSIONS
 from utilities.models import RestrictedFileField
 
 
@@ -248,3 +249,21 @@ class QuestionSubmission(models.Model):
     def is_published(self):
         """Whether this answer has been published with a completion comment (vs still a draft)."""
         return self.comment_id is not None
+
+    @property
+    def response_file_is_script_capable(self):
+        """Whether this answer's file is one a browser would run a script from (#2559).
+
+        Answered from the stored file rather than from the question, deliberately. A question
+        can be deleted (``question`` is ``SET_NULL``) or moved off the "web" file type long
+        after the answer was published, and neither changes the file sitting on the row.
+        Asking the question instead would quietly start linking a stored HTML answer at its
+        storage URL again, which is the whole vulnerability.
+
+        Returns:
+            bool: True for a stored HTML, SVG, XML or MHTML file; False for anything else,
+            including an answer with no file.
+        """
+        if not self.response_file:
+            return False
+        return os.path.splitext(self.response_file.name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS
