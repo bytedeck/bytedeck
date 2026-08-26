@@ -203,7 +203,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaigns list, since a new campaign has no
+            and `cancel_url`: the campaigns list, since a new campaign has no
             detail view to return to yet.
         """
         kwargs["heading"] = "Create New Campaign"
@@ -228,7 +228,7 @@ class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaign's detail view, so cancelling returns
+            and `cancel_url`: the campaign's detail view, so cancelling returns
             to the page the edit was started from (issue #1931).
         """
         kwargs["heading"] = "Update Campaign"
@@ -440,7 +440,7 @@ class QuestCopy(QuestCreate):
         duplication all run inside a single transaction, so a failure duplicating a question rolls
         back the whole copy rather than leaving an orphaned quest with no (or partial) questions.
 
-        Student answers are not copied — those belong to submissions, not to the quest. The
+        Student answers are not copied: those belong to submissions, not to the quest. The
         solution_file reference is shared with the source question, matching how the copied
         quest already shares its icon file.
         """
@@ -1186,9 +1186,9 @@ def quest_user_status(request, quest_id):
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
-    #   active    — all active students (in a course or not); the superset
-    #   current   — students registered in a course in a semester that is open
-    #   my_blocks — students in a course block the current teacher teaches in one of those
+    #   active    : all active students (in a course or not); the superset
+    #   current   : students registered in a course in a semester that is open
+    #   my_blocks : students in a course block the current teacher teaches in one of those
     # The last two span every open semester, since a deck can run more than one at a time
     # (issue #2157 Phase 3): scoping them to the deck's default would count a student as
     # current and then leave them out of their own teacher's group.
@@ -2105,7 +2105,7 @@ def complete(request, submission_id):
         # stale page from before the quest's questions changed) can present fewer answer forms
         # than the quest has questions. Without this guard those omitted questions are never
         # validated yet still published (the blanket publish below), so required questions
-        # could be bypassed — completing/auto-approving a quest with nothing answered. Require
+        # could be bypassed, completing or auto-approving a quest with nothing answered. Require
         # the POST to cover exactly the quest's current questions; otherwise bounce back to a
         # freshly-built page that shows them all.
         expected_ids = set(draft_rows.values_list("pk", flat=True))

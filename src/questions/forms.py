@@ -79,7 +79,7 @@ class QuestionForm(forms.ModelForm):
 
         Raises:
             ValueError: If ``question_type`` is not one of the supported types. Callers
-                (views) must validate user-supplied types first — by the time the form is
+                (views) must validate user-supplied types first: by the time the form is
                 constructed an unknown type is a programming error.
         """
         question_type = kwargs.pop('question_type', None)
