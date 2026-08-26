@@ -1594,6 +1594,43 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
 
         self.assertErrorMessage(response)
 
+    def test_complete__empty_looking_comment_but_verification_required(self):
+        """An editor nobody typed in does not satisfy the attach-or-comment rule (#2609).
+
+        The summernote editor never posts an empty string. It posts markup, and markup is
+        truthy, so each of these reads as a real comment unless the check asks what the
+        markup renders as. On a verification-required quest that means the student completes
+        with nothing for the teacher to verify, and the teacher gets a submission whose
+        comment renders as blank space.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                response = self.post_complete(submission_comment=empty)
+
+                self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+                self.sub.refresh_from_db()
+                self.assertFalse(self.sub.is_completed)
+                self.assertErrorMessage(response)
+
+    def test_complete__comment_that_is_only_an_image_satisfies_verification(self):
+        """A comment made entirely of a pasted image is a real comment and completes.
+
+        Stripping the tags out of it leaves nothing, so an emptiness test judging on text
+        alone would bounce a student who answered "show me your work" the way the quest
+        invites. Refusing a real comment is worse for them than accepting a blank one.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment='<p><img src="/media/screenshot.png"></p>')
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
     def test_quest_not_available__unpublished(self):
         """ If a quest is unpublished (moved to drafts) while a student's submission is
         in progress, they should not be able to complete it by entering the completion
@@ -1677,6 +1714,27 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
 
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
+
+    def test_complete__no_notification_for_an_empty_looking_comment(self):
+        """No teacher notification for a comment box the student typed nothing into (#2609).
+
+        On an auto-approved quest a comment is the only reason to notify a teacher, since the
+        quest never reaches the approvals tab. The editor posts markup rather than an empty
+        string, so each of these looked like a comment and sent the teacher to read one that
+        renders as blank space. Every payload here got through, the exact `<p><br></p>`
+        included: the POST path builds SubmissionQuickReplyFormStudent, whose comment_text is
+        a plain Textarea, so summernote's own empty-string handling never runs.
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                Notification.objects.all().delete()
+                self.post_complete(submission_comment=empty)
+
+                notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+                self.assertEqual(notifications.count(), 0)
 
     def test_complete__specific_teacher_is_own_teacher_no_notification(self):
         """
@@ -5091,6 +5149,48 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
+
+    def test_approve__empty_looking_comment_uses_default_text(self):
+        """An editor the teacher typed nothing into gets the default text too (#2609).
+
+        The editor posts markup rather than an empty string, so without asking what that
+        markup renders as, a teacher who clicked into the box and pressed space or enter
+        stores that markup as their approval comment. The student then sees an approval
+        whose comment is blank space instead of the deck's configured wording.
+        """
+        from comments.models import Comment
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                # a fresh quest each time: only one in-progress submission per quest per
+                # student is allowed, so reusing one would trip that unique constraint
+                sub = baker.make(QuestSubmission, quest=baker.make(Quest), user=self.test_student)
+                self.client.post(
+                    reverse('quests:approve', args=[sub.id]),
+                    data={'comment_text': empty, 'approve_button': True},
+                )
+
+                comments = Comment.objects.all_with_target_object(sub)
+                self.assertEqual(comments.count(), 1)
+                self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
+
+    def test_approve__comment_that_is_only_an_image_is_kept(self):
+        """An approval comment made entirely of a pasted image is kept, not replaced.
+
+        Stripping its tags leaves nothing, so an emptiness test judging on text alone would
+        throw away a teacher's screenshot and substitute the default wording.
+        """
+        from comments.models import Comment
+
+        image_comment = '<p><img src="/media/marked-up-work.png"></p>'
+        self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_text': image_comment, 'approve_button': True},
+        )
+
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertIn("marked-up-work.png", comments.first().text)
 
     def test_approve__with_multiple_badges_staff_form(self):
         """ Test that multiple badges can be granted from the SubmissionFormStaff form"""

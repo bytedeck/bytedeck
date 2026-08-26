@@ -41,6 +41,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.html import is_empty_html
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -1538,6 +1539,23 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, submission_id, *args, **kwargs):
+        """Act on a teacher's decision about one submission, and tell the student.
+
+        Which decision it is comes from the button the form carries (approve, return, comment,
+        skip), which `handle_form_button` reads; that also supplies the wording to store when
+        the teacher wrote no comment of their own. Any badge granted alongside is appended to
+        the comment, uploaded files are attached to it, and the student is notified.
+
+        Args:
+            request: the POST carrying the teacher's comment, any files, any badge, and which
+                button was pressed.
+            submission_id: pk of the submission being acted on.
+
+        Returns:
+            HttpResponse: `form_valid`'s redirect to the approvals tab, or a JsonResponse when
+            the request was made by ajax. An invalid form returns `form_invalid` instead,
+            which re-renders the submission page (or a 400 for ajax).
+        """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
 
@@ -1551,7 +1569,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # handle comment text
             # if staff didnt write any text for comment use blank_comment_text
             comment_text = self.form.cleaned_data.get("comment_text")
-            if not comment_text or comment_text == "<p><br></p>":
+            # An editor the teacher typed nothing into posts markup, not an empty string, so
+            # what counts as "no comment" is a question about what that markup renders as
+            # rather than about the string (#2609). An image on its own is a real comment and
+            # is kept: is_empty_html treats embedded media as content.
+            if is_empty_html(comment_text):
                 comment_text = blank_comment_text
 
             comment_new = Comment.objects.create_comment(
@@ -2134,9 +2156,14 @@ def complete(request, submission_id):
     # editor posts markup rather than an empty string (#2560).
     answered_a_question = bool(question_formset) and any(f.has_answer() for f in question_formset.forms)
 
-    # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
-    # then need to check if we should bother handling this form submission
-    if not comment_text or comment_text == "<p><br></p>":
+    # Whether the student left a comment at all. The editor posts markup rather than an empty
+    # string for a box nobody typed in, so this asks what that markup renders as (#2609); a
+    # comment that is only a pasted image counts as content. Answered once, here, because the
+    # branches below overwrite comment_text with placeholder text, and the teacher
+    # notification further down still needs to know whether there was ever a real comment.
+    has_comment = not is_empty_html(comment_text)
+
+    if not has_comment:
 
         # If the student answered at least one question, those answers are the submission's
         # content, so don't demand an additional comment or attachment on top of them.
@@ -2234,10 +2261,10 @@ def complete(request, submission_id):
 
         # Send notification to current teachers when a comment is left on an auto-approved quest
         # since these quests don't appear in the approvals tab, teacher would never know about the comment.
-        if (
-            form.cleaned_data.get("comment_text")
-            and not submission.quest.verification_required
-        ):
+        # has_comment rather than the posted value: an editor nobody typed in posts markup, and
+        # notifying a teacher to come and read a comment that renders as blank space wastes the
+        # trip (#2609).
+        if has_comment and not submission.quest.verification_required:
             affected_users.extend(request.user.profile.current_teachers())
 
         # Record which course the student said this counts toward, before the XP is granted so
