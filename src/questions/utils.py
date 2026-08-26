@@ -90,9 +90,13 @@ def sync_draft_question_submissions(quest_submission):
     so the formset always matches the quest's *current* question set:
 
     * A question added after the student started gets a fresh draft row here.
-    * A deleted question's rows have question=None (SET_NULL) and are excluded from the
-      returned queryset, so they can't block or crash the formset; the rows themselves are
-      kept (any content may still interest a marker).
+    * A deleted question's rows have question=None (SET_NULL). A *published* one is kept:
+      it renders with its comment as part of the student's record, and is excluded from the
+      returned queryset so it can't block or crash the formset. An unpublished one is
+      deleted, because nothing can ever reach it again: answers display only through
+      ``comment.question_submissions``, which a NULL comment excludes, and the publish step
+      filters on ``question__isnull=False``. Left alone it would sit in the schema forever,
+      along with an uploaded file of up to 16 MiB (#2567).
     * Published rows (comment set) belong to an earlier submission cycle and are ignored,
       so a returned-and-resubmitted quest starts a fresh set of drafts.
     * Duplicate draft rows for the same question are healed by keeping one and deleting the
@@ -100,9 +104,27 @@ def sync_draft_question_submissions(quest_submission):
       arise from two concurrent first renders racing this function, or from a published
       comment being deleted (its answers revert to draft via SET_NULL) while a new cycle's
       draft for the same question already exists. A DB uniqueness constraint can't be used
-      here precisely because of that revert path — it would turn the comment deletion into
+      here precisely because of that revert path: it would turn the comment deletion into
       an IntegrityError.
     """
+    # Unpublished answers to a question that has since been deleted: invisible to every
+    # code path and reachable by none, so this is their only chance to be cleaned up
+    # (#2567). Published ones are untouched: those still render with their comment.
+    #
+    # The uploaded file goes first, and has to. Django has not deleted a FileField's
+    # storage on row delete since 1.3, so dropping the row alone would leave the file on
+    # disk with nothing left in the database pointing at it: worse than the orphan being
+    # fixed, because the row at least named the file a sweep could find. Deleted one row at
+    # a time rather than through the queryset, since QuerySet.delete() never opens the
+    # files. save=False because the row is about to be deleted anyway.
+    orphans = QuestionSubmission.objects.filter(
+        quest_submission=quest_submission, comment__isnull=True, question__isnull=True
+    )
+    for orphan in orphans:
+        if orphan.response_file:
+            orphan.response_file.delete(save=False)
+    orphans.delete()
+
     drafts = QuestionSubmission.objects.filter(
         quest_submission=quest_submission, comment__isnull=True, question__isnull=False
     )
