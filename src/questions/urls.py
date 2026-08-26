@@ -13,7 +13,7 @@ urlpatterns = [
     path('quest/<int:quest_id>/<int:pk>/delete/', views.QuestionDeleteView.as_view(), name='delete'),
     path('quest/<int:quest_id>/<int:pk>/move/<str:direction>/', views.QuestionMoveView.as_view(), name='move'),
 
-    # A web-file answer is downloaded through here rather than linked at its storage URL, so
-    # that HTML or SVG a student uploaded is never opened as a page in a marker's session.
+    # A script-capable answer is downloaded through here rather than linked at its storage URL,
+    # so that HTML or SVG a student uploaded is never opened as a page in a marker's session.
     path('answer/<int:pk>/download/', views.answer_file_download, name='answer_file_download'),
 ]
