@@ -343,9 +343,9 @@ class PortfolioViewTests(TempMediaRootMixin, ByteDeckTenantTestCase):
 
         ``QuestionSubmission.question`` is ``on_delete=SET_NULL``, and the question list's help
         text promises that deleting a question keeps the answers students have already
-        submitted. The file on such a row is still that student's work, so it stays eligible:
-        deciding this on the question's current type instead would mean a teacher tidying up a
-        quest silently revoked a student's route to their own artwork.
+        submitted. Eligibility follows the stored file rather than the question, so a student
+        can still put their own picture in their portfolio after a teacher tidies up the quest
+        it was asked for.
         """
         answer = self.answer_with_file(generate_test_png_file())
         answer.question.delete()
