@@ -166,6 +166,26 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         self.assertEqual(help_text, "Allowed file types: All")
 
+    def test_init__only_a_web_question_lifts_the_script_capable_refusal(self):
+        """The form field opts in for a "web" question and for nothing else (#2559).
+
+        ``allow_markup`` is what lets an HTML or SVG answer through at all, so a question a
+        teacher left on any other file type, "all" included, must build a field that still
+        refuses them.
+        """
+        web_question = baker.make(
+            Question, quest=self.quest, ordinal=7, type="file_upload", allowed_file_type="web",
+        )
+        web_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=web_question,
+        )
+
+        web_form = QuestionSubmissionForm(instance=web_answer)
+        any_form = QuestionSubmissionForm(instance=self.file_answer)
+
+        self.assertTrue(web_form.fields["response_file"].allow_markup)
+        self.assertFalse(any_form.fields["response_file"].allow_markup)
+
     def test_init__optional_question_not_required(self):
         """Answers to non-required questions aren't required fields."""
         optional_question = baker.make(

@@ -250,6 +250,10 @@ class QuestionSubmissionForm(forms.ModelForm):
                 required=self.question.required,
                 content_types=mime_types,
                 max_upload_size=MAX_RESPONSE_FILE_SIZE,
+                # The one place the script-capable refusal is lifted, and only because a
+                # teacher asked for it on this question (#2559). The answer is handed over as
+                # a download rather than opened, so nothing in it runs in a marker's session.
+                allow_markup=self.question.accepts_web_files,
                 # The visible label is the same on every file question, so several of them on
                 # one page are indistinguishable by name. The aria-label adds the question number
                 # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)

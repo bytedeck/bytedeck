@@ -175,6 +175,21 @@ class QuestionModelTest(ByteDeckTenantTestCase):
         question = baker.make(Question, quest=self.quest2, ordinal=131)
         self.assertEqual(question.allowed_mime_types(), "All")
 
+    def test_accepts_web_files__only_for_the_web_file_type(self):
+        """Only the "web" file type accepts script-capable files (#2559).
+
+        ``accepts_web_files`` is the single switch that lifts the refusal in
+        ``RestrictedFileFormField.validate_file`` and decides that an answer is handed over as
+        a download, so every other choice, "all" included, must read False.
+        """
+        for key, _label in ALLOWED_FILE_TYPE_CHOICES:
+            question = baker.make(
+                Question, quest=self.quest2, ordinal=140 + list(dict(ALLOWED_FILE_TYPE_CHOICES)).index(key),
+                type="file_upload", allowed_file_type=key,
+            )
+            with self.subTest(allowed_file_type=key):
+                self.assertEqual(question.accepts_web_files, key == "web")
+
     def test_solution_file__saved_regardless_of_allowed_file_type(self):
         """Model-level saves don't enforce MIME restrictions (that's the form's job): a
         solution file of any type is stored and its content preserved."""

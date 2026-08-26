@@ -202,6 +202,57 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         with self.assertRaises(ValidationError):
             field.validate_file(stored)
 
+    def test_validate_file__rejects_an_unsafe_type_declared_with_parameters_or_odd_case(self):
+        """A declared media type is matched by its type alone, whatever else it carries (#2559).
+
+        ``Content-Type`` may append parameters and use any casing, so
+        ``image/SVG+XML; charset=utf-8`` names the same type as ``image/svg+xml``. Comparing the
+        raw header against the deny-list lets a safe-looking file name through on either
+        spelling, so the type is normalised before the comparison.
+        """
+        field = RestrictedFileFormField()
+        for declared in (
+            "image/svg+xml; charset=utf-8",
+            "IMAGE/SVG+XML",
+            "  text/html ",
+            "text/html;charset=UTF-8",
+            "multipart/related; boundary=test",
+            "message/rfc822",
+        ):
+            with self.subTest(content_type=declared):
+                # a safe file name, so only the declared type can refuse this
+                spoofed = SimpleNamespace(content_type=declared, size=1, name="homework.png")
+                with self.assertRaises(ValidationError):
+                    field.validate_file(spoofed)
+
+    def test_validate_file__allow_markup_accepts_a_script_capable_file(self):
+        """A field that opted in accepts HTML and SVG, by name and by declared type (#2559).
+
+        The opt-in exists for a question a teacher set to the "web" file type, for a web or
+        graphic design quest. Nothing else sets it, so nothing else accepts these.
+        """
+        field = RestrictedFileFormField(allow_markup=True)
+
+        field.validate_file(SimpleNamespace(content_type="text/html", size=1, name="index.html"))
+        field.validate_file(SimpleNamespace(content_type="image/svg+xml", size=1, name="logo.svg"))
+        field.validate_file(SimpleNamespace(size=1, name="kept/logo.svg"))  # a kept draft file
+
+    def test_validate_file__allow_markup_still_enforces_size_and_types(self):
+        """Opting in lifts the script-capable refusal and nothing else.
+
+        The field's own content_types allow-list and max_upload_size still apply, so a teacher
+        turning this on for a web design question has not turned off every other check.
+        """
+        field = RestrictedFileFormField(allow_markup=True, max_upload_size=10)
+        oversized = SimpleNamespace(content_type="text/html", size=11, name="index.html")
+        with self.assertRaises(ValidationError):
+            field.validate_file(oversized)
+
+        restricted = RestrictedFileFormField(allow_markup=True, content_types=FILE_MIME_TYPES["image"])
+        with self.assertRaises(ValidationError):
+            restricted.validate_file(
+                SimpleNamespace(content_type="application/zip", size=1, name="site.zip"))
+
 
 class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):
     """Regression tests for AllowedGFKChoiceField rebuilding its choices on copy.

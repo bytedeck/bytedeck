@@ -68,6 +68,12 @@ FILE_MIME_TYPES = {
     'audio': AUDIO_MIME_TYPES,
     'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
     'all': 'All',
+    # 'web' accepts any declared type, like 'all', and is not a narrower list on purpose:
+    # browsers disagree wildly about what a .js or .css upload is (text/javascript,
+    # text/plain, application/octet-stream), so a list would refuse the very files a web
+    # design quest asks for. What makes it different from 'all' is that it is the one
+    # setting that also lifts the UNSAFE_UPLOAD_* refusal, and the only way to lift it.
+    'web': 'All',
 }
 
 # Files that can carry a script a browser will run when it renders them inline from the app's
@@ -83,7 +89,27 @@ UNSAFE_UPLOAD_EXTENSIONS = frozenset({
 UNSAFE_UPLOAD_MIME_TYPES = frozenset({
     'image/svg+xml', 'text/html', 'application/xhtml+xml',
     'application/xml', 'text/xml', 'text/xsl', 'application/xslt+xml',
+    # MHTML: a whole page, script included, in one file. Browsers and Windows label it
+    # several ways, so all of them are here.
+    'multipart/related', 'message/rfc822', 'application/x-mimearchive',
 })
+
+def declared_mime_type(content_type):
+    """Return the bare media type from a browser-declared ``Content-Type``.
+
+    A declared type may carry parameters and any casing: ``image/SVG+XML; charset=utf-8``
+    is the same type as ``image/svg+xml``, and only the part before the semicolon is the
+    type itself. Comparing the raw string against a deny-list would miss both spellings.
+
+    Args:
+        content_type (str | None): the type as the browser declared it.
+
+    Returns:
+        str: the lower-cased media type with parameters and surrounding space removed,
+        or "" when nothing was declared.
+    """
+    return (content_type or "").split(";")[0].strip().lower()
+
 
 # Python's builtin MIME table does not know `.m4a`: platforms fill the gap from
 # /etc/mime.types when that file exists, so the same recording guessed as `audio/mp4` on
@@ -336,26 +362,46 @@ class RestrictedFileFormField(forms.FileField):
     def __init__(self, *args, **kwargs):
         self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
+        # Opt-in for the one place a script-capable file is wanted: a question a teacher set
+        # to the "web" file type, for a web or graphic design quest (#2559). Off by default,
+        # so a field that says nothing about it gets the refusal.
+        self.allow_markup = kwargs.pop("allow_markup", False)
         super().__init__(*args, **kwargs)
 
     def validate_file(self, file):
-        # Refuse script-capable files (SVG, HTML, XML, ...) up front, before and regardless of
-        # the content_types allow-list: served inline from the app's own origin they run their
-        # embedded script in the viewer's session (stored XSS, #2559). file.name is present on a
-        # fresh upload and on a stored FieldFile, so a dangerous extension is caught even when the
-        # browser declares a harmless content type or (for a kept draft file) sends none.
+        """Refuse an upload this field must not accept.
+
+        Two rules, in this order. First, script-capable files (SVG, HTML, XML, MHTML) are
+        refused unless this field set ``allow_markup``: served inline from the app's own
+        origin they run their embedded script in the viewer's session, which is stored XSS
+        against whoever opens the file, usually the marker (#2559). Both the file name and
+        the browser-declared type are checked, because either one alone is trivially
+        sidestepped: a spoofed ``Content-Type`` on a ``.svg``, or a declared
+        ``image/svg+xml`` on a file named ``.png``. Second, the field's own
+        ``content_types`` allow-list and ``max_upload_size``.
+
+        Args:
+            file: the uploaded file, or the stored ``FieldFile`` Django's ``FileField.clean``
+                returns when a form re-submits without choosing a new one. A stored file has
+                no ``content_type``, so only the name-based rules apply to it.
+
+        Raises:
+            ValidationError: if the file is script-capable and this field does not allow it,
+                if its declared type is outside ``content_types``, or if it is too large.
+        """
         name = getattr(file, "name", "") or ""
-        if os.path.splitext(name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS:
+        extension = os.path.splitext(name.lower())[1]
+        if not self.allow_markup and extension in UNSAFE_UPLOAD_EXTENSIONS:
             raise ValidationError("For security reasons, this type of file cannot be uploaded.")
 
         try:
-            content_type = file.content_type
+            content_type = declared_mime_type(file.content_type)
         except AttributeError:
-            # A stored FieldFile has no content_type; its extension was checked above, and its
-            # type and size were validated when it was first uploaded.
+            # A stored FieldFile has no content_type, so there is no declared type left to
+            # check. Its name was checked above, against the rules in force right now.
             return
 
-        if content_type in UNSAFE_UPLOAD_MIME_TYPES:
+        if not self.allow_markup and content_type in UNSAFE_UPLOAD_MIME_TYPES:
             raise ValidationError("For security reasons, this type of file cannot be uploaded.")
 
         if self.content_types == "All" or content_type in self.content_types:

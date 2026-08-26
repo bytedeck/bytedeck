@@ -31,7 +31,18 @@ ALLOWED_FILE_TYPE_CHOICES = [
     ("audio", "Audio"),
     ("media", "Image or Video"),
     ("all", "All"),
+    # The only setting that accepts a script-capable file (HTML, SVG, XML), for the quests
+    # that ask for one: web design and graphic design. Everywhere else those are refused
+    # outright, because opened from the app's own origin they run their script in the
+    # viewer's session (#2559). An answer to a question set to this is handed over as a
+    # download rather than opened, and an SVG is shown through an <img>, where browsers
+    # run no script at all.
+    ("web", "Web files (HTML, CSS, JS, SVG)"),
 ]
+
+# The one allowed_file_type that accepts a script-capable file. Named because three places
+# turn on it: the form field's opt-in, the template that links the answer, and this module.
+WEB_FILE_TYPE = "web"
 
 
 class Question(models.Model):
@@ -76,7 +87,11 @@ class Question(models.Model):
         choices=ALLOWED_FILE_TYPE_CHOICES,
         default="all",
         help_text=(
-            "The types of files that can be uploaded by a student for this question."
+            "The types of files that can be uploaded by a student for this question. "
+            "Choose <b>Web files</b> only for a quest that asks for a web page or an SVG: "
+            "those are the file types a browser can run a script from, so an answer to such "
+            "a question is handed to you as a download rather than opened in the site, and "
+            "an SVG is shown as a picture (which browsers never run script in)."
         ),
     )
     marker_notes = models.TextField(
@@ -152,6 +167,20 @@ class Question(models.Model):
         sentinel "All" (understood by RestrictedFileFormField) when any type is allowed.
         """
         return FILE_MIME_TYPES[self.allowed_file_type]
+
+    @property
+    def accepts_web_files(self):
+        """Whether this question accepts script-capable files (HTML, SVG, XML).
+
+        True only for the "web" file type, which a teacher picks for a web or graphic design
+        quest. It is the single switch that lifts the refusal in
+        ``RestrictedFileFormField.validate_file``, and it also decides how an answer is handed
+        over: as a download rather than a link into the site (#2559).
+
+        Returns:
+            bool: True when this question is set to accept web files.
+        """
+        return self.allowed_file_type == WEB_FILE_TYPE
 
 
 class QuestionSubmission(models.Model):
