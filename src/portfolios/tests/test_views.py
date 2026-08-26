@@ -338,6 +338,26 @@ class PortfolioViewTests(TempMediaRootMixin, ByteDeckTenantTestCase):
         self.assertEqual(self.added_artwork().portfolio, self.portfolio)
         self.assertFalse(Portfolio.objects.filter(user=teacher).exists())
 
+    def test_art_add_answer__an_answer_whose_question_was_deleted_still_works(self):
+        """Deleting the question does not take the student's own file away from them.
+
+        ``QuestionSubmission.question`` is ``on_delete=SET_NULL``, and the question list's help
+        text promises that deleting a question keeps the answers students have already
+        submitted. The file on such a row is still that student's work, so it stays eligible:
+        deciding this on the question's current type instead would mean a teacher tidying up a
+        quest silently revoked a student's route to their own artwork.
+        """
+        answer = self.answer_with_file(generate_test_png_file())
+        answer.question.delete()
+        answer.refresh_from_db()
+        self.assertIsNone(answer.question, "the answer must outlive its question")
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        self.assertTrue(self.added_artwork().image_file)
+
     def test_art_add_answer__another_student_is_refused(self):
         """Someone else's answer is not theirs to publish, so the view 404s and adds nothing."""
         answer = self.answer_with_file(generate_test_png_file())
