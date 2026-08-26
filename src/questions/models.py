@@ -5,7 +5,13 @@ from django.db import models
 from django.urls import reverse
 
 from comments.models import Comment
-from utilities.fields import FILE_MIME_TYPES, UNSAFE_UPLOAD_EXTENSIONS
+from utilities.fields import (
+    ALL_SCRIPT_CAPABLE_TYPES,
+    FILE_MIME_TYPES,
+    NO_SCRIPT_CAPABLE_TYPES,
+    SVG_SCRIPT_CAPABLE_TYPES,
+    UNSAFE_UPLOAD_EXTENSIONS,
+)
 from utilities.models import RestrictedFileField
 
 
@@ -32,18 +38,17 @@ ALLOWED_FILE_TYPE_CHOICES = [
     ("audio", "Audio"),
     ("media", "Image or Video"),
     ("all", "All"),
-    # The only setting that accepts a script-capable file (HTML, SVG, XML), for the quests
-    # that ask for one: web design and graphic design. Everywhere else those are refused
-    # outright, because opened from the app's own origin they run their script in the
-    # viewer's session (#2559). An answer to a question set to this is handed over as a
-    # download rather than opened, and an SVG is shown through an <img>, where browsers
-    # run no script at all.
-    ("web", "Web files (HTML, CSS, JS, SVG)"),
 ]
 
-# The one allowed_file_type that accepts a script-capable file. Named because three places
-# turn on it: the form field's opt-in, the template that links the answer, and this module.
-WEB_FILE_TYPE = "web"
+# What ticking `allow_script_capable_files` adds, per allowed_file_type. SVG is an image, so
+# that is what the two image settings gain; "all" gains the whole set, which is what a web
+# design quest asks for. Video and audio have no script-capable member, so the tick adds
+# nothing there and those settings are deliberately absent (#2559).
+SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE = {
+    "image": SVG_SCRIPT_CAPABLE_TYPES,
+    "media": SVG_SCRIPT_CAPABLE_TYPES,
+    "all": ALL_SCRIPT_CAPABLE_TYPES,
+}
 
 
 class Question(models.Model):
@@ -87,12 +92,18 @@ class Question(models.Model):
         max_length=50,
         choices=ALLOWED_FILE_TYPE_CHOICES,
         default="all",
+        help_text="The types of files that can be uploaded by a student for this question.",
+    )
+    allow_script_capable_files = models.BooleanField(
+        default=False,
+        verbose_name="Also allow file types that can carry a script",
         help_text=(
-            "The types of files that can be uploaded by a student for this question. "
-            "Choose <b>Web files</b> only for a quest that asks for a web page or an SVG: "
-            "those are the file types a browser can run a script from, so an answer to such "
-            "a question is handed to you as a download rather than opened in the site, and "
-            "an SVG is shown as a picture (which browsers never run script in)."
+            "Tick this only for a quest that asks for one: with <b>Image</b> or "
+            "<b>Image or Video</b> it also accepts SVG, and with <b>All</b> it also accepts "
+            "SVG, HTML, XML and similar. A browser can run a script from these, so such an "
+            "answer is handed to you as a download rather than opened in ByteDeck. An SVG is "
+            "shown as a picture as well, which browsers never run script in. Leave it "
+            "unticked with <b>Video</b> or <b>Audio</b>: neither has such a file type."
         ),
     )
     marker_notes = models.TextField(
@@ -166,22 +177,35 @@ class Question(models.Model):
     def allowed_mime_types(self):
         """Return the list of MIME types a student's file response may have, or the string
         sentinel "All" (understood by RestrictedFileFormField) when any type is allowed.
+
+        The script-capable types this question opted into are part of the list, because
+        ``validate_file`` checks its allow-list separately from the script-capable rule: a
+        question that accepts SVG has to say so in both or the SVG is refused by the other one.
         """
-        return FILE_MIME_TYPES[self.allowed_file_type]
+        mime_types = FILE_MIME_TYPES[self.allowed_file_type]
 
-    @property
-    def accepts_web_files(self):
-        """Whether this question accepts script-capable files (HTML, SVG, XML).
+        if mime_types == "All":
+            return mime_types
 
-        True only for the "web" file type, which a teacher picks for a web or graphic design
-        quest. It is the single switch that lifts the refusal in
-        ``RestrictedFileFormField.validate_file``, and it also decides how an answer is handed
-        over: as a download rather than a link into the site (#2559).
+        return mime_types + sorted(self.script_capable_types().mime_types)
+
+    def script_capable_types(self):
+        """Return the script-capable files this question accepts, as a ``ScriptCapableTypes``.
+
+        Script-capable files (SVG, HTML, XML, MHTML) are refused from every upload, because a
+        browser opening one from the app's own origin runs whatever script it carries in the
+        viewer's session, usually the marker's (#2559). A teacher lifts that here, per question
+        and only as far as the chosen file type reaches: an Image question that opted in takes
+        an SVG and still refuses an HTML page.
 
         Returns:
-            bool: True when this question is set to accept web files.
+            ScriptCapableTypes: the extensions and declared types to accept anyway, empty
+            unless the teacher ticked the opt-in on a file type that has such a member.
         """
-        return self.allowed_file_type == WEB_FILE_TYPE
+        if not self.allow_script_capable_files:
+            return NO_SCRIPT_CAPABLE_TYPES
+
+        return SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE.get(self.allowed_file_type, NO_SCRIPT_CAPABLE_TYPES)
 
 
 class QuestionSubmission(models.Model):
@@ -255,10 +279,10 @@ class QuestionSubmission(models.Model):
         """Whether this answer's file is one a browser would run a script from (#2559).
 
         Answered from the stored file rather than from the question, deliberately. A question
-        can be deleted (``question`` is ``SET_NULL``) or moved off the "web" file type long
-        after the answer was published, and neither changes the file sitting on the row.
-        Asking the question instead would quietly start linking a stored HTML answer at its
-        storage URL again, which is the whole vulnerability.
+        can be deleted (``question`` is ``SET_NULL``), or have its opt-in unticked, long after
+        the answer was published, and neither changes the file sitting on the row. Asking the
+        question instead would quietly start linking a stored HTML answer at its storage URL
+        again, which is the whole vulnerability.
 
         Returns:
             bool: True for a stored HTML, SVG, XML or MHTML file; False for anything else,

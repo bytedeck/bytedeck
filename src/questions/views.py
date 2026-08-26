@@ -245,14 +245,14 @@ class QuestionMoveView(
 @non_public_only_view
 @login_required
 def answer_file_download(request, pk):
-    """Hand a web-file answer to the viewer as a download instead of opening it in the site.
+    """Hand a script-capable answer to the viewer as a download instead of opening it in the site.
 
-    A question set to the "web" file type accepts HTML and SVG, which a browser will happily
-    run scripts from if it navigates to them, in whatever origin serves them. Linking such an
-    answer straight at its storage URL is how a student's file ends up executing in their
-    marker's session. Everything the app links goes through here instead, and this responds
-    with ``Content-Disposition: attachment``, so following the link saves the file rather than
-    rendering it (#2559).
+    A question whose teacher ticked the script-capable opt-in accepts HTML or SVG, which a
+    browser will happily run scripts from if it navigates to them, in whatever origin serves
+    them. Linking such an answer straight at its storage URL is how a student's file ends up
+    executing in their marker's session. Everything the app links goes through here instead,
+    and this responds with ``Content-Disposition: attachment``, so following the link saves the
+    file rather than rendering it (#2559).
 
     Args:
         request (HttpRequest): the request.

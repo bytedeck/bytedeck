@@ -25,11 +25,12 @@ _TYPE_ICONS = {
 def is_displayable_svg(value):
     """Whether a stored file is an SVG a page can safely show through an ``<img>``.
 
-    An SVG reaches the site only as an answer to a question a teacher set to the "web" file
-    type, and it is never linked at its storage URL, because navigating to one runs any script
-    it carries (#2559). Loaded as an image it is safe: browsers run no script, no external
-    reference and no interactivity in SVG-as-image mode, whatever the file contains. So a
-    graphic design student's artwork can still be looked at rather than only downloaded.
+    An SVG reaches the site only as an answer to a question whose teacher ticked the
+    script-capable opt-in, and it is never linked at its storage URL, because navigating to one
+    runs any script it carries (#2559). Loaded as an image it is safe: browsers run no script,
+    no external reference and no interactivity in SVG-as-image mode, whatever the file
+    contains. So a graphic design student's artwork can still be looked at rather than only
+    downloaded.
 
     ``.svgz`` is excluded deliberately: it is gzipped, and only renders where the storage
     serves it with ``Content-Encoding: gzip``, which is not something this app controls.

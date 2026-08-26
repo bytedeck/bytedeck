@@ -1,5 +1,6 @@
 import mimetypes
 import os
+from collections import namedtuple
 
 from django import forms
 from django.contrib.contenttypes.models import ContentType
@@ -23,9 +24,12 @@ IMAGE_MIME_TYPES = [
     'image/webp',  # WEBP images
     'image/tiff',  # TIFF images
     'image/bmp',   # BMP images
-    # SVG is deliberately absent: it is an XML document that can carry a <script>, so served
-    # inline from the app's own origin it is a stored-XSS vector, not a safe raster image.
-    # UNSAFE_UPLOAD_* below refuses it (and other script-capable files) from every upload (#2559).
+    # SVG is absent from this list even though it is an image, because of how the list is used
+    # rather than what SVG is: the pages that embed a file from it also link it at its storage
+    # URL, and navigating to an SVG runs whatever <script> the XML carries (#2559). A question
+    # can still ask for one, by ticking the script-capable opt-in below; that adds SVG to this
+    # field's accepted types for that question alone, and the answer is shown through an <img>
+    # (where browsers run no script) with a download link instead of a link into the site.
 ]
 
 VIDEO_MIME_TYPES = [
@@ -68,20 +72,14 @@ FILE_MIME_TYPES = {
     'audio': AUDIO_MIME_TYPES,
     'media': IMAGE_MIME_TYPES + VIDEO_MIME_TYPES,
     'all': 'All',
-    # 'web' accepts any declared type, like 'all', and is not a narrower list on purpose:
-    # browsers disagree wildly about what a .js or .css upload is (text/javascript,
-    # text/plain, application/octet-stream), so a list would refuse the very files a web
-    # design quest asks for. What makes it different from 'all' is that it is the one
-    # setting that also lifts the UNSAFE_UPLOAD_* refusal, and the only way to lift it.
-    'web': 'All',
 }
 
 # Files that can carry a script a browser will run when it renders them inline from the app's
 # own origin (the default, non-CDN media setup). An SVG or HTML upload with an embedded
 # <script> runs in the viewer's session when someone opens it (a marker opening a student's
 # file answer, typically): stored XSS. RestrictedFileFormField.validate_file refuses these
-# from every upload, by extension and by declared type, regardless of the field's allowed
-# content types, so no allowed_file_type setting (not even "all") lets one through (#2559).
+# from every upload, by extension and by declared type, unless the field names some of them
+# in its `script_capable_types` (#2559).
 UNSAFE_UPLOAD_EXTENSIONS = frozenset({
     '.svg', '.svgz', '.html', '.htm', '.xhtml', '.xht', '.shtml',
     '.xml', '.xsl', '.xslt', '.mhtml', '.mht',
@@ -93,6 +91,28 @@ UNSAFE_UPLOAD_MIME_TYPES = frozenset({
     # several ways, so all of them are here.
     'multipart/related', 'message/rfc822', 'application/x-mimearchive',
 })
+
+#: The script-capable extensions and declared types that one upload field accepts anyway.
+#: Both spellings travel together because a field has to allow both or neither: accepting
+#: `image/svg+xml` while still refusing `.svg` (or the reverse) leaves the other spelling as
+#: the way in, which is why `validate_file` checks the two separately in the first place.
+ScriptCapableTypes = namedtuple("ScriptCapableTypes", "extensions mime_types")
+
+#: The default every field gets: no script-capable file, whatever its content types allow.
+NO_SCRIPT_CAPABLE_TYPES = ScriptCapableTypes(frozenset(), frozenset())
+
+#: SVG alone, for a question that asks for an image and will take a vector one. `.svgz` comes
+#: with it: it is the same format gzipped, and browsers declare it `image/svg+xml` too.
+SVG_SCRIPT_CAPABLE_TYPES = ScriptCapableTypes(
+    frozenset({'.svg', '.svgz'}),
+    frozenset({'image/svg+xml'}),
+)
+
+#: All of them, for a question that asks for web files: a web design quest wants the HTML,
+#: the stylesheet, the script and the SVG together, and browsers disagree about what several
+#: of those are on upload, so nothing narrower would take the files it is asking for.
+ALL_SCRIPT_CAPABLE_TYPES = ScriptCapableTypes(UNSAFE_UPLOAD_EXTENSIONS, UNSAFE_UPLOAD_MIME_TYPES)
+
 
 def declared_mime_type(content_type):
     """Return the bare media type from a browser-declared ``Content-Type``.
@@ -362,23 +382,28 @@ class RestrictedFileFormField(forms.FileField):
     def __init__(self, *args, **kwargs):
         self.content_types = kwargs.pop("content_types", "All")
         self.max_upload_size = kwargs.pop("max_upload_size", 512000)
-        # Opt-in for the one place a script-capable file is wanted: a question a teacher set
-        # to the "web" file type, for a web or graphic design quest (#2559). Off by default,
-        # so a field that says nothing about it gets the refusal.
-        self.allow_markup = kwargs.pop("allow_markup", False)
+        # Which script-capable files this field takes anyway, for the questions that ask for
+        # one: an image question willing to accept an SVG, or a web design question asking for
+        # a page (#2559). Named types rather than a single "allow anything markup" flag, so a
+        # question that asked for an SVG gets an SVG: under a blanket lift, `evil.html` sent as
+        # `image/png` would pass both checks below and land in the image question's answers.
+        self.script_capable_types = kwargs.pop("script_capable_types", NO_SCRIPT_CAPABLE_TYPES)
         super().__init__(*args, **kwargs)
 
     def validate_file(self, file):
         """Refuse an upload this field must not accept.
 
         Two rules, in this order. First, script-capable files (SVG, HTML, XML, MHTML) are
-        refused unless this field set ``allow_markup``: served inline from the app's own
-        origin they run their embedded script in the viewer's session, which is stored XSS
-        against whoever opens the file, usually the marker (#2559). Both the file name and
-        the browser-declared type are checked, because either one alone is trivially
-        sidestepped: a spoofed ``Content-Type`` on a ``.svg``, or a declared
-        ``image/svg+xml`` on a file named ``.png``. Second, the field's own
-        ``content_types`` allow-list and ``max_upload_size``.
+        refused unless this field named them in its ``script_capable_types``: served inline
+        from the app's own origin they run their embedded script in the viewer's session,
+        which is stored XSS against whoever opens the file, usually the marker (#2559). Both
+        the file name and the browser-declared type are checked, because either one alone is
+        trivially sidestepped: a spoofed ``Content-Type`` on a ``.svg``, or a declared
+        ``image/svg+xml`` on a file named ``.png``. Second, the field's own ``content_types``
+        allow-list and ``max_upload_size``.
+
+        The two rules are independent, so allowing a script-capable type does not admit it
+        past ``content_types``: a field that accepts SVG lists ``image/svg+xml`` in both.
 
         Args:
             file: the uploaded file, or the stored ``FieldFile`` Django's ``FileField.clean``
@@ -391,7 +416,7 @@ class RestrictedFileFormField(forms.FileField):
         """
         name = getattr(file, "name", "") or ""
         extension = os.path.splitext(name.lower())[1]
-        if not self.allow_markup and extension in UNSAFE_UPLOAD_EXTENSIONS:
+        if extension in UNSAFE_UPLOAD_EXTENSIONS and extension not in self.script_capable_types.extensions:
             raise ValidationError("For security reasons, this type of file cannot be uploaded.")
 
         try:
@@ -401,7 +426,7 @@ class RestrictedFileFormField(forms.FileField):
             # check. Its name was checked above, against the rules in force right now.
             return
 
-        if not self.allow_markup and content_type in UNSAFE_UPLOAD_MIME_TYPES:
+        if content_type in UNSAFE_UPLOAD_MIME_TYPES and content_type not in self.script_capable_types.mime_types:
             raise ValidationError("For security reasons, this type of file cannot be uploaded.")
 
         if self.content_types == "All" or content_type in self.content_types:

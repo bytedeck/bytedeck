@@ -11,7 +11,14 @@ from django.test import SimpleTestCase
 from queryset_sequence import QuerySetSequence
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from utilities.fields import FILE_MIME_TYPES, GFKChoiceField, RestrictedFileFormField, media_kind_of
+from utilities.fields import (
+    ALL_SCRIPT_CAPABLE_TYPES,
+    FILE_MIME_TYPES,
+    SVG_SCRIPT_CAPABLE_TYPES,
+    GFKChoiceField,
+    RestrictedFileFormField,
+    media_kind_of,
+)
 from utilities.models import RestrictedFileField
 
 
@@ -225,33 +232,64 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
                 with self.assertRaises(ValidationError):
                     field.validate_file(spoofed)
 
-    def test_validate_file__allow_markup_accepts_a_script_capable_file(self):
+    def test_validate_file__script_capable_types_accepts_what_it_names(self):
         """A field that opted in accepts HTML and SVG, by name and by declared type (#2559).
 
-        The opt-in exists for a question a teacher set to the "web" file type, for a web or
-        graphic design quest. Nothing else sets it, so nothing else accepts these.
+        The opt-in exists for the questions that ask for such a file: a web design quest, or a
+        graphic design one wanting an SVG. Nothing else sets it, so nothing else accepts these.
         """
-        field = RestrictedFileFormField(allow_markup=True)
+        field = RestrictedFileFormField(script_capable_types=ALL_SCRIPT_CAPABLE_TYPES)
 
         field.validate_file(SimpleNamespace(content_type="text/html", size=1, name="index.html"))
         field.validate_file(SimpleNamespace(content_type="image/svg+xml", size=1, name="logo.svg"))
         field.validate_file(SimpleNamespace(size=1, name="kept/logo.svg"))  # a kept draft file
 
-    def test_validate_file__allow_markup_still_enforces_size_and_types(self):
+    def test_validate_file__script_capable_types_refuses_the_ones_it_does_not_name(self):
+        """An SVG opt-in accepts an SVG and still refuses a page, either spelling (#2559).
+
+        This is why the opt-in names types instead of being one "allow markup" flag. An Image
+        question that will take a vector drawing has not asked for an HTML page, and a page is
+        the more dangerous of the two: it is the file the download route exists for. A blanket
+        lift would let `evil.html` in on a spoofed `image/png`, since the file's name and its
+        declared type are the only two things standing in its way.
+        """
+        field = RestrictedFileFormField(
+            script_capable_types=SVG_SCRIPT_CAPABLE_TYPES,
+            content_types=FILE_MIME_TYPES["image"] + ["image/svg+xml"],
+        )
+
+        field.validate_file(SimpleNamespace(content_type="image/svg+xml", size=1, name="logo.svg"))
+
+        for spoofed in (
+            SimpleNamespace(content_type="image/png", size=1, name="evil.html"),  # refused on its name
+            SimpleNamespace(content_type="text/html", size=1, name="evil.png"),   # refused on its type
+        ):
+            with self.subTest(name=spoofed.name):
+                with self.assertRaises(ValidationError):
+                    field.validate_file(spoofed)
+
+    def test_validate_file__script_capable_types_still_enforces_size_and_types(self):
         """Opting in lifts the script-capable refusal and nothing else.
 
         The field's own content_types allow-list and max_upload_size still apply, so a teacher
         turning this on for a web design question has not turned off every other check.
         """
-        field = RestrictedFileFormField(allow_markup=True, max_upload_size=10)
+        field = RestrictedFileFormField(script_capable_types=ALL_SCRIPT_CAPABLE_TYPES, max_upload_size=10)
         oversized = SimpleNamespace(content_type="text/html", size=11, name="index.html")
         with self.assertRaises(ValidationError):
             field.validate_file(oversized)
 
-        restricted = RestrictedFileFormField(allow_markup=True, content_types=FILE_MIME_TYPES["image"])
+        restricted = RestrictedFileFormField(
+            script_capable_types=ALL_SCRIPT_CAPABLE_TYPES, content_types=FILE_MIME_TYPES["image"])
         with self.assertRaises(ValidationError):
             restricted.validate_file(
                 SimpleNamespace(content_type="application/zip", size=1, name="site.zip"))
+
+        # ... including on the very type it opted into: the two rules are independent, so an
+        # SVG that the opt-in allows is still refused by an allow-list that does not list it.
+        with self.assertRaises(ValidationError):
+            restricted.validate_file(
+                SimpleNamespace(content_type="image/svg+xml", size=1, name="logo.svg"))
 
 
 class AllowedGFKChoiceFieldRebuildTest(ByteDeckTenantTestCase):

@@ -593,7 +593,7 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
 
 
 class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
-    """A web-file answer is handed over as a download, and only to people entitled to it (#2559)."""
+    """A script-capable answer is handed over as a download, and only to people entitled to it (#2559)."""
 
     @classmethod
     def setUpClass(cls):
@@ -613,12 +613,13 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """A teacher, a student, and a quest with one web-file question."""
+        """A teacher, a student, and a quest with one question that opted into web files."""
         cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
         cls.test_student = User.objects.create_user("test_student", password="password")
         cls.quest = baker.make(Quest)
         cls.question = baker.make(
-            Question, quest=cls.quest, ordinal=1, type="file_upload", allowed_file_type="web",
+            Question, quest=cls.quest, ordinal=1, type="file_upload",
+            allowed_file_type="all", allow_script_capable_files=True,
         )
 
     def answer(self, uploaded_file=None, user=None):
@@ -700,8 +701,8 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
         """
         return render_to_string("questions/snippets/comment_answers.html", {"answers": [answer]})
 
-    def test_display__a_web_file_answer_links_the_download_view_not_the_file(self):
-        """The answers table never points at a web file's storage URL (#2559).
+    def test_display__a_script_capable_answer_links_the_download_view_not_the_file(self):
+        """The answers table never points at a script-capable file's storage URL (#2559).
 
         Following a link to the stored file opens the student's HTML as a page in the marker's
         session, which is the whole vulnerability. The link goes to the download view instead.
@@ -735,10 +736,10 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
         """A stored HTML answer keeps its download link after its question is deleted (#2559).
 
         ``QuestionSubmission.question`` is ``SET_NULL``, so the answer outlives the question,
-        and a teacher can also move a question off the "web" file type after the fact. Deciding
-        from the question would start linking the stored file at its storage URL again in both
-        cases, which is exactly the stored XSS this feature exists to prevent, so the stored
-        file decides instead.
+        and a teacher can also untick the opt-in after the fact. Deciding from the question
+        would start linking the stored file at its storage URL again in both cases, which is
+        exactly the stored XSS this feature exists to prevent, so the stored file decides
+        instead.
         """
         answer = self.answer()
         answer.question.delete()
@@ -751,10 +752,10 @@ class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
         self.assertNotIn(f'href="{answer.response_file.url}"', html)
 
     def test_display__an_ordinary_file_answer_is_unchanged(self):
-        """A question on any other file type still renders through question_file.html.
+        """A question that did not opt in still renders through question_file.html.
 
-        Only web-file answers are diverted, so an image answer keeps the inline preview and the
-        direct link it has always had.
+        Only script-capable answers are diverted, so an image answer keeps the inline preview
+        and the direct link it has always had.
         """
         image_question = baker.make(
             Question, quest=self.quest, ordinal=2, type="file_upload", allowed_file_type="image",

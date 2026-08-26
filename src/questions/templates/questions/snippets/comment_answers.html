@@ -50,7 +50,7 @@
                rather than opened in the marker's session (#2559). An SVG is shown as well,
                through an <img>, where browsers run no script at all, so a graphic design answer
                can still be looked at. The stored file decides this, not the question, so a
-               question that is later deleted or retyped cannot bring the direct link back.
+               question that is later deleted, retyped or unticked cannot bring the direct link back.
                {% endcomment %}
             {% if answer.response_file|is_displayable_svg %}
               <img class="question-media" src="{{ answer.response_file.url }}"

@@ -303,6 +303,60 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         # and the re-rendered page shows it, so the student can see it was kept
         self.assertContains(response, "my-work")
 
+    def test_complete__a_kept_svg_answer_is_offered_as_a_download(self):
+        """An Image question that opted in takes an SVG, and never links it at its URL (#2559).
+
+        Both halves in one pass: the opt-in is what lets the SVG through validation at all, and
+        the kept-file line on the re-rendered page points at the download view. Following a link
+        to the stored file would run the script an SVG can carry, in the session of whoever
+        followed it, which here is the student's own.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach your logo.</p>", allowed_file_type="image",
+            allow_script_capable_files=True,
+        )
+        upload = SimpleUploadedFile(
+            "my-logo.svg",
+            b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            content_type="image/svg+xml")
+
+        # short answer left blank, so the formset is invalid and the page re-renders
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        data[self.file_field_name(file_question)] = upload
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertTrue(file_row.response_file, "the opt-in should have accepted the SVG")
+
+        self.assertContains(response, reverse("questions:answer_file_download", args=[file_row.id]))
+        self.assertNotContains(response, f'href="{file_row.response_file.url}"')
+
+    def test_complete__an_svg_is_still_refused_without_the_opt_in(self):
+        """The same SVG on an Image question that did not opt in is refused (#2559).
+
+        The opt-in is the only thing that admits it, so the file must not be stored and the
+        student has to attach something else.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach your logo.</p>", allowed_file_type="image",
+        )
+        upload = SimpleUploadedFile(
+            "refused-logo.svg", b"<svg xmlns='http://www.w3.org/2000/svg'></svg>",
+            content_type="image/svg+xml")
+
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()}
+        data[self.file_field_name(file_question)] = upload
+        response = self.client.post(self.complete_url(), data=data)
+
+        self.assertEqual(response.status_code, 200)
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        self.assertFalse(file_row.response_file)
+
     def test_complete__rejected_file_is_not_saved(self):
         """A file rejected for its type is not kept, so its error still applies on the retry (#2165).
 
