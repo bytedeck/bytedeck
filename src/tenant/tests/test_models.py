@@ -448,6 +448,117 @@ class TenantBillingStatusTest(SimpleTestCase):
 
 
 @freeze_time(FROZEN_NOW)
+class TenantSubscriptionStatusAnnotationTest(ByteDeckTenantTestCase):
+    """Tests that Tenant.annotate_subscription_status ranks decks in SQL exactly the
+    way the subscription_status property classifies them in Python.
+
+    Needs the database (an annotation is evaluated by Postgres), but not schemas:
+    the rows are bulk_created, which skips Tenant.save() and so skips schema
+    creation, since only public-schema date columns are being ranked. The
+    annotation is always run from inside a test method, never from setUpTestData,
+    because it reads today() and only the test methods are frozen.
+    """
+
+    # one deck per status, keyed by the status it must rank as, plus the
+    # precedence case where a stale paid clock could mask a running trial
+    STATUS_FIXTURES = {
+        'suspended': {'trial_end_date': FROZEN_TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), 'paid_until': None},
+        'grace': {'trial_end_date': FROZEN_TODAY - timedelta(days=1), 'paid_until': None},
+        'trial': {'trial_end_date': FROZEN_TODAY + timedelta(days=30), 'paid_until': None},
+        # trial_end_date is spelled out on the paid fixtures too: it defaults to a
+        # live trial date, and a live trial clock outranks a paid one
+        'maintenance': {
+            'trial_end_date': None, 'paid_until': FROZEN_TODAY + timedelta(days=30),
+            'max_active_users': TRIAL_MAX_ACTIVE_USERS,
+        },
+        'subscribed': {
+            'trial_end_date': None, 'paid_until': FROZEN_TODAY + timedelta(days=30), 'max_active_users': 40,
+        },
+        'manual': {'trial_end_date': None, 'paid_until': None},
+        # a running trial alongside an OLDER paid date still inside its grace tail:
+        # the trial governs, so this must rank 'trial' rather than 'subscribed'
+        'trial-over-stale-paid': {
+            'trial_end_date': FROZEN_TODAY + timedelta(days=30),
+            'paid_until': FROZEN_TODAY - timedelta(days=1),
+        },
+        # both clocks landing on the SAME day: subscription language wins the tie,
+        # so this must rank 'subscribed'. Both chains compare the trial strictly
+        # later, and this fixture is what holds them to it
+        'equal-deadlines': {
+            'trial_end_date': FROZEN_TODAY + timedelta(days=30),
+            'paid_until': FROZEN_TODAY + timedelta(days=30),
+            'max_active_users': 40,
+        },
+    }
+
+    @classmethod
+    def schema_for(cls, fixture):
+        """The schema_name given to a fixture's row.
+
+        Args:
+            fixture (str): A STATUS_FIXTURES key.
+
+        Returns:
+            str: The row's schema_name, e.g. 'rank-suspended'.
+        """
+        return 'rank-{}'.format(fixture)
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create one dateless-schema Tenant row per fixture."""
+        with schema_context(get_public_schema_name()):
+            Tenant.objects.bulk_create([
+                Tenant(schema_name=cls.schema_for(fixture), name=cls.schema_for(fixture), **fields)
+                for fixture, fields in cls.STATUS_FIXTURES.items()
+            ])
+
+    def ranked(self):
+        """Annotate the fixture rows and key them by fixture name.
+
+        Returns:
+            dict: {fixture name: annotated Tenant}.
+        """
+        decks = Tenant.annotate_subscription_status(Tenant.objects.filter(schema_name__startswith='rank-'))
+        by_schema = {deck.schema_name: deck for deck in decks}
+        return {fixture: by_schema[self.schema_for(fixture)] for fixture in self.STATUS_FIXTURES}
+
+    def test_annotate_subscription_status__matches_the_python_chain(self):
+        """Every fixture's annotated rank is the rank of the status the Python
+        property reports for the same deck, so the SQL chain and the Python chain
+        cannot drift apart unnoticed."""
+        rank = {slug: position for position, slug in enumerate(Tenant.SUBSCRIPTION_STATUS_LABELS)}
+        for fixture, deck in self.ranked().items():
+            with self.subTest(fixture=fixture):
+                self.assertEqual(deck.subscription_status_rank, rank[deck.subscription_status])
+
+    def test_annotate_subscription_status__covers_every_status(self):
+        """The fixtures reach all six statuses (so the test above is not silently
+        checking a subset), and each is the status its fixture name claims.
+
+        The two clock-precedence cases are pinned by name: a running trial outranks
+        an older paid clock still inside its grace tail, and two clocks ending on
+        the SAME day are 'subscribed', which is what stops either chain from
+        relaxing its strict comparison to a >=."""
+        statuses = {fixture: deck.subscription_status for fixture, deck in self.ranked().items()}
+        self.assertEqual(set(statuses.values()), set(Tenant.SUBSCRIPTION_STATUS_LABELS))
+        for status in Tenant.SUBSCRIPTION_STATUS_LABELS:
+            self.assertEqual(statuses[status], status)
+        self.assertEqual(statuses['trial-over-stale-paid'], 'trial')
+        self.assertEqual(statuses['equal-deadlines'], 'subscribed')
+
+    def test_annotate_subscription_status__orders_suspended_first_and_manual_last(self):
+        """Sorting ascending on the rank lists the decks needing attention first:
+        suspended, grace, trial, maintenance, subscribed, then managed manually."""
+        one_per_status = [self.schema_for(status) for status in Tenant.SUBSCRIPTION_STATUS_LABELS]
+        ordered = Tenant.annotate_subscription_status(
+            Tenant.objects.filter(schema_name__in=one_per_status)).order_by('subscription_status_rank')
+        self.assertEqual(
+            [deck.subscription_status for deck in ordered],
+            ['suspended', 'grace', 'trial', 'maintenance', 'subscribed', 'manual'],
+        )
+
+
+@freeze_time(FROZEN_NOW)
 class TenantDeletionClockTest(ByteDeckTenantTestCase):
     """Tests for the suspension-keyed deletion clock (#1734 B3): Tenant.deletion_date
     and the is_deletable guard it drives.
@@ -762,6 +873,56 @@ class TenantBannerStatusTest(SimpleTestCase):
         since the live recount is skipped entirely by the -1 short-circuit."""
         self.assertFalse(self.make_tenant(max_active_users=-1, active_user_count=999).is_over_user_limit)
 
+    def test_auto_renews__only_while_the_billing_date_is_still_ahead(self):
+        """The stored Stripe flag alone does not mean the deck renews: the billing
+        date must still be ahead of it. A flag left set on a deck whose paid period
+        already lapsed (a failed payment whose webhook is late, a webhook
+        outage) reads as NOT renewing, so the deck falls back to the expiry
+        cadence and the grace banner instead of sitting reassured (#2586).
+
+        The date checked is paid_until specifically, so a trial that outlasts the
+        paid period cannot stand in for a charge that never happened (#2588
+        review find)."""
+        renewing = self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=5))
+        renewing.stripe_auto_renews = True
+        self.assertTrue(renewing.auto_renews)
+
+        # the renewal date itself still counts as ahead (it bills that day)
+        today_renewal = self.make_tenant(paid_until=FROZEN_TODAY)
+        today_renewal.stripe_auto_renews = True
+        self.assertTrue(today_renewal.auto_renews)
+
+        # the date passed and paid_until never advanced: not renewing after all
+        lapsed = self.make_tenant(paid_until=FROZEN_TODAY - timedelta(days=1))
+        lapsed.stripe_auto_renews = True
+        self.assertFalse(lapsed.auto_renews)
+
+        # a trial date outlasting the lapsed paid period does not rescue the flag:
+        # the deck is still running, but nothing was charged on the billing date
+        extended_trial = self.make_tenant(
+            trial_end_date=FROZEN_TODAY + timedelta(days=60), paid_until=FROZEN_TODAY - timedelta(days=1))
+        extended_trial.stripe_auto_renews = True
+        self.assertFalse(extended_trial.auto_renews)
+
+        # the flag set on a deck with no paid period at all: nothing to renew
+        trial_only = self.make_tenant(trial_end_date=FROZEN_TODAY + timedelta(days=60))
+        trial_only.stripe_auto_renews = True
+        self.assertFalse(trial_only.auto_renews)
+
+        # no Stripe subscription (manually managed deck): never auto-renewing
+        self.assertFalse(self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=5)).auto_renews)
+
+    def test_is_expiring_soon__false_while_auto_renewing(self):
+        """An auto-renewing deck is not expiring, so the banner must not warn about
+        it: the card is charged and the period rolls forward (#2586). The same
+        deck warns once it is set to cancel instead."""
+        deck = self.make_tenant(paid_until=FROZEN_TODAY + timedelta(days=3))
+        deck.stripe_auto_renews = True
+        self.assertFalse(deck.is_expiring_soon)
+
+        deck.stripe_auto_renews = False  # cancel-at-period-end, or a failing renewal
+        self.assertTrue(deck.is_expiring_soon)
+
     def test_is_expiring_soon__within_warning_window_or_grace(self):
         """Warns within EXPIRY_WARNING_DAYS of the governing deadline, and through the
         grace window (negative days), paid or trial alike; quiet before the window."""
@@ -826,7 +987,9 @@ class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
     def test_sync__monotonic_never_lowers_paid_until(self):
         """A re-delivered or out-of-order older event can never LOWER paid_until."""
         later = self.PERIOD_END + timedelta(days=365)
-        self.set_deck(paid_until=later, stripe_subscription_id='sub_sync')
+        # the sync that granted this later period also recorded that it renews, so
+        # the older event genuinely has nothing left to change
+        self.set_deck(paid_until=later, stripe_subscription_id='sub_sync', stripe_auto_renews=True)
         summary = self.tenant.sync_from_stripe_subscription(self.make_subscription())
         self.assertEqual(summary, 'no changes')
         self.tenant.refresh_from_db()
@@ -900,13 +1063,16 @@ class SyncFromStripeSubscriptionTest(ByteDeckTenantTestCase):
     def test_sync__canceled_event_without_an_id_unlinks_nothing(self):
         """A malformed cancellation payload with no subscription id (which the
         identity guard cannot see) must not unlink the deck's current
-        subscription: unlinking requires an exact id match."""
-        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_sync')
+        subscription: unlinking requires an exact id match. It must not clear the
+        renewal flag either, which would move a deck that really does renew off
+        its single heads-up and onto the whole expiry cadence (#2588 review find)."""
+        self.set_deck(paid_until=self.PERIOD_END, stripe_subscription_id='sub_sync', stripe_auto_renews=True)
         summary = self.tenant.sync_from_stripe_subscription(
             self.make_subscription(id='', status='canceled'))
         self.assertEqual(summary, 'no changes')
         self.tenant.refresh_from_db()
         self.assertEqual(self.tenant.stripe_subscription_id, 'sub_sync')
+        self.assertTrue(self.tenant.stripe_auto_renews)
 
     def test_sync__canceled_when_already_unlinked_is_a_no_op(self):
         """A cancellation event for a deck already unlinked changes nothing (a

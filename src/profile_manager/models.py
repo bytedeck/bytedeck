@@ -27,6 +27,7 @@ from utilities.models import RestrictedFileField
 
 from allauth.account.signals import email_confirmed, user_logged_in, email_confirmation_sent, user_logged_out
 from allauth.account.models import EmailAddress, EmailConfirmationHMAC
+from utilities.signals import disable_for_loaddata
 
 
 class ProfileQuerySet(models.query.QuerySet):
@@ -516,6 +517,7 @@ class Profile(models.Model):
 
 
 @receiver(post_save, sender=User)
+@disable_for_loaddata
 def create_profile(sender, **kwargs):
     from django.db import connection
 

@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template.loader import render_to_string
 from django.urls import reverse
 
 from model_bakery import baker
@@ -119,8 +120,25 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
 
         response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
 
-        self.assertContains(response, "any chosen files too")
+        self.assertContains(response, "chosen files included")
         self.assertNotContains(response, "upload when the quest is submitted")
+
+    def test_list__help_text_says_how_often_a_draft_saves(self):
+        """The page's copy matches how often a draft actually saves (#2571).
+
+        A draft is written by a 60-second timer and by the Save Draft button, and by nothing
+        else: there is no keystroke, change or unload handler. So the sentence names the
+        interval and the button, and must not say answers save "as they type", which the third
+        assertion guards: a teacher reading that tells students their typing is safe when up to
+        a minute of it is not.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, "autosaves about every minute")
+        self.assertContains(response, "Save Draft")
+        self.assertNotContains(response, "as they type")
 
     def test_list__an_image_solution_shows_as_a_thumbnail(self):
         """A picture used as a solution is shown in the table, not just named (#2172).
@@ -290,6 +308,94 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.assertTrue(Question.objects.filter(id=self.question1.id).exists())
 
 
+class QuestionTableMoveArrowsTest(ByteDeckTenantTestCase):
+    """The move arrows render only where the page can act on them (#2568).
+
+    The snippet's arrows post to `questions:move`, whose non-AJAX path redirects to the
+    question list. Only the question list binds the handler that posts them in the background
+    instead, so anywhere else a click would silently relocate the reader: off a quest they were
+    reading, off a submission they were marking, or out of a Library export they were partway
+    through.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a quest with two questions, so the table has rows to act on."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.quest = baker.make(Quest, name="Reorderable Quest")
+        cls.q1 = baker.make(Question, quest=cls.quest, ordinal=1, instructions="First question")
+        cls.q2 = baker.make(Question, quest=cls.quest, ordinal=2, instructions="Second question")
+
+    def _render_snippet(self, **extra):
+        """Render the question table snippet on its own, outside any page that includes it.
+
+        Args:
+            **extra: context merged over the quest and its questions, so a test can render
+                the snippet the way a given caller would (`can_reorder_questions=True` for
+                one that binds the move handler).
+
+        Returns:
+            str: the rendered table HTML.
+        """
+        return render_to_string(
+            "questions/snippets/question_table.html",
+            {"quest": self.quest, "questions": Question.objects.filter(quest=self.quest), **extra},
+        )
+
+    def test_question_table__withholds_the_move_arrows_by_default(self):
+        """A template that includes this snippet gets no arrows unless it asks for them.
+
+        The default is off so a page cannot inherit buttons whose handler it does not have,
+        which is how they came to be on three pages that strand the reader.
+        """
+        table = self._render_snippet()
+
+        self.assertNotIn("question-move-form", table)
+
+    def test_question_table__keeps_edit_and_delete_without_the_arrows(self):
+        """Only the arrows are withheld: Edit and Delete are plain links to other pages.
+
+        Leaving the page is what a link promises, so those stay wherever the table renders
+        with actions at all.
+        """
+        table = self._render_snippet()
+
+        self.assertIn('title="Edit"', table)
+        self.assertIn('title="Delete"', table)
+
+    def test_question_table__renders_the_move_arrows_when_asked(self):
+        """A caller that binds the handler gets the arrows by passing the flag."""
+        table = self._render_snippet(can_reorder_questions=True)
+
+        self.assertIn("question-move-form", table)
+        self.assertIn('title="Move up"', table)
+        self.assertIn('title="Move down"', table)
+
+    def test_QuestionList__renders_the_move_arrows(self):
+        """The question list is the page built to reorder from, so it shows them."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+
+        self.assertContains(response, "question-move-form")
+
+    def test_quest_detail__shows_the_questions_without_the_move_arrows(self):
+        """A teacher reading a quest sees its questions but cannot reorder from there.
+
+        Asserting the panel is present matters as much as the arrows being absent: without it
+        this passes for the wrong reason on any page that renders no question table at all.
+        The panel's own Manage Questions button is the way to the page that can reorder.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        self.assertContains(response, "Submission Questions")
+        self.assertContains(response, "First question")
+        self.assertContains(response, "Manage Questions")
+        self.assertNotContains(response, "question-move-form")
+
+
 class QuestionMoveViewTest(ByteDeckTenantTestCase):
     """Tests for QuestionMoveView: staff-only up/down reordering of a quest's questions."""
 
@@ -420,6 +526,23 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(self._ordinals(), {"Q1": 2, "Q2": 1, "Q3": 3})
         table = response.json()["question_table_html"]
         self.assertLess(table.index("Q2"), table.index("Q1"), "the table came back in the old order")
+
+    def test_move__ajax_table_still_carries_the_move_arrows(self):
+        """The table a move hands back can itself be moved from, so a reorder can continue.
+
+        This HTML replaces the one the teacher just clicked in, and reordering takes several
+        clicks. The snippet withholds the arrows unless the caller asks for them (#2568), so
+        the view has to ask: without that a move would work once and return a table with
+        nothing left to click.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self._move_by_ajax(self.q1, "down")
+
+        table = response.json()["question_table_html"]
+        self.assertIn("question-move-form", table)
+        self.assertIn("Move up", table)
+        self.assertIn("Move down", table)
 
     def test_move__ajax_table_disables_the_arrows_at_the_ends_of_the_list(self):
         """The re-rendered table decides which arrows are dead, so the page never has to.

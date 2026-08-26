@@ -5,8 +5,8 @@
 {% load comment_tags %}
 
 {% block head %}
-    {# the comment box is a summernote editor too, so its media covers the answer editors #}
-    {{ submission_form.media }}
+    {# the comment form's assets combined with the answer editors', de-duplicated in the view #}
+    {{ form_media }}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
@@ -180,6 +180,11 @@
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
             </a>
+            {# Shown when a draft save fails, and cleared by the next one that works. The autosave #}
+            {# keeps trying, so this says so rather than interrupting the student every minute. #}
+            <span id="draft-error" class="text-danger" style="display:none" role="status">
+              <i class="fa fa-exclamation-triangle fa-fw"></i> Draft not saved. It will try again shortly.
+            </span>
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
@@ -269,16 +274,17 @@
             // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading
-                console.log("Draft saved!")  // sanity check
-                save_draft();
+                save_draft(true);  // pressed, so a failure is worth interrupting for
             });
 
-            setInterval(save_draft, 60000); // autosave every 60 seconds
+            // autosave every 60 seconds, unattended: a failure here reports itself in the
+            // page instead of in a modal the student did not ask for
+            setInterval(function() { save_draft(); }, 60000);
 
 
         });
 
-        function save_draft() {
+        function save_draft(pressed) {
             // scoped to the main comment form: question answers add their own summernote editors
             $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
@@ -320,6 +326,13 @@
                 // management form, row ids and files) come from the form itself.
                 var mainForm = document.getElementById('submission-main-form');
                 var formData = mainForm ? new FormData(mainForm) : new FormData();
+                // What each file input is sending, captured with the snapshot above. The
+                // response arrives later (a file answer may be 16 MiB, and the 60s autosave
+                // starts these uploads with no action from the student), and by then they may
+                // have chosen a different file in the same input. The response speaks about
+                // the file that went out, so it is only allowed to touch an input still
+                // holding it (#2563).
+                var sentFiles = chosen_files_by_input();
                 formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
                 formData.set('comment', draftComment);
                 formData.set('submission_id', '{{ submission.id }}');
@@ -335,23 +348,59 @@
 
                     // handle a successful response
                     success : function(json) {
-                      show_saved_files(json);
+                      $('#draft-error').hide();
+                      show_saved_files(json, sentFiles);
                       hide_check_show_text();
                     },
 
                     // handle a non-successful response
                     error : function(xhr,errmsg,err) {
-                        $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
-                            " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
+                        // Put the button back first: save_draft() only runs while #draft-text is
+                        // visible, so restoring it is what lets the next autosave tick, or a
+                        // click, attempt the save again. #draft-error stays up alongside it
+                        // until a save succeeds, so the failure is visible meanwhile (#2561).
+                        $('#draft-spin').hide();
+                        $('#draft-check').hide();
+                        $('#draft-text').show();
+                        $('#draft-error').show();
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                        alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        if (pressed) {
+                            // The student asked for this save, so tell them it did not happen.
+                            // A timer's failure is reported only in #draft-error: it retries by
+                            // itself, and a modal once a minute would interrupt a whole lesson.
+                            alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        }
                     }
                 });
             }
 
         }
 
-        function show_saved_files(json) {
+        function chosen_files(input) {
+            // The File objects an input currently holds. Identity is what is compared later,
+            // not the names: choosing a file always produces new File objects, so this notices
+            // a replacement even when the student picked another file of the same name. The
+            // comment's Attach files field takes several at once, so the whole list counts.
+            return Array.prototype.slice.call((input && input.files) || []);
+        }
+
+        function chosen_files_by_input() {
+            // Every file input on the form, keyed by name, ready to compare against later.
+            var chosen = {};
+            $('#submission-main-form input[type="file"]').each(function() {
+                chosen[this.name] = chosen_files(this);
+            });
+            return chosen;
+        }
+
+        function same_files(current, sent) {
+            // Whether an input still holds exactly what it sent. An untracked input (no
+            // snapshot) counts as changed, which is the safe answer: it means leave it alone.
+            if (!sent || current.length !== sent.length) return false;
+            return current.every(function(file, index) { return file === sent[index]; });
+        }
+
+        function show_saved_files(json, sentFiles) {
             // A saved file is stored with the draft, so its input is cleared: the file no
             // longer needs re-choosing, and the next autosave must not upload it again. A
             // note under the input says where it went. A rejected file is cleared too, with
@@ -359,22 +408,28 @@
             $.each(json.saved_answer_files || {}, function(field_name, file_name) {
                 file_note($('[name="' + field_name + '"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             });
             if ((json.saved_attachments || []).length) {
                 var names = json.saved_attachments.map(function(name) { return $('<i>').text(name).html(); });
                 file_note($('#submission-main-form input[name="attachments"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + names.join(', ') +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             }
             $.each(json.file_errors || {}, function(field_name, error_text) {
                 file_note($('[name="' + field_name + '"]'),
-                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>');
+                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>', sentFiles);
             });
         }
 
-        function file_note(input, html) {
+        function file_note(input, html, sentFiles) {
             if (!input.length) return;
+            // The response describes the file this input sent. If the input now holds a
+            // different choice, the student replaced it while the request was in flight:
+            // clearing it would throw that newer file away, and the note would name one they
+            // have moved on from (or blame it for the older file's error). Leave both alone;
+            // the next save reports the new file in the ordinary way (#2563).
+            if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
             var note = input.closest('.form-group').find('.draft-file-note');
             if (!note.length) {
