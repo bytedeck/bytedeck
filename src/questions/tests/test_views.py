@@ -119,8 +119,24 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
 
         response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
 
-        self.assertContains(response, "any chosen files too")
+        self.assertContains(response, "chosen files included")
         self.assertNotContains(response, "upload when the quest is submitted")
+
+    def test_list__help_text_says_how_often_a_draft_saves(self):
+        """The page's copy matches how often a draft actually saves (#2571).
+
+        A draft is written by a 60-second timer and by the Save Draft button, and by nothing
+        else: there is no keystroke, change or unload handler. Copy promising that text saves
+        as the student types has a teacher telling students their typing is safe when up to a
+        minute of it is not, so the sentence names the interval and the button instead.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, "autosaves about every minute")
+        self.assertContains(response, "Save Draft")
+        self.assertNotContains(response, "as they type")
 
     def test_list__an_image_solution_shows_as_a_thumbnail(self):
         """A picture used as a solution is shown in the table, not just named (#2172).
