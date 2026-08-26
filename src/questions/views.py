@@ -207,7 +207,15 @@ class QuestionMoveView(
         """
         return render_to_string(
             'questions/snippets/question_table.html',
-            {'quest': quest, 'questions': Question.objects.filter(quest_id=quest.id)},
+            {
+                'quest': quest,
+                'questions': Question.objects.filter(quest_id=quest.id),
+                # This table replaces the one on the question list, which is the page that
+                # binds the move handler, so it needs the arrows the snippet otherwise
+                # withholds. Without this a reorder would work once and then hand back a
+                # table with nothing left to click (#2568).
+                'can_reorder_questions': True,
+            },
             request=request,
         )
 

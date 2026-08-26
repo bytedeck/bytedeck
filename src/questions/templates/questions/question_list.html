@@ -29,7 +29,7 @@
     Deleting a question keeps any answers students have already submitted.</p>
   </div>
   <div id="question-table">
-    {% include 'questions/snippets/question_table.html' %}
+    {% include 'questions/snippets/question_table.html' with can_reorder_questions=True %}
   </div>
 {% endblock %}
 
