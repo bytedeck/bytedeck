@@ -26,10 +26,9 @@ LEGACY_UNCONVENTIONAL = set()
 
 _SETUP_METHODS = {"setUp", "setUpTestData", "tearDown"}
 
-# Directories under src/ scanned for em dashes. CLAUDE.md bans them project-wide, but the
-# rest of the tree still carries a backlog (102 more, across 35 files, when #2569 was written), so
-# this starts at the app that has been cleared and grows as others are. Adding a name here
-# is the last step of cleaning a directory, not the first.
+# Directories under src/ scanned for em dashes. CLAUDE.md bans them project-wide, but only
+# the directories named here are clear of them, so only these can be enforced. The list grows
+# as others are cleared: adding a name is the last step of cleaning a directory, not the first.
 EM_DASH_CHECKED_DIRS = ("questions",)
 
 # The two spellings CLAUDE.md names. The entity is the one that hides from a plain search

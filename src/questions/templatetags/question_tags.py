@@ -80,8 +80,9 @@ def unwrap_p(value):
     The Summernote editor wraps even one line of text in a ``<p>``; nesting that block inside an
     inline context (``<small>``, ``<span>``) makes the browser reparent it onto a new line, so
     removing the wrapper is what actually keeps it inline. Multi-paragraph content (an inner
-    ``<p>``) is returned unchanged. The value is assumed already sanitized (these fields are
-    teacher-authored and were previously rendered with ``|safe``), so the result is marked safe.
+    ``<p>``) is returned unchanged. The values this runs on (a question's instructions and its
+    marker notes) are staff-authored, through the teacher's own question form, so their HTML is
+    trusted the way the rest of a quest's rich text is and the result is marked safe.
     """
     if not value:
         return value
