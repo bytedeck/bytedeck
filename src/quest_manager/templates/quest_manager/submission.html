@@ -134,7 +134,16 @@
               {% if form.instance.response_file %}
                 <p class="help-block">
                   <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  {% if form.instance.response_file_is_script_capable %}
+                    {% comment %} An SVG or HTML file is never linked at its storage URL, here either:
+                       navigating to one runs whatever script it carries in the session of whoever
+                       follows the link, and the student following it is signed in (#2559). The
+                       download view responds with Content-Disposition: attachment instead. {% endcomment %}
+                    <a href="{% url 'questions:answer_file_download' form.instance.id %}">
+                      <i class="fa fa-fw fa-download"></i>{{ form.instance.response_file|filename }}</a>
+                  {% else %}
+                    <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  {% endif %}
                   <small>(already saved: only choose a file above if you want to replace it)</small>
                 </p>
               {% endif %}

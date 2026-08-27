@@ -1,13 +1,18 @@
+import os
+import shutil
+import tempfile
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.template.loader import render_to_string
+from django.test import override_settings
 from django.urls import reverse
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from quest_manager.models import Quest
-from questions.models import Question
+from quest_manager.models import Quest, QuestSubmission
+from questions.models import Question, QuestionSubmission
 
 User = get_user_model()
 
@@ -612,3 +617,183 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         response = self._move(self.q1, "down")
 
         self.assertRedirects(response, reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+
+
+class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
+    """A script-capable answer is handed over as a download, and only to people entitled to it (#2559)."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Redirect MEDIA_ROOT to a temp directory, deleted along with the class.
+
+        These tests store real files. Without this they pile up in the project's
+        _media_uploads and Django's storage dedupes the repeated name on the next run, so a
+        suite that passes once fails on every rerun in the same workspace.
+        """
+        cls._temp_media = tempfile.mkdtemp(prefix="test-media-answer-download-")
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        # registered before super(), so they run after the base class's own cleanups: LIFO
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, a student, and a quest with one question that opted into web files."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.test_student = User.objects.create_user("test_student", password="password")
+        cls.quest = baker.make(Quest)
+        cls.question = baker.make(
+            Question, quest=cls.quest, ordinal=1, type="file_upload",
+            allowed_file_type="all", allow_script_capable_files=True,
+        )
+
+    def answer(self, uploaded_file=None, user=None):
+        """A published answer holding a stored file.
+
+        Args:
+            uploaded_file: the file to store; a small HTML page by default.
+            user (User): whose submission it is; defaults to self.test_student.
+
+        Returns:
+            QuestionSubmission: the answer row.
+        """
+        if uploaded_file is None:
+            uploaded_file = SimpleUploadedFile(
+                "index.html", b"<h1>my page</h1>", content_type="text/html")
+        submission = baker.make(QuestSubmission, quest=self.quest, user=user or self.test_student)
+        return baker.make(
+            QuestionSubmission, quest_submission=submission, question=self.question,
+            response_file=uploaded_file,
+        )
+
+    def test_answer_file_download__owner_gets_the_file_as_an_attachment(self):
+        """The student's own answer downloads, rather than rendering in the browser.
+
+        The Content-Disposition is the whole point: an HTML answer opened as a page would run
+        its script in whoever opened it, which is the stored XSS this feature exists to avoid.
+        """
+        answer = self.answer()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse("questions:answer_file_download", args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        disposition = response.headers["Content-Disposition"]
+        self.assertIn("attachment", disposition)
+        self.assertIn(os.path.basename(answer.response_file.name), disposition)
+        self.assertEqual(b"".join(response.streaming_content), b"<h1>my page</h1>")
+
+    def test_answer_file_download__staff_may_download_a_students_answer(self):
+        """Markers reach it too: reading the file is how a web design answer gets marked."""
+        answer = self.answer()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("questions:answer_file_download", args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_answer_file_download__another_student_is_refused(self):
+        """Someone else's answer is not theirs to fetch."""
+        answer = self.answer()
+        self.client.force_login(User.objects.create_user("nosy", password="password"))
+
+        self.assert404("questions:answer_file_download", args=[answer.pk])
+
+    def test_answer_file_download__an_answer_with_no_file_is_404(self):
+        """Nothing to hand over, so the view refuses rather than failing on an empty file."""
+        submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
+        answer = baker.make(
+            QuestionSubmission, quest_submission=submission, question=self.question,
+        )
+        self.client.force_login(self.test_student)
+
+        self.assert404("questions:answer_file_download", args=[answer.pk])
+
+    def test_answer_file_download__anonymous_redirects_to_login(self):
+        """Login-only, like every other view that reaches a student's submitted work."""
+        answer = self.answer()
+
+        self.assertRedirectsLogin("questions:answer_file_download", args=[answer.pk])
+
+    def render_answers(self, answer):
+        """Render the published-answers table for one answer.
+
+        Args:
+            answer (QuestionSubmission): the answer to render.
+
+        Returns:
+            str: the rendered HTML.
+        """
+        return render_to_string("questions/snippets/comment_answers.html", {"answers": [answer]})
+
+    def test_display__a_script_capable_answer_links_the_download_view_not_the_file(self):
+        """The answers table never points at a script-capable file's storage URL (#2559).
+
+        Following a link to the stored file opens the student's HTML as a page in the marker's
+        session, which is the whole vulnerability. The link goes to the download view instead.
+        """
+        answer = self.answer()
+
+        html = self.render_answers(answer)
+
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__an_svg_answer_is_shown_as_a_picture(self):
+        """An SVG answer renders through an <img>, and still downloads from its link.
+
+        Browsers run no script, external reference or interactivity in SVG-as-image mode, so
+        this is safe without sanitising the file, and a graphic design student's artwork can be
+        looked at rather than only downloaded.
+        """
+        answer = self.answer(SimpleUploadedFile(
+            "logo.svg",
+            b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            content_type="image/svg+xml"))
+
+        html = self.render_answers(answer)
+
+        self.assertIn(f'<img class="question-media" src="{answer.response_file.url}"', html)
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__a_deleted_question_does_not_bring_the_direct_link_back(self):
+        """A stored HTML answer keeps its download link after its question is deleted (#2559).
+
+        ``QuestionSubmission.question`` is ``SET_NULL``, so the answer outlives the question,
+        and a teacher can also untick the opt-in after the fact. Deciding from the question
+        would start linking the stored file at its storage URL again in both cases, which is
+        exactly the stored XSS this feature exists to prevent, so the stored file decides
+        instead.
+        """
+        answer = self.answer()
+        answer.question.delete()
+        answer.refresh_from_db()
+        self.assertIsNone(answer.question, "the answer must outlive its question")
+
+        html = self.render_answers(answer)
+
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__an_ordinary_file_answer_is_unchanged(self):
+        """A question that did not opt in still renders through question_file.html.
+
+        Only script-capable answers are diverted, so an image answer keeps the inline preview
+        and the direct link it has always had.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=2, type="file_upload", allowed_file_type="image",
+        )
+        submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
+        answer = baker.make(
+            QuestionSubmission, quest_submission=submission, question=image_question,
+            response_file=SimpleUploadedFile("photo.png", b"png-bytes", content_type="image/png"),
+        )
+
+        html = self.render_answers(answer)
+
+        self.assertIn(f'href="{answer.response_file.url}"', html)
+        self.assertNotIn(reverse("questions:answer_file_download", args=[answer.pk]), html)

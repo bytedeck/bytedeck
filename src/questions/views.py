@@ -1,17 +1,20 @@
+import os
+
+from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Max
-from django.http import Http404, JsonResponse
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, View
 
 from hackerspace_online.decorators import StaffMemberRequiredMixin
-from tenant.views import NonPublicOnlyViewMixin
+from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 from quest_manager.models import Quest
 
 from .forms import QuestionForm
-from .models import Question, QuestionType
+from .models import Question, QuestionSubmission, QuestionType
 
 
 class QuestionListView(NonPublicOnlyViewMixin, StaffMemberRequiredMixin, ListView):
@@ -237,3 +240,38 @@ class QuestionMoveView(
             question.ordinal = neighbour_ordinal
             question.full_clean()
             question.save()
+
+
+@non_public_only_view
+@login_required
+def answer_file_download(request, pk):
+    """Hand a script-capable answer to the viewer as a download instead of opening it in the site.
+
+    A question whose teacher ticked the script-capable opt-in accepts HTML or SVG, which a
+    browser will happily run scripts from if it navigates to them, in whatever origin serves
+    them. Linking such an answer straight at its storage URL is how a student's file ends up
+    executing in their marker's session. Everything the app links goes through here instead,
+    and this responds with ``Content-Disposition: attachment``, so following the link saves the
+    file rather than rendering it (#2559).
+
+    Args:
+        request (HttpRequest): the request.
+        pk (int): id of the ``QuestionSubmission`` whose ``response_file`` to serve.
+
+    Returns:
+        FileResponse: the stored file, as an attachment.
+
+    Raises:
+        Http404: if the answer has no file, or the viewer is neither its owner nor staff.
+    """
+    answer = get_object_or_404(QuestionSubmission, pk=pk)
+    if not answer.response_file:
+        raise Http404("That answer doesn't have a file.")
+    if not (request.user.is_staff or answer.quest_submission.user == request.user):
+        raise Http404("I don't think you're supposed to be here....")
+
+    return FileResponse(
+        answer.response_file.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(answer.response_file.name),
+    )

@@ -11,7 +11,7 @@ from quest_manager.models import QuestSubmission
 from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
 from utilities.html import is_empty_html
 
-from .models import Question, QuestionSubmission, QuestionType
+from .models import SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE, Question, QuestionSubmission, QuestionType
 
 # 16 MiB, the maximum size of a student's file response.
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
@@ -63,6 +63,7 @@ class QuestionForm(forms.ModelForm):
                   'solution_text',
                   'solution_file',
                   'allowed_file_type',
+                  'allow_script_capable_files',
                   'marker_notes')
 
         # type comes from the URL and is fixed per form, so it is hidden
@@ -90,6 +91,7 @@ class QuestionForm(forms.ModelForm):
         if question_type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
             del self.fields['solution_file']
             del self.fields['allowed_file_type']
+            del self.fields['allow_script_capable_files']
             solution_fields = Div('solution_text')
         elif question_type == QuestionType.FILE_UPLOAD:
             del self.fields['solution_text']
@@ -100,7 +102,11 @@ class QuestionForm(forms.ModelForm):
                 mime_types = FILE_MIME_TYPES.get(choice)
                 # 'all' (and any non-list sentinel) accepts everything, so a legend row is pointless
                 if isinstance(mime_types, list):
-                    allowed_file_types_html_list += f"<li><strong>{verbose_name}</strong>: {', '.join(mime_types)}</li>"
+                    # ticking the box below adds to what this row lists, so the row says what
+                    # it would add rather than leaving the reader to find out by trying it
+                    opt_in = SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE.get(choice)
+                    extra = f" (plus {', '.join(sorted(opt_in.mime_types))} if the box below is ticked)" if opt_in else ''
+                    allowed_file_types_html_list += f"<li><strong>{verbose_name}</strong>: {', '.join(mime_types)}{extra}</li>"
 
             solution_fields = Div(
                 'solution_file',
@@ -110,7 +116,8 @@ class QuestionForm(forms.ModelForm):
                      <ul>
                      {allowed_file_types_html_list}
                      </ul>
-                     """)
+                     """),
+                'allow_script_capable_files',
             )
         else:
             raise ValueError(f"Question of type {question_type} not supported.")
@@ -250,6 +257,10 @@ class QuestionSubmissionForm(forms.ModelForm):
                 required=self.question.required,
                 content_types=mime_types,
                 max_upload_size=MAX_RESPONSE_FILE_SIZE,
+                # The one place the script-capable refusal is lifted, and only as far as the
+                # teacher asked for on this question (#2559). Such an answer is handed over as
+                # a download rather than opened, so nothing in it runs in a marker's session.
+                script_capable_types=self.question.script_capable_types(),
                 # The visible label is the same on every file question, so several of them on
                 # one page are indistinguishable by name. The aria-label adds the question number
                 # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)

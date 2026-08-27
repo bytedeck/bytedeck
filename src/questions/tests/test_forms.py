@@ -13,6 +13,7 @@ from questions.forms import (
     QuestionSubmissionFormsetFactory,
 )
 from questions.models import Question, QuestionSubmission
+from utilities.fields import NO_SCRIPT_CAPABLE_TYPES, SVG_SCRIPT_CAPABLE_TYPES
 
 
 class QuestionFormTest(ByteDeckTenantTestCase):
@@ -165,6 +166,40 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         help_text = QuestionSubmissionForm(instance=answer).fields["response_file"].help_text
 
         self.assertEqual(help_text, "Allowed file types: All")
+
+    def test_init__the_answer_field_opts_in_only_as_far_as_the_question_did(self):
+        """The form field carries the question's own opt-in, and nothing wider (#2559).
+
+        ``script_capable_types`` is what lets an HTML or SVG answer through at all. A question
+        with the box unticked, "All" included, must build a field that still refuses both, and
+        an Image question that ticked it must take an SVG while still refusing a page.
+        """
+        svg_question = baker.make(
+            Question, quest=self.quest, ordinal=7, type="file_upload",
+            allowed_file_type="image", allow_script_capable_files=True,
+        )
+        svg_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=svg_question,
+        )
+
+        # "All" is the default, and the setting #2559 was reported against, so it is asserted
+        # directly rather than being taken on trust from another file type behaving
+        all_question = baker.make(
+            Question, quest=self.quest, ordinal=8, type="file_upload", allowed_file_type="all",
+        )
+        all_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=all_question,
+        )
+
+        svg_field = QuestionSubmissionForm(instance=svg_answer).fields["response_file"]
+        all_field = QuestionSubmissionForm(instance=all_answer).fields["response_file"]
+        video_field = QuestionSubmissionForm(instance=self.file_answer).fields["response_file"]
+
+        self.assertEqual(svg_field.script_capable_types, SVG_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(all_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(video_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        # the allow-list has to name the SVG too, or the field's other rule refuses it
+        self.assertIn("image/svg+xml", svg_field.content_types)
 
     def test_init__optional_question_not_required(self):
         """Answers to non-required questions aren't required fields."""
