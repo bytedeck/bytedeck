@@ -13,6 +13,7 @@ from questions.forms import (
     QuestionSubmissionFormsetFactory,
 )
 from questions.models import Question, QuestionSubmission
+from utilities.fields import NO_SCRIPT_CAPABLE_TYPES, SVG_SCRIPT_CAPABLE_TYPES
 
 
 class QuestionFormTest(ByteDeckTenantTestCase):
@@ -166,6 +167,40 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
 
         self.assertEqual(help_text, "Allowed file types: All")
 
+    def test_init__the_answer_field_opts_in_only_as_far_as_the_question_did(self):
+        """The form field carries the question's own opt-in, and nothing wider (#2559).
+
+        ``script_capable_types`` is what lets an HTML or SVG answer through at all. A question
+        with the box unticked, "All" included, must build a field that still refuses both, and
+        an Image question that ticked it must take an SVG while still refusing a page.
+        """
+        svg_question = baker.make(
+            Question, quest=self.quest, ordinal=7, type="file_upload",
+            allowed_file_type="image", allow_script_capable_files=True,
+        )
+        svg_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=svg_question,
+        )
+
+        # "All" is the default, and the setting #2559 was reported against, so it is asserted
+        # directly rather than being taken on trust from another file type behaving
+        all_question = baker.make(
+            Question, quest=self.quest, ordinal=8, type="file_upload", allowed_file_type="all",
+        )
+        all_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=all_question,
+        )
+
+        svg_field = QuestionSubmissionForm(instance=svg_answer).fields["response_file"]
+        all_field = QuestionSubmissionForm(instance=all_answer).fields["response_file"]
+        video_field = QuestionSubmissionForm(instance=self.file_answer).fields["response_file"]
+
+        self.assertEqual(svg_field.script_capable_types, SVG_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(all_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(video_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        # the allow-list has to name the SVG too, or the field's other rule refuses it
+        self.assertIn("image/svg+xml", svg_field.content_types)
+
     def test_init__optional_question_not_required(self):
         """Answers to non-required questions aren't required fields."""
         optional_question = baker.make(
@@ -200,6 +235,70 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         'Response' aria-label rather than erroring on the missing position."""
         form = QuestionSubmissionForm(instance=self.short_answer)
         self.assertEqual(form.fields["response_text"].widget.attrs["aria-label"], "Response")
+
+    def test_init__every_answer_field_gets_a_distinct_aria_label(self):
+        """All three answer types announce their question number, not just the short answer.
+
+        A quest with several questions renders several answer fields with no visible labels of
+        their own (or, for file uploads, the identical one), so without this a screen-reader
+        student hears "Attach files" twice over and an unnamed editor between them (#2570).
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission,
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+
+        labels = [
+            form.fields["response_text" if "response_text" in form.fields else "response_file"]
+            .widget.attrs["aria-label"]
+            for form in formset.forms
+        ]
+        self.assertEqual(
+            labels,
+            ["Response to question 1", "Response to question 2", "Attach files for question 3"],
+        )
+
+    def test_init__file_aria_label_contains_its_visible_label(self):
+        """The file input's accessible name keeps the words of its visible label.
+
+        WCAG 2.5.3 (Label in Name) asks that a control's accessible name contain its visible
+        label text, so someone driving the page by voice can still say "attach files" to reach
+        it. An aria-label of "File for question 3" would read well but break that.
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission, question__type="file_upload",
+        )
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+        field = formset.forms[0].fields["response_file"]
+
+        self.assertIn(field.label.lower(), field.widget.attrs["aria-label"].lower())
+
+    def test_init__long_answer_and_file_aria_label_fallback_without_formset(self):
+        """Standalone forms (no numeric prefix, as for the formset's empty_form) fall back to a
+        generic name rather than erroring on the missing position."""
+        long_form = QuestionSubmissionForm(instance=self.long_answer)
+        file_form = QuestionSubmissionForm(instance=self.file_answer)
+
+        self.assertEqual(long_form.fields["response_text"].widget.attrs["aria-label"], "Response")
+        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach files")
+
+    def test_init__answer_fields_render_their_aria_label(self):
+        """The aria-label survives rendering, on the editor's wrapper and on the file input.
+
+        The long-answer editor's attributes are handed to summernote's init script rather than
+        written onto a tag, so this asserts on the call that applies them; the widget template
+        forwards aria-label from that wrapper onto the .note-editable the student focuses.
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission,
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+        long_html = str(formset.forms[1]["response_text"])
+        file_html = str(formset.forms[2]["response_file"])
+
+        self.assertIn("$wrap.attr('aria-label', 'Response to question 2');", long_html)
+        self.assertIn(".note-editable').attr('aria-label', ariaLabel)", long_html)
+        self.assertIn('aria-label="Attach files for question 3"', file_html)
 
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and

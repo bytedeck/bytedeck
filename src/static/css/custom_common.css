@@ -661,6 +661,12 @@ form > div.alert.alert-block.alert-danger {
     cursor: pointer;
 }
 
+/* A help icon that opens a popover: an <a> with no href gets no pointer of its own, so
+   nothing would suggest it can be clicked. */
+.bt-help-popover {
+    cursor: pointer;
+}
+
 .panel-top {
     margin-top: 15px;
 }
