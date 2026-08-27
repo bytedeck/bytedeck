@@ -12,7 +12,10 @@ set -e
 # Always operate from the repo root, regardless of the caller's CWD.
 cd "$(dirname "$0")/.."
 
+# Exported so wait-for-healthy.sh below acts on the same stack rather than
+# falling back to its own default.
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
+export COMPOSE
 
 # Reclaim disk before building so image layers and BuildKit cache left by earlier
 # deploys can't fill the host and fail the build mid-`pip install` ([Errno 28] No
@@ -112,6 +115,25 @@ $COMPOSE run --rm --no-deps web python src/manage.py collectstatic --noinput
 # owns the stack and still brings it back after a host reboot.
 sudo systemctl start bytedeck.com
 $COMPOSE up -d --remove-orphans
+
+# Assert the app actually came back, and fail the deploy if it did not. `up -d`
+# above returns once the containers are *created*, which is a much weaker claim
+# than "the deploy worked": a bad setting, a missing env var or an import error
+# in the deployed commit leaves uwsgi refusing to bind (`need-app = true`) and
+# nginx serving the maintenance page, and without this the script would go on
+# to print its logs and exit 0, so the Deploy job would go green over a site
+# that is down.
+#
+# Failing here does not roll anything back. It makes the failure loud, and
+# wait-for-healthy.sh puts the web log in the job output so the red run is
+# worth opening. Rolling back is issue #2346: a rollback means rebuilding from
+# an older commit, which is not something to do automatically.
+#
+# Invoked via the interpreter, not ./, for the reason deploy.yml gives for
+# invoking this script the same way: a lost exec bit in git would otherwise
+# fail the deploy with "Permission denied" for a reason that has nothing to do
+# with the deploy.
+sh production/wait-for-healthy.sh web
 
 # Show logs. Follow them when run interactively; in an automated deploy (no TTY,
 # e.g. the CI runner) print a recent snapshot and exit so the job can finish.
