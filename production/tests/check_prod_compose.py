@@ -22,13 +22,14 @@ LOG_SIZE = re.compile(r"^(\d+(?:\.\d+)?)(b|[kmg]b?)?$", re.IGNORECASE)
 
 
 def runs_as_root(user):
-    """Return whether a Compose `user:` value would run the container as root.
-
-    `user` is the rendered value, which Compose accepts as `UID[:GID]` or
-    `name[:group]`, so only the part before the first colon identifies the user
-    and `0:1000` is as much root as `0`. None means no override, which is not
-    root: the image's own USER applies, and that is asserted against the built
-    image by the "Application image" job in the workflow.
+    """
+    Determine whether a rendered Compose `user:` value explicitly selects root.
+    
+    Parameters:
+        user: A Compose user value such as `root`, `0`, or `0:1000`.
+    
+    Returns:
+        bool: `True` if the value specifies `root` or user ID `0`, `False` otherwise.
     """
     if user is None:
         return False
@@ -36,12 +37,13 @@ def runs_as_root(user):
 
 
 def command_text(command):
-    """Return a rendered Compose `command` as one searchable string.
-
-    Compose accepts a command as a string or as an argv list, and renders it as
-    whichever the file used, so a caller looking for a word in it has to handle
-    both: joining a string would put a space between every character. None (no
-    command, the image's own CMD applies) reads as the empty string.
+    """Normalize a Compose command into searchable text.
+    
+    Parameters:
+        command: A command represented as a string, argument list, or None.
+    
+    Returns:
+        A string containing the command text, or an empty string when no command is provided.
     """
     if command is None:
         return ""
@@ -51,11 +53,14 @@ def command_text(command):
 
 
 def log_size_is_bounded(size):
-    """Return whether a json-file `max-size` option actually bounds the log.
-
-    `size` is the rendered option value. Truthiness is not enough here, since
-    `"0"` and a typo'd size are both non-empty strings while neither bounds
-    anything, so the value has to parse as a positive Docker size.
+    """
+    Determine whether a rendered Docker logging size is a positive bounded value.
+    
+    Parameters:
+        size: The rendered `max-size` option value.
+    
+    Returns:
+        `True` if the value is a valid positive Docker size, `False` otherwise.
     """
     if size is None:
         return False
@@ -83,11 +88,11 @@ def render():
 
 
 def main():
-    """Assert every production invariant and report the outcome of each.
-
-    Deliberately evaluates all of them instead of stopping at the first failure,
-    so one run tells you everything that drifted. Returns the process exit
-    status: 1 if any assertion failed, 0 otherwise.
+    """
+    Validate all production Docker Compose invariants and report each result.
+    
+    Returns:
+    	int: 1 if any invariant fails, otherwise 0.
     """
     services = render().get("services", {})
     failures = []
