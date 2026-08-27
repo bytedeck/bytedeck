@@ -22,6 +22,7 @@ never add entries: write conforming tests instead.
 
 import ast
 import inspect
+import re
 from pathlib import Path
 
 from django.db.migrations.loader import MigrationLoader
@@ -117,10 +118,12 @@ LEGACY_DEPLOY_UNSAFE_MIGRATIONS = frozenset({
 })
 
 #: Written in a migration whose unsafe operation is deliberate and cannot hurt a deploy: a
-#: table nothing has ever queried in production, say. The marker exempts the file and must be
-#: accompanied by a comment saying which of those it is, since the whole point of the check is
-#: that "I am sure it is fine" is the reasoning that breaks a class mid-lesson.
-_DEPLOY_UNSAFE_ALLOWED_MARKER = "deploy-unsafe-ok"
+#: table nothing has ever queried in production, say. Spelled ``deploy-unsafe-ok: <reason>``,
+#: and the reason is required rather than conventional: the whole point of the check is that
+#: "I am sure it is fine" is the reasoning that breaks a class mid-lesson, so a bare marker
+#: exempts nothing. Matched anywhere in the file, since it belongs in a comment next to the
+#: operation it excuses.
+_DEPLOY_UNSAFE_ALLOWED_MARKER = re.compile(r"deploy-unsafe-ok:[ \t]*\S+")
 
 
 def _iter_project_migrations():
@@ -152,14 +155,40 @@ def _deploy_unsafe_operations(migration):
     """
     problems = []
     for operation in migration.operations:
-        name = type(operation).__name__
-        if name not in DEPLOY_UNSAFE_OPERATIONS:
-            continue
-        # Every one of these names a model, and all but DeleteModel name a field too.
-        target = getattr(operation, "model_name", None) or getattr(operation, "name", "?")
-        field = getattr(operation, "old_name", None) or getattr(operation, "name", None)
-        problems.append(f"{name} on {target}.{field}" if field and field != target else f"{name} on {target}")
+        problems.extend(_unsafe_within(operation))
     return problems
+
+
+def _unsafe_within(operation, prefix=""):
+    """Return the deploy-unsafe descriptions in ``operation``, looking inside wrappers.
+
+    ``SeparateDatabaseAndState`` is how CONTRIBUTING.md's two-release drop separates the
+    model change from the column change, so it needs opening rather than skipping. Only its
+    ``database_operations`` are examined: those touch real columns, while ``state_operations``
+    only tell Django the field is gone, which is the safe half and the whole point of release
+    one. A wrapper carrying a destructive operation in *both* halves is a plain destructive
+    migration wearing a hat, and is reported like one.
+
+    Args:
+        operation (Operation): the migration operation to inspect.
+        prefix (str): how to label a nested operation in the report.
+
+    Returns:
+        list[str]: one entry per offending operation, empty when there is nothing unsafe.
+    """
+    name = type(operation).__name__
+    if name == "SeparateDatabaseAndState":
+        problems = []
+        for inner in operation.database_operations:
+            problems.extend(_unsafe_within(inner, prefix="SeparateDatabaseAndState.database_operations -> "))
+        return problems
+    if name not in DEPLOY_UNSAFE_OPERATIONS:
+        return []
+    # Every one of these names a model, and all but DeleteModel name a field too.
+    target = getattr(operation, "model_name", None) or getattr(operation, "name", "?")
+    field = getattr(operation, "old_name", None) or getattr(operation, "name", None)
+    described = f"{name} on {target}.{field}" if field and field != target else f"{name} on {target}"
+    return [prefix + described]
 
 
 def _iter_test_modules():
@@ -257,7 +286,7 @@ class TestMigrationsSurviveTheDeployWindow(SimpleTestCase):
         for rel, migration, path in _iter_project_migrations():
             if rel in LEGACY_DEPLOY_UNSAFE_MIGRATIONS:
                 continue
-            if _DEPLOY_UNSAFE_ALLOWED_MARKER in path.read_text(encoding="utf-8"):
+            if _DEPLOY_UNSAFE_ALLOWED_MARKER.search(path.read_text(encoding="utf-8")):
                 continue
             problems = _deploy_unsafe_operations(migration)
             if problems:

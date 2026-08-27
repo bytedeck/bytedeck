@@ -158,16 +158,27 @@ traffic, that is real requests failing during a lesson.
 
    After this ships, nothing running mentions the column, but it is still there.
 
-2. **Release two.** Actually drop it, once no deployed version knows about it:
+2. **Release two.** Actually drop the column, once no deployed version knows about it.
+   This one has to be `RunSQL`, **not** another `RemoveField`:
 
    ```python
    operations = [
-       migrations.SeparateDatabaseAndState(
-           database_operations=[migrations.RemoveField(model_name="quest", name="old_field")],
-           state_operations=[],  # already gone from state in release one
+       migrations.RunSQL(
+           sql='ALTER TABLE "quest_manager_quest" DROP COLUMN "old_field";',
+           reverse_sql='ALTER TABLE "quest_manager_quest" ADD COLUMN "old_field" integer NULL;',
        ),
    ]
    ```
+
+   `RemoveField` resolves the field from the migration's *from-state* to work out what to
+   drop, and release one already took it out of that state, so a `RemoveField` here raises
+   `KeyError: 'old_field'` before it reaches the database. `RunSQL` reads no state at all,
+   which is exactly why it is the right tool for the half that is only a column change.
+
+   The unqualified table name is correct here: `migrate_schemas` runs each migration once
+   per tenant schema with the search path already set, so the statement drops the column in
+   every deck rather than only the public one. Write `reverse_sql` too, so the migration is
+   still reversible in development.
 
 A **rename** is the same shape with more steps: add the new column, write both for a
 release, backfill, switch reads to the new one, then drop the old one by the two steps
