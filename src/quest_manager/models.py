@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
+from django.db.models import BooleanField, Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
@@ -80,7 +80,7 @@ class CategoryManager(models.Manager):
     def all_published_with_importable_quests(self):
         """
         Returns a queryset of published campaigns (categories) in the library schema
-        that have at least one importable quest — meaning a quest that is published and not archived.
+        that have at least one importable quest: one that is published and not archived.
 
         Each returned campaign is annotated with:
         - quest_count: the number of importable quests in the campaign
@@ -112,7 +112,10 @@ class CategoryManager(models.Manager):
         # Exclude campaigns without any qualifying quests
         qs = qs.filter(quest_count__gt=0)
 
-        return qs
+        # The aggregate annotation above groups the query, and Django emits no ORDER BY at all
+        # for a grouped query, so Category.Meta.ordering is lost and the Library's campaigns
+        # tab comes up in whatever order Postgres finds them. Ask for the title back (#2624).
+        return qs.order_by('title')
 
 
 class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
@@ -409,6 +412,23 @@ class QuestQuerySet(models.QuerySet):
 
         # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
         return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
+
+    def with_is_expired(self):
+        """Annotate each quest with ``is_expired``, so a page can read it without a query each.
+
+        ``Quest.expired()`` reads this annotation when it is present, and falls back to a query
+        per quest when it is not, which a list of thirty pays thirty times over. The value comes
+        from ``not_expired()`` rather than from a second copy of the date and time rules, so the
+        two can never disagree about what expired means.
+
+        Returns:
+            QuerySet[Quest]: the same quests, each carrying a boolean ``is_expired``.
+        """
+        not_expired = self.model.objects.filter(id=OuterRef("id")).not_expired().values("id")
+
+        return self.annotate(
+            is_expired=ExpressionWrapper(~Exists(not_expired), output_field=BooleanField()),
+        )
 
     def published(self):
         """
