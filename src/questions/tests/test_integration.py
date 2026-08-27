@@ -240,9 +240,9 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         """An editor a student typed nothing into does not satisfy a required long answer.
 
         End to end, this is the symptom of #2560: the student clicks into the editor and
-        presses space or enter, summernote posts markup rather than an empty string, and the
-        quest used to complete with a blank answer. The marker's answer table renders that
-        markup through |safe as an empty cell, so nobody could tell it had happened.
+        presses space or enter, and summernote posts markup rather than an empty string.
+        Without this check the quest completes with a blank answer, and the marker's answer
+        table renders that markup through |safe as an empty cell, so nobody can tell.
         """
         self.long_question.required = True
         self.long_question.save()
