@@ -281,8 +281,8 @@ class CampaignColumnOverlapRenderTest(SimpleTestCase):
 
         Args:
             order_i (int): map_order of the intro campaign, which sits above the other two.
-            order_a (int): map_order of the left-hand path.
-            order_b (int): map_order of the right-hand path.
+            order_a (int): map_order of Path A.
+            order_b (int): map_order of Path B.
 
         Returns:
             list[dict]: one ``{'label', 'x1', 'x2', 'y1', 'y2'}`` per campaign.
@@ -330,12 +330,12 @@ class CampaignColumnOverlapRenderTest(SimpleTestCase):
         return found
 
     def test_campaign_columns__do_not_overlap_at_the_default_map_order(self):
-        """The default map_order still reorders campaigns, and must not stack them on each other.
+        """A map nobody has ordered comes out with its columns clear of each other.
 
-        Every campaign at map_order 0 falls back to the smallest quest id, and the intro campaign
-        holds the smallest of all, so it is sorted to the leftmost slot. The slot it vacates is the
-        middle one, between the two paths, which is only wide enough for a campaign standing alone
-        above them.
+        Every campaign at map_order 0 falls back to the smallest quest id, so a default map is
+        reordered too rather than left alone: this is what a deck that has never touched campaign
+        ordering gets. The intro campaign is a row of one, so it keeps the x dagre gave it, and
+        the two paths share a row and may trade places within it.
         """
         overlaps = self._overlaps(self._campaign_boxes())
         self.assertEqual(overlaps, [], "campaign columns overlap: " + "; ".join(overlaps))
