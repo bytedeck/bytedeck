@@ -1,6 +1,7 @@
 {% extends "quest_manager/base.html" %}
 {% block head_title %}Campaigns |{% endblock %}
-{% block head %}{% endblock %}
+{% comment %} `head` is left to quest_manager/base.html: it loads bootstrap-table's stylesheet,
+   without which this page's table has no sort indicators and no layout of its own (#2624). {% endcomment %}
 {% block content_first %}{% endblock %}
 {% block heading %}
   <i class="fa fa-compass pull-right"></i>

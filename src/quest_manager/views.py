@@ -20,7 +20,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, DateTimeField, F, ExpressionWrapper, fields, BooleanField, Count, Exists, IntegerField, OuterRef, Q, Sum, Value, When,
+    Case, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, Q, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -45,6 +45,7 @@ from utilities.html import is_empty_html
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
+
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -69,6 +70,12 @@ from .models import Quest, QuestSubmission, Category, CommonData
 from djcytoscape.models import CytoScape
 
 User = get_user_model()
+
+#: How a quest tab is ordered until a heading is clicked. `sort_order` is the teacher's own
+#: manual ordering (#1179), so it comes first and nothing else may override it; expired quests
+#: are grouped ahead of the rest, since they are the ones needing attention; and the name
+#: settles everything else, which is the column the reader is looking at (#2623).
+DEFAULT_QUEST_ORDERING = ('sort_order', '-is_expired', 'name')
 
 
 def is_staff_or_TA(user):
@@ -97,6 +104,16 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return self.request.path in [reverse('quest_manager:categories'), reverse('quest_manager:categories_available')]
 
     def get_queryset(self):
+        """The campaigns for the tab being viewed, counted, summed and ordered by title.
+
+        Which tab is showing decides whether the published or the unpublished campaigns are
+        listed, and the two annotations give the template its per-campaign figures without a
+        query each.
+
+        Returns:
+            QuerySet[Category]: the tab's campaigns, alphabetical by title, each carrying
+            `quest_count_annotated` and `xp_sum_annotated` for its current quests.
+        """
         queryset = super().get_queryset()
 
         if self.inactive_tab_active:
@@ -113,7 +130,10 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
             xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
         )
 
-        return queryset
+        # An aggregate annotation groups the query, and Django emits no ORDER BY at all for a
+        # grouped query, so Category.Meta.ordering is lost and Postgres returns the campaigns
+        # in whatever order it finds them. Ask for the title back explicitly (#2624).
+        return queryset.order_by('title')
 
     def get_context_data(self, *args, **kwargs):
         """Add the tab state and the campaign table's flags to the deck's campaign list.
@@ -175,14 +195,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # icon), tags, and calls quest.expired() (twice), so select_related the
         # campaign, prefetch tags and annotate is_expired to avoid a handful of
         # queries per quest. This mirrors the quest list view (see quest_list()).
-        quests = quests.select_related("campaign").prefetch_related("tags")
-        not_expired_subquery = quests.not_expired().values("id")
-        quests = quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
-        )
+        quests = quests.select_related("campaign").prefetch_related("tags").with_is_expired()
 
         kwargs['category_displayed_quests'] = quests
 
@@ -203,7 +216,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaigns list, since a new campaign has no
+            and `cancel_url`: the campaigns list, since a new campaign has no
             detail view to return to yet.
         """
         kwargs["heading"] = "Create New Campaign"
@@ -228,7 +241,7 @@ class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaign's detail view, so cancelling returns
+            and `cancel_url`: the campaign's detail view, so cancelling returns
             to the page the edit was started from (issue #1931).
         """
         kwargs["heading"] = "Update Campaign"
@@ -440,7 +453,7 @@ class QuestCopy(QuestCreate):
         duplication all run inside a single transaction, so a failure duplicating a question rolls
         back the whole copy rather than leaving an orphaned quest with no (or partial) questions.
 
-        Student answers are not copied — those belong to submissions, not to the quest. The
+        Student answers are not copied: those belong to submissions, not to the quest. The
         solution_file reference is shared with the source question, matching how the copied
         quest already shares its icon file.
         """
@@ -816,6 +829,25 @@ class QuestListViewTabTypes:
 @non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
+    """Render the quest tabs: available, in progress, completed, past, drafts and archived.
+
+    Which tab is shown comes from the path, or from `quest_id`, which opens the Available tab
+    with that quest expanded. Every tab is counted in full for its badge, then searched,
+    ordered and cut to a page in the database, so each of those three answers a question about
+    the whole tab rather than about the page the browser is holding (#2379, #2410, #2582).
+
+    A staff member sees every published quest; a student sees the ones available to them, plus
+    the repeatable ones still inside their cooldown window, shown as available again soon.
+
+    Args:
+        request (HttpRequest): the request, whose path picks the tab and whose query string
+            carries the page, the search term and the sort.
+        quest_id (int): a quest to open on the Available tab, or None for the tab alone.
+        template (str): the template to render.
+
+    Returns:
+        HttpResponse: the rendered quest list.
+    """
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
@@ -858,14 +890,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             .published()
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
-        )
-        # There was a looping call to quest.expired() which was causing a lot of queries.  Instead, annotate the value here
-        not_expired_subquery = available_quests.not_expired().values("id")
-        available_quests = available_quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
         )
     else:
         if request.user.profile.has_current_course:
@@ -938,8 +962,16 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     quests = search_quests(quests, search_term)
     num_matching_quests = quests.count()
 
+    # `is_expired` is read by the table (it colours an expired row) and by the ordering below,
+    # so every tab carries it, not only the staff Available one. Annotating beats the looping
+    # `quest.expired()` call it replaces, which cost a query per row.
+    quests = quests.with_is_expired()
+
     quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS)
-    quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    if quest_sort_column:
+        quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    else:
+        quests = quests.order_by(*DEFAULT_QUEST_ORDERING)
     quests = paginate(quests, page)
 
     # Used to explain why the "Available" tab is empty, if it is
@@ -1186,9 +1218,9 @@ def quest_user_status(request, quest_id):
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
-    #   active    — all active students (in a course or not); the superset
-    #   current   — students registered in a course in a semester that is open
-    #   my_blocks — students in a course block the current teacher teaches in one of those
+    #   active    : all active students (in a course or not); the superset
+    #   current   : students registered in a course in a semester that is open
+    #   my_blocks : students in a course block the current teacher teaches in one of those
     # The last two span every open semester, since a deck can run more than one at a time
     # (issue #2157 Phase 3): scoping them to the deck's default would count a student as
     # current and then leave them out of their own teacher's group.
@@ -2105,7 +2137,7 @@ def complete(request, submission_id):
         # stale page from before the quest's questions changed) can present fewer answer forms
         # than the quest has questions. Without this guard those omitted questions are never
         # validated yet still published (the blanket publish below), so required questions
-        # could be bypassed — completing/auto-approving a quest with nothing answered. Require
+        # could be bypassed, completing or auto-approving a quest with nothing answered. Require
         # the POST to cover exactly the quest's current questions; otherwise bounce back to a
         # freshly-built page that shows them all.
         expected_ids = set(draft_rows.values_list("pk", flat=True))

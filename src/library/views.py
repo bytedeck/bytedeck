@@ -606,11 +606,14 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     def get_sort(self):
         """The column the list is ordered by and its direction, from the `sort` parameter.
 
+        Falls back to the quest name, so the Library's quests tab comes up in the order a
+        reader browsing it expects, and matches the deck's own quest tabs (#2623).
+
         Returns:
-            tuple[str, bool]: the column key, '' when none applies, and whether it was
+            tuple[str, bool]: the column key, 'name' when none applies, and whether it was
             asked for in reverse.
         """
-        return resolve_sort(self.request, self.SORT_COLUMNS)
+        return resolve_sort(self.request, self.SORT_COLUMNS, default='name')
 
     def sort_library_quests(self, quests, column, descending):
         """Order the quests by the chosen column, before the page is cut from them.
