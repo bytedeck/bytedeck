@@ -68,6 +68,26 @@ class CategoryManagerTests(LibraryTenantTestCaseMixin):
             self.assertEqual(category.quest_count, 1)
             self.assertEqual(category.xp_sum, 100)
 
+    def test_all_published_with_importable_quests__ordered_by_title(self):
+        """The Library's campaigns arrive in alphabetical order (#2624).
+
+        The aggregate annotations group the query, and Django emits no ORDER BY at all for a
+        grouped query, so `Category.Meta.ordering` is dropped and the database is free to
+        return the rows however it finds them. The campaigns are created here in an order
+        that is not alphabetical, so a queryset that lost its ordering fails this.
+        """
+        with library_schema_context():
+            Quest.objects.all().delete()
+            Category.objects.all().delete()
+
+            for title in ("Zebra Robotics", "Intro to Python", "Animation", "Music Production"):
+                campaign = baker.make(Category, title=title, published=True)
+                baker.make(Quest, campaign=campaign, published=True, archived=False, xp=10)
+
+            titles = list(Category.objects.all_published_with_importable_quests().values_list('title', flat=True))
+
+        self.assertEqual(titles, sorted(titles))
+
     def test_all_published_with_importable_quests__excludes_categories_without_importable_quests(self):
         """
         Ensures that published campaigns with no importable quests are excluded

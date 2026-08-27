@@ -40,7 +40,7 @@ from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 
 User = get_user_model()
@@ -457,6 +457,27 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
+
+    def test_submission_view__both_forms_warn_about_unsaved_changes(self):
+        """The student's form and the marker's form opt into the unsaved-changes guard (#2572).
+
+        Answers, the comment box and marking feedback all sit in a form that only reaches the
+        server on a submit or the 60-second autosave, so leaving the page in between loses
+        whatever was typed since. `data-warn-unsaved` is the attribute the site-wide
+        warn-unsaved-changes.js binds to.
+
+        Matched inside a form tag, not anywhere on the page: base.html names the attribute in
+        the HTML comment above the script, so a plain substring assertion passes on every page
+        in the site whether or not any form opted in.
+        """
+        guarded_form = r"<form[^>]*\sdata-warn-unsaved"
+        url = reverse('quests:submission', args=[self.sub1.pk])
+
+        self.client.force_login(self.test_student1)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
+
+        self.client.force_login(self.test_teacher)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
 
     def test_submission_view__quest_quick_reply_button_shown_when_set(self):
         """When a quest has quick_reply text, staff reviewing a submission of it get a quest-specific quick-reply button (#161)."""
@@ -3633,6 +3654,47 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         # should now see the quest
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
 
+    def test_quest_list__default_order_is_sort_order_then_expired_then_name(self):
+        """A quest tab comes up in the teacher's manual order, expired first, then by name (#2623).
+
+        Each key earns its place: `sort_order` is the manual ordering a teacher sets on the
+        quest form, so nothing may override it; expired quests are the ones needing attention,
+        so they group ahead of the rest; and the name settles everything else, which is what
+        makes the bulk of a deck read alphabetically since almost every quest is `sort_order` 0.
+
+        Two of the names cut against the key that decides their place, so dropping that key
+        reorders the list: "Aardvark" would lead on name alone, and its `sort_order` sends it
+        last; "Zulu" would trail on name alone, and being expired brings it first. "Alpha" and
+        "Bravo" tie on both of those, so the name is the only thing separating them.
+        """
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Aardvark", sort_order=9)
+        baker.make(Quest, name="Zulu", date_expired=date(2020, 1, 1))  # in the past: expired
+        baker.make(Quest, name="Bravo", date_expired=date(2030, 1, 1))  # in the future: not yet
+        baker.make(Quest, name="Alpha")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(
+            [quest.name for quest in response.context['quests']], ["Zulu", "Alpha", "Bravo", "Aardvark"])
+        # no single heading owns this order, so none of them claims to
+        self.assertEqual(response.context['quest_sort_column'], '')
+        self.assertFalse(response.context['quest_sort_descending'])
+
+    def test_quest_list__a_chosen_sort_still_wins_over_the_default(self):
+        """Clicking a column heading orders by it, so the default is only a starting point."""
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Alpha", xp=30)
+        baker.make(Quest, name="Bravo", xp=10)
+        baker.make(Quest, name="Charlie", xp=20)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'), {'sort': 'xp'})
+
+        self.assertEqual([quest.name for quest in response.context['quests']], ["Bravo", "Charlie", "Alpha"])
+        self.assertEqual(response.context['quest_sort_column'], 'xp')
+
     def test_quest_list__student_sees_quests_available_outside_course(self):
         """A quest flagged available_outside_course appears for a student not in a course."""
         self.client.force_login(self.test_student)
@@ -4186,6 +4248,46 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:categories'))
         self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
+
+    def test_CategoryList_view__lists_campaigns_in_alphabetical_order(self):
+        """The campaign list comes up sorted by title (#2624).
+
+        The list annotates a quest count and an XP sum, and an aggregate annotation groups the
+        query, for which Django emits no ORDER BY at all: `Category.Meta.ordering` is dropped
+        and the database returns the rows however it finds them. These are created in an order
+        that is not alphabetical, so a queryset that lost its ordering fails this.
+        """
+        for title in ("Zebra Robotics", "Intro to Python", "Animation", "Music Production"):
+            baker.make(Category, title=title, published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        titles = [campaign.title for campaign in response.context['object_list']]
+        self.assertEqual(titles, sorted(titles))
+
+    def test_CategoryList_view__loads_the_bootstrap_table_stylesheet(self):
+        """The campaigns page keeps the stylesheet its table is styled by (#2624).
+
+        The page used to blank the `head` block it inherits, which is where
+        `quest_manager/base.html` loads bootstrap-table's CSS. Without it the headings carry
+        the sortable classes but nothing draws the arrow or reserves room for it, so the table
+        offered a sort with no way to see which column it was on.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, 'bootstrap-table-1.20.2.min.css')
+
+    def test_CategoryList_view__table_names_the_column_it_is_sorted_by(self):
+        """The campaigns table declares its default sort, so a heading shows the arrow (#2624)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, "data-sort-name='title'")
+        self.assertContains(response, "data-sort-order='asc'")
 
     def test_CategoryList_view__shows_the_decks_own_campaign_actions(self):
         """The deck's campaign list offers the local actions (details, edit, delete), not the

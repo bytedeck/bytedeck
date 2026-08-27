@@ -1,4 +1,5 @@
 import html
+import os
 import re
 
 from django import template
@@ -18,6 +19,30 @@ _TYPE_ICONS = {
     QuestionType.LONG_ANSWER: "fa-align-left",
     QuestionType.FILE_UPLOAD: "fa-paperclip",
 }
+
+
+@register.filter
+def is_displayable_svg(value):
+    """Whether a stored file is an SVG a page can safely show through an ``<img>``.
+
+    An SVG reaches the site only as an answer to a question whose teacher ticked the
+    script-capable opt-in, and it is never linked at its storage URL, because navigating to one
+    runs any script it carries (#2559). Loaded as an image it is safe: browsers run no script,
+    no external reference and no interactivity in SVG-as-image mode, whatever the file
+    contains. So a graphic design student's artwork can still be looked at rather than only
+    downloaded.
+
+    ``.svgz`` is excluded deliberately: it is gzipped, and only renders where the storage
+    serves it with ``Content-Encoding: gzip``, which is not something this app controls.
+
+    Args:
+        value: a stored file (any object whose ``name`` is its path), or None.
+
+    Returns:
+        bool: True for a file named ``.svg``.
+    """
+    name = getattr(value, "name", "") or ""
+    return os.path.splitext(name.lower())[1] == ".svg"
 
 
 @register.filter
@@ -80,8 +105,9 @@ def unwrap_p(value):
     The Summernote editor wraps even one line of text in a ``<p>``; nesting that block inside an
     inline context (``<small>``, ``<span>``) makes the browser reparent it onto a new line, so
     removing the wrapper is what actually keeps it inline. Multi-paragraph content (an inner
-    ``<p>``) is returned unchanged. The value is assumed already sanitized — these fields are
-    teacher-authored and were previously rendered with ``|safe`` — so the result is marked safe.
+    ``<p>``) is returned unchanged. The values this runs on (a question's instructions and its
+    marker notes) are staff-authored, through the teacher's own question form, so their HTML is
+    trusted the way the rest of a quest's rich text is and the result is marked safe.
     """
     if not value:
         return value
