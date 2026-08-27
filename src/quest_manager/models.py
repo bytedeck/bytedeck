@@ -9,7 +9,7 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
-from django.db.models import Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
+from django.db.models import BooleanField, Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
 from django.db.models.functions import Greatest
 from django.urls import reverse
 from django.utils import timezone
@@ -412,6 +412,23 @@ class QuestQuerySet(models.QuerySet):
 
         # Remove quests with no expiry date AND past expiry time (i.e. daily expiration at set time)
         return qs_date.exclude(Q(date_expired=None) & Q(time_expired__lt=now_local.time()))
+
+    def with_is_expired(self):
+        """Annotate each quest with ``is_expired``, so a page can read it without a query each.
+
+        ``Quest.expired()`` reads this annotation when it is present, and falls back to a query
+        per quest when it is not, which a list of thirty pays thirty times over. The value comes
+        from ``not_expired()`` rather than from a second copy of the date and time rules, so the
+        two can never disagree about what expired means.
+
+        Returns:
+            QuerySet[Quest]: the same quests, each carrying a boolean ``is_expired``.
+        """
+        not_expired = self.model.objects.filter(id=OuterRef("id")).not_expired().values("id")
+
+        return self.annotate(
+            is_expired=ExpressionWrapper(~Exists(not_expired), output_field=BooleanField()),
+        )
 
     def published(self):
         """

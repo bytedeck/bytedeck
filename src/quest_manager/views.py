@@ -20,7 +20,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, DateTimeField, F, ExpressionWrapper, fields, BooleanField, Count, Exists, IntegerField, OuterRef, Q, Sum, Value, When,
+    Case, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, Q, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -45,6 +45,7 @@ from utilities.html import is_empty_html
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
+
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -69,6 +70,12 @@ from .models import Quest, QuestSubmission, Category, CommonData
 from djcytoscape.models import CytoScape
 
 User = get_user_model()
+
+#: How a quest tab is ordered until a heading is clicked. `sort_order` is the teacher's own
+#: manual ordering (#1179), so it comes first and nothing else may override it; expired quests
+#: are grouped ahead of the rest, since they are the ones needing attention; and the name
+#: settles everything else, which is the column the reader is looking at (#2623).
+DEFAULT_QUEST_ORDERING = ('sort_order', '-is_expired', 'name')
 
 
 def is_staff_or_TA(user):
@@ -188,14 +195,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # icon), tags, and calls quest.expired() (twice), so select_related the
         # campaign, prefetch tags and annotate is_expired to avoid a handful of
         # queries per quest. This mirrors the quest list view (see quest_list()).
-        quests = quests.select_related("campaign").prefetch_related("tags")
-        not_expired_subquery = quests.not_expired().values("id")
-        quests = quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
-        )
+        quests = quests.select_related("campaign").prefetch_related("tags").with_is_expired()
 
         kwargs['category_displayed_quests'] = quests
 
@@ -891,14 +891,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
         )
-        # There was a looping call to quest.expired() which was causing a lot of queries.  Instead, annotate the value here
-        not_expired_subquery = available_quests.not_expired().values("id")
-        available_quests = available_quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
-        )
     else:
         if request.user.profile.has_current_course:
             available_quests = Quest.objects.get_available(request.user, remove_hidden)
@@ -970,12 +962,16 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     quests = search_quests(quests, search_term)
     num_matching_quests = quests.count()
 
-    # Sorted by name unless a heading was clicked. Quest.Meta.ordering leads with sort_order
-    # and the expiry date, none of which this table shows, so a deck where some quests carry
-    # an expiry gets those first and the rest alphabetically after them, which reads as no
-    # order at all (#2623). The name is the column the reader is looking at.
-    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS, default='name')
-    quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    # `is_expired` is read by the table (it colours an expired row) and by the ordering below,
+    # so every tab carries it, not only the staff Available one. Annotating beats the looping
+    # `quest.expired()` call it replaces, which cost a query per row.
+    quests = quests.with_is_expired()
+
+    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS)
+    if quest_sort_column:
+        quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    else:
+        quests = quests.order_by(*DEFAULT_QUEST_ORDERING)
     quests = paginate(quests, page)
 
     # Used to explain why the "Available" tab is empty, if it is

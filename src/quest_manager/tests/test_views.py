@@ -3654,25 +3654,32 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         # should now see the quest
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
 
-    def test_quest_list__available_tab_is_sorted_by_name(self):
-        """The quest tabs come up in alphabetical order (#2623).
+    def test_quest_list__default_order_is_sort_order_then_expired_then_name(self):
+        """A quest tab comes up in the teacher's manual order, expired first, then by name (#2623).
 
-        `Quest.Meta.ordering` leads with `sort_order` and the expiry date, none of which the
-        table shows, so a deck where some quests carry either gets an order the reader cannot
-        account for. These three are created so that the model's own ordering would put them
-        in exactly the opposite order to their names.
+        Each key earns its place: `sort_order` is the manual ordering a teacher sets on the
+        quest form, so nothing may override it; expired quests are the ones needing attention,
+        so they group ahead of the rest; and the name settles everything else, which is what
+        makes the bulk of a deck read alphabetically since almost every quest is `sort_order` 0.
+
+        Two of the names cut against the key that decides their place, so dropping that key
+        reorders the list: "Aardvark" would lead on name alone, and its `sort_order` sends it
+        last; "Zulu" would trail on name alone, and being expired brings it first. "Alpha" and
+        "Bravo" tie on both of those, so the name is the only thing separating them.
         """
         Quest.objects.all().delete()
-        baker.make(Quest, name="Alpha", sort_order=9)
-        baker.make(Quest, name="Bravo", date_expired=date(2030, 1, 2))
-        baker.make(Quest, name="Charlie", date_expired=date(2030, 1, 1))
+        baker.make(Quest, name="Aardvark", sort_order=9)
+        baker.make(Quest, name="Zulu", date_expired=date(2020, 1, 1))  # in the past: expired
+        baker.make(Quest, name="Bravo", date_expired=date(2030, 1, 1))  # in the future: not yet
+        baker.make(Quest, name="Alpha")
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('quests:quests'))
 
-        self.assertEqual([quest.name for quest in response.context['quests']], ["Alpha", "Bravo", "Charlie"])
-        # and the heading says so, rather than leaving the reader to work the order out
-        self.assertEqual(response.context['quest_sort_column'], 'name')
+        self.assertEqual(
+            [quest.name for quest in response.context['quests']], ["Zulu", "Alpha", "Bravo", "Aardvark"])
+        # no single heading owns this order, so none of them claims to
+        self.assertEqual(response.context['quest_sort_column'], '')
         self.assertFalse(response.context['quest_sort_descending'])
 
     def test_quest_list__a_chosen_sort_still_wins_over_the_default(self):
@@ -5585,11 +5592,7 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
             self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
 
     def test_quest_list__a_column_this_tab_does_not_offer_is_ignored(self):
-        """A stale or hand-made `?sort=` falls back to the tab's default column, not an error.
-
-        The fallback is the name, the same column an unsorted visit lands on, so the heading
-        still says what the list is ordered by rather than showing no column at all (#2623).
-        """
+        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
         default_order = self._names()
 
         for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
@@ -5598,7 +5601,7 @@ class QuestTabListingTests(ByteDeckTenantTestCase):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual([q.name for q in response.context['quests']], default_order)
-                self.assertEqual(response.context['quest_sort_column'], 'name')
+                self.assertEqual(response.context['quest_sort_column'], '')
 
     def test_quest_list__the_table_carries_no_client_side_search_or_sort(self):
         """The tab's searching and ordering are the server's, so the table asks for neither.
