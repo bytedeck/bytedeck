@@ -88,9 +88,18 @@ $COMPOSE run --rm --no-deps web python src/manage.py migrate_schemas --executor=
 $COMPOSE run --rm --no-deps web python src/manage.py collectstatic --noinput
 
 # Swap the containers. `up -d` recreates only the services whose image or
-# configuration changed, so redis and nginx keep running and what a visitor
-# sees is the few seconds between the old web stopping and the new one binding
+# configuration changed, which on a typical deploy is the three app services.
+# redis is untouched, so queued Celery tasks survive, and what a visitor sees
+# is the few seconds between the old web stopping and the new one binding
 # :8000, covered by nginx's maintenance page.
+#
+# nginx usually keeps running through that, but not always: the build above
+# passes --pull, so when the upstream nginx:stable tag has moved, nginx's image
+# changes too and it is recreated with the rest, unbinding 443 for about a
+# second. That second is a connection error rather than the maintenance page,
+# so this is not a seamless deploy; it is bounded, and it only happens when the
+# base image actually moved, where the unit restart described next unbinds 443
+# on every deploy.
 #
 # Restarting the systemd unit instead would run its ExecStop, `docker compose
 # down`, which removes every container: nginx included, so for part of the

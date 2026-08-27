@@ -56,7 +56,7 @@ Services started in production:
 
 | Service       | What it does                                                                 |
 | ------------- | --------------------------------------------------------------------------- |
-| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared`, `migrate_schemas --executor=multiprocessing`, and `collectstatic`. The port is **not** published to the host: nginx reaches it over the internal `frontend-network`, so TLS and the host check can't be bypassed. |
+| `web`         | Django served by **uwsgi** (`uwsgi --ini uwsgi.aws.ini`), listening on `:8000`. On start it runs `migrate_schemas --shared` and `migrate_schemas --executor=multiprocessing`, so a cold start reaches a migrated database on its own; `collectstatic` is a deploy step (`server-update.sh`), not a startup one. The port is **not** published to the host: nginx reaches it over the internal `frontend-network`, so TLS and the host check can't be bypassed. |
 | `celery`      | Celery worker (`-c 3 -Q default`) for background tasks.                      |
 | `celery-beat` | Celery beat scheduler (`DatabaseScheduler`) for periodic tasks.             |
 | `nginx`       | Reverse proxy / TLS terminator, built from `./nginx`. Mounts `/etc/letsencrypt`. Publishes host `443 -> 8088` and `80 -> 8080` (the container listens on high ports because it runs as a non-root user). |
@@ -87,7 +87,8 @@ visible, not quietly loop-restart. **Healthchecks** are shared (defined in
 `docker-compose.yml`, so development gets them too):
 
 - `web`: TCP connect to the uwsgi socket (`:8000`), with a long `start_period`
-  to cover the `migrate_schemas`/`collectstatic` startup run.
+  to cover the `migrate_schemas` startup run, which on a cold start with
+  migrations to apply walks every tenant schema.
 - `celery`: `celery inspect ping` against the worker over the broker — catches
   hung/disconnected workers, not just dead processes.
 - `celery-beat`: process check (`pgrep`) — beat has no ping command, and a dead
@@ -157,9 +158,17 @@ git pull                      # master (prod) or staging (staging host)
    it out of the window when nginx has no backend. A migration that fails stops
    the deploy here, with the previous version still up.
 6. `docker compose ... up -d --remove-orphans` to swap the containers. Compose
-   recreates only what changed, so `redis` and `nginx` keep running and only
-   the app services are replaced; the outage a visitor sees is the few seconds
-   between the old `web` stopping and the new one binding `:8000`.
+   recreates only the services whose image or configuration changed, which on
+   a typical deploy is the three app services; `redis` is untouched, so queued
+   Celery tasks survive. What a visitor sees is the few seconds between the
+   old `web` stopping and the new one binding `:8000`.
+
+   `nginx` usually keeps running too, but not always: step 1 builds it with
+   `--pull`, so when the upstream `nginx:stable` tag has moved its image
+   changes and Compose recreates it as well, unbinding 443 for about a
+   second. That is a connection error rather than the maintenance page, so a
+   deploy is not strictly seamless. It is bounded and rare (only when the
+   base image moved), against the `down` always doing it on every deploy.
 7. Tail the compose logs when run interactively; print a recent snapshot and
    exit when run non-interactively (e.g. from the deploy runner).
 
