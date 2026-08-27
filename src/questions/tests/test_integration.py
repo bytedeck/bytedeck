@@ -1242,7 +1242,7 @@ class CompleteSecurityTest(QuestionSubmissionFlowTestBase):
         )
 
     def test_autosave__sanitizes_script_on_write(self):
-        """A hostile draft answer is neutralized as it is stored, not just on the form path —
+        """A hostile draft answer is neutralized as it is stored, not just on the form path:
         the raw value would otherwise be published verbatim and rendered with |safe."""
         row = sync_draft_question_submissions(self.submission).get(question=self.short_question)
         self.autosave({
