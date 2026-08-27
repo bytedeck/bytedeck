@@ -115,6 +115,76 @@ When contributing to this repo, you need to keep in mind its multi-tenant archit
 * **SiteConfig**: To get the SiteConfig singleton of a specific tenant, use the class method `SiteConfig.get()`
 * **Migrations**: Do NOT use the standard migrate command! If for some reason you need to manually migrate, use the `migrate_schemas` command instead (you can find docs for this and other management commands [here](https://django-tenants.readthedocs.io/en/latest/use.html?highlight=migrations#management-commands))
 
+### Migrations and the deploy window
+
+A deploy applies migrations from the **new** image while the **previous** containers are
+still serving, so that the slow part of a deploy happens with the site up rather than down
+(see `production/server-update.sh`). For the seconds between the two, the outgoing code is
+querying the new schema.
+
+Django `SELECT`s every concrete field of a model by default. So a column the outgoing
+version still declares on its model class, and no longer finds in the database, makes its
+ordinary reads raise `ProgrammingError` until it is replaced. With six uwsgi workers on live
+traffic, that is real requests failing during a lesson.
+
+**Safe in one release:**
+
+* Adding a nullable column, or one with a database default. The outgoing version does not
+  know about it and never mentions it.
+* Adding a model, an index, or a constraint that existing rows already satisfy.
+* Backfilling data with a `RunPython` that only writes columns the outgoing version can
+  already cope with.
+
+**Not safe in one release**, and caught by the guard in
+`src/hackerspace_online/tests/test_conventions.py`:
+
+* `RemoveField`, `DeleteModel`: the outgoing version still selects it.
+* `RenameField`, `RenameModel`: the same, and there is no ordering that avoids it. A rename
+  is a drop and an add.
+
+**How to drop a column safely**, over two releases:
+
+1. **Release one.** Remove the field from `models.py`, but keep the column. Write the
+   migration by hand so it changes Django's *state* without touching the database:
+
+   ```python
+   operations = [
+       migrations.SeparateDatabaseAndState(
+           database_operations=[],  # the column stays exactly as it is
+           state_operations=[migrations.RemoveField(model_name="quest", name="old_field")],
+       ),
+   ]
+   ```
+
+   After this ships, nothing running mentions the column, but it is still there.
+
+2. **Release two.** Actually drop it, once no deployed version knows about it:
+
+   ```python
+   operations = [
+       migrations.SeparateDatabaseAndState(
+           database_operations=[migrations.RemoveField(model_name="quest", name="old_field")],
+           state_operations=[],  # already gone from state in release one
+       ),
+   ]
+   ```
+
+A **rename** is the same shape with more steps: add the new column, write both for a
+release, backfill, switch reads to the new one, then drop the old one by the two steps
+above. If that sounds like a lot for a tidier name, it is: that is the argument for leaving
+the name alone.
+
+**Tightening a column** (`AlterField` to `null=False`, or a narrower type) is unsafe for the
+mirror reason: the outgoing version still writes the old shape. Add the constraint in a later
+release than the code that stops violating it. This one is *not* automated, because most
+`AlterField`s are harmless and a check that cries wolf on the common case only teaches people
+to skip it.
+
+**If a migration genuinely cannot hurt a deploy** (a table nothing has ever queried in
+production, say), put a `deploy-unsafe-ok` marker in the migration file with a comment saying
+which of those it is. Do not add entries to `LEGACY_DEPLOY_UNSAFE_MIGRATIONS`: that list is
+the migrations that predate the check.
+
 ### Use a Consistent Coding Style
 We use [ruff](https://docs.astral.sh/ruff/) (lint only) with a few exclusions -- see `[tool.ruff]` in [pyproject.toml](pyproject.toml).  These will be enforced by the pre-commit hook.
 

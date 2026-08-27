@@ -85,6 +85,7 @@ Semi-isolated approach: one database, one schema per tenant. Tenants are identif
 * **Tests**: tests that use models must inherit from `TenantTestCase` and use `TenantClient`.
 * **SiteConfig**: each tenant has a `SiteConfig` singleton (per-deck settings); always fetch it with `SiteConfig.get()`.
 * **Migrations**: never use the standard `migrate` command: use `migrate_schemas`. To run a shell/management command against tenants, use `tenant_command` (e.g. `python src/manage.py tenant_command shell`).
+* **Deploy-safe migrations**: a deploy applies migrations from the new image while the previous containers still serve, so a migration that drops or renames a column breaks the outgoing version for those seconds. Adding a nullable column is fine; `RemoveField`, `DeleteModel`, `RenameField` and `RenameModel` are not, and `test_conventions.py` fails the build on a new one. Dropping a column takes two releases (`SeparateDatabaseAndState` first, the real drop second): the recipe is in CONTRIBUTING.md under "Migrations and the deploy window".
 
 ### Async tasks
 
