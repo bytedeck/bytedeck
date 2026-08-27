@@ -52,7 +52,12 @@ while :; do
     # One inspect for both facts, so a poll is a single round trip. `none` for
     # health covers a service with no healthcheck declared, where the container
     # running is the strongest signal available.
-    container=$($COMPOSE ps -q "$service" 2>/dev/null | head -n 1)
+    # --all because `docker compose ps` lists only running containers by default,
+    # and a container that has exited is precisely the case worth catching early:
+    # without it the lookup comes back empty and the fail-fast below never sees
+    # the exited state, so a dead container costs the whole timeout instead of
+    # one poll.
+    container=$($COMPOSE ps --all -q "$service" 2>/dev/null | head -n 1)
     if [ -n "$container" ]; then
         report=$(docker inspect \
             -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \

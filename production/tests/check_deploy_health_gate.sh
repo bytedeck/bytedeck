@@ -27,7 +27,17 @@ cat > "$STUB_DIR/docker" <<'STUB'
 #!/usr/bin/env bash
 for arg in "$@"; do
     case $arg in
-        ps)      echo "${CONTAINER_ID-}"; exit 0 ;;
+        ps)
+            # Real `docker compose ps` lists only RUNNING containers unless --all is
+            # passed, so this has to as well. A stub that always answers cannot tell
+            # whether the caller remembered the flag, and the fail-fast path for an
+            # exited container is exactly the one that needs it.
+            stub_state=$(head -n 1 "$STATE_SEQUENCE" | cut -d' ' -f1)
+            case " $* " in
+                *" --all "*|*" -a "*)                  echo "${CONTAINER_ID-}" ;;
+                *) [ "$stub_state" = "running" ] &&    echo "${CONTAINER_ID-}" ;;
+            esac
+            exit 0 ;;
         logs)    echo "(stub log line)"; exit 0 ;;
         inspect) 
             line=$(head -n 1 "$STATE_SEQUENCE")
