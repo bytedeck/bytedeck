@@ -35,20 +35,12 @@ def generate_test_png_file():
 
 
 class PortfolioViewTests(TempMediaRootMixin, ByteDeckTenantTestCase):
-    """ url(r'^$', views.PortfolioList.as_view(), name='list'),
-        url(r'^public/$', views.public_list, name='public_list'),
-        url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
-        url(r'^(?P<pk>[0-9]+)/$', views.detail, name='detail'),
-        url(r'^detail/$', views.detail, name='current_user'),
-        url(r'^(?P<uuid>[0-9a-z-]+)/$', views.public, name='public'),
-        # url(r'^(?P<pk>[0-9]+)/update/$', views.PortfolioUpdate.as_view(), name='update'),
-        url(r'^(?P<pk>[0-9]+)/edit/$', views.edit, name='edit'),
+    """Every view in `portfolios.urls`: who may reach each one, and what it does.
 
-        url(r'^art/(?P<pk>[0-9]+)/create/$', views.ArtworkCreate.as_view(), name='art_create'),
-
-        url(r'^art/create/(?P<doc_id>[0-9]+)$', views.art_add, name='art_add'),
-        url(r'^art/(?P<pk>[0-9]+)/delete/$', views.ArtworkDelete.as_view(), name='art_delete'),
-        url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
+    A portfolio is a student's own page, so most of what these cover is who is allowed where:
+    the owner, a teacher, another student, and an anonymous visitor holding the public UUID.
+    The artwork routes are the other half, adding a file to a portfolio and editing or
+    deleting what is already in one.
     """
 
     @classmethod
@@ -294,9 +286,9 @@ class PortfolioViewTests(TempMediaRootMixin, ByteDeckTenantTestCase):
     def test_art_add_answer__student_adds_their_own_image_answer(self):
         """A student's image answer to a file_upload question goes into their portfolio (#2573).
 
-        Before this, the identical file attached to the comment box one section lower had an
-        Add to Portfolio button and the answer had none, so asking for work as a question
-        quietly removed the only route into a portfolio.
+        `art_add` takes a comment attachment, so without this route the identical file handed
+        in as an answer has nowhere to go, and asking for work as a question is the one way of
+        handing it in that keeps it out of a portfolio.
         """
         answer = self.answer_with_file(generate_test_png_file())
         self.client.force_login(self.test_student)

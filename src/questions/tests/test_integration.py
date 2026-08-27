@@ -894,9 +894,9 @@ class AnswerPortfolioButtonTest(TempMediaRootMixin, QuestionSubmissionFlowTestBa
     def test_display__image_answer_offers_add_to_portfolio(self):
         """An image answer gets the button, linking the route that adds it (#2573).
 
-        Without it, the same picture attached to the comment box one section lower had an
-        Add to Portfolio button and the answer had none, so asking for the work as a question
-        removed the only path into a portfolio.
+        The same picture attached to the comment box one section lower offers this button, so
+        an answer offering none would make asking for the work as a question the one way of
+        handing it in that keeps it out of a portfolio.
         """
         self.publish_answers()
         answer = self.store_answer_file(
