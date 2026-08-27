@@ -1,8 +1,12 @@
 #!/bin/sh
-# Build the images and (re)start the app via its systemd unit.
+# Build the images, migrate, and swap the running containers for the new ones.
 #
 # Run from anywhere, either manually on the host or automatically by the Deploy
 # workflow (.github/workflows/deploy.yml) on a self-hosted runner.
+#
+# Ordered so the slow work happens while the previous version is still serving:
+# build, then migrate and collect static from the new image, and only then
+# replace the containers. What a visitor can see is the last step.
 set -e
 
 # Always operate from the repo root, regardless of the caller's CWD.
@@ -55,11 +59,59 @@ sudo cp production/systemd/redis-host-setup.service /etc/systemd/system/redis-ho
 # Load the new systemd modules
 sudo systemctl daemon-reload
 
-# Ensure the services are enabled, apply the Redis host tuning, then restart the app
+# Ensure the services are enabled and apply the Redis host tuning
 sudo systemctl enable redis-host-setup.service
 sudo systemctl restart redis-host-setup.service
 sudo systemctl enable bytedeck.com.service
-sudo systemctl restart bytedeck.com
+
+# Migrate and publish static files from the NEW image while the OLD containers
+# are still serving. Both steps are slow -- migrate_schemas walks every tenant
+# schema, and collectstatic uploads to S3 over the network -- and doing them
+# here rather than inside the replacement web container is what keeps them out
+# of the window when nginx has no backend to talk to.
+#
+# `run --rm --no-deps` starts a one-off container from the image built above,
+# on the same networks, and leaves every running service alone: --no-deps so it
+# cannot recreate redis underneath the containers currently using it, --rm so
+# these do not pile up as exited containers. The database is RDS, reached over
+# the network, so a one-off container talks to exactly the database the running
+# app is using.
+#
+# A migration that fails now stops the deploy with the previous version still
+# serving, instead of replacing it and leaving nginx on the maintenance page.
+# The trade is that each migration has to be readable by the code it replaces
+# for the seconds between here and the switch below, which is the ordinary
+# expand-then-contract discipline for an online schema change: add and backfill
+# in one release, stop reading the old shape in the next, drop it in a third.
+$COMPOSE run --rm --no-deps web python src/manage.py migrate_schemas --shared
+$COMPOSE run --rm --no-deps web python src/manage.py migrate_schemas --executor=multiprocessing
+$COMPOSE run --rm --no-deps web python src/manage.py collectstatic --noinput
+
+# Swap the containers. `up -d` recreates only the services whose image or
+# configuration changed, which on a typical deploy is the three app services.
+# redis is untouched, so queued Celery tasks survive, and what a visitor sees
+# is the few seconds between the old web stopping and the new one binding
+# :8000, covered by nginx's maintenance page.
+#
+# nginx usually keeps running through that, but not always: the build above
+# passes --pull, so when the upstream nginx:stable tag has moved, nginx's image
+# changes too and it is recreated with the rest, unbinding 443 for about a
+# second. That second is a connection error rather than the maintenance page,
+# so this is not a seamless deploy; it is bounded, and it only happens when the
+# base image actually moved, where the unit restart described next unbinds 443
+# on every deploy.
+#
+# Restarting the systemd unit instead would run its ExecStop, `docker compose
+# down`, which removes every container: nginx included, so for part of the
+# window nothing is listening on 443 at all and a visitor gets a connection
+# error rather than the "ByteDeck is updating" page; and redis included, which
+# runs with persistence disabled, so any Celery task still queued is lost.
+#
+# `systemctl start` is a no-op while the unit is active (it is, on every deploy
+# after the first) and runs this same `up -d` when it is not, so systemd still
+# owns the stack and still brings it back after a host reboot.
+sudo systemctl start bytedeck.com
+$COMPOSE up -d --remove-orphans
 
 # Show logs. Follow them when run interactively; in an automated deploy (no TTY,
 # e.g. the CI runner) print a recent snapshot and exit so the job can finish.
