@@ -148,10 +148,36 @@ git pull                      # master (prod) or staging (staging host)
 3. Install the certbot-renew override (see [TLS](#tls--certificates)) and the
    `redis-host-setup.service` host tuning (disables THP, sets
    `vm.overcommit_memory=1` — the settings the dockerized Redis warns about).
-4. `systemctl daemon-reload`, enable + run `redis-host-setup`, then enable and
-   **restart** `bytedeck.com.service` (which runs `docker compose ... up -d`).
-5. Tail the compose logs when run interactively; print a recent snapshot and
+4. `systemctl daemon-reload`, then enable + run `redis-host-setup` and enable
+   `bytedeck.com.service`.
+5. Run `migrate_schemas` (shared, then every tenant schema) and `collectstatic`
+   from the **newly built image**, in one-off `docker compose run --rm
+   --no-deps web` containers, while the **previous** containers are still
+   serving. This is the slow part of a deploy, and doing it here is what keeps
+   it out of the window when nginx has no backend. A migration that fails stops
+   the deploy here, with the previous version still up.
+6. `docker compose ... up -d --remove-orphans` to swap the containers. Compose
+   recreates only what changed, so `redis` and `nginx` keep running and only
+   the app services are replaced; the outage a visitor sees is the few seconds
+   between the old `web` stopping and the new one binding `:8000`.
+7. Tail the compose logs when run interactively; print a recent snapshot and
    exit when run non-interactively (e.g. from the deploy runner).
+
+> **Why not `systemctl restart bytedeck.com`?** The unit's `ExecStop` is
+> `docker compose ... down`, which removes *every* container. That takes nginx
+> with it, so for part of the window nothing is listening on 443 and a visitor
+> gets a connection error rather than the maintenance page, and it takes redis
+> with it, which runs with persistence disabled, so any queued Celery task is
+> lost. `up -d` reaches the same end state without either. The script still
+> calls `systemctl start` (a no-op while the unit is active) so systemd keeps
+> owning the stack and still brings it back after a reboot.
+
+**Migrations are applied before the new code runs**, so each one has to be
+readable by the code it replaces for the seconds between step 5 and step 6.
+That is the ordinary expand-then-contract discipline for an online schema
+change: add and backfill in one release, stop reading the old shape in the
+next, drop it in a third. A migration that renames or drops in a single step
+will break the outgoing version during that window.
 
 The app is managed by the **`bytedeck.com.service`** systemd unit
 (`Type=oneshot`, `RemainAfterExit=yes`) so it comes back up automatically on
@@ -313,13 +339,15 @@ request, so it redirects every request forever).
 
 ## Troubleshooting
 
-- **502 right after a restart:** expected while `web` is still starting, and it
-  lasts as long as startup does rather than any fixed time: the `web` container
-  runs `migrate_schemas` over every tenant schema and then `collectstatic`
-  before uwsgi binds :8000 (the more tenants, the longer it takes; the
-  container healthcheck allows up to 10 minutes), and nginx has nothing to talk
-  to until it does. The 502s clear once `spawned uWSGI master process` appears
-  in the web logs:
+- **Maintenance page right after a restart:** expected while `web` is still
+  starting, and it lasts as long as startup does rather than any fixed time:
+  the `web` container runs `migrate_schemas` over every tenant schema before
+  uwsgi binds :8000, and nginx has nothing to talk to until it does. After a
+  deploy that is a check that finds nothing to do (`server-update.sh` migrated
+  before it swapped the containers) and clears in seconds; after a **cold
+  start** with migrations still to apply it is as long as those take, and the
+  more tenants the longer (the container healthcheck allows up to 10 minutes).
+  It clears once `spawned uWSGI master process` appears in the web logs:
   ```bash
   cd ~/bytedeck
   C="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"

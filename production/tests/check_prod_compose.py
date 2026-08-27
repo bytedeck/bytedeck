@@ -35,6 +35,21 @@ def runs_as_root(user):
     return str(user).split(":", 1)[0].strip().lower() in ("0", "root")
 
 
+def command_text(command):
+    """Return a rendered Compose `command` as one searchable string.
+
+    Compose accepts a command as a string or as an argv list, and renders it as
+    whichever the file used, so a caller looking for a word in it has to handle
+    both: joining a string would put a space between every character. None (no
+    command, the image's own CMD applies) reads as the empty string.
+    """
+    if command is None:
+        return ""
+    if isinstance(command, list):
+        return " ".join(str(part) for part in command)
+    return str(command)
+
+
 def log_size_is_bounded(size):
     """Return whether a json-file `max-size` option actually bounds the log.
 
@@ -110,6 +125,21 @@ def main():
     # Production runs the built image, not the host checkout.
     for name in APP_SERVICES:
         check(not services[name].get("volumes"), f"{name} mounts no source volume")
+
+    # What `web` does before uwsgi binds :8000 is what a visitor waits through
+    # on the maintenance page, so the split between start-up work and deploy
+    # work is a deployment invariant and not a style choice.
+    #   - migrate_schemas belongs here: a host reboot starts this stack from
+    #     systemd with no deploy script involved, and it has to reach a
+    #     migrated database on its own.
+    #   - collectstatic does not: only a deploy produces new static files, and
+    #     publishing them is hundreds of round trips to S3.
+    # production/server-update.sh runs both against the new image while the
+    # previous one is still serving, so on a deploy the migrate here finds
+    # nothing to do.
+    web_command = command_text(services["web"].get("command"))
+    check("migrate_schemas" in web_command, "web migrates on start (a cold start has no deploy script)")
+    check("collectstatic" not in web_command, "web does not collectstatic on start (a deploy step)")
 
     # Nothing may be pinned to root here. The rendered config cannot see the
     # image's own USER, so this only catches an explicit root override; that the
