@@ -83,9 +83,11 @@ sudo systemctl enable bytedeck.com.service
 # A migration that fails now stops the deploy with the previous version still
 # serving, instead of replacing it and leaving nginx on the maintenance page.
 # The trade is that each migration has to be readable by the code it replaces
-# for the seconds between here and the switch below, which is the ordinary
-# expand-then-contract discipline for an online schema change: add and backfill
-# in one release, stop reading the old shape in the next, drop it in a third.
+# for the seconds between here and the switch below: Django selects every
+# concrete field of a model, so a column the outgoing version still declares
+# and no longer finds raises ProgrammingError on ordinary reads. Dropping one
+# safely takes two releases; see CONTRIBUTING.md, "Migrations and the deploy
+# window".
 $COMPOSE run --rm --no-deps web python src/manage.py migrate_schemas --shared
 $COMPOSE run --rm --no-deps web python src/manage.py migrate_schemas --executor=multiprocessing
 $COMPOSE run --rm --no-deps web python src/manage.py collectstatic --noinput

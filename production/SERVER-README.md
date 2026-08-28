@@ -192,11 +192,18 @@ git pull                      # master (prod) or staging (staging host)
 > owning the stack and still brings it back after a reboot.
 
 **Migrations are applied before the new code runs**, so each one has to be
-readable by the code it replaces for the seconds between step 5 and step 6.
-That is the ordinary expand-then-contract discipline for an online schema
-change: add and backfill in one release, stop reading the old shape in the
-next, drop it in a third. A migration that renames or drops in a single step
-will break the outgoing version during that window.
+readable by the code it replaces for the seconds between step 5 and step 6. A
+migration that renames or drops a column in a single step breaks the outgoing
+version during that window: Django selects every concrete field of a model, so
+a column it still declares and no longer finds raises `ProgrammingError` on
+ordinary reads.
+
+Dropping a column safely takes two releases, the first removing it from
+Django's state while leaving the column alone (`SeparateDatabaseAndState`) and
+the second dropping it once nothing deployed knows about it. The full recipe,
+and what is safe to do in one release, is in CONTRIBUTING.md under "Migrations
+and the deploy window"; `src/hackerspace_online/tests/test_conventions.py`
+fails the build on a new migration that skips it.
 
 The app is managed by the **`bytedeck.com.service`** systemd unit
 (`Type=oneshot`, `RemainAfterExit=yes`) so it comes back up automatically on
