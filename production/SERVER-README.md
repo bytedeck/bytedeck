@@ -104,11 +104,14 @@ application image and asserts it runs as the unprivileged `app` user with no
 compiler left in it. Both scripts are runnable by hand from the repo root:
 
 ```bash
-python production/tests/check_prod_compose.py   # renders the prod config, asserts its invariants
-bash production/tests/check_prod_topology.sh    # boots the stack, asserts who can reach whom
+python production/tests/check_prod_compose.py        # renders the prod config, asserts its invariants
+bash production/tests/check_prod_topology.sh         # boots the stack, asserts who can reach whom
+bash production/tests/check_deploy_health_gate.sh    # asserts the deploy goes red when the app stays down
 ```
 
-The first needs no Docker daemon and takes seconds. The second boots the real
+The first and the third need no Docker daemon and take seconds (the third
+replaces `docker` on PATH with a stub, so it can drive container states a real
+deploy only reaches by accident). The second boots the real
 production overlay against throwaway certificates, substituting a trivial server
 for the application image, so it tests the topology rather than the app. Between
 them they assert that nothing but nginx is published to the host, that the app
@@ -169,7 +172,14 @@ git pull                      # master (prod) or staging (staging host)
    second. That is a connection error rather than the maintenance page, so a
    deploy is not strictly seamless. It is bounded and rare (only when the
    base image moved), against the `down` always doing it on every deploy.
-7. Tail the compose logs when run interactively; print a recent snapshot and
+7. `./production/wait-for-healthy.sh web` to confirm the app actually came
+   back, failing the deploy if it did not. Step 6 returns once the containers
+   are *created*, which is a much weaker claim than "the deploy worked": a bad
+   setting, a missing env var, or an import error in the deployed commit leaves
+   uwsgi refusing to bind (`need-app = true`) and nginx serving the maintenance
+   page. Without this the script would print its logs and exit 0, so the
+   **Deploy** job would go green over a site that is down.
+8. Tail the compose logs when run interactively; print a recent snapshot and
    exit when run non-interactively (e.g. from the deploy runner).
 
 > **Why not `systemctl restart bytedeck.com`?** The unit's `ExecStop` is
