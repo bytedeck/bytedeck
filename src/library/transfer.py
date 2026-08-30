@@ -114,11 +114,19 @@ def build_available_name(name, taken_names, suffix, max_len):
     """Return a version of `name` that nothing in the destination schema is using.
 
     `Quest.name` and `Category.title` are both unique per schema, so a copy whose name is
-    already spoken for cannot be written at all. Every direction of the transfer hits this:
-    pushing a second copy of a quest already in the Library, pulling a quest onto a deck
-    that wrote its own quest of the same name, and pulling a campaign onto a deck that has
-    an unrelated campaign of that title (#2532). They answer it the same way, by giving the
-    copy a name of its own and saying so, rather than refusing the transfer.
+    already spoken for cannot be written at all. This builds the name that gets it in, and
+    nothing more: whether a collision should be resolved by renaming at all is the caller's
+    decision, not this function's, and the callers do not all answer it the same way.
+
+    Quest names are renamed in both directions: pushing a second copy of a quest already in
+    the Library (" (Exported on ...)"), and pulling one onto a deck that wrote its own quest
+    of that name (" (Imported on ...)").
+
+    Campaign titles are renamed on the way *in* only. A deck importing a campaign whose
+    title it has given to an unrelated campaign gets a renamed copy (#2532), but a push to
+    the Library does not: `_write_campaign` is left to fail validation and the sharing view
+    refuses, because a title the sharer chose should not be changed on the way out and
+    published to every other deck under something they did not pick (#2531, #2534).
 
     Args:
         name (str): the name the copy would like to keep.

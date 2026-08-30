@@ -78,8 +78,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
     Returns:
         TransferResult: The quests as they now exist on the destination deck, the names of
-            any prerequisites this deck does not have, and any quests renamed on the way in
-            because this deck already used their name.
+            any prerequisites this deck does not have, any quests renamed on the way in
+            because this deck already used their name, and in `renamed_campaign` the
+            `(wanted, given)` titles when the campaign itself had to be renamed because
+            this deck had given its title to a different campaign (#2532).
 
     Raises:
         LibraryTransferError: If a quest cannot be written to the destination deck.
