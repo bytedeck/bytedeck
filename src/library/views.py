@@ -1,10 +1,10 @@
 import functools
+from uuid import UUID
 
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import connection, transaction
-from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import get_template
@@ -24,6 +24,8 @@ from quest_manager.models import Quest, Category
 from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.tasks import send_email_message
+from quest_manager.listing import QUEST_SORT_COLUMNS, search_quests
+from utilities.sorting import apply_sort, resolve_sort
 
 from notifications.signals import notify
 
@@ -597,6 +599,10 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
     #: Quests per page, matching the campaigns tab.
     paginate_by = 15
 
+    #: The columns this tab can be ordered by, shared with the deck's own quest tabs since
+    #: both list the same model through the same columns.
+    SORT_COLUMNS = QUEST_SORT_COLUMNS
+
     def get_search_term(self):
         """The search term the user typed, from the `q` query parameter.
 
@@ -625,6 +631,36 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         except (TypeError, ValueError):
             return requested
 
+    def get_sort(self):
+        """The column the list is ordered by and its direction, from the `sort` parameter.
+
+        Falls back to the quest name, so the Library's quests tab comes up in the order a
+        reader browsing it expects, and matches the deck's own quest tabs (#2623).
+
+        Returns:
+            tuple[str, bool]: the column key, 'name' when none applies, and whether it was
+            asked for in reverse.
+        """
+        return resolve_sort(self.request, self.SORT_COLUMNS, default='name')
+
+    def sort_library_quests(self, quests, column, descending):
+        """Order the quests by the chosen column, before the page is cut from them.
+
+        Ordering has to happen here rather than in the browser, because the browser only
+        holds one page: sorting there answers a question about the page, not about the
+        Library. `name` settles quests that tie, so paging through a sorted Library shows
+        each one exactly once, and quests with no campaign sort last either way.
+
+        Args:
+            quests (QuerySet[Quest]): the quests to order.
+            column (str): the column key, or '' to keep the Library's own order.
+            descending (bool): whether to reverse the chosen column.
+
+        Returns:
+            QuerySet[Quest]: the ordered quests.
+        """
+        return apply_sort(quests, self.SORT_COLUMNS, column, descending, tie_break='name')
+
     def get_library_quests(self, search_term):
         """The listable Library quests, narrowed by the search term.
 
@@ -635,9 +671,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         which is what the column headings promise the reader they can search by. Several
         words narrow the results rather than widening them: every word has to match
         something, though not all the same thing, so "recursion python" finds the quest
-        named "Recursion: base cases" that is tagged python. That is how the search box
-        behaved when it filtered rows in the browser, and it is the more useful of the two
-        readings once the Library is big enough to need narrowing.
+        named "Recursion: base cases" that is tagged python. Narrowing is the more useful
+        of the two readings once the Library is big enough to need searching at all.
 
         Args:
             search_term (str): what the user typed, or '' for no filtering.
@@ -647,27 +682,16 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         """
         quests = library_listable_quests().select_related('campaign').prefetch_related('tags')
 
-        for word in search_term.split():
-            quests = quests.filter(
-                Q(name__icontains=word)
-                | Q(campaign__title__icontains=word)
-                | Q(tags__name__icontains=word)
-            )
-
-        if search_term:
-            # distinct() because the tags join multiplies a quest by its matching tags
-            quests = quests.distinct()
-
-        return quests
+        return search_quests(quests, search_term)
 
     def get_context_data(self, **kwargs):
         """
         Populate context with a page of the shared library's listable quests.
 
         The Library is read one page at a time, since loading all of it into memory on
-        every request does not survive a Library worth browsing (#2379). Searching
-        happens in the database for the same reason, so it covers every quest rather
-        than only the ones already sent to the browser.
+        every request does not survive a Library worth browsing (#2379). Searching and
+        sorting happen in the database for the same reason, so they cover every quest
+        rather than only the ones already sent to the browser (#2410).
 
         Args:
             **kwargs: keyword arguments passed through to `TemplateView.get_context_data`.
@@ -680,6 +704,9 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
                     related Campaign and tags prefetched.
                 - page_obj (Page): The current page, for the pagination controls.
                 - search_term (str): What the user searched for, to keep the box filled in.
+                - sort_column (str): The column the list is ordered by, '' for the Library's
+                    own order. Read by the sortable column headings.
+                - sort_descending (bool): Whether that column is applied in reverse.
                 - num_matching_quests (int): How many quests the search matched, across
                     every page.
                 - num_quests (int): Number of listable quests in the Library, used for the UI
@@ -694,8 +721,11 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
         context = super().get_context_data(**kwargs)
         search_term = self.get_search_term()
 
+        sort_column, sort_descending = self.get_sort()
+
         with library_schema_context():
             quests = self.get_library_quests(search_term)
+            quests = self.sort_library_quests(quests, sort_column, sort_descending)
             paginator = Paginator(quests, self.paginate_by)
             # get_page (rather than page) turns a junk or out-of-range ?page= into the
             # nearest real page instead of raising
@@ -723,6 +753,8 @@ class LibraryQuestListView(NonPublicOnlyViewMixin, TemplateView):
             'library_quests': page_quests,
             'page_obj': page,
             'search_term': search_term,
+            'sort_column': sort_column,
+            'sort_descending': sort_descending,
             'viewer_is_library_staff': viewer_is_library_staff(self.request),
             'num_matching_quests': paginator.count,
             'num_quests': num_quests,
@@ -944,7 +976,8 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             quest_import_ids = [q.import_id for q in shared_quests]
 
         # Need local import_ids so the template can indicate which library quests already exist locally
-        local_quest_import_ids = Quest.objects.filter(import_id__in=quest_import_ids).values_list('import_id', flat=True)
+        local_quests = list(Quest.objects.all_including_archived().filter(import_id__in=quest_import_ids))
+        local_quest_import_ids = [quest.import_id for quest in local_quests]
         colliding_names = get_colliding_quest_names(shared_quests)
 
         context = {
@@ -958,6 +991,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             'category_displayed_quests': shared_quests,
             'local_category': local_category,
             'local_quest_import_ids': local_quest_import_ids,
+            'preservable_quests': local_quests,
             'colliding_names': colliding_names,
         }
         return render(request, self.template_name, context)
@@ -992,10 +1026,32 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
             # Collect import IDs for all quests in the campaign
             # Inactive quests are filtered out by the importer
             quest_ids = list(category.quest_set.values_list('import_id', flat=True))
+
+        # Quests the teacher ticked to keep as they are. Parsed as UUIDs first, because a
+        # value that is not one would raise rather than simply match nothing, then narrowed
+        # twice: to quests belonging to the campaign being imported, and to quests this deck
+        # actually holds. Both are needed against a hand-made POST, which could otherwise
+        # name a quest this deck has in some other campaign and have it moved into this one.
+        requested = set()
+        for value in request.POST.getlist('preserve'):
+            try:
+                requested.add(UUID(value))
+            except ValueError:
+                continue
+        requested &= set(quest_ids)
+
+        preserve_import_ids = list(
+            Quest.objects.all_including_archived()
+            .filter(import_id__in=requested)
+            .values_list('import_id', flat=True)
+        )
+
+        with library_schema_context():
             # Use dest_schema because current schema is library
             try:
                 imported = import_campaign_to(
-                    destination_schema=dest_schema, quest_import_ids=quest_ids, campaign_import_id=category.import_id,
+                    destination_schema=dest_schema, quest_import_ids=quest_ids,
+                    campaign_import_id=category.import_id, preserve_import_ids=preserve_import_ids,
                 )
             except LibraryTransferError as error:
                 return redirect_failed_import(request, error, 'library:category_list')
@@ -1003,9 +1059,12 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
         # Show a message with a link to the imported campaign
         category = get_object_or_404(Category, import_id=campaign_import_id)
         # As with a single quest: the campaign and its quests arrive unpublished and
-        # unreachable, so the import is only half the job (#2377). Publishing is on the
-        # campaign's own edit form; the prerequisite belongs to one of its quests, so that
-        # step links to the campaign, where they are listed.
+        # unreachable, so the import is only half the job (#2377). Both remaining steps are
+        # on the campaign's own page: the publish button there is the one that publishes
+        # the quests too, and the quests are listed there for the one that needs a
+        # prerequisite.
+        # The edit form is deliberately not linked: ticking Published on it publishes the
+        # campaign alone, leaving every quest a draft and students still seeing nothing.
         messages.success(
             request,
             format_html(
@@ -1015,7 +1074,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
                 '<strong><a href="{}">prerequisite</a></strong> so the campaign is reachable on the '
                 "quest map.",
                 category.get_absolute_url(), category.name,
-                reverse("quests:category_update", args=[category.id]),
+                category.get_absolute_url(),
                 category.get_absolute_url(),
             )
         )

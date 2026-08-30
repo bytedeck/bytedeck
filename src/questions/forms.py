@@ -9,8 +9,9 @@ from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget,
 from comments.sanitize import sanitize_comment_html
 from quest_manager.models import QuestSubmission
 from utilities.fields import FILE_MIME_TYPES, RestrictedFileFormField
+from utilities.html import is_empty_html
 
-from .models import Question, QuestionSubmission, QuestionType
+from .models import SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE, Question, QuestionSubmission, QuestionType
 
 # 16 MiB, the maximum size of a student's file response.
 MAX_RESPONSE_FILE_SIZE = 16 * 1024 * 1024
@@ -62,6 +63,7 @@ class QuestionForm(forms.ModelForm):
                   'solution_text',
                   'solution_file',
                   'allowed_file_type',
+                  'allow_script_capable_files',
                   'marker_notes')
 
         # type comes from the URL and is fixed per form, so it is hidden
@@ -78,7 +80,7 @@ class QuestionForm(forms.ModelForm):
 
         Raises:
             ValueError: If ``question_type`` is not one of the supported types. Callers
-                (views) must validate user-supplied types first — by the time the form is
+                (views) must validate user-supplied types first: by the time the form is
                 constructed an unknown type is a programming error.
         """
         question_type = kwargs.pop('question_type', None)
@@ -89,6 +91,7 @@ class QuestionForm(forms.ModelForm):
         if question_type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
             del self.fields['solution_file']
             del self.fields['allowed_file_type']
+            del self.fields['allow_script_capable_files']
             solution_fields = Div('solution_text')
         elif question_type == QuestionType.FILE_UPLOAD:
             del self.fields['solution_text']
@@ -99,7 +102,11 @@ class QuestionForm(forms.ModelForm):
                 mime_types = FILE_MIME_TYPES.get(choice)
                 # 'all' (and any non-list sentinel) accepts everything, so a legend row is pointless
                 if isinstance(mime_types, list):
-                    allowed_file_types_html_list += f"<li><strong>{verbose_name}</strong>: {', '.join(mime_types)}</li>"
+                    # ticking the box below adds to what this row lists, so the row says what
+                    # it would add rather than leaving the reader to find out by trying it
+                    opt_in = SCRIPT_CAPABLE_TYPES_BY_FILE_TYPE.get(choice)
+                    extra = f" (plus {', '.join(sorted(opt_in.mime_types))} if the box below is ticked)" if opt_in else ''
+                    allowed_file_types_html_list += f"<li><strong>{verbose_name}</strong>: {', '.join(mime_types)}{extra}</li>"
 
             solution_fields = Div(
                 'solution_file',
@@ -109,7 +116,8 @@ class QuestionForm(forms.ModelForm):
                      <ul>
                      {allowed_file_types_html_list}
                      </ul>
-                     """)
+                     """),
+                'allow_script_capable_files',
             )
         else:
             raise ValueError(f"Question of type {question_type} not supported.")
@@ -215,8 +223,15 @@ class QuestionSubmissionForm(forms.ModelForm):
             )
         elif self.question.type == QuestionType.LONG_ANSWER:
             del self.fields["response_file"]
+            # No visible label (the question's instructions directly above serve as one), so
+            # without an aria-label the editor announces nothing at all, while the short answer
+            # beside it announces "Response to question N". The widget's attrs are applied to a
+            # wrapper div; bytedeck_summernote's template forwards aria-label from there onto
+            # .note-editable, which is the element that takes focus (#2570).
             self.fields["response_text"] = forms.CharField(
-                label="", required=self.question.required, widget=AnswerSummernoteWidget()
+                label="",
+                required=self.question.required,
+                widget=AnswerSummernoteWidget(attrs={"aria-label": self._response_aria_label()}),
             )
         elif self.question.type == QuestionType.FILE_UPLOAD:
             del self.fields["response_text"]
@@ -242,7 +257,15 @@ class QuestionSubmissionForm(forms.ModelForm):
                 required=self.question.required,
                 content_types=mime_types,
                 max_upload_size=MAX_RESPONSE_FILE_SIZE,
-                widget=forms.ClearableFileInput(attrs={"multiple": False}),
+                # The one place the script-capable refusal is lifted, and only as far as the
+                # teacher asked for on this question (#2559). Such an answer is handed over as
+                # a download rather than opened, so nothing in it runs in a marker's session.
+                script_capable_types=self.question.script_capable_types(),
+                # The visible label is the same on every file question, so several of them on
+                # one page are indistinguishable by name. The aria-label adds the question number
+                # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)
+                # requires of a control whose visible label is text (#2570).
+                widget=forms.ClearableFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
                 label="Attach files",
                 help_text=help_text,
             )
@@ -262,23 +285,49 @@ class QuestionSubmissionForm(forms.ModelForm):
             form_fields,
         )
 
-    def _response_aria_label(self):
-        """Return a per-question aria-label for the short-answer input.
+    def _question_position(self):
+        """Return this question's 1-based position on the submission page, or None.
 
-        Several short-answer inputs on one page would otherwise all announce the identical
-        "Response", so screen-reader users couldn't tell them apart. The form's formset prefix
-        is "question_submissions-<i>" (0-based); i + 1 matches the visible "Question N:" heading
-        rendered just above the input in submission.html. Falls back to "Response" if the form
-        isn't in a formset (no numeric prefix, e.g. the formset's empty_form placeholder).
+        The form's formset prefix is "question_submissions-<i>" (0-based); i + 1 matches the
+        visible "Question N:" heading rendered just above the answer field in submission.html.
 
         Returns:
-            str: the aria-label for this input, e.g. "Response to question 2".
+            int | None: the question number, or None if the form isn't in a formset (no numeric
+            prefix, e.g. the formset's empty_form placeholder).
         """
         try:
-            position = int(self.prefix.rsplit("-", 1)[-1]) + 1
+            return int(self.prefix.rsplit("-", 1)[-1]) + 1
         except (AttributeError, ValueError):
+            return None
+
+    def _response_aria_label(self):
+        """Return a per-question aria-label for the short-answer input or long-answer editor.
+
+        Several answer fields on one page would otherwise all announce the identical "Response"
+        (or, for the editor, nothing at all), so screen-reader users couldn't tell them apart.
+
+        Returns:
+            str: the aria-label for this field, e.g. "Response to question 2".
+        """
+        position = self._question_position()
+        if position is None:
             return "Response"
         return f"Response to question {position}"
+
+    def _file_aria_label(self):
+        """Return a per-question aria-label for the file input.
+
+        Keeps the visible label's own words and adds the question number: WCAG 2.5.3 (Label in
+        Name) asks that a control's accessible name contain its visible label text, so that
+        someone driving the page by voice can still say "attach files" to reach it.
+
+        Returns:
+            str: the aria-label for this input, e.g. "Attach files for question 3".
+        """
+        position = self._question_position()
+        if position is None:
+            return "Attach files"
+        return f"Attach files for question {position}"
 
     def clean_response_text(self):
         """Sanitize the answer text with the comments allow-list (issue #1343 / #2113).
@@ -303,6 +352,33 @@ class QuestionSubmissionForm(forms.ModelForm):
         """
         return sanitize_comment_html(self.cleaned_data.get("response_text", ""))
 
+    def has_answer(self):
+        """Whether the student actually answered this question.
+
+        The single definition of "answered", so the required check below and the complete
+        view's decision about whether a submission has any content of its own cannot drift
+        apart and disagree about the same answer.
+
+        A long answer comes from the Summernote editor, which posts markup rather than an
+        empty string for an untouched editor, so emptiness there is a question about what the
+        markup renders as (#2560). The other two types have no such gap: a short answer is a
+        plain text input whose CharField already strips whitespace-only input, and a file is
+        either attached or it isn't.
+
+        Only call this once validation has run: it reads ``cleaned_data``, and a field that
+        failed its own validation is absent from it and so reads as unanswered.
+
+        Returns:
+            bool: True when this form carries an answer with content in it.
+        """
+        if self.question.type == QuestionType.FILE_UPLOAD:
+            return bool(self.cleaned_data.get("response_file"))
+
+        response_text = self.cleaned_data.get("response_text")
+        if self.question.type == QuestionType.LONG_ANSWER:
+            return not is_empty_html(response_text)
+        return bool(response_text)
+
     def clean(self):
         """Enforce required answers per question type, and fail cleanly on stale rows."""
         cleaned_data = super().clean()
@@ -312,16 +388,10 @@ class QuestionSubmissionForm(forms.ModelForm):
                 "This answer no longer matches one of the quest's questions. Please reload the page and try again."
             )
 
-        response_text = cleaned_data.get('response_text')
-        response_file = cleaned_data.get('response_file')
-
-        if self.question.type in (QuestionType.SHORT_ANSWER, QuestionType.LONG_ANSWER):
-            if self.question.required and not response_text:
-                raise ValidationError('You must provide a text response for this type of question.')
-        else:
-            # only FILE_UPLOAD can reach here: __init__ raises NotImplementedError for any other type
-            if self.question.required and not response_file:
+        if self.question.required and not self.has_answer():
+            if self.question.type == QuestionType.FILE_UPLOAD:
                 raise ValidationError('You must upload a file for this type of question.')
+            raise ValidationError('You must provide a text response for this type of question.')
 
         return cleaned_data
 

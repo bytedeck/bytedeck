@@ -1,14 +1,26 @@
+import os
+import shutil
+import tempfile
+
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.template.loader import render_to_string
+from django.test import override_settings
 from django.urls import reverse
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
-from quest_manager.models import Quest
-from questions.models import Question
+from quest_manager.models import Quest, QuestSubmission
+from questions.models import Question, QuestionSubmission
 
 User = get_user_model()
+
+
+# A <form> that opted into warn-unsaved-changes.js. Matching the tag rather than the bare
+# attribute name matters: base.html mentions `data-warn-unsaved` in the comment above the
+# script tag, so a plain substring is present on every page in the site (#2572).
+GUARDED_FORM = r"<form[^>]*\sdata-warn-unsaved"
 
 
 class QuestionCRUDViewTest(ByteDeckTenantTestCase):
@@ -105,8 +117,9 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
 
         response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
 
-        self.assertNotContains(response, "—")
-        self.assertNotContains(response, "&mdash;")
+        # each of these names the character it is asserting is absent, hence the markers
+        self.assertNotContains(response, "—")  # em-dash-ok
+        self.assertNotContains(response, "&mdash;")  # em-dash-ok
 
     def test_list__help_text_says_files_save_with_the_draft(self):
         """The page's copy matches how draft saving works (#2551).
@@ -119,8 +132,25 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
 
         response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
 
-        self.assertContains(response, "any chosen files too")
+        self.assertContains(response, "chosen files included")
         self.assertNotContains(response, "upload when the quest is submitted")
+
+    def test_list__help_text_says_how_often_a_draft_saves(self):
+        """The page's copy matches how often a draft actually saves (#2571).
+
+        A draft is written by a 60-second timer and by the Save Draft button, and by nothing
+        else: there is no keystroke, change or unload handler. So the sentence names the
+        interval and the button, and must not say answers save "as they type", which the third
+        assertion guards: a teacher reading that tells students their typing is safe when up to
+        a minute of it is not.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200("questions:list", kwargs={"quest_id": self.quest.id})
+
+        self.assertContains(response, "autosaves about every minute")
+        self.assertContains(response, "Save Draft")
+        self.assertNotContains(response, "as they type")
 
     def test_list__an_image_solution_shows_as_a_thumbnail(self):
         """A picture used as a solution is shown in the table, not just named (#2172).
@@ -159,6 +189,27 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.test_teacher)
         self.assert200(
             "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+
+    def test_create__form_warns_about_unsaved_changes(self):
+        """Creating or editing a question opts into the unsaved-changes guard (#2572).
+
+        A teacher part way through writing a question's instructions, solution and marker
+        notes loses all of it to a stray click on the navbar, with nothing saved anywhere
+        until they submit. `data-warn-unsaved` is the attribute warn-unsaved-changes.js binds.
+
+        Matched inside a form tag, not anywhere on the page: base.html names the attribute in
+        the HTML comment above the script, so a plain substring assertion passes on every page
+        in the site whether or not any form opted in.
+        """
+        self.client.force_login(self.test_teacher)
+
+        created = self.assert200(
+            "questions:create", kwargs={"quest_id": self.quest.id, "question_type": "short_answer"})
+        updated = self.assert200(
+            "questions:update", kwargs={"quest_id": self.quest.id, "pk": self.question1.id})
+
+        self.assertRegex(created.content.decode(), GUARDED_FORM)
+        self.assertRegex(updated.content.decode(), GUARDED_FORM)
 
     def test_create__invalid_type_404(self):
         """Creating a question with an unsupported type in the URL is a 404 (not a crash)."""
@@ -288,6 +339,94 @@ class QuestionCRUDViewTest(ByteDeckTenantTestCase):
             "questions:delete",
             kwargs={"quest_id": self.other_quest.id, "pk": self.question1.id})
         self.assertTrue(Question.objects.filter(id=self.question1.id).exists())
+
+
+class QuestionTableMoveArrowsTest(ByteDeckTenantTestCase):
+    """The move arrows render only where the page can act on them (#2568).
+
+    The snippet's arrows post to `questions:move`, whose non-AJAX path redirects to the
+    question list. Only the question list binds the handler that posts them in the background
+    instead, so anywhere else a click would silently relocate the reader: off a quest they were
+    reading, off a submission they were marking, or out of a Library export they were partway
+    through.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher and a quest with two questions, so the table has rows to act on."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.quest = baker.make(Quest, name="Reorderable Quest")
+        cls.q1 = baker.make(Question, quest=cls.quest, ordinal=1, instructions="First question")
+        cls.q2 = baker.make(Question, quest=cls.quest, ordinal=2, instructions="Second question")
+
+    def _render_snippet(self, **extra):
+        """Render the question table snippet on its own, outside any page that includes it.
+
+        Args:
+            **extra: context merged over the quest and its questions, so a test can render
+                the snippet the way a given caller would (`can_reorder_questions=True` for
+                one that binds the move handler).
+
+        Returns:
+            str: the rendered table HTML.
+        """
+        return render_to_string(
+            "questions/snippets/question_table.html",
+            {"quest": self.quest, "questions": Question.objects.filter(quest=self.quest), **extra},
+        )
+
+    def test_question_table__withholds_the_move_arrows_by_default(self):
+        """A template that includes this snippet gets no arrows unless it asks for them.
+
+        The default is off so a page cannot inherit buttons whose handler it does not have,
+        which is how they came to be on three pages that strand the reader.
+        """
+        table = self._render_snippet()
+
+        self.assertNotIn("question-move-form", table)
+
+    def test_question_table__keeps_edit_and_delete_without_the_arrows(self):
+        """Only the arrows are withheld: Edit and Delete are plain links to other pages.
+
+        Leaving the page is what a link promises, so those stay wherever the table renders
+        with actions at all.
+        """
+        table = self._render_snippet()
+
+        self.assertIn('title="Edit"', table)
+        self.assertIn('title="Delete"', table)
+
+    def test_question_table__renders_the_move_arrows_when_asked(self):
+        """A caller that binds the handler gets the arrows by passing the flag."""
+        table = self._render_snippet(can_reorder_questions=True)
+
+        self.assertIn("question-move-form", table)
+        self.assertIn('title="Move up"', table)
+        self.assertIn('title="Move down"', table)
+
+    def test_QuestionList__renders_the_move_arrows(self):
+        """The question list is the page built to reorder from, so it shows them."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+
+        self.assertContains(response, "question-move-form")
+
+    def test_quest_detail__shows_the_questions_without_the_move_arrows(self):
+        """A teacher reading a quest sees its questions but cannot reorder from there.
+
+        Asserting the panel is present matters as much as the arrows being absent: without it
+        this passes for the wrong reason on any page that renders no question table at all.
+        The panel's own Manage Questions button is the way to the page that can reorder.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("quests:quest_detail", args=[self.quest.id]))
+
+        self.assertContains(response, "Submission Questions")
+        self.assertContains(response, "First question")
+        self.assertContains(response, "Manage Questions")
+        self.assertNotContains(response, "question-move-form")
 
 
 class QuestionMoveViewTest(ByteDeckTenantTestCase):
@@ -421,6 +560,23 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         table = response.json()["question_table_html"]
         self.assertLess(table.index("Q2"), table.index("Q1"), "the table came back in the old order")
 
+    def test_move__ajax_table_still_carries_the_move_arrows(self):
+        """The table a move hands back can itself be moved from, so a reorder can continue.
+
+        This HTML replaces the one the teacher just clicked in, and reordering takes several
+        clicks. The snippet withholds the arrows unless the caller asks for them (#2568), so
+        the view has to ask: without that a move would work once and return a table with
+        nothing left to click.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self._move_by_ajax(self.q1, "down")
+
+        table = response.json()["question_table_html"]
+        self.assertIn("question-move-form", table)
+        self.assertIn("Move up", table)
+        self.assertIn("Move down", table)
+
     def test_move__ajax_table_disables_the_arrows_at_the_ends_of_the_list(self):
         """The re-rendered table decides which arrows are dead, so the page never has to.
 
@@ -462,3 +618,183 @@ class QuestionMoveViewTest(ByteDeckTenantTestCase):
         response = self._move(self.q1, "down")
 
         self.assertRedirects(response, reverse("questions:list", kwargs={"quest_id": self.quest.id}))
+
+
+class AnswerFileDownloadViewTest(ByteDeckTenantTestCase):
+    """A script-capable answer is handed over as a download, and only to people entitled to it (#2559)."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Redirect MEDIA_ROOT to a temp directory, deleted along with the class.
+
+        These tests store real files. Without this they pile up in the project's
+        _media_uploads and Django's storage dedupes the repeated name on the next run, so a
+        suite that passes once fails on every rerun in the same workspace.
+        """
+        cls._temp_media = tempfile.mkdtemp(prefix="test-media-answer-download-")
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        # registered before super(), so they run after the base class's own cleanups: LIFO
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, a student, and a quest with one question that opted into web files."""
+        cls.test_teacher = User.objects.create_user("test_teacher", password="password", is_staff=True)
+        cls.test_student = User.objects.create_user("test_student", password="password")
+        cls.quest = baker.make(Quest)
+        cls.question = baker.make(
+            Question, quest=cls.quest, ordinal=1, type="file_upload",
+            allowed_file_type="all", allow_script_capable_files=True,
+        )
+
+    def answer(self, uploaded_file=None, user=None):
+        """A published answer holding a stored file.
+
+        Args:
+            uploaded_file: the file to store; a small HTML page by default.
+            user (User): whose submission it is; defaults to self.test_student.
+
+        Returns:
+            QuestionSubmission: the answer row.
+        """
+        if uploaded_file is None:
+            uploaded_file = SimpleUploadedFile(
+                "index.html", b"<h1>my page</h1>", content_type="text/html")
+        submission = baker.make(QuestSubmission, quest=self.quest, user=user or self.test_student)
+        return baker.make(
+            QuestionSubmission, quest_submission=submission, question=self.question,
+            response_file=uploaded_file,
+        )
+
+    def test_answer_file_download__owner_gets_the_file_as_an_attachment(self):
+        """The student's own answer downloads, rather than rendering in the browser.
+
+        The Content-Disposition is the whole point: an HTML answer opened as a page would run
+        its script in whoever opened it, which is the stored XSS this feature exists to avoid.
+        """
+        answer = self.answer()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse("questions:answer_file_download", args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        disposition = response.headers["Content-Disposition"]
+        self.assertIn("attachment", disposition)
+        self.assertIn(os.path.basename(answer.response_file.name), disposition)
+        self.assertEqual(b"".join(response.streaming_content), b"<h1>my page</h1>")
+
+    def test_answer_file_download__staff_may_download_a_students_answer(self):
+        """Markers reach it too: reading the file is how a web design answer gets marked."""
+        answer = self.answer()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("questions:answer_file_download", args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 200)
+
+    def test_answer_file_download__another_student_is_refused(self):
+        """Someone else's answer is not theirs to fetch."""
+        answer = self.answer()
+        self.client.force_login(User.objects.create_user("nosy", password="password"))
+
+        self.assert404("questions:answer_file_download", args=[answer.pk])
+
+    def test_answer_file_download__an_answer_with_no_file_is_404(self):
+        """Nothing to hand over, so the view refuses rather than failing on an empty file."""
+        submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
+        answer = baker.make(
+            QuestionSubmission, quest_submission=submission, question=self.question,
+        )
+        self.client.force_login(self.test_student)
+
+        self.assert404("questions:answer_file_download", args=[answer.pk])
+
+    def test_answer_file_download__anonymous_redirects_to_login(self):
+        """Login-only, like every other view that reaches a student's submitted work."""
+        answer = self.answer()
+
+        self.assertRedirectsLogin("questions:answer_file_download", args=[answer.pk])
+
+    def render_answers(self, answer):
+        """Render the published-answers table for one answer.
+
+        Args:
+            answer (QuestionSubmission): the answer to render.
+
+        Returns:
+            str: the rendered HTML.
+        """
+        return render_to_string("questions/snippets/comment_answers.html", {"answers": [answer]})
+
+    def test_display__a_script_capable_answer_links_the_download_view_not_the_file(self):
+        """The answers table never points at a script-capable file's storage URL (#2559).
+
+        Following a link to the stored file opens the student's HTML as a page in the marker's
+        session, which is the whole vulnerability. The link goes to the download view instead.
+        """
+        answer = self.answer()
+
+        html = self.render_answers(answer)
+
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__an_svg_answer_is_shown_as_a_picture(self):
+        """An SVG answer renders through an <img>, and still downloads from its link.
+
+        Browsers run no script, external reference or interactivity in SVG-as-image mode, so
+        this is safe without sanitising the file, and a graphic design student's artwork can be
+        looked at rather than only downloaded.
+        """
+        answer = self.answer(SimpleUploadedFile(
+            "logo.svg",
+            b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            content_type="image/svg+xml"))
+
+        html = self.render_answers(answer)
+
+        self.assertIn(f'<img class="question-media" src="{answer.response_file.url}"', html)
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__a_deleted_question_does_not_bring_the_direct_link_back(self):
+        """A stored HTML answer keeps its download link after its question is deleted (#2559).
+
+        ``QuestionSubmission.question`` is ``SET_NULL``, so the answer outlives the question,
+        and a teacher can also untick the opt-in after the fact. Deciding from the question
+        would start linking the stored file at its storage URL again in both cases, which is
+        exactly the stored XSS this feature exists to prevent, so the stored file decides
+        instead.
+        """
+        answer = self.answer()
+        answer.question.delete()
+        answer.refresh_from_db()
+        self.assertIsNone(answer.question, "the answer must outlive its question")
+
+        html = self.render_answers(answer)
+
+        self.assertIn(reverse("questions:answer_file_download", args=[answer.pk]), html)
+        self.assertNotIn(f'href="{answer.response_file.url}"', html)
+
+    def test_display__an_ordinary_file_answer_is_unchanged(self):
+        """A question that did not opt in still renders through question_file.html.
+
+        Only script-capable answers are diverted, so an image answer keeps the inline preview
+        and the direct link it has always had.
+        """
+        image_question = baker.make(
+            Question, quest=self.quest, ordinal=2, type="file_upload", allowed_file_type="image",
+        )
+        submission = baker.make(QuestSubmission, quest=self.quest, user=self.test_student)
+        answer = baker.make(
+            QuestionSubmission, quest_submission=submission, question=image_question,
+            response_file=SimpleUploadedFile("photo.png", b"png-bytes", content_type="image/png"),
+        )
+
+        html = self.render_answers(answer)
+
+        self.assertIn(f'href="{answer.response_file.url}"', html)
+        self.assertNotIn(reverse("questions:answer_file_download", args=[answer.pk]), html)

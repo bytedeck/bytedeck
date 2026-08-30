@@ -314,6 +314,19 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         email = generate_notification_email(self.test_student1, "https://test.com")
         self.assertEqual(email.from_email, formataddr(("test.com", "noreply@bytedeck.com")))
 
+    @override_settings(DEFAULT_FROM_EMAIL="Byte Deck <contact@bytedeck.com>")
+    def test_generate_notification_email__from_when_the_setting_carries_its_own_name(self):
+        """DEFAULT_FROM_EMAIL is configured with a display name in production, so only its
+        address goes under the deck's domain. A header carrying both names is not a valid
+        address, and the nightly digest raises ValueError in the Celery task instead of
+        being delivered."""
+        baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+        email = generate_notification_email(self.test_student1, "https://test.com")
+        self.assertEqual(email.from_email, formataddr(("test.com", "contact@bytedeck.com")))
+
     @override_settings(DEFAULT_FROM_EMAIL="")
     def test_generate_notification_email__from_falls_back_when_unconfigured(self):
         """With no DEFAULT_FROM_EMAIL configured, the From is left to Django's default (#2338)."""

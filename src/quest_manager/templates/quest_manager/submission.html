@@ -5,8 +5,8 @@
 {% load comment_tags %}
 
 {% block head %}
-    {# the comment box is a summernote editor too, so its media covers the answer editors #}
-    {{ submission_form.media }}
+    {# the comment form's assets combined with the answer editors', de-duplicated in the view #}
+    {{ form_media }}
     <link rel="stylesheet" href="{% static 'css/select2-bootstrap-0.1.0-beta.10.min.css' %}">
 {% endblock %}
 
@@ -95,10 +95,14 @@
       <h3 class="panel-title">Quest Submission Form</h3>
     </div>
     <div class="panel-body panel-summernote">
+      {% comment %} data-warn-unsaved opts both forms into warn-unsaved-changes.js, so leaving the
+         page with answer, comment or marking text that has not reached the server draws the
+         browser's "Leave site?" prompt (#2572). The comment box is a div, not a nested form, so
+         the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}">
+        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
       {% else %}
-        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}">
+        <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}" data-warn-unsaved>
       {% endif %}
 
         {% csrf_token %}
@@ -130,7 +134,16 @@
               {% if form.instance.response_file %}
                 <p class="help-block">
                   <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  {% if form.instance.response_file_is_script_capable %}
+                    {% comment %} An SVG or HTML file is never linked at its storage URL, here either:
+                       navigating to one runs whatever script it carries in the session of whoever
+                       follows the link, and the student following it is signed in (#2559). The
+                       download view responds with Content-Disposition: attachment instead. {% endcomment %}
+                    <a href="{% url 'questions:answer_file_download' form.instance.id %}">
+                      <i class="fa fa-fw fa-download"></i>{{ form.instance.response_file|filename }}</a>
+                  {% else %}
+                    <a href="{{ form.instance.response_file.url }}" target="_blank">{{ form.instance.response_file|filename }}</a>
+                  {% endif %}
                   <small>(already saved: only choose a file above if you want to replace it)</small>
                 </p>
               {% endif %}
@@ -180,6 +193,11 @@
               <span id="draft-spin" style="display:none"><i class="fa fa-spinner fa-spin fa-fw"></i><span class="sr-only">Saving draft...</span></span>
               <span id="draft-check" style="display:none" class="text-success"><i class="fa fa-check fa-fw"></i><span class="sr-only">Draft saved successfully</span></span>
             </a>
+            {# Shown when a draft save fails, and cleared by the next one that works. The autosave #}
+            {# keeps trying, so this says so rather than interrupting the student every minute. #}
+            <span id="draft-error" class="text-danger" style="display:none" role="status">
+              <i class="fa fa-exclamation-triangle fa-fw"></i> Draft not saved. It will try again shortly.
+            </span>
             {% if submission.is_approved %}
               <input type='submit' name='comment' class='btn btn-primary' value='Add Comment' />
             {% else %}
@@ -193,7 +211,7 @@
              In Progress/Completed tab preview (#141). Shown regardless of the quest's published
              state so a TA can always template off a quest they've started. {% endcomment %}
           {% if request.user.profile.is_TA %}
-            <a title="Copy Quest &mdash; available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
+            <a title="Copy Quest, available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
                class="btn btn-default" role="button" href="{% url 'quests:quest_copy' submission.quest.id %}">
               <i class="fa fa-fw fa-copy"></i> Copy Quest
             </a>
@@ -269,16 +287,17 @@
             // Save drafts via Ajax when button pressed
             $('#save-draft-btn').on('click', function(event){
                 event.preventDefault(); // prevent browser from reloading
-                console.log("Draft saved!")  // sanity check
-                save_draft();
+                save_draft(true);  // pressed, so a failure is worth interrupting for
             });
 
-            setInterval(save_draft, 60000); // autosave every 60 seconds
+            // autosave every 60 seconds, unattended: a failure here reports itself in the
+            // page instead of in a modal the student did not ask for
+            setInterval(function() { save_draft(); }, 60000);
 
 
         });
 
-        function save_draft() {
+        function save_draft(pressed) {
             // scoped to the main comment form: question answers add their own summernote editors
             $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
@@ -320,6 +339,14 @@
                 // management form, row ids and files) come from the form itself.
                 var mainForm = document.getElementById('submission-main-form');
                 var formData = mainForm ? new FormData(mainForm) : new FormData();
+                // What each file input is sending, captured with the snapshot above. The
+                // response arrives later (a file answer may be 16 MiB, and the 60s autosave
+                // starts these uploads with no action from the student), and by then they may
+                // have chosen a different file in the same input. The response speaks about
+                // the file that went out, so it is only allowed to touch an input still
+                // holding it (#2563).
+                var sentFiles = chosen_files_by_input();
+                var sentEdits = edits_so_far();
                 formData.set('csrfmiddlewaretoken', '{{ csrf_token }}');
                 formData.set('comment', draftComment);
                 formData.set('submission_id', '{{ submission.id }}');
@@ -335,23 +362,82 @@
 
                     // handle a successful response
                     success : function(json) {
-                      show_saved_files(json);
+                      $('#draft-error').hide();
+                      show_saved_files(json, sentFiles);
+                      mark_draft_saved(sentEdits);
                       hide_check_show_text();
                     },
 
                     // handle a non-successful response
                     error : function(xhr,errmsg,err) {
-                        $('#results').html("<div class='alert-box alert radius' data-alert>Oops! We have encountered an error: "+errmsg+
-                            " <a href='#' class='close'>&times;</a></div>"); // add the error to the dom
+                        // Put the button back first: save_draft() only runs while #draft-text is
+                        // visible, so restoring it is what lets the next autosave tick, or a
+                        // click, attempt the save again. #draft-error stays up alongside it
+                        // until a save succeeds, so the failure is visible meanwhile (#2561).
+                        $('#draft-spin').hide();
+                        $('#draft-check').hide();
+                        $('#draft-text').show();
+                        $('#draft-error').show();
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                        alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        if (pressed) {
+                            // The student asked for this save, so tell them it did not happen.
+                            // A timer's failure is reported only in #draft-error: it retries by
+                            // itself, and a modal once a minute would interrupt a whole lesson.
+                            alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
+                        }
                     }
                 });
             }
 
         }
 
-        function show_saved_files(json) {
+        function unsaved_guard() {
+            // The guard warn-unsaved-changes.js attaches to a form carrying data-warn-unsaved.
+            // Absent if that script has not run, which must leave saving working regardless.
+            var form = document.getElementById('submission-main-form');
+            return form && form.warnUnsaved;
+        }
+
+        function edits_so_far() {
+            // How many edits the guard has counted, read before a draft save leaves. Snapshotted
+            // for the same reason chosen_files_by_input() is: what comes back can only be said to
+            // have saved the edits that were there when it was sent.
+            var guard = unsaved_guard();
+            return guard ? guard.edits() : 0;
+        }
+
+        function mark_draft_saved(sentEdits) {
+            // The server has the draft as it stood at sentEdits, so stop warning about those
+            // edits. Anything typed while the request was in flight keeps the guard armed.
+            var guard = unsaved_guard();
+            if (guard) guard.saved(sentEdits);
+        }
+
+        function chosen_files(input) {
+            // The File objects an input currently holds. Identity is what is compared later,
+            // not the names: choosing a file always produces new File objects, so this notices
+            // a replacement even when the student picked another file of the same name. The
+            // comment's Attach files field takes several at once, so the whole list counts.
+            return Array.prototype.slice.call((input && input.files) || []);
+        }
+
+        function chosen_files_by_input() {
+            // Every file input on the form, keyed by name, ready to compare against later.
+            var chosen = {};
+            $('#submission-main-form input[type="file"]').each(function() {
+                chosen[this.name] = chosen_files(this);
+            });
+            return chosen;
+        }
+
+        function same_files(current, sent) {
+            // Whether an input still holds exactly what it sent. An untracked input (no
+            // snapshot) counts as changed, which is the safe answer: it means leave it alone.
+            if (!sent || current.length !== sent.length) return false;
+            return current.every(function(file, index) { return file === sent[index]; });
+        }
+
+        function show_saved_files(json, sentFiles) {
             // A saved file is stored with the draft, so its input is cleared: the file no
             // longer needs re-choosing, and the next autosave must not upload it again. A
             // note under the input says where it went. A rejected file is cleared too, with
@@ -359,22 +445,28 @@
             $.each(json.saved_answer_files || {}, function(field_name, file_name) {
                 file_note($('[name="' + field_name + '"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             });
             if ((json.saved_attachments || []).length) {
                 var names = json.saved_attachments.map(function(name) { return $('<i>').text(name).html(); });
                 file_note($('#submission-main-form input[name="attachments"]'),
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + names.join(', ') +
-                    ' <small>(saved with your draft)</small>');
+                    ' <small>(saved with your draft)</small>', sentFiles);
             }
             $.each(json.file_errors || {}, function(field_name, error_text) {
                 file_note($('[name="' + field_name + '"]'),
-                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>');
+                    '<span class="text-danger">' + $('<i>').text(error_text).html() + '</span>', sentFiles);
             });
         }
 
-        function file_note(input, html) {
+        function file_note(input, html, sentFiles) {
             if (!input.length) return;
+            // The response describes the file this input sent. If the input now holds a
+            // different choice, the student replaced it while the request was in flight:
+            // clearing it would throw that newer file away, and the note would name one they
+            // have moved on from (or blame it for the older file's error). Leave both alone;
+            // the next save reports the new file in the ordinary way (#2563).
+            if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
             var note = input.closest('.form-group').find('.draft-file-note');
             if (!note.length) {

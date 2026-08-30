@@ -4,7 +4,7 @@ from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 
-from .transfer import build_available_name, snapshot_quest, write_quests
+from .transfer import _write_campaign, build_available_name, snapshot_campaign, snapshot_quest, write_quests
 from .utils import library_schema_context
 
 
@@ -54,7 +54,7 @@ def resolve_name_collisions(snapshots):
     return overrides, renames
 
 
-def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_id):
+def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_id, preserve_import_ids=()):
     """
     Imports the given campaign and all quests from the library schema into the given destination schema.
 
@@ -62,10 +62,19 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
     quest: re-importing keeps that deck's own show/hide choice rather than overriding it.
     The campaign itself arrives as a draft either way.
 
+    A quest named in `preserve_import_ids` is not written: the deck keeps the version it
+    already has, edits and all. It is still put into the arriving campaign, so the campaign
+    is whole rather than missing a part, which is the decision recorded on #1845. That has a
+    consequence the teacher has to be told about rather than protected from: the campaign
+    arrives unpublished, and a quest in an unpublished campaign is hidden from students, so
+    a preserved quest that was visible stops being visible until the campaign is published.
+
     Args:
         destination_schema (str): The schema to import the quests into.
         quest_import_ids (list): A list of quest import UUIDs to import.
         campaign_import_id (UUID): The import ID of the campaign to deactivate after import.
+        preserve_import_ids (Iterable[UUID]): quests the deck already has and wants to keep
+            as they are. Ignored when the deck does not actually have them.
 
     Returns:
         TransferResult: The quests as they now exist on the destination deck, the names of
@@ -75,6 +84,8 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
     Raises:
         LibraryTransferError: If a quest cannot be written to the destination deck.
     """
+    preserve_import_ids = list(preserve_import_ids)
+
     with library_schema_context():
         # select_related/prefetch_related: snapshot_quest reads each quest's campaign and
         # its questions, which are a query each otherwise.
@@ -82,8 +93,18 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
             Quest.objects.select_related('campaign')
             .prefetch_related('question_set')
             .filter(published=True, import_id__in=quest_import_ids)
+            .exclude(import_id__in=preserve_import_ids)
         )
         snapshots = [snapshot_quest(quest) for quest in quests]
+        # Taken here because the campaign row on the destination is normally created from
+        # the arriving quests' snapshots. Preserve every quest and none arrive, so there
+        # would be no campaign for the preserved ones to join.
+        library_campaign = Category.objects.filter(import_id=campaign_import_id).first()
+        campaign_snapshot = snapshot_campaign(library_campaign)
+
+    # Set when the campaign is written by the fallback below rather than by an arriving
+    # quest, so the rename is still reported in that case.
+    fallback_campaign_rename = None
 
     with schema_context(destination_schema):
         # One transaction for the whole arrival: `write_quests` is atomic on its own, but
@@ -110,12 +131,34 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
             )
 
             category = Category.objects.filter(import_id=campaign_import_id).first()
+            if category is None and campaign_snapshot is not None:
+                # Reached when every quest was preserved, so none of them created the
+                # campaign on the way in. It is renamed on a title clash for the same
+                # reason an arriving quest's campaign is: this is still an import onto a
+                # deck, and merging into the teacher's own campaign of that name is what
+                # #2532 is about.
+                category, fallback_campaign_rename = _write_campaign(
+                    campaign_snapshot, rename_on_clash=True)
+
             if category:
                 category.published = False
                 category.full_clean()
                 category.save()
 
-    return imported._replace(renamed_quests=renames)
+                # Saved one at a time rather than through a bulk update, so a quest moving
+                # between campaigns raises the same signals it would if a teacher moved it
+                # by hand: the quest map is rebuilt from campaigns. Archived quests are
+                # included because the confirmation page offers them for preservation too,
+                # and a preserved quest left out here would be a hole in the campaign.
+                for quest in Quest.objects.all_including_archived().filter(import_id__in=preserve_import_ids):
+                    quest.campaign = category
+                    quest.full_clean(exclude=['campaign'])
+                    quest.save()
+
+    return imported._replace(
+        renamed_quests=renames,
+        renamed_campaign=imported.renamed_campaign or fallback_campaign_rename,
+    )
 
 
 def import_quest_to(*, destination_schema, quest_import_id):

@@ -91,20 +91,28 @@
     {# the questions themselves are visible to students (they answer them when submitting); #}
     {# only this management panel and the solutions/marker notes are staff-only #}
     <h3 class="panel-title">Submission Questions <small>(students answer these when submitting)</small>
+      {% comment %}
+        What questions are and how they behave, on demand. The "focus" trigger needs the
+        tabindex to be focusable at all, and gives click to open and click anywhere to
+        dismiss, which a paragraph this long wants. The site-wide initializer in
+        javascript.html binds every [data-toggle="popover"], so this needs no script of its
+        own, and data-container="body" keeps the popover from being clipped by the heading.
+      {% endcomment %}
+      <a tabindex="0" role="button" class="bt-help-popover"
+         data-toggle="popover"
+         data-trigger="focus"
+         data-placement="bottom"
+         data-container="body"
+         title="Submission Questions"
+         data-content="Questions turn this quest's submission into a structured form: each question adds its own answer field (short answer, long answer, or file upload) that students fill in when they submit the quest, in addition to the usual comment box and file attachments. Required questions must be answered before the quest can be submitted, and file upload questions can restrict what type of file students may attach. When marking, each student's answers appear beside the question's solution and your marker notes. A quest with no questions behaves exactly as it always has.">
+        <i class="fa fa-question-circle"></i>
+      </a>
       {# on a Library preview the quest belongs to another schema, so a link keyed on its id #}
       {# would open whichever quest of this deck happens to hold that id (#2163) #}
       {% if not dont_edit_questions %}<a class="btn btn-info btn-xs pull-right" href="{% url 'questions:list' quest.id %}">Manage Questions</a>{% endif %}
     </h3>
   </div>
   <div class="panel-body">
-    <div class="help-block">
-      <p>Questions turn this quest's submission into a structured form: each question adds its own
-      answer field (short answer, long answer, or file upload) that students fill in when they submit
-      the quest, in addition to the usual comment box and file attachments. Required questions must be
-      answered before the quest can be submitted, and file upload questions can restrict what type of
-      file students may attach. When marking, each student's answers appear beside the question's
-      solution and your marker notes. A quest with no questions behaves exactly as it always has.</p>
-    </div>
     {% with quest.question_set.all as questions %}
       {% include 'questions/snippets/question_table.html' %}
     {% endwith %}

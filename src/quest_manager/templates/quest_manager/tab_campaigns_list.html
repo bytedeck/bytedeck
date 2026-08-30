@@ -9,19 +9,26 @@
   </p>
 {% endif %}
 {% include 'snippets/table_loading.html' %}
+{% comment %} The whole list is in the page, so bootstrap-table's own sorting covers all of it
+   rather than one page of it, and data-sort-name gives the table a column to come up sorted by:
+   the Title heading then carries the arrow saying so. The rows arrive in that order from the
+   view as well, so the pre-JavaScript paint is not a different list (#2624). {% endcomment %}
 <table data-toggle='table'
        data-search='true'
        data-classes="table"
        data-pagination='true'
        data-page-size="15"
-       data-page-list="[15, 50, 100, all]">
+       data-page-list="[15, 50, 100, all]"
+       data-sort-name='title'
+       data-sort-order='asc'>
   <thead>
+    {# fixed column widths, so sorting a column cannot resize it and shove the rest along #}
     <tr>
-      <th data-sortable='true' data-field='title'>Title</th>
-      <th>Icon</th>
-      <th data-sortable='true' data-field='count'># of Quests</th>
-      <th data-sortable='true' data-field='xp'>XP Available</th>
-      <th>Action</th>
+      <th class="col-sm-5" data-sortable='true' data-field='title'>Title</th>
+      <th class="col-sm-1">Icon</th>
+      <th class="col-sm-2" data-sortable='true' data-field='count'># of Quests</th>
+      <th class="col-sm-2" data-sortable='true' data-field='xp'>XP Available</th>
+      <th class="col-sm-2">Action</th>
     </tr>
   </thead>
   <tbody>

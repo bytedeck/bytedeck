@@ -23,7 +23,7 @@
     {% for object in object_list %}
     <tr>
       <td>{{ object.name }}</td>
-      <td>{% if object.fa_icon %}<i class="fa {{ object.fa_icon }}"></i>{% endif %}</td>
+      <td>{% if object.fa_icon_class %}<i class="{{ object.fa_icon_class }}"></i>{% endif %}</td>
       <td>{{ object.sort_order }}</td>
       <td>
         <a class="btn btn-warning" href="{% url 'badges:badge_type_update' object.id %}" role="button" title="Edit this type">

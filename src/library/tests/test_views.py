@@ -1,3 +1,4 @@
+import re
 import uuid
 from copy import deepcopy
 from datetime import date
@@ -641,7 +642,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assert200('library:import_category', args=[self.library_category.import_id])
         self.assert200('library:category_detail_view', args=[self.library_category.import_id])
 
-    def test_import_campaign___already_exists(self):
+    def test_ImportCampaignView__already_exists(self):
         """Importing a campaign already present on the deck shows a matching-name warning."""
         self.client.force_login(self.test_teacher)
         with library_schema_context():
@@ -656,7 +657,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         response = self.client.get(import_url)
         self.assertContains(response, 'Your deck already contains a campaign with a matching name.')
 
-    def test_import_campaign__post_when_campaign_exists_locally_is_refused(self):
+    def test_ImportCampaignView__post_when_campaign_exists_locally_is_refused(self):
         """POSTing to import a campaign whose import_id already exists on the local deck imports nothing.
 
         The refusal is a redirect carrying an explanation rather than a 403, since the deck
@@ -689,7 +690,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertEqual(response.context['quest_info'], [])
         self.assertEqual(list(response.context['category_displayed_quests']), [])
 
-    def test_import_campaign___success(self):
+    def test_ImportCampaignView__success(self):
         """Importing a library campaign copies it and its quests as unpublished onto the deck."""
         self.client.force_login(self.test_teacher)
         # Capture baseline to assert relative change after import
@@ -725,7 +726,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
 
         self.assertIn(expected_link, message)
 
-    def test_import_campaign_get__identifies_existing_local_quests(self):
+    def test_ImportCampaignView__get_identifies_existing_local_quests(self):
         """
         Ensure the import campaign view correctly identifies which quests from the
         selected library campaign already exist locally and includes their import IDs
@@ -757,8 +758,9 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         for quest in library_quests[1:]:
             self.assertNotIn(quest.import_id, local_ids)
 
-        # Check the warning text appears in the rendered content
-        self.assertContains(response, "One or more quests in this campaign already exist")
+        # The notice names what the deck already has and offers to keep this deck's version (#1845)
+        self.assertContains(response, "Your deck already has this quest")
+        self.assertContains(response, "Keep my version of")
 
     def test_campaigns_tab__shows_correct_badge_count(self):
         """
@@ -810,7 +812,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         if campaign:
             self.assertContains(response, campaign.name)
 
-    def test_import_campaign__preserves_local_quest_visibility(self):
+    def test_ImportCampaignView__preserves_local_quest_visibility(self):
         """
         Tests that importing a campaign preserves the local visibility state of existing quests.
 
@@ -924,7 +926,7 @@ class CampaignLibraryTestCases(LibraryTenantTestCaseMixin):
         self.assertContains(response, published_campaign.title)
         self.assertNotContains(response, unpublished_campaign.title)
 
-    def test_import_campaign_view__shows_only_current_quests(self):
+    def test_ImportCampaignView__shows_only_current_quests(self):
         """
         Only current quests (published and not archived) should be shown when confirming a campaign import.
         """
@@ -1551,7 +1553,7 @@ class SharedLibraryDisabledTests(LibraryTenantTestCaseMixin):
         self.assertEqual(response.status_code, 404)
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.library_quest.import_id).exists())
 
-    def test_import_campaign_post__does_nothing_when_shared_library_disabled(self):
+    def test_ImportCampaignView__post_does_nothing_when_shared_library_disabled(self):
         """A POST to the campaign import URL cannot pull content onto an opted-out deck."""
         response = self.client.post(reverse('library:import_category', args=[self.library_campaign.import_id]))
 
@@ -1607,14 +1609,14 @@ class UnreviewedLibraryContentTests(LibraryTenantTestCaseMixin):
         self.assertRedirects(response, reverse('library:quest_list'))
         self.assertFalse(Quest.objects.all_including_archived().filter(import_id=self.pending_quest.import_id).exists())
 
-    def test_import_campaign_get__redirects_when_campaign_awaits_review(self):
+    def test_ImportCampaignView__get_redirects_when_campaign_awaits_review(self):
         """The confirmation page for an unpublished Library campaign sends the user back with a warning."""
         response = self.client.get(reverse('library:import_category', args=[self.pending_campaign.import_id]))
 
         self.assertRedirects(response, reverse('library:category_list'))
         self.assertWarningMessage(response)
 
-    def test_import_campaign_post__refuses_a_campaign_awaiting_review(self):
+    def test_ImportCampaignView__post_refuses_a_campaign_awaiting_review(self):
         """Posting the import URL for an unpublished Library campaign imports nothing, quests included."""
         response = self.client.post(reverse('library:import_category', args=[self.pending_campaign.import_id]))
 
@@ -1917,7 +1919,7 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
             f'href="{reverse("quests:quest_prereqs_update", args=[imported.id])}">prerequisite</a>', message
         )
 
-    def test_import_campaign_post__tells_the_user_to_publish_and_add_a_prerequisite(self):
+    def test_ImportCampaignView__post_tells_the_user_to_publish_and_add_a_prerequisite(self):
         """The campaign import message names both remaining steps."""
         response = self.client.post(
             reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True
@@ -1925,10 +1927,10 @@ class ImportNextStepsTests(LibraryTenantTestCaseMixin):
 
         imported = Category.objects.get(import_id=self.library_campaign.import_id)
         message = str(list(response.context['messages'])[0])
-        self.assertIn(
-            f'href="{reverse("quests:category_update", args=[imported.id])}">publish the campaign</a>', message
-        )
-        # the prerequisite belongs to one of its quests, so this one points at the campaign
+        # Both steps live on the campaign's own page: the publish button there is the one
+        # that publishes the quests too, and the quests are listed there so the first can
+        # be given a prerequisite (#2533)
+        self.assertIn(f'href="{imported.get_absolute_url()}">publish the campaign</a>', message)
         self.assertIn(f'href="{imported.get_absolute_url()}">prerequisite</a>', message)
 
 
@@ -2877,6 +2879,169 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
         )
 
 
+class LibraryQuestSortTests(LibraryTenantTestCaseMixin):
+    """The quests tab's column headings order the whole Library, not one page of it.
+
+    The list is paginated, so the browser holds a page rather than the Library. A sort
+    applied there answers a question about that page: which of these fifteen is worth the
+    most XP, rather than which quests in the Library are (#2410). Every assertion below
+    narrows to this class's own quests with the search box, because the Library tenant is
+    seeded with quests of its own.
+    """
+
+    #: Enough quests to fill a page and spill onto a second one.
+    QUEST_COUNT = LibraryQuestListView.paginate_by + 5
+
+    @classmethod
+    def setUpTestData(cls):
+        """Fill the Library with quests whose name order is the reverse of their XP order.
+
+        Named so they sort into the order they were created and given ascending XP, so the
+        highest-XP quests are exactly the ones the default order pushes onto page two. A
+        sort that only reached the current page could not bring them forward.
+        """
+        cls.test_teacher = User.objects.create_user('sort_teacher', is_staff=True)
+
+        with library_schema_context():
+            cls.campaign = baker.make(Category, title="Sortable Campaign", published=True)
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(cls.QUEST_COUNT):
+                baker.make(
+                    Quest, name=f'Zsort quest {i:02d}', campaign=cls.campaign, published=True, xp=i,
+                )
+
+    def _sorted_names(self, **params):
+        """The names on the first page of this class's quests, in the order rendered.
+
+        Args:
+            **params: query parameters, added to the `q=Zsort` that narrows the list.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        params.setdefault('q', 'Zsort')
+        response = self.client.get(reverse('library:quest_list'), params)
+        return [quest.name for quest in response.context['library_quests']]
+
+    def setUp(self):
+        """Sign the teacher in, since every quests-tab request needs staff."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+    def test_LibraryQuestListView__sorting_reaches_quests_that_are_not_on_the_current_page(self):
+        """Sorting by XP brings the Library's highest-XP quests onto the first page.
+
+        This is the whole point of the issue: those quests sit on page two in the default
+        order, so a sort confined to the rows the browser holds could never surface them.
+        """
+        default_first_page = self._sorted_names()
+        highest_xp_first = self._sorted_names(sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_LibraryQuestListView__a_sort_applies_ascending_and_reverses_with_a_leading_minus(self):
+        """`?sort=xp` runs lowest first and `?sort=-xp` highest first."""
+        ascending = self._sorted_names(sort='xp')
+        descending = self._sorted_names(sort='-xp')
+
+        self.assertEqual(ascending[0], 'Zsort quest 00')
+        self.assertEqual(descending[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+
+    def test_LibraryQuestListView__sorting_keeps_the_search_applied(self):
+        """Reordering a search shows the same quests in a new order, not the whole Library."""
+        names = self._sorted_names(sort='-xp')
+
+        self.assertEqual(len(names), LibraryQuestListView.paginate_by)
+        for name in names:
+            self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
+
+    def test_LibraryQuestListView__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the tab's default column, not an error.
+
+        Tags are the live case: the column is rendered but deliberately not sortable, so a
+        link someone kept from elsewhere names a column this tab will not order by. The
+        fallback is the quest name, the same column an unsorted visit lands on (#2623).
+        """
+        default_order = self._sorted_names()
+
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([quest.name for quest in response.context['library_quests']], default_order)
+                self.assertEqual(response.context['sort_column'], 'name')
+                self.assertFalse(response.context['sort_descending'])
+
+    def test_LibraryQuestListView__quests_with_no_campaign_sort_last_in_both_directions(self):
+        """A quest with no campaign goes to the end whichever way the campaign column runs.
+
+        Postgres orders NULLs first on a descending sort, which would fill the first page
+        with blanks for a reader who asked to see the Library by campaign.
+        """
+        # Named to sort first by name, which is both the Library's default order and the
+        # tie-break here, so landing last can only come from the campaign ordering itself
+        with library_schema_context():
+            baker.make(Quest, name='Zsort AAA no campaign', campaign=None, published=True, xp=1)
+
+        self.assertEqual(self._sorted_names()[0], 'Zsort AAA no campaign')
+
+        for direction in ('campaign', '-campaign'):
+            with self.subTest(sort=direction):
+                names = self._sorted_names(sort=direction, page=2)
+
+                self.assertEqual(names[-1], 'Zsort AAA no campaign')
+
+    def test_LibraryQuestListView__paging_a_sorted_list_shows_each_quest_exactly_once(self):
+        """Quests sharing a sort value keep a settled order, so paging neither skips nor repeats.
+
+        Ordering by a column alone leaves rows that tie in no defined order, and the
+        database is free to return them differently per query, which is what lets a quest
+        show up on two pages or on neither.
+        """
+        # Enough to span three pages, so the tie is carried across two page boundaries
+        tie_count = LibraryQuestListView.paginate_by * 2 + 5
+        with library_schema_context():
+            # Quest.name is unique, so these can't be made in one _quantity call
+            for i in range(tie_count):
+                baker.make(Quest, name=f'Ztie quest {i:02d}', campaign=self.campaign, published=True, xp=7)
+
+        seen = []
+        for page in (1, 2, 3):
+            seen += self._sorted_names(q='Ztie', sort='xp', page=page)
+
+        self.assertEqual(len(seen), tie_count)
+        self.assertEqual(sorted(seen), sorted(set(seen)), 'a quest appeared on more than one page')
+
+    def test_LibraryQuestListView__the_headings_link_to_the_server_and_start_a_new_first_page(self):
+        """A heading is a link carrying `sort=`, keeping the search and dropping the page.
+
+        Page 3 of the Library by name holds different quests than page 3 of it by XP, so
+        carrying the number across would land the reader somewhere they did not ask to be.
+        """
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'page': 2})
+
+        self.assertContains(response, 'sort=xp')
+        self.assertContains(response, 'q=Zsort')
+        self.assertNotContains(response, 'sort=xp&amp;page=2')
+        # bootstrap-table's own sort would reorder the page underneath the link
+        self.assertNotContains(response, 'data-sortable="true"')
+
+    def test_LibraryQuestListView__the_applied_heading_offers_the_reverse(self):
+        """Once a column is applied, its heading links to the same column reversed."""
+        response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': 'xp'})
+
+        self.assertEqual(response.context['sort_column'], 'xp')
+        self.assertFalse(response.context['sort_descending'])
+        self.assertContains(response, 'sort=-xp')
+
+        reversed_response = self.client.get(reverse('library:quest_list'), {'q': 'Zsort', 'sort': '-xp'})
+
+        self.assertEqual(reversed_response.context['sort_column'], 'xp')
+        self.assertTrue(reversed_response.context['sort_descending'])
+
+
 class LibraryListingWindowTests(LibraryTenantTestCaseMixin):
     """The Library lists what it holds, not what the sharing deck's timetable allows.
 
@@ -3168,6 +3333,270 @@ class LibraryLazyQuerysetRenderTests(LibraryTenantTestCaseMixin):
         self.assertNotContains(response, "Local Gate Quest")
 
 
+class LibraryPreserveLocalQuestTests(LibraryTenantTestCaseMixin):
+    """A campaign import can keep the deck's own version of a quest it already has.
+
+    Ticking "Keep my version of ..." on the confirmation page leaves that quest's local
+    content alone, and it still joins the arriving campaign (#1845).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to import with."""
+        cls.test_teacher = User.objects.create_user('preserve_teacher', is_staff=True)
+
+    def setUp(self):
+        """Publish a two-quest campaign in the Library and sign the teacher in."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+
+        with library_schema_context():
+            self.library_campaign = baker.make(Category, title="Web Basics", published=True)
+            self.shared = baker.make(
+                Quest, name="Semantic HTML", campaign=self.library_campaign,
+                published=True, instructions="<p>The Library's wording.</p>",
+            )
+            self.untouched = baker.make(
+                Quest, name="Flexbox Basics", campaign=self.library_campaign, published=True,
+            )
+
+    def _local_copy_of_the_shared_quest(self, **overrides):
+        """Give this deck its own edited copy of the Library's quest, matched by import_id.
+
+        Args:
+            **overrides: field values for the local quest.
+
+        Returns:
+            Quest: the local copy.
+        """
+        fields = {
+            'name': "Semantic HTML",
+            'import_id': self.shared.import_id,
+            'published': True,
+            'instructions': "<p>My own wording, rewritten for my class.</p>",
+        }
+        fields.update(overrides)
+        quest = baker.make(Quest, **fields)
+        # all_including_archived: the default manager hides archived quests, and a deck's
+        # archived copy is preservable like any other.
+        Quest.objects.all_including_archived().filter(pk=quest.pk).update(published=fields['published'])
+        return Quest.objects.all_including_archived().get(pk=quest.pk)
+
+    def _import(self, preserve=()):
+        """Import the Library campaign, optionally preserving some quests.
+
+        Args:
+            preserve (Iterable): import_ids to tick "keep my version" for.
+
+        Returns:
+            HttpResponse: the followed response.
+        """
+        data = {'preserve': [str(import_id) for import_id in preserve]}
+        return self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), data, follow=True,
+        )
+
+    def test_ImportCampaignView__the_page_offers_to_keep_each_quest_the_deck_already_has(self):
+        """The confirmation page lists a tick box per quest the deck already holds."""
+        self._local_copy_of_the_shared_quest()
+
+        response = self.client.get(reverse('library:import_category', args=[self.library_campaign.import_id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Keep my version of")
+        self.assertContains(response, f'value="{self.shared.import_id}"')
+        # Only the quest this deck actually has, not every quest in the campaign.
+        self.assertNotContains(response, f'value="{self.untouched.import_id}"')
+
+    def test_ImportCampaignView__a_preserved_quest_keeps_its_own_wording(self):
+        """Ticking a quest leaves this deck's version of it untouched (#1845)."""
+        local = self._local_copy_of_the_shared_quest()
+
+        self._import(preserve=[self.shared.import_id])
+
+        local.refresh_from_db()
+        self.assertIn("My own wording", local.instructions)
+
+    def test_ImportCampaignView__a_preserved_quest_joins_the_campaign(self):
+        """A preserved quest is put into the arriving campaign rather than left out.
+
+        The decision recorded on #1845: the campaign should be whole. A quest that stayed
+        outside it would leave a gap in the campaign and on the quest map.
+        """
+        local = self._local_copy_of_the_shared_quest(campaign=None)
+
+        self._import(preserve=[self.shared.import_id])
+
+        local.refresh_from_db()
+        self.assertIsNotNone(local.campaign)
+        self.assertEqual(local.campaign.import_id, self.library_campaign.import_id)
+        # Joined the campaign without being replaced on the way: an ordinary import also
+        # ends with the quest in the campaign, but only after overwriting it.
+        self.assertIn("My own wording", local.instructions)
+
+    def test_ImportCampaignView__quests_left_unticked_are_still_overwritten(self):
+        """A quest left unticked is replaced by the Library's version."""
+        local = self._local_copy_of_the_shared_quest()
+
+        self._import()
+
+        local.refresh_from_db()
+        self.assertIn("The Library's wording", local.instructions)
+
+    def test_ImportCampaignView__preserving_every_quest_still_creates_the_campaign(self):
+        """The campaign arrives even when no quest is written.
+
+        The campaign row is normally created from the arriving quests' snapshots, so
+        preserving all of them would otherwise leave nothing for them to join.
+        """
+        first = self._local_copy_of_the_shared_quest(campaign=None)
+        second = baker.make(
+            Quest, name="Flexbox Basics", import_id=self.untouched.import_id, published=True,
+            campaign=None, instructions="<p>My own second wording.</p>",
+        )
+
+        self._import(preserve=[self.shared.import_id, self.untouched.import_id])
+
+        campaign = Category.objects.filter(import_id=self.library_campaign.import_id).first()
+        self.assertIsNotNone(campaign, "the campaign should exist even with every quest preserved")
+        first.refresh_from_db()
+        second.refresh_from_db()
+        self.assertEqual(first.campaign, campaign)
+        self.assertEqual(second.campaign, campaign)
+        # And nothing was written over them on the way in.
+        self.assertIn("My own wording", first.instructions)
+        self.assertIn("My own second wording", second.instructions)
+
+    def test_ImportCampaignView__a_preserve_value_this_deck_does_not_have_is_ignored(self):
+        """A hand-made POST naming something else cannot change what is imported."""
+        local = self._local_copy_of_the_shared_quest()
+
+        response = self._import(preserve=[uuid.uuid4(), 'not-a-uuid'])
+
+        self.assertEqual(response.status_code, 200)
+        local.refresh_from_db()
+        # Nothing was preserved, so the import behaved normally.
+        self.assertIn("The Library's wording", local.instructions)
+
+    def test_ImportCampaignView__a_preserved_archived_quest_joins_the_campaign(self):
+        """An archived copy is preservable, and joins the campaign like any other.
+
+        The confirmation page offers the deck's archived quests too, so leaving them out of
+        the campaign would put a hole in it: the quest is neither imported nor joined.
+        """
+        local = self._local_copy_of_the_shared_quest(campaign=None, archived=True)
+
+        self._import(preserve=[self.shared.import_id])
+
+        local = Quest.objects.all_including_archived().get(pk=local.pk)
+        self.assertTrue(local.archived, "preserving a quest should not unarchive it")
+        self.assertIsNotNone(local.campaign)
+        self.assertEqual(local.campaign.import_id, self.library_campaign.import_id)
+        self.assertIn("My own wording", local.instructions)
+
+    def test_ImportCampaignView__a_preserve_value_from_another_campaign_is_ignored(self):
+        """A quest outside the campaign being imported cannot be pulled into it.
+
+        Holding a quest is not on its own enough to make it preservable: a hand-made POST
+        naming one of this deck's quests from elsewhere leaves that quest where it is.
+        """
+        other_campaign = baker.make(Category, title="A campaign of my own")
+        outsider = baker.make(Quest, name="Nothing to do with the Library", campaign=other_campaign)
+
+        self._import(preserve=[outsider.import_id])
+
+        outsider.refresh_from_db()
+        self.assertEqual(outsider.campaign, other_campaign)
+
+
+class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
+    """The import message's publish link reaches the action it promises (#2533).
+
+    The message tells the teacher that publishing the campaign publishes its quests. Only
+    one control does that, and it is a POST-only button on the campaign's own page, so the
+    link has to lead there: the campaign's edit form publishes the campaign alone and
+    leaves every quest a draft, which looks identical to the teacher until a student says
+    they cannot see anything.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to import with."""
+        cls.test_teacher = User.objects.create_user('publish_link_teacher', is_staff=True)
+
+    def setUp(self):
+        """Publish a two-quest campaign in the Library and sign the teacher in.
+
+        Two quests rather than one, so "and all its Quests" is asserted against a set the
+        publish has to walk, and an assertion about every quest cannot pass on an empty one.
+        """
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            self.library_campaign = baker.make(Category, title="Digital Citizenship", published=True)
+            baker.make(Quest, name="Your Digital Footprint", campaign=self.library_campaign, published=True)
+            baker.make(Quest, name="Reading The Terms", campaign=self.library_campaign, published=True)
+
+    def _import_and_read_the_message(self):
+        """Import the Library campaign and return the success message's HTML.
+
+        Returns:
+            str: the rendered message.
+        """
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+        messages = [str(message) for message in response.context['messages']]
+        return next(message for message in messages if "Successfully imported" in message)
+
+    def _publish_link_target(self, message):
+        """Return the URL that the message's "publish the campaign" link points at.
+
+        Args:
+            message (str): the rendered success message.
+
+        Returns:
+            str: the link's href.
+        """
+        return re.search(r'<a href="([^"]+)">publish the campaign</a>', message).group(1)
+
+    def test_ImportCampaignView__the_publish_link_goes_to_the_campaign_page(self):
+        """The "publish the campaign" link points at the campaign, not at its edit form."""
+        message = self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+
+        self.assertEqual(self._publish_link_target(message), campaign.get_absolute_url())
+        self.assertNotIn(reverse('quests:category_update', args=[campaign.id]), message)
+
+    def test_ImportCampaignView__the_page_the_publish_link_reaches_publishes_the_quests(self):
+        """The page that link reaches carries the control publishing the campaign and its quests.
+
+        The href is read out of the message and requested, so this fails if the button moves
+        off the page the message points at, not merely if the link string changes.
+        """
+        message = self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+
+        response = self.client.get(self._publish_link_target(message))
+
+        self.assertContains(response, reverse('quests:category_publish', args=[campaign.id]))
+        self.assertContains(response, "Publish Campaign and all its Quests")
+
+    def test_CategoryPublish__publishes_the_campaign_and_its_quests(self):
+        """The linked-to control does publish both, which is what the message promises."""
+        self._import_and_read_the_message()
+        campaign = Category.objects.get(import_id=self.library_campaign.import_id)
+        quests = Quest.objects.filter(campaign=campaign)
+        self.assertFalse(campaign.published)
+        self.assertEqual(quests.filter(published=False).count(), 2)
+
+        self.client.post(reverse('quests:category_publish', args=[campaign.id]))
+
+        campaign.refresh_from_db()
+        self.assertTrue(campaign.published)
+        self.assertEqual(quests.filter(published=True).count(), 2)
+
+
 class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
     """Importing a campaign whose title this deck has given to a different campaign.
 
@@ -3197,6 +3626,36 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         """
         return self.client.post(
             reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+
+    def test_ImportCampaignView__a_clashing_title_arrives_renamed_when_every_quest_is_preserved(self):
+        """The campaign is still renamed when no arriving quest was written to create it.
+
+        Preserving every quest means none of them is written, so the campaign is created by
+        `import_campaign_to`'s own fallback rather than on a quest's way in (#1845). That
+        path has to rename on a title clash for the same reason the other one does, and
+        report it, or this deck's own campaign is merged into after all.
+        """
+        mine = baker.make(Category, title="Studio Habits")
+        with library_schema_context():
+            arriving = self.library_campaign.quest_set.get()
+        # The deck holds the arriving quest already, and the teacher keeps their version.
+        baker.make(Quest, name="Welcome Aboard", import_id=arriving.import_id)
+
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]),
+            {'preserve': [str(arriving.import_id)]}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        self.assertNotEqual(arrived.pk, mine.pk)
+        self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
+        # The teacher is told, exactly as on the ordinary path.
+        messages = [message.message for message in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any("already had a different campaign called 'Studio Habits'" in message for message in messages),
+            f"no message named the renamed campaign: {messages}",
         )
 
     def test_ImportCampaignView__a_clashing_title_arrives_renamed(self):

@@ -66,6 +66,17 @@
       </td>
       {% if not dont_edit_questions %}
       <td class="text-nowrap">
+        {% comment %}
+          Only where the page binds the handler that posts these in the background and swaps
+          the answer in (the question list, and the view re-rendering this table for it).
+          Elsewhere this snippet is a preview of a quest the reader is doing something else
+          with, and the move would redirect them to the question list, losing their place and,
+          on the Library's Share Quest page, the export they were partway through (#2568).
+          The flag is positive so the default is no arrows: a template that includes this
+          without the handler cannot inherit buttons that would strand its reader. Edit and
+          Delete stay: those are plain links, so leaving the page is what they promise.
+        {% endcomment %}
+        {% if can_reorder_questions %}
         <form method="post" action="{% url 'questions:move' quest.id question.id 'up' %}" class="preview-action-form question-move-form">
           {% csrf_token %}
           <button type="submit" class="btn btn-default" title="Move up"{% if forloop.first %} disabled{% endif %}>
@@ -78,6 +89,7 @@
             <i class="fa fa-fw fa-arrow-down"></i>
           </button>
         </form>
+        {% endif %}
         <a class="btn btn-warning" href="{{ question.get_absolute_url }}" title="Edit">
           <i class="fa fa-edit"></i>
         </a>

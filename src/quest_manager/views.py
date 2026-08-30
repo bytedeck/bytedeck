@@ -2,6 +2,8 @@ import json
 import posixpath
 import re
 import uuid
+from collections import namedtuple
+from datetime import datetime, timezone as dt_timezone
 
 from django.utils.html import format_html
 from django.utils.decorators import method_decorator
@@ -17,7 +19,10 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
-from django.db.models import F, ExpressionWrapper, fields, BooleanField, Count, Exists, OuterRef, Q, Sum
+from django.db.models import (
+    Case, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, Q, Sum, Value, When,
+)
+from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import Http404, get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -36,6 +41,11 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.html import is_empty_html
+from utilities.sorting import apply_sort, resolve_sort
+
+from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
+
 from library.utils import is_library_schema_requested, library_schema_if_requested
 from notifications.signals import notify
 from notifications.models import notify_rank_up
@@ -60,6 +70,12 @@ from .models import Quest, QuestSubmission, Category, CommonData
 from djcytoscape.models import CytoScape
 
 User = get_user_model()
+
+#: How a quest tab is ordered until a heading is clicked. `sort_order` is the teacher's own
+#: manual ordering (#1179), so it comes first and nothing else may override it; expired quests
+#: are grouped ahead of the rest, since they are the ones needing attention; and the name
+#: settles everything else, which is the column the reader is looking at (#2623).
+DEFAULT_QUEST_ORDERING = ('sort_order', '-is_expired', 'name')
 
 
 def is_staff_or_TA(user):
@@ -88,6 +104,16 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         return self.request.path in [reverse('quest_manager:categories'), reverse('quest_manager:categories_available')]
 
     def get_queryset(self):
+        """The campaigns for the tab being viewed, counted, summed and ordered by title.
+
+        Which tab is showing decides whether the published or the unpublished campaigns are
+        listed, and the two annotations give the template its per-campaign figures without a
+        query each.
+
+        Returns:
+            QuerySet[Category]: the tab's campaigns, alphabetical by title, each carrying
+            `quest_count_annotated` and `xp_sum_annotated` for its current quests.
+        """
         queryset = super().get_queryset()
 
         if self.inactive_tab_active:
@@ -104,7 +130,10 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
             xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
         )
 
-        return queryset
+        # An aggregate annotation groups the query, and Django emits no ORDER BY at all for a
+        # grouped query, so Category.Meta.ordering is lost and Postgres returns the campaigns
+        # in whatever order it finds them. Ask for the title back explicitly (#2624).
+        return queryset.order_by('title')
 
     def get_context_data(self, *args, **kwargs):
         """Add the tab state and the campaign table's flags to the deck's campaign list.
@@ -166,14 +195,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
         # icon), tags, and calls quest.expired() (twice), so select_related the
         # campaign, prefetch tags and annotate is_expired to avoid a handful of
         # queries per quest. This mirrors the quest list view (see quest_list()).
-        quests = quests.select_related("campaign").prefetch_related("tags")
-        not_expired_subquery = quests.not_expired().values("id")
-        quests = quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
-        )
+        quests = quests.select_related("campaign").prefetch_related("tags").with_is_expired()
 
         kwargs['category_displayed_quests'] = quests
 
@@ -194,7 +216,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaigns list, since a new campaign has no
+            and `cancel_url`: the campaigns list, since a new campaign has no
             detail view to return to yet.
         """
         kwargs["heading"] = "Create New Campaign"
@@ -219,7 +241,7 @@ class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
 
         Returns:
             dict: template context including the form heading, submit button label,
-            and `cancel_url` — the campaign's detail view, so cancelling returns
+            and `cancel_url`: the campaign's detail view, so cancelling returns
             to the page the edit was started from (issue #1931).
         """
         kwargs["heading"] = "Update Campaign"
@@ -431,7 +453,7 @@ class QuestCopy(QuestCreate):
         duplication all run inside a single transaction, so a failure duplicating a question rolls
         back the whole copy rather than leaving an orphaned quest with no (or partial) questions.
 
-        Student answers are not copied — those belong to submissions, not to the quest. The
+        Student answers are not copied: those belong to submissions, not to the quest. The
         solution_file reference is shared with the source question, matching how the copied
         quest already shares its icon file.
         """
@@ -807,6 +829,25 @@ class QuestListViewTabTypes:
 @non_public_only_view
 @login_required
 def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
+    """Render the quest tabs: available, in progress, completed, past, drafts and archived.
+
+    Which tab is shown comes from the path, or from `quest_id`, which opens the Available tab
+    with that quest expanded. Every tab is counted in full for its badge, then searched,
+    ordered and cut to a page in the database, so each of those three answers a question about
+    the whole tab rather than about the page the browser is holding (#2379, #2410, #2582).
+
+    A staff member sees every published quest; a student sees the ones available to them, plus
+    the repeatable ones still inside their cooldown window, shown as available again soon.
+
+    Args:
+        request (HttpRequest): the request, whose path picks the tab and whose query string
+            carries the page, the search term and the sort.
+        quest_id (int): a quest to open on the Available tab, or None for the tab alone.
+        template (str): the template to render.
+
+    Returns:
+        HttpResponse: the rendered quest list.
+    """
     available_quests = []
     in_progress_submissions = []
     completed_submissions = []
@@ -850,14 +891,6 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
             .select_related("campaign", "editor__profile")
             .prefetch_related("tags")
         )
-        # There was a looping call to quest.expired() which was causing a lot of queries.  Instead, annotate the value here
-        not_expired_subquery = available_quests.not_expired().values("id")
-        available_quests = available_quests.annotate(
-            is_expired=ExpressionWrapper(
-                ~Exists(not_expired_subquery.filter(id=OuterRef("id"))),
-                output_field=BooleanField(),
-            )
-        )
     else:
         if request.user.profile.has_current_course:
             available_quests = Quest.objects.get_available(request.user, remove_hidden)
@@ -892,15 +925,26 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         else available_quests.count()
     )
 
+    # The quest tabs show the campaign, and are the student's own submissions, so there is
+    # no user column. The in-progress tab's Status cell carries no time, so it offers no
+    # sort by it. A quest tab leaves this empty: it has its own search and ordering below.
+    submission_tab = SubmissionTab(
+        page=None, sortable_columns={}, sort_column='', sort_descending=False,
+        search_term='', num_matching=0,
+    )
+
     if view_type == QuestListViewTabTypes.IN_PROGRESS:
-        in_progress_submissions = paginate(in_progress_submissions, page)
+        submission_tab = submission_tab_page(request, in_progress_submissions, page, campaign=True, status=False)
+        in_progress_submissions = submission_tab.page
         # available_quests = []
     elif view_type == QuestListViewTabTypes.COMPLETED:
         # completed_submissions_count = completed_submissions.count()
-        completed_submissions = paginate(completed_submissions, page)
+        submission_tab = submission_tab_page(request, completed_submissions, page, campaign=True)
+        completed_submissions = submission_tab.page
         # available_quests = []
     elif view_type == QuestListViewTabTypes.PAST:
-        past_submissions = paginate(past_submissions, page)
+        submission_tab = submission_tab_page(request, past_submissions, page, campaign=True)
+        past_submissions = submission_tab.page
         # available_quests = []
 
     if view_type == QuestListViewTabTypes.DRAFT:
@@ -909,6 +953,26 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         quests = archived_quests
     else:
         quests = available_quests
+
+    # The quest tabs are searched, ordered and paginated in the database, so all three
+    # cover the whole tab rather than the page the browser is holding (#2379, #2410).
+    # The counts above are taken first, so the tab badges keep reporting what the tab
+    # holds rather than what the current search matched.
+    search_term = request.GET.get('q', '').strip()
+    quests = search_quests(quests, search_term)
+    num_matching_quests = quests.count()
+
+    # `is_expired` is read by the table (it colours an expired row) and by the ordering below,
+    # so every tab carries it, not only the staff Available one. Annotating beats the looping
+    # `quest.expired()` call it replaces, which cost a query per row.
+    quests = quests.with_is_expired()
+
+    quest_sort_column, quest_sort_descending = resolve_sort(request, QUEST_SORT_COLUMNS)
+    if quest_sort_column:
+        quests = apply_sort(quests, QUEST_SORT_COLUMNS, quest_sort_column, quest_sort_descending, tie_break='name')
+    else:
+        quests = quests.order_by(*DEFAULT_QUEST_ORDERING)
+    quests = paginate(quests, page)
 
     # Used to explain why the "Available" tab is empty, if it is
     awaiting_approval = QuestSubmission.objects.filter(
@@ -937,6 +1001,19 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         "VIEW_TYPES": QuestListViewTabTypes,
         "view_type": view_type,
         "bulk_edit_mode": request.user.is_staff and 'bulk_edit' in request.GET,
+        # Read by the submission tabs' table and its search box
+        "sortable_columns": submission_tab.sortable_columns,
+        "sort_column": submission_tab.sort_column,
+        "sort_descending": submission_tab.sort_descending,
+        "submission_search_term": submission_tab.search_term,
+        "num_matching_submissions": submission_tab.num_matching,
+        # The quest tabs (available, drafts, archived) carry their own search and order,
+        # since they list quests rather than submissions
+        "search_term": search_term,
+        "num_matching_quests": num_matching_quests,
+        "quest_sortable_columns": QUEST_SORT_COLUMNS,
+        "quest_sort_column": quest_sort_column,
+        "quest_sort_descending": quest_sort_descending,
     }
     return render(request, template, context)
 
@@ -1141,9 +1218,9 @@ def quest_user_status(request, quest_id):
     quest = get_object_or_404(Quest.objects.all(), pk=quest_id)
 
     # Three student groups the page can show, as sets of user ids (issue #1973):
-    #   active    — all active students (in a course or not); the superset
-    #   current   — students registered in a course in a semester that is open
-    #   my_blocks — students in a course block the current teacher teaches in one of those
+    #   active    : all active students (in a course or not); the superset
+    #   current   : students registered in a course in a semester that is open
+    #   my_blocks : students in a course block the current teacher teaches in one of those
     # The last two span every open semester, since a deck can run more than one at a time
     # (issue #2157 Phase 3): scoping them to the deck's default would count a student as
     # current and then leave them out of their own teacher's group.
@@ -1308,6 +1385,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission": self.submission,
             # "comments": comments,
             "submission_form": self.form,
+            "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
             # "reply_comment_form": reply_comment_form,
         }
@@ -1493,6 +1571,23 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         return super().dispatch(request, *args, **kwargs)
 
     def post(self, request, submission_id, *args, **kwargs):
+        """Act on a teacher's decision about one submission, and tell the student.
+
+        Which decision it is comes from the button the form carries (approve, return, comment,
+        skip), which `handle_form_button` reads; that also supplies the wording to store when
+        the teacher wrote no comment of their own. Any badge granted alongside is appended to
+        the comment, uploaded files are attached to it, and the student is notified.
+
+        Args:
+            request: the POST carrying the teacher's comment, any files, any badge, and which
+                button was pressed.
+            submission_id: pk of the submission being acted on.
+
+        Returns:
+            HttpResponse: `form_valid`'s redirect to the approvals tab, or a JsonResponse when
+            the request was made by ajax. An invalid form returns `form_invalid` instead,
+            which re-renders the submission page (or a 400 for ajax).
+        """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
 
@@ -1506,7 +1601,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # handle comment text
             # if staff didnt write any text for comment use blank_comment_text
             comment_text = self.form.cleaned_data.get("comment_text")
-            if not comment_text or comment_text == "<p><br></p>":
+            # An editor the teacher typed nothing into posts markup, not an empty string, so
+            # what counts as "no comment" is a question about what that markup renders as
+            # rather than about the string (#2609). An image on its own is a real comment and
+            # is kept: is_empty_html treats embedded media as content.
+            if is_empty_html(comment_text):
                 comment_text = blank_comment_text
 
             comment_new = Comment.objects.create_comment(
@@ -1536,6 +1635,136 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
             return self.form_valid()
         return self.form_invalid()
+
+
+#: A returned submission whose `time_returned` was never recorded is treated as very old,
+#: so it sorts alongside the oldest rather than jumping to the front of a list ordered by
+#: Status. `snippets/submitted_status.html` calls the same case "Unknown time ago".
+RETURNED_LONG_AGO = datetime(1970, 1, 1, tzinfo=dt_timezone.utc)
+
+
+def submission_status_time():
+    """The time the Status column shows, as something the database can order by.
+
+    That column shows a different time depending on how far the submission got, following
+    the same chain as `quest_manager/snippets/submitted_status.html`: approved shows when
+    it was approved, awaiting approval shows when it was handed in, returned shows when it
+    was returned, and one still in progress has no time of its own.
+
+    A sort has to read the value the reader is looking at, so this mirrors that chain
+    rather than picking a single column and hoping the tab only holds one kind of row.
+
+    Returns:
+        Case: the timestamp for each submission, for `order_by`.
+    """
+    return Case(
+        When(is_approved=True, then=F('time_approved')),
+        # Reached only when not approved, so this is "awaiting approval"
+        When(is_completed=True, then=F('time_completed')),
+        # Reached only when not completed, so a time_completed here means it was returned
+        When(time_completed__isnull=False, then=Coalesce(F('time_returned'), Value(RETURNED_LONG_AGO))),
+        default=Now(),
+        output_field=DateTimeField(),
+    )
+
+
+def submission_displayed_xp():
+    """The XP the table shows, as something the database can order by.
+
+    The cell shows a different number depending on the submission, following the same
+    chain as the two tab templates: a skipped submission grants nothing and shows 0, a
+    quest whose XP the student enters shows the amount they asked for, and everything else
+    shows the quest's own XP.
+
+    Ordering by `quest__xp` alone would sort by a number that is not on screen for either
+    of the first two, which is the same trap the Status column has.
+
+    Returns:
+        Case: the XP for each submission, for `order_by`.
+    """
+    return Case(
+        When(do_not_grant_xp=True, then=Value(0)),
+        When(quest__xp_can_be_entered_by_students=True, then=F('xp_requested')),
+        default=F('quest__xp'),
+        output_field=IntegerField(),
+    )
+
+
+def submission_sort_columns(*, campaign=False, user=False, status=True):
+    """The columns a submission tab offers, mapped to what the database orders on.
+
+    Two columns are never offered, for the same reason the Library's quests tab does not
+    offer its tags (#2410): a submission's {group} blocks and its quest's tags are both
+    many-valued, so there is no one value to order a row by, and neither column can keep
+    the promise a sort control makes.
+
+    Args:
+        campaign (bool): whether this tab shows the quest's campaign.
+        user (bool): whether this tab shows whose submission it is.
+        status (bool): whether the Status column carries a time. The in-progress tabs show
+            no time there, so ordering by it would move nothing and still look like a sort.
+
+    Returns:
+        dict: the offered columns, keyed by the key the headings use.
+    """
+    columns = {
+        'name': 'quest__name',
+        'xp': submission_displayed_xp(),
+    }
+    if campaign:
+        columns['campaign'] = 'quest__campaign__title'
+    if user:
+        columns['user'] = 'user__username'
+    if status:
+        columns['status'] = submission_status_time()
+
+    return columns
+
+
+#: What a submission tab needs to render itself once its page has been cut: the page, the
+#: columns it offers, the ordering applied, and the search it was narrowed by.
+SubmissionTab = namedtuple(
+    'SubmissionTab',
+    'page sortable_columns sort_column sort_descending search_term num_matching',
+)
+
+
+def submission_tab_page(request, submissions, page, *, campaign=False, user=False, status=True):
+    """Narrow, order and cut a page from one tab's submissions.
+
+    All three happen here, before the page is taken, because the browser only ever holds
+    one page: a search or a sort applied there answers a question about that page rather
+    than about the tab (#2582, #2597). `id` settles submissions that tie on the chosen
+    column, so paging through a sorted tab shows each of them exactly once.
+
+    Args:
+        request (HttpRequest): the current request, for the `q` and `sort` parameters.
+        submissions (QuerySet[QuestSubmission]): the tab's submissions.
+        page: the requested page.
+        campaign (bool): whether this tab shows the quest's campaign and tags.
+        user (bool): whether this tab shows whose submission it is.
+        status (bool): whether the Status column carries a time to order by.
+
+    Returns:
+        SubmissionTab: the page and everything the template reads beside it.
+    """
+    sortable_columns = submission_sort_columns(campaign=campaign, user=user, status=status)
+
+    search_term = request.GET.get('q', '').strip()
+    submissions = search_submissions(submissions, search_term, campaign=campaign, user=user)
+    num_matching = submissions.count()
+
+    column, descending = resolve_sort(request, sortable_columns)
+    submissions = apply_sort(submissions, sortable_columns, column, descending, tie_break='id')
+
+    return SubmissionTab(
+        page=paginate(submissions, page),
+        sortable_columns=sortable_columns,
+        sort_column=column,
+        sort_descending=descending,
+        search_term=search_term,
+        num_matching=num_matching,
+    )
 
 
 def paginate(object_list, page, per_page=30):
@@ -1607,22 +1836,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
     page = request.GET.get("page")
+    # The approvals tabs show whose submission it is, and no campaign column, so that is
+    # what they search and order by. The in-progress tab's Status cell carries no time.
     # if '/submitted/' in request.path_info:
     #     approval_submissions = QuestSubmission.objects.all_awaiting_approval()
     if "/in-progress/" in request.path_info:
         view_type = ApprovalsViewTabTypes.INPROGRESS
         in_progress_submissions = QuestSubmission.objects.all_not_completed().order_by(F("time_completed").desc(nulls_last=True))
-        in_progress_submissions = paginate(in_progress_submissions, page)
+        submission_tab = submission_tab_page(request, in_progress_submissions, page, user=True, status=False)
+        in_progress_submissions = submission_tab.page
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only
         )
-        approved_submissions = paginate(approved_submissions, page)
+        submission_tab = submission_tab_page(request, approved_submissions, page, user=True)
+        approved_submissions = submission_tab.page
     elif "/flagged/" in request.path_info:
         view_type = ApprovalsViewTabTypes.FLAGGED
         flagged_submissions = QuestSubmission.objects.flagged(user=request.user)
-        flagged_submissions = paginate(flagged_submissions, page)
+        submission_tab = submission_tab_page(request, flagged_submissions, page, user=True)
+        flagged_submissions = submission_tab.page
     else:  # default is /submitted/ (awaiting approval)
         view_type = ApprovalsViewTabTypes.SUBMITTED
         if current_teacher_only:
@@ -1632,7 +1866,8 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval(
             teacher=teacher
         )
-        submitted_submissions = paginate(submitted_submissions, page)
+        submission_tab = submission_tab_page(request, submitted_submissions, page, user=True)
+        submitted_submissions = submission_tab.page
 
     tab_list = [
         {
@@ -1687,6 +1922,12 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
+        # Read by the tab's table and its search box
+        "sortable_columns": submission_tab.sortable_columns,
+        "sort_column": submission_tab.sort_column,
+        "sort_descending": submission_tab.sort_descending,
+        "submission_search_term": submission_tab.search_term,
+        "num_matching_submissions": submission_tab.num_matching,
     }
     return render(request, template, context)
 
@@ -1736,6 +1977,39 @@ def unarchive(request, quest_id):
 #   QUEST SUBMISSION - STUDENT VIEWS
 #
 #########################################
+def _submission_page_media(form, question_formset=None):
+    """The assets the submission page's head needs, combined into one ``Media``.
+
+    The page carries editors from two different forms: the comment box on ``form``, and one
+    per long-answer question on ``question_formset``. Both need the summernote library, and
+    only a single ``Media`` object de-duplicates the shared files: two separate renders in
+    the template would emit the whole asset set twice (#2169). The answer forms set crispy's
+    ``include_media = False`` for that reason and depend on this being emitted for them.
+
+    Every form in the formset is asked, not the formset itself. ``BaseFormSet.media`` reads
+    only ``forms[0]`` on the assumption that a formset's forms are alike, which is not true
+    here: each answer form builds a widget for its own question type, so a quest whose first
+    question is a short answer would otherwise report no editor assets at all.
+
+    The comment form does not always carry them either. The POST path builds
+    ``SubmissionQuickReplyFormStudent``, whose ``comment_text`` is a plain textarea, so
+    without the formset's half a submission bounced back for a validation error loads no
+    summernote and every editor on the page degrades to a raw textarea (#2608).
+
+    Args:
+        form: the page's comment form.
+        question_formset: the answer formset, or None when the quest has no questions (or
+            the page is not showing them).
+
+    Returns:
+        Media: the combined assets, ready to render in the template's head.
+    """
+    media = form.media
+    for answer_form in question_formset.forms if question_formset else ():
+        media = media + answer_form.media
+    return media
+
+
 def _keep_posted_uploads(request, form, question_formset, submission, followup=""):
     """Save the POST's uploads that pass their own validation, and tell the student.
 
@@ -1784,6 +2058,19 @@ def complete(request, submission_id):
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
     - The submission is marked as completed (by the student)
     - If the quest is automatically approved, then the submission is also marked as approved
+
+    Args:
+        request: the POST carrying the comment, any files, the answer formset, and which
+            button was pressed ("complete" or "comment").
+        submission_id: pk of the submission being completed or commented on.
+
+    Returns:
+        HttpResponse: a redirect once the submission is accepted, or the re-rendered
+        submission page (status 200) when the form or the answer formset has errors to show.
+
+    Raises:
+        Http404: on a GET, an unrecognized submit button, or a submission with no draft
+            comment that is not already completed.
     """
     submission = get_object_or_404(QuestSubmission, pk=submission_id)
     origin_path = submission.get_absolute_url()
@@ -1850,7 +2137,7 @@ def complete(request, submission_id):
         # stale page from before the quest's questions changed) can present fewer answer forms
         # than the quest has questions. Without this guard those omitted questions are never
         # validated yet still published (the blanket publish below), so required questions
-        # could be bypassed — completing/auto-approving a quest with nothing answered. Require
+        # could be bypassed, completing or auto-approving a quest with nothing answered. Require
         # the POST to cover exactly the quest's current questions; otherwise bounce back to a
         # freshly-built page that shows them all.
         expected_ids = set(draft_rows.values_list("pk", flat=True))
@@ -1885,6 +2172,7 @@ def complete(request, submission_id):
             "q": submission.quest,  # allows for common data to be displayed on sidebar more easily...
             "submission_form": form,
             "question_formset": question_formset,
+            "form_media": _submission_page_media(form, question_formset),
             "anchor": "submission-form-" + str(submission.quest.id),
         }
         return render(request, "quest_manager/submission.html", context)
@@ -1896,14 +2184,18 @@ def complete(request, submission_id):
     # Whether the student actually answered at least one question (a BaseFormSet is always
     # truthy, so `if question_formset:` alone would treat a set of only-blank optional
     # answers as content and wrongly bypass the verification-required check below).
-    answered_a_question = bool(question_formset) and any(
-        f.cleaned_data.get("response_text") or f.cleaned_data.get("response_file")
-        for f in question_formset.forms
-    )
+    # Each form decides for itself what counts as answered, since an untouched summernote
+    # editor posts markup rather than an empty string (#2560).
+    answered_a_question = bool(question_formset) and any(f.has_answer() for f in question_formset.forms)
 
-    # If the student didn't leave a comment (or the default html from summernote <p><br></p>)
-    # then need to check if we should bother handling this form submission
-    if not comment_text or comment_text == "<p><br></p>":
+    # Whether the student left a comment at all. The editor posts markup rather than an empty
+    # string for a box nobody typed in, so this asks what that markup renders as (#2609); a
+    # comment that is only a pasted image counts as content. Answered once, here, because the
+    # branches below overwrite comment_text with placeholder text, and the teacher
+    # notification further down still needs to know whether there was ever a real comment.
+    has_comment = not is_empty_html(comment_text)
+
+    if not has_comment:
 
         # If the student answered at least one question, those answers are the submission's
         # content, so don't demand an additional comment or attachment on top of them.
@@ -2001,10 +2293,10 @@ def complete(request, submission_id):
 
         # Send notification to current teachers when a comment is left on an auto-approved quest
         # since these quests don't appear in the approvals tab, teacher would never know about the comment.
-        if (
-            form.cleaned_data.get("comment_text")
-            and not submission.quest.verification_required
-        ):
+        # has_comment rather than the posted value: an editor nobody typed in posts markup, and
+        # notifying a teacher to come and read a comment that renders as blank space wastes the
+        # trip (#2609).
+        if has_comment and not submission.quest.verification_required:
             affected_users.extend(request.user.profile.current_teachers())
 
         # Record which course the student said this counts toward, before the XP is granted so
@@ -2267,7 +2559,6 @@ def ajax_save_draft(request):
             submission_id = int(request.POST.get("submission_id", ""))
         except (TypeError, ValueError):
             raise Http404("No valid submission id provided.")
-        # xp_requested = request.POST.get('xp_requested')
 
         sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
         # if there is no draft comment, then the quest is not in progress
@@ -2278,9 +2569,33 @@ def ajax_save_draft(request):
 
         if submission_comment is not None and draft_comment.text != submission_comment:
             draft_comment.text = submission_comment
-            # sub.xp_requested = xp_requested
             response_data["result"] = "Draft saved"
             draft_comment.save()
+
+        # The page sends the custom XP with every draft save, so store it: the submission
+        # form seeds that field from sub.xp_requested, so storing it is what brings the
+        # student's own number back when they return to a half-finished quest (#2562).
+        #
+        # Guarded on exactly the condition the page builds the field under, so a request
+        # cannot set XP on a quest that does not offer it, or on an approved submission.
+        if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
+            try:
+                xp_requested = int(request.POST.get("xp_requested", ""))
+            except (TypeError, ValueError):
+                # absent, blank, or not a number: leave whatever is stored alone
+                xp_requested = None
+            # Zero and below are left alone rather than stored. Zero is this app's sentinel
+            # for "no custom XP requested" (`sub.xp_requested or sub.quest.xp` here and in
+            # the approval path), so storing it says the same thing as storing nothing while
+            # destroying a real number the student had already saved. A box holding "0" for
+            # a keystroke, or emptied to be retyped, is exactly what an autosave lands in.
+            if xp_requested is not None and xp_requested > 0 and xp_requested != sub.xp_requested:
+                sub.xp_requested = xp_requested
+                sub.full_clean()
+                # this field only: a draft save must not write back the rest of a row it
+                # read a moment ago (#2565)
+                sub.save(update_fields=["xp_requested"])
+                response_data["result"] = "Draft saved"
 
         # Autosave draft answers to the quest's questions. Text answers arrive as a JSON
         # object of the formset's field names, pairing each row's hidden id with its
@@ -2329,7 +2644,10 @@ def ajax_save_draft(request):
                 if row and row.response_text != text:
                     row.response_text = text
                     row.full_clean()
-                    row.save()
+                    # Only the answer, never the whole row: the filter above read `comment`
+                    # before this save, so a submit publishing in between would otherwise
+                    # have that stale NULL written back over it (#2565).
+                    row.save(update_fields=["response_text", "datetime_last_edit"])
                     response_data["result"] = "Draft saved"
 
         # Draft-save any files in the POST (#1459). The Save Draft button posts the whole
@@ -2344,7 +2662,15 @@ def ajax_save_draft(request):
             saved_attachments = []
             file_errors = {}
 
-            if sub.quest.question_set.exists():
+            # Same submission-state condition as the page GET and complete(): building the formset calls
+            # sync_draft_question_submissions, which creates a draft row per question when
+            # none exists. On a submission that is finished those rows can never be
+            # published or rendered, so they would be invisible and permanent, and on a
+            # skipped quest they would undo the discard the skip flow just performed
+            # (#2164, #2567). The page still offers Save Draft on a completed submission,
+            # and the draft comment the GET creates is enough to reach this, so the guard
+            # has to be here rather than relying on the button being hidden.
+            if not sub.is_completed and not sub.is_approved and sub.quest.question_set.exists():
                 question_formset = QuestionSubmissionFormsetFactory(
                     request.POST, request.FILES,
                     instance=sub, queryset=sync_draft_question_submissions(sub),
@@ -2418,6 +2744,31 @@ def drop(request, submission_id):
 @non_public_only_view
 @login_required
 def submission(request, submission_id=None, quest_id=None):
+    """Show one submission: the student's work on a quest, and the form to add to it.
+
+    Serves both roles. A student sees their own in-progress submission with the comment box,
+    the answer formset for the quest's questions, and their draft comment (created here on
+    first visit, since the draft-save endpoint needs one to write to). Staff see the same
+    submission with the approval form instead, which carries the extra fields for granting
+    badges. Anyone who is neither the owner nor staff is redirected away.
+
+    The answer formset is only built while the submission can still be worked on. Once it is
+    completed or approved the answers are published and shown with their comment instead.
+
+    Args:
+        request: the HTTP request; ``request.user`` decides which form and whose submission.
+        submission_id: pk of the submission to show. A submission whose quest has since
+            become unavailable is still found, through the user's completed submissions.
+        quest_id: unused. No URL pattern routes to this view with it, and nothing in the
+            body reads it; kept so existing callers passing it do not break.
+
+    Returns:
+        HttpResponse: the rendered submission page, or a redirect to the quest list when the
+        requesting user may not see this submission.
+
+    Raises:
+        Http404: if no submission with this pk is visible to the requesting user.
+    """
     try:
         sub = QuestSubmission.objects.get(pk=submission_id)
     except QuestSubmission.DoesNotExist:
@@ -2476,6 +2827,7 @@ def submission(request, submission_id=None, quest_id=None):
         "q": sub.quest,  # allows for common data to be displayed on sidebar more easily...
         "submission_form": main_comment_form,
         "question_formset": question_formset,
+        "form_media": _submission_page_media(main_comment_form, question_formset),
         # "reply_comment_form": reply_comment_form,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         # A quest can become unpublished (drafted) after a student has already submitted it.

@@ -1,6 +1,6 @@
 /*!
  * Font Awesome icon picker for FontAwesomeIconPickerWidget
- * (utilities.widgets.FontAwesomeIconPickerWidget).
+ * (utilities.fa_icon_widget.FontAwesomeIconPickerWidget).
  *
  * Vanilla JS (no jQuery), so it is safe regardless of script order. For every
  * .fa-icon-picker on the page it builds a searchable grid from window.faIcons
