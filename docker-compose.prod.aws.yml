@@ -37,10 +37,20 @@ services:
   # user, so none of them run as root.
   web:
     <<: *prod-service
+    # migrate_schemas runs here so a cold start reaches a migrated database on
+    # its own: a host reboot brings this stack up straight from systemd, with
+    # no deploy script involved. A deploy has already applied them from
+    # production/server-update.sh, so by the time a deploy reaches this it is a
+    # check that finds nothing to do.
+    #
+    # collectstatic is deliberately NOT here. Only a deploy produces new static
+    # files, and publishing them is hundreds of round trips to S3; every one of
+    # them would land between nginx losing its backend and uwsgi binding :8000,
+    # where a visitor is looking at the maintenance page. server-update.sh does
+    # it against the new image while the previous one is still serving.
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&
                       python manage.py migrate_schemas --executor=multiprocessing &&
-                      python manage.py collectstatic --noinput &&
                       uwsgi --ini uwsgi.aws.ini ${UWSGI_EXTRA_ARGS:-}"
 
   celery:
@@ -106,12 +116,14 @@ services:
       - "443:8088"
       - "80:8080"
     # Start ordering only. nginx must come up straight away, without waiting
-    # for web to pass its healthcheck: web spends minutes running
-    # migrate_schemas over every tenant schema and then collectstatic before
-    # uwsgi binds :8000, and nginx serves the maintenance page for that whole
-    # window. Gating on service_healthy would leave 443 unbound until the
-    # migrations finished, so visitors would get a connection error instead of
-    # the "ByteDeck is updating" page. nginx re-resolves `web` at request time
+    # for web to pass its healthcheck: web runs migrate_schemas over every
+    # tenant schema before uwsgi binds :8000, and on a cold start with
+    # migrations still to apply that takes minutes. nginx serves the
+    # maintenance page for that window. Gating on service_healthy would leave
+    # 443 unbound until the migrations finished, so visitors would get a
+    # connection error instead of the "ByteDeck is updating" page. (A deploy
+    # does not reach that: production/server-update.sh migrates before it
+    # swaps the containers.) nginx re-resolves `web` at request time
     # (see the resolver directive in nginx/bytedeck.conf.template), so it does
     # not need the upstream to exist when it starts.
     depends_on:

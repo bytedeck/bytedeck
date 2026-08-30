@@ -2957,10 +2957,11 @@ class LibraryQuestSortTests(LibraryTenantTestCaseMixin):
             self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
 
     def test_LibraryQuestListView__a_column_this_tab_does_not_offer_is_ignored(self):
-        """A stale or hand-made `?sort=` falls back to the Library's own order, not an error.
+        """A stale or hand-made `?sort=` falls back to the tab's default column, not an error.
 
         Tags are the live case: the column is rendered but deliberately not sortable, so a
-        link someone kept from elsewhere names a column this tab will not order by.
+        link someone kept from elsewhere names a column this tab will not order by. The
+        fallback is the quest name, the same column an unsorted visit lands on (#2623).
         """
         default_order = self._sorted_names()
 
@@ -2970,7 +2971,7 @@ class LibraryQuestSortTests(LibraryTenantTestCaseMixin):
 
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual([quest.name for quest in response.context['library_quests']], default_order)
-                self.assertEqual(response.context['sort_column'], '')
+                self.assertEqual(response.context['sort_column'], 'name')
                 self.assertFalse(response.context['sort_descending'])
 
     def test_LibraryQuestListView__quests_with_no_campaign_sort_last_in_both_directions(self):
