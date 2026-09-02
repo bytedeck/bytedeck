@@ -3597,6 +3597,140 @@ class LibraryImportCampaignPublishLinkTests(LibraryTenantTestCaseMixin):
         self.assertEqual(quests.filter(published=True).count(), 2)
 
 
+class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
+    """Importing a campaign whose title this deck has given to a different campaign.
+
+    `Category.title` is unique per deck, so the arriving campaign cannot be written under
+    a title the deck has already used. It is renamed on the way in, the way a clashing
+    quest name already is, leaving the teacher's own campaign alone (#2532).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a staff user to import with."""
+        cls.test_teacher = User.objects.create_user('title_clash_teacher', is_staff=True)
+
+    def setUp(self):
+        """Publish a one-quest campaign in the Library and sign the teacher in."""
+        super().setUp()
+        self.client.force_login(self.test_teacher)
+        with library_schema_context():
+            self.library_campaign = baker.make(Category, title="Studio Habits", published=True)
+            baker.make(Quest, name="Welcome Aboard", campaign=self.library_campaign, published=True)
+
+    def _import(self):
+        """Import the Library campaign into this deck.
+
+        Returns:
+            HttpResponse: the followed response.
+        """
+        return self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]), follow=True,
+        )
+
+    def test_ImportCampaignView__a_clashing_title_arrives_renamed_when_every_quest_is_preserved(self):
+        """The campaign is still renamed when no arriving quest was written to create it.
+
+        Preserving every quest means none of them is written, so the campaign is created by
+        `import_campaign_to`'s own fallback rather than on a quest's way in (#1845). That
+        path has to rename on a title clash for the same reason the other one does, and
+        report it, or this deck's own campaign is merged into after all.
+        """
+        mine = baker.make(Category, title="Studio Habits")
+        with library_schema_context():
+            arriving = self.library_campaign.quest_set.get()
+        # The deck holds the arriving quest already, and the teacher keeps their version.
+        baker.make(Quest, name="Welcome Aboard", import_id=arriving.import_id)
+
+        response = self.client.post(
+            reverse('library:import_category', args=[self.library_campaign.import_id]),
+            {'preserve': [str(arriving.import_id)]}, follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        self.assertNotEqual(arrived.pk, mine.pk)
+        self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
+        # The teacher is told, exactly as on the ordinary path.
+        messages = [message.message for message in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any("already had a different campaign called 'Studio Habits'" in message for message in messages),
+            f"no message named the renamed campaign: {messages}",
+        )
+
+    def test_ImportCampaignView__a_clashing_title_arrives_renamed(self):
+        """The arriving campaign gets a title of its own rather than 404ing (#2532)."""
+        mine = baker.make(Category, title="Studio Habits")
+
+        response = self._import()
+
+        self.assertEqual(response.status_code, 200)
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        self.assertNotEqual(arrived.pk, mine.pk)
+        self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
+
+    def test_ImportCampaignView__the_decks_own_campaign_is_left_alone(self):
+        """The teacher's campaign keeps its title, its published state and only its own quests.
+
+        The last of those is the one that matters: a campaign that quietly gains somebody
+        else's quests has not been left alone, however unchanged its own fields are.
+        """
+        mine = baker.make(Category, title="Studio Habits", published=True)
+        my_quest = baker.make(Quest, name="My Own Welcome", campaign=mine)
+
+        self._import()
+
+        mine.refresh_from_db()
+        my_quest.refresh_from_db()
+        self.assertEqual(mine.title, "Studio Habits")
+        self.assertTrue(mine.published)
+        self.assertEqual(my_quest.campaign, mine)
+        self.assertEqual(list(Quest.objects.all_including_archived().filter(campaign=mine)), [my_quest])
+
+    def test_ImportCampaignView__the_arriving_quests_go_into_the_arriving_campaign(self):
+        """The imported quests land in the new campaign, not the teacher's."""
+        mine = baker.make(Category, title="Studio Habits")
+
+        self._import()
+
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        imported_quest = Quest.objects.all_including_archived().get(name="Welcome Aboard")
+        self.assertEqual(imported_quest.campaign, arrived)
+        self.assertNotEqual(imported_quest.campaign, mine)
+
+    def test_ImportCampaignView__the_teacher_is_told_the_campaign_was_renamed(self):
+        """The rename is announced, since the teacher is looking for the Library's title."""
+        baker.make(Category, title="Studio Habits")
+
+        response = self._import()
+
+        texts = [str(message) for message in response.context['messages']]
+        self.assertTrue(
+            any("already had a different campaign called 'Studio Habits'" in text for text in texts),
+            f"expected the rename to be announced, got {texts}",
+        )
+
+    def test_ImportCampaignView__an_unclashing_title_is_untouched(self):
+        """A campaign whose title is free keeps it, and nothing is announced."""
+        response = self._import()
+
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        self.assertEqual(arrived.title, "Studio Habits")
+        texts = [str(message) for message in response.context['messages']]
+        self.assertFalse(any("cannot share a title" in text for text in texts))
+
+    def test_ImportCampaignView__a_second_clashing_import_is_numbered(self):
+        """A second arrival on the same day does not collide with the first rename."""
+        baker.make(Category, title="Studio Habits")
+        baker.make(Category, title=f"Studio Habits (Imported on {date.today()})")
+
+        self._import()
+
+        arrived = Category.objects.get(import_id=self.library_campaign.import_id)
+        self.assertTrue(arrived.title.startswith("Studio Habits (Imported on "))
+        self.assertTrue(arrived.title.endswith("#1"), f"expected a numbered title, got {arrived.title!r}")
+
+
 class LibraryImportCampaignPreviewTests(LibraryTenantTestCaseMixin):
     """What the campaign import confirmation page tells a teacher about the campaign.
 

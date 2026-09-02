@@ -303,6 +303,34 @@ def redirect_already_shared(request, local_object, content_type, redirect_to):
     return redirect(redirect_to)
 
 
+def tell_importer_about_renamed_campaign(request, renamed_campaign):
+    """Tell the importing teacher the campaign arrived under a title of its own.
+
+    `Category.title` is unique per deck, so a campaign whose title this deck has already
+    given to a different campaign is renamed on the way in rather than being merged into
+    that one or blocking the import (#2532). The teacher is looking for the title the
+    Library page showed them, so the new one has to be said out loud, along with why.
+
+    Args:
+        request (HttpRequest): the current request, for the message framework.
+        renamed_campaign (tuple[str, str] | None): the `(wanted, given)` titles, or None
+            when the campaign kept the title it arrived with.
+
+    Returns:
+        None. Queues an informational message only when the campaign was renamed.
+    """
+    if not renamed_campaign:
+        return
+
+    wanted, given = renamed_campaign
+    messages.info(
+        request,
+        f"Your deck already had a different campaign called '{wanted}', and two campaigns "
+        f"cannot share a title, so the one that just arrived is called '{given}'. Your own "
+        "campaign was left alone. Rename the new one to whatever suits your deck."
+    )
+
+
 def tell_importer_about_renamed_quests(request, renamed_quests):
     """Tell the importing teacher which arriving quests were given a name of their own.
 
@@ -1050,6 +1078,7 @@ class ImportCampaignView(NonPublicOnlyViewMixin, View):
                 category.get_absolute_url(),
             )
         )
+        tell_importer_about_renamed_campaign(request, imported.renamed_campaign)
         tell_importer_about_renamed_quests(request, imported.renamed_quests)
 
         # The campaign will be deactivated by import_campaign_to()
