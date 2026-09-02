@@ -1797,6 +1797,34 @@ class SemesterViewTests(ByteDeckTenantTestCase):
         # Nothing is saved: the formset is invalid as a whole, so neither row is written.
         self.assertFalse(ExcludedDate.objects.exists())
 
+    def test_SemesterUpdate__an_existing_row_can_take_the_date_of_a_later_row_being_deleted(self):
+        """Moving a date onto a day a row further down the form is giving up is accepted.
+
+        The formset is ordered by date, and Django saves the rows it edits in that order,
+        deleting or writing each as it comes. So the earlier row is written while the later
+        one still holds the day, and only the state at the end of the request has to satisfy
+        the constraint.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        earlier = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 10, 14), label='typo')
+        later = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '2',
+            'form-0-id': earlier.id, 'form-0-date': '2019-11-11', 'form-0-label': 'Remembrance Day',
+            'form-1-id': later.id, 'form-1-date': '2019-11-11', 'form-1-label': 'Remembrance Day',
+            'form-1-DELETE': 'on',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(
+            list(semester.excludeddate_set.values_list('date', 'label')),
+            [(datetime.date(2019, 11, 11), 'Remembrance Day')],
+        )
+
     def test_SemesterUpdate__a_date_is_free_to_reuse_when_the_row_holding_it_is_deleted(self):
         """Retyping a date on a new row while deleting the row that held it is accepted.
 
