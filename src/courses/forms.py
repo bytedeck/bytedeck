@@ -1,4 +1,5 @@
 from django import forms
+from django.forms.formsets import DELETION_FIELD_NAME
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
@@ -341,7 +342,39 @@ class BaseFormSet(forms.BaseModelFormSet):
         form.fields['DELETE'].widget = forms.HiddenInput()
 
 
-ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=ExcludedDateForm, formset=BaseFormSet, can_delete=True, extra=1)
+class BaseExcludedDateFormSet(BaseFormSet):
+    """Refuses a semester two excluded dates on the same day.
+
+    A date is unique per semester rather than deck-wide (#2647), and `semester` is not one of
+    these forms' fields: `ExcludedDateForm.save` attaches it. Django's own formset uniqueness
+    check only covers a constraint whose every field is on the form, so it does not see this
+    one, and two rows naming the same day would reach the database as an IntegrityError.
+
+    Comparing the rows against each other is the whole check: the view hands the formset the
+    semester's entire `excludeddate_set`, so every date it already has is a form here.
+    """
+
+    def clean(self):
+        """Fault every row naming a date an earlier row in the formset already claimed."""
+        super().clean()
+
+        claimed = set()
+        for form in self.forms:
+            # A form with no cleaned_data failed its own validation, and a blank extra row or
+            # an unparseable date leaves `date` out of it: nothing to compare either way. A row
+            # marked for deletion is on its way out, so the day it holds is free to reuse.
+            date = getattr(form, 'cleaned_data', {}).get('date')
+            if date is None or form.cleaned_data.get(DELETION_FIELD_NAME):
+                continue
+
+            if date in claimed:
+                form.add_error('date', 'This semester already excludes this date.')
+            claimed.add(date)
+
+
+ExcludedDateFormset = forms.modelformset_factory(
+    model=ExcludedDate, form=ExcludedDateForm, formset=BaseExcludedDateFormSet, can_delete=True, extra=1,
+)
 
 
 class BlockForm(forms.ModelForm):
