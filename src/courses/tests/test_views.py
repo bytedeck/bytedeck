@@ -1701,6 +1701,52 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
+    def test_SemesterUpdate__offers_the_other_semesters_excluded_dates_to_copy(self):
+        """The form carries the deck's other excluded dates, and the button that copies them in.
+
+        The dates are read by the page's JavaScript, which decides which of them fall inside
+        this semester, so they are rendered to the page rather than filtered here (#2648).
+        """
+        self.client.force_login(self.test_teacher)
+        night_school = baker.make(Semester)
+        baker.make(ExcludedDate, semester=night_school, date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        semester = SiteConfig.get().active_semester
+        response = self.assert200('courses:semester_update', args=[semester.pk])
+
+        self.assertEqual(
+            response.context['other_excluded_dates'],
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+        self.assertContains(response, 'id="copy-excluded-dates"')
+        self.assertContains(response, '2019-11-11')
+
+    def test_SemesterUpdate__no_copy_button_when_the_other_semesters_exclude_nothing(self):
+        """A deck with nothing to copy is not shown a button that could never do anything."""
+        self.client.force_login(self.test_teacher)
+        baker.make(Semester)
+
+        semester = SiteConfig.get().active_semester
+        baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 11, 11))
+        response = self.assert200('courses:semester_update', args=[semester.pk])
+
+        self.assertEqual(response.context['other_excluded_dates'], [])
+        self.assertNotContains(response, 'id="copy-excluded-dates"')
+
+    def test_SemesterCreate__offers_every_excluded_date_on_the_deck_to_copy(self):
+        """A semester being created is offered all of them: it owns none of them yet."""
+        self.client.force_login(self.test_teacher)
+        baker.make(ExcludedDate, semester=SiteConfig.get().active_semester,
+                   date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        response = self.assert200('courses:semester_create')
+
+        self.assertEqual(
+            response.context['other_excluded_dates'],
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+        self.assertContains(response, 'id="copy-excluded-dates"')
+
     def test_SemesterUpdate__a_date_another_semester_already_excludes_is_accepted(self):
         """A holiday another semester excludes can be excluded from this one too.
 

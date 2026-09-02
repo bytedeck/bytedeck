@@ -1988,3 +1988,63 @@ class ExcludedDateModelTest(ByteDeckTenantTestCase):
 
         with self.assertRaises(IntegrityError):
             ExcludedDate.objects.create(semester=semester, date=date(2019, 11, 11))
+
+    def test_from_other_semesters__returns_the_other_semesters_dates_in_date_order(self):
+        """Every excluded date the deck holds outside this semester, oldest first."""
+        semester = baker.make(Semester)
+        other = baker.make(Semester)
+        baker.make(ExcludedDate, semester=other, date=date(2019, 12, 25), label='Christmas')
+        baker.make(ExcludedDate, semester=other, date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'},
+             {'date': '2019-12-25', 'label': 'Christmas'}],
+        )
+
+    def test_from_other_semesters__leaves_out_this_semesters_own_dates(self):
+        """A date this semester already excludes is not offered back to it."""
+        semester = baker.make(Semester)
+        other = baker.make(Semester)
+        baker.make(ExcludedDate, semester=semester, date=date(2019, 11, 11), label='mine')
+        baker.make(ExcludedDate, semester=other, date=date(2019, 12, 25), label='theirs')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-12-25', 'label': 'theirs'}],
+        )
+
+    def test_from_other_semesters__offers_a_date_two_semesters_both_hold_once(self):
+        """Two semesters skipping the same holiday is one day to copy, not two rows."""
+        semester = baker.make(Semester)
+        for _ in range(2):
+            baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+
+    def test_from_other_semesters__prefers_a_labelled_row_over_an_unlabelled_one(self):
+        """Collapsing two rows for a date keeps the label, which is the part worth copying."""
+        semester = baker.make(Semester)
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='')
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(semester),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
+
+    def test_from_other_semesters__an_unsaved_semester_has_none_of_its_own_to_leave_out(self):
+        """The create form is offered every excluded date on the deck.
+
+        `SemesterCreate.get_object` hands the form an unsaved Semester, which cannot be the
+        owner of any row, so there is nothing to exclude from the offer.
+        """
+        baker.make(ExcludedDate, semester=baker.make(Semester), date=date(2019, 11, 11), label='Remembrance Day')
+
+        self.assertEqual(
+            ExcludedDate.from_other_semesters(Semester()),
+            [{'date': '2019-11-11', 'label': 'Remembrance Day'}],
+        )
