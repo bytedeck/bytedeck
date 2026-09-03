@@ -765,9 +765,22 @@ class Block(IsAPrereqMixin, models.Model):
 
 
 class ExcludedDate(models.Model):
+    """A day within a semester that does not count as a class day, such as a holiday.
+
+    Each row belongs to one semester, and a semester's mark calculations read only its own
+    (`Semester.excluded_days`), so the same calendar date is a separate row in each semester
+    that skips it. Two semesters running at once therefore both get to exclude the same
+    holiday, which is what the uniqueness constraint below allows and a deck-wide unique date
+    would not (#2647).
+    """
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
-    date = models.DateField(unique=True)
+    date = models.DateField()
     label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['semester', 'date'], name='unique_excluded_date_per_semester'),
+        ]
 
     def __str__(self):
         return self.date.strftime("%d-%b-%Y")
