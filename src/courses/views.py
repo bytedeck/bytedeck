@@ -34,7 +34,7 @@ from .forms import (
     BlockForm, CourseStudentForm, CourseStudentStaffForm, MarkRangeForm, RankForm, SemesterForm,
     ExcludedDateFormset, ExcludedDateFormsetHelper,
 )
-from .models import Block, Course, CourseStudent, Rank, Semester, MarkRange, semester_for
+from .models import Block, Course, CourseStudent, ExcludedDate, Rank, Semester, MarkRange, semester_for
 
 from django.db import transaction
 from django.db.models import ProtectedError, Q
@@ -806,6 +806,14 @@ class SemesterCreateUpdateFormsetMixin:
         ctx = super().get_context_data(**kwargs).copy()
         ctx['formset'] = kwargs.get('formset', self.get_formset())
         ctx['helper'] = ExcludedDateFormsetHelper()
+        # What the page's Copy button offers to bring in, so the same holidays are not typed
+        # again for every semester running alongside this one (#2648). Empty on a deck whose
+        # other semesters exclude nothing, and the template then leaves the button out.
+        #
+        # From get_object() rather than self.object, like get_formset_queryset above: on a
+        # create GET, CreateView.get sets self.object back to None after this mixin's own get
+        # has set it, so the semester is only reliably reachable by asking for it again.
+        ctx['other_excluded_dates'] = ExcludedDate.from_other_semesters(self.get_object())
         return ctx
 
     # formsets
