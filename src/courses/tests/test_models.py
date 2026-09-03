@@ -3,6 +3,7 @@ from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
 from django.db import connection
+from django.db.utils import IntegrityError
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
@@ -1960,3 +1961,30 @@ class ExcludedDateModelTest(ByteDeckTenantTestCase):
         semester = baker.make(Semester)
         excluded = baker.make(ExcludedDate, semester=semester, date=date(2019, 9, 2))
         self.assertEqual(str(excluded), '02-Sep-2019')
+
+    def test_ExcludedDate__two_semesters_can_exclude_the_same_date(self):
+        """A holiday that falls in two semesters is excluded from each of them.
+
+        A deck can run more than one semester at a time, and each counts its own class days
+        off its own excluded dates, so the day has to be recorded in both (#2647).
+        """
+        fall = baker.make(Semester)
+        night_school = baker.make(Semester)
+
+        baker.make(ExcludedDate, semester=fall, date=date(2019, 11, 11))
+        baker.make(ExcludedDate, semester=night_school, date=date(2019, 11, 11))
+
+        self.assertEqual(list(fall.excluded_days()), [date(2019, 11, 11)])
+        self.assertEqual(list(night_school.excluded_days()), [date(2019, 11, 11)])
+
+    def test_ExcludedDate__one_semester_cannot_exclude_the_same_date_twice(self):
+        """A second row for a date a semester already excludes is refused by the database.
+
+        Uniqueness moved from the date alone to the date within its semester, so this is what
+        is left of it: a semester still gets one row per day.
+        """
+        semester = baker.make(Semester)
+        baker.make(ExcludedDate, semester=semester, date=date(2019, 11, 11))
+
+        with self.assertRaises(IntegrityError):
+            ExcludedDate.objects.create(semester=semester, date=date(2019, 11, 11))

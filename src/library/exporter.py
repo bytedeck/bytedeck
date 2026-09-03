@@ -6,7 +6,7 @@ from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 from django.core.exceptions import ValidationError
 
-from .transfer import TransferResult, build_available_quest_name, snapshot_quest, write_quests
+from .transfer import TransferResult, build_available_name, snapshot_quest, write_quests
 from .utils import library_schema_context, get_library_conflicting_quests
 
 
@@ -24,7 +24,10 @@ def build_library_clone_name(local_name, taken_names):
     Returns:
         str: a name not in `taken_names`, within the field's max_length.
     """
-    return build_available_quest_name(local_name, taken_names, f" (Exported on {date.today()})")
+    return build_available_name(
+        local_name, taken_names, f" (Exported on {date.today()})",
+        Quest._meta.get_field('name').max_length or 50,
+    )
 
 
 def clone_quests_into_library(*, source_schema, quests):

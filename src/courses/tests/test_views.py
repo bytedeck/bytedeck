@@ -1701,6 +1701,111 @@ class SemesterViewTests(ByteDeckTenantTestCase):
 
         self.assertFalse(ExcludedDate.objects.exists())
 
+    def test_SemesterUpdate__a_date_another_semester_already_excludes_is_accepted(self):
+        """A holiday another semester excludes can be excluded from this one too.
+
+        A deck can run two semesters at once, and each counts its class days off its own
+        excluded dates, so the same day has to be recordable in both. Excluded dates used to be
+        unique deck-wide, which refused the second semester's copy outright (#2647).
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        night_school = baker.make(Semester)
+        baker.make(ExcludedDate, semester=night_school, date=remembrance_day)
+
+        semester = SiteConfig.get().active_semester
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '1', 'form-INITIAL_FORMS': '0',
+            'form-0-date': remembrance_day.isoformat(), 'form-0-label': 'Remembrance Day',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(list(semester.excluded_days()), [remembrance_day])
+        # The other semester keeps its own row: this adds a date, it does not move one.
+        self.assertEqual(list(night_school.excluded_days()), [remembrance_day])
+
+    def test_SemesterUpdate__the_same_date_twice_is_refused(self):
+        """Two rows naming one day are refused on the form rather than reaching the database.
+
+        The date is unique within its semester, and `semester` is not a field on these forms,
+        so the formset checks the rows against each other; without that the second row raises
+        IntegrityError and the teacher gets a 500 instead of an error beside the field.
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        semester = SiteConfig.get().active_semester
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '0',
+            'form-0-date': remembrance_day.isoformat(), 'form-0-label': 'Remembrance Day',
+            'form-1-date': remembrance_day.isoformat(), 'form-1-label': 'Remembrance Day again',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This semester already excludes this date.')
+        # Nothing is saved: the formset is invalid as a whole, so neither row is written.
+        self.assertFalse(ExcludedDate.objects.exists())
+
+    def test_SemesterUpdate__an_existing_row_can_take_the_date_of_a_later_row_being_deleted(self):
+        """Moving a date onto a day a row further down the form is giving up is accepted.
+
+        The formset is ordered by date, and Django saves the rows it edits in that order,
+        deleting or writing each as it comes. So the earlier row is written while the later
+        one still holds the day, and only the state at the end of the request has to satisfy
+        the constraint.
+        """
+        self.client.force_login(self.test_teacher)
+        semester = SiteConfig.get().active_semester
+        earlier = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 10, 14), label='typo')
+        later = baker.make(ExcludedDate, semester=semester, date=datetime.date(2019, 11, 11), label='Remembrance Day')
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '2',
+            'form-0-id': earlier.id, 'form-0-date': '2019-11-11', 'form-0-label': 'Remembrance Day',
+            'form-1-id': later.id, 'form-1-date': '2019-11-11', 'form-1-label': 'Remembrance Day',
+            'form-1-DELETE': 'on',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(
+            list(semester.excludeddate_set.values_list('date', 'label')),
+            [(datetime.date(2019, 11, 11), 'Remembrance Day')],
+        )
+
+    def test_SemesterUpdate__a_date_is_free_to_reuse_when_the_row_holding_it_is_deleted(self):
+        """Retyping a date on a new row while deleting the row that held it is accepted.
+
+        The duplicate check has to ignore rows on their way out, or moving a holiday's label to
+        a fresh row would look like a collision with the row being removed.
+        """
+        self.client.force_login(self.test_teacher)
+        remembrance_day = datetime.date(2019, 11, 11)
+
+        semester = SiteConfig.get().active_semester
+        existing = baker.make(ExcludedDate, semester=semester, date=remembrance_day, label='typo')
+
+        post_data = {
+            **model_to_form_data(semester, SemesterForm),
+            'form-TOTAL_FORMS': '2', 'form-INITIAL_FORMS': '1',
+            'form-0-id': existing.id, 'form-0-date': remembrance_day.isoformat(),
+            'form-0-label': 'typo', 'form-0-DELETE': 'on',
+            'form-1-date': remembrance_day.isoformat(), 'form-1-label': 'Remembrance Day',
+        }
+        response = self.client.post(reverse('courses:semester_update', args=[semester.pk]), data=post_data)
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        self.assertEqual(
+            list(semester.excludeddate_set.values_list('date', 'label')),
+            [(remembrance_day, 'Remembrance Day')],
+        )
+
     @patch_registration_xp(-10)
     def test_SemesterArchive__student_with_negative_xp__view(self, registration_split):
         """
