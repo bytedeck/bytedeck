@@ -81,6 +81,21 @@
     const formInitialForms = document.getElementById("id_form-INITIAL_FORMS");
     const initialForms = parseInt(formInitialForms.getAttribute("value"))-1;
 
+    // Put a date into a row's field, updating both the box the teacher reads and the value the
+    // form posts. The date picker moves the field's name onto a hidden input beside it and
+    // drives that input from its own dp.change event, so writing to the visible box alone
+    // shows the date and submits nothing (#2652). Going through the picker fires that event.
+    // Its script comes from a CDN, and when that has not loaded there is no hidden input:
+    // the visible box still carries the field's name, so assigning to it is what posts.
+    function setDateValue(dateInput, value) {
+        const picker = window.jQuery && jQuery(dateInput).closest(".dbdp").data("DateTimePicker");
+        if (picker) {
+            picker.date(moment(value, "YYYY-MM-DD"));
+        } else {
+            dateInput.value = value;
+        }
+    }
+
     // Parse date string as local date to avoid timezone issues
     function parseLocalDate(dateStr) {
         const [year, month, day] = dateStr.split('-').map(Number);
@@ -160,7 +175,7 @@
         // set copied values
         const newDateInput = document.querySelector(`#id_form-${newIndex}-date`);
         if (newDateInput && nextDateStr) {
-            newDateInput.value = nextDateStr;
+            setDateValue(newDateInput, nextDateStr);
         }
         // Assigned even when blank, so a caller-supplied blank clears the label carried
         // forward above. On a row nobody supplied values for, the field is empty either way.
@@ -265,7 +280,7 @@
                 // copying into an empty semester does not leave a stray empty row behind.
                 const blank = visibleDateInputs().find(input => !input.value);
                 if (blank) {
-                    blank.value = entry.date;
+                    setDateValue(blank, entry.date);
                     document.getElementById(blank.id.replace(/-date$/, "-label")).value = entry.label;
                 } else {
                     AddForm(entry.date, entry.label);
