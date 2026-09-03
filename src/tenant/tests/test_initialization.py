@@ -131,6 +131,7 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         self.assertTrue(Quest.objects.filter(name="Screenshots").exists())
         self.assertTrue(Quest.objects.filter(name="Who owns your creations?").exists())
         self.assertTrue(Quest.objects.filter(name="Send your teacher a Message").exists())
+        self.assertTrue(Quest.objects.filter(name="Owner: New Maps").exists())
 
     def test_initialization__message_quest_notifies_owner(self):
         """ The quest "Send your teacher a Message" should have the deck owner assigned as the specific teacher to notify by default. """
@@ -150,6 +151,9 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         self.assertTrue(q_intro.filter(name="Screenshots").exists())
         self.assertTrue(q_intro.filter(name="Who owns your creations?").exists())
         self.assertTrue(q_intro.filter(name="Send your teacher a Message").exists())
+
+        q_owner = Quest.objects.filter(tags__name="owner")
+        self.assertTrue(q_owner.filter(name="Owner: New Maps").exists())
 
     def test_create_initial_badges__default_tags_created(self):
         """ test if intro tag is properly assigned to
