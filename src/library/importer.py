@@ -4,7 +4,7 @@ from django.db import transaction
 from django_tenants.utils import schema_context
 from quest_manager.models import Quest, Category
 
-from .transfer import _write_campaign, build_available_quest_name, snapshot_campaign, snapshot_quest, write_quests
+from .transfer import _write_campaign, build_available_name, snapshot_campaign, snapshot_quest, write_quests
 from .utils import library_schema_context
 
 
@@ -46,7 +46,7 @@ def resolve_name_collisions(snapshots):
         if wanted not in taken_names:
             continue
 
-        given = build_available_quest_name(wanted, taken_names, suffix)
+        given = build_available_name(wanted, taken_names, suffix, Quest._meta.get_field('name').max_length or 50)
         taken_names.add(given)
         overrides[snapshot['fields']['import_id']] = {'name': given}
         renames.append((wanted, given))
@@ -78,8 +78,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
 
     Returns:
         TransferResult: The quests as they now exist on the destination deck, the names of
-            any prerequisites this deck does not have, and any quests renamed on the way in
-            because this deck already used their name.
+            any prerequisites this deck does not have, any quests renamed on the way in
+            because this deck already used their name, and in `renamed_campaign` the
+            `(wanted, given)` titles when the campaign itself had to be renamed because
+            this deck had given its title to a different campaign (#2532).
 
     Raises:
         LibraryTransferError: If a quest cannot be written to the destination deck.
@@ -102,6 +104,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
         library_campaign = Category.objects.filter(import_id=campaign_import_id).first()
         campaign_snapshot = snapshot_campaign(library_campaign)
 
+    # Set when the campaign is written by the fallback below rather than by an arriving
+    # quest, so the rename is still reported in that case.
+    fallback_campaign_rename = None
+
     with schema_context(destination_schema):
         # One transaction for the whole arrival: `write_quests` is atomic on its own, but
         # the campaign is put back into draft afterwards, and a failure there would
@@ -123,11 +129,18 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
                     for snapshot in snapshots
                 ],
                 with_campaign=True,
+                rename_campaign_on_clash=True,
             )
 
             category = Category.objects.filter(import_id=campaign_import_id).first()
             if category is None and campaign_snapshot is not None:
-                category = _write_campaign(campaign_snapshot)
+                # Reached when every quest was preserved, so none of them created the
+                # campaign on the way in. It is renamed on a title clash for the same
+                # reason an arriving quest's campaign is: this is still an import onto a
+                # deck, and merging into the teacher's own campaign of that name is what
+                # #2532 is about.
+                category, fallback_campaign_rename = _write_campaign(
+                    campaign_snapshot, rename_on_clash=True)
 
             if category:
                 category.published = False
@@ -144,7 +157,10 @@ def import_campaign_to(*, destination_schema, quest_import_ids, campaign_import_
                     quest.full_clean(exclude=['campaign'])
                     quest.save()
 
-    return imported._replace(renamed_quests=renames)
+    return imported._replace(
+        renamed_quests=renames,
+        renamed_campaign=imported.renamed_campaign or fallback_campaign_rename,
+    )
 
 
 def import_quest_to(*, destination_schema, quest_import_id):
