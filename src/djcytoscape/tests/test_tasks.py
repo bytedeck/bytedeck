@@ -1,10 +1,13 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 
 from model_bakery import baker
 
 from djcytoscape.models import CytoScape
-from djcytoscape.tasks import regenerate_all_maps, regenerate_map
+from djcytoscape.tasks import pending_regeneration_key, regenerate_all_maps, regenerate_map
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 
@@ -72,3 +75,28 @@ class CytoScapeTaskTests(ByteDeckTenantTestCase):
 
         # should be 3 as self.quest got linked to 3 maps
         self.assertEqual(CytoScape.objects.get_related_maps(self.quest).count(), 3)
+
+    def test_regenerate_map__gives_up_its_claim_from_inside_the_rebuild(self):
+        """The task holds its claim on a map until the rebuild has that map's row.
+
+        The claim is what keeps a second regeneration off the queue. Giving it up on the
+        way in would surrender it before the wait for the row, which can be as long as
+        the rebuild ahead of it, and queue a redundant rebuild for every save made during
+        that wait: saves this task has not read past and so still covers. Holding it past
+        the row would lose them instead, since the rebuild is reading from there (#2658).
+        """
+        scape = CytoScape.generate_map(self.quest, "Map")
+        key = pending_regeneration_key(scape.id)
+        cache.set(key, True, 60)
+
+        claim = {}
+
+        def rebuild(map_, on_lock_acquired=None):
+            claim['on the way in'] = cache.get(key)
+            on_lock_acquired()
+            claim['once the row is held'] = cache.get(key)
+
+        with patch.object(CytoScape, 'regenerate', autospec=True, side_effect=rebuild):
+            regenerate_map.apply(args=[[scape.id]], queue='default').get()
+
+        self.assertEqual(claim, {'on the way in': True, 'once the row is held': None})
