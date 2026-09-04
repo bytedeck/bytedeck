@@ -1015,8 +1015,15 @@ class CytoScape(models.Model):
         self.update_cache()
         self.save()
 
-    def regenerate(self):
+    def regenerate(self, on_lock_acquired=None):
         """Rebuild this map's elements from the objects it maps.
+
+        Args:
+            on_lock_acquired: optional callable, run once this map's row is held and
+                immediately before the rebuild reads anything. `regenerate_map` releases
+                its claim on the map there (djcytoscape/tasks.py): up to that moment the
+                task has read nothing, so it still covers every save made while it waited
+                for the row, and past it, it does not.
 
         Raises:
             InitialObjectDoesNotExist: if the object the map starts from is gone, in which
@@ -1039,6 +1046,9 @@ class CytoScape(models.Model):
             # the delete and the nodes replacing it land together, so nobody loading the page
             # meets the empty gap between them.
             CytoScape.objects.select_for_update().get(pk=self.pk)
+
+            if on_lock_acquired is not None:
+                on_lock_acquired()
 
             # Delete existing nodes
             CytoElement.objects.all_for_scape(self).delete()

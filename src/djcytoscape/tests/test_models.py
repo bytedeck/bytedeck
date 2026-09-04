@@ -627,6 +627,28 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         ]
         self.assertTrue(locking, "regenerate() did not lock the map row it is about to rebuild")
 
+    def test_regenerate__runs_on_lock_acquired_between_taking_the_row_and_reading(self):
+        """`on_lock_acquired` runs once the map's row is held and before anything is read.
+
+        `regenerate_map` gives up its claim on the map there (#2658), so where it runs is
+        exactly what decides which saves are collapsed into that task. Everything up to
+        this point is still covered by it, the wait for the row included, and nothing
+        after it is.
+        """
+        seen = {}
+
+        def record():
+            seen['row taken'] = any(
+                'FOR UPDATE' in query['sql'] and 'djcytoscape_cytoscape' in query['sql']
+                for query in queries.captured_queries
+            )
+            seen['nothing read yet'] = CytoElement.objects.all_for_scape(self.map).exists()
+
+        with CaptureQueriesContext(connection) as queries:
+            self.map.regenerate(on_lock_acquired=record)
+
+        self.assertEqual(seen, {'row taken': True, 'nothing read yet': True})
+
     def test_regenerate__a_failure_part_way_through_leaves_the_map_alone(self):
         """A regeneration that raises leaves the map that was there, rather than a deleted one.
 
