@@ -627,6 +627,31 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
         ]
         self.assertTrue(locking, "regenerate() did not lock the map row it is about to rebuild")
 
+    def test_regenerate__builds_from_the_initial_object_as_it_is_once_the_row_is_taken(self):
+        """The rebuild reads the object the map starts from after it holds the map's row.
+
+        Waiting for that row can take as long as the rebuild ahead of it, and every save
+        made during the wait is collapsed into this rebuild rather than given one of its
+        own (#2658), so building from what was loaded before the wait would publish a map
+        without those saves and queue nothing to correct it.
+
+        The wait is stood in for by resolving the initial object and then changing it in
+        the database behind the loaded instance, which is the state a task that waited is
+        in: `initial_content_object` is a GenericForeignKey, so the instance it hands back
+        is cached from whenever it was first asked for.
+        """
+        scape = CytoScape.objects.get(pk=self.map.pk)  # a fresh instance, as the task loads one
+        initial_quest = scape.initial_content_object  # resolved and cached before the wait
+        Quest.objects.filter(pk=initial_quest.pk).update(name='renamed while the rebuild waited')
+
+        scape.regenerate()
+
+        labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+        self.assertTrue(
+            any('renamed while the rebuild waited' in (label or '') for label in labels),
+            "the map's first node was built from the initial object as it was before the wait",
+        )
+
     def test_regenerate__runs_on_lock_acquired_between_taking_the_row_and_reading(self):
         """`on_lock_acquired` runs once the map's row is held and before anything is read.
 

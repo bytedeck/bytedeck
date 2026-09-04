@@ -118,10 +118,10 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         """A run of saves touching one map queues a single regeneration, not one apiece.
 
         Editing a quest with a few prereqs fires this signal several times over, and a
-        bulk operation such as a library import fires it a great many times. Each of
-        those used to queue a full rebuild of the same map, and since they take the
-        map's row in turn they then ran one after another, each throwing away the last
-        one's work (#2658).
+        bulk operation such as a library import fires it a great many times. A map that
+        already has a regeneration claimed is left to it, so the whole run costs one
+        rebuild between them. One per save would queue behind that map's row and rebuild
+        it in turn, each throwing away the last one's work (#2658).
         """
         quest = baker.make(Quest)
         scape = CytoScape.generate_map(quest, "Map")

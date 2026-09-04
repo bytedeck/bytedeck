@@ -72,6 +72,10 @@ def regenerate_map(map_ids):
     Since this function will be mainly used by post signals, notifications to a user wont be functional
     Unlike `regenerate_all_maps`
 
+    Each map's claim (the marker that keeps a second regeneration of it off the queue) is
+    given up from inside its rebuild, once that rebuild holds the map's row and just before
+    it reads, so the wait for the row stays deduplicated and the read does not.
+
     ARGS:
         map_ids (list[int]): list of ids belonging to Cytoscape maps
     """

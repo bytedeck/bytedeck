@@ -22,6 +22,10 @@ def regenerate_related_maps(instance):
     given a second one. One edit fires this several times over (the quest, then each of
     its prereqs) and a bulk operation such as a library import fires it a great many
     times, and each of those rebuilds the whole map from scratch (#2658).
+
+    Args:
+        instance: the Quest, Badge or Rank that was saved or deleted, or for a Prereq,
+            the parent object it belongs to.
     """
     if not SiteConfig.get().map_auto_update:
         return
