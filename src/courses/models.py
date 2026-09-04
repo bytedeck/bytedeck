@@ -785,6 +785,38 @@ class ExcludedDate(models.Model):
     def __str__(self):
         return self.date.strftime("%d-%b-%Y")
 
+    @classmethod
+    def from_other_semesters(cls, semester):
+        """The excluded dates every other semester holds, one entry per calendar date.
+
+        What the semester form offers to copy in, so a deck running two semesters at once does
+        not type the same holidays twice (#2648). Each semester holds its own row for a day it
+        skips, and the teacher wants that day offered once, so rows are collapsed by date: a
+        labelled row wins over an unlabelled one, since the label is the part worth carrying
+        over, and between two labelled rows the lower semester id wins, which is arbitrary but
+        stable from one page load to the next.
+
+        Args:
+            semester (Semester): the semester being edited. Its own dates are left out, since
+                it already lists them. An unsaved one (the create form) has none to leave out.
+
+        Returns:
+            list[dict]: ``{'date': 'YYYY-MM-DD', 'label': str}`` entries ordered by date. The
+            date is a string because this is read by the page's JavaScript, which compares
+            those directly: ISO dates sort as text exactly as they do as dates.
+        """
+        rows = cls.objects.order_by('date', 'semester_id')
+        if semester.pk is not None:
+            rows = rows.exclude(semester_id=semester.pk)
+
+        label_for_date = {}
+        for row in rows:
+            label = row.label or ''
+            if row.date not in label_for_date or (label and not label_for_date[row.date]):
+                label_for_date[row.date] = label
+
+        return [{'date': date.isoformat(), 'label': label} for date, label in label_for_date.items()]
+
 
 class Course(IsAPrereqMixin, models.Model):
     title = models.CharField(max_length=50, unique=True)
