@@ -8,7 +8,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.urls import reverse
-from django.db import models
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -747,7 +747,7 @@ class CytoScape(models.Model):
             # Create a node for this campaign (or get it if it already exists).
             # selector_id ties the compound node back to its Category (like quest/badge nodes do),
             # so the map can order campaigns left-to-right by Category.map_order (issue #1977).
-            campaign_node, campaign_created = CytoElement.objects.get_or_create(
+            campaign_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
                 label=CytoScape.generate_label(obj.campaign),
@@ -760,9 +760,16 @@ class CytoScape(models.Model):
             target_node.save()
 
             # TempCampaign utility for cleaning up the edges and making the resulting map look good, after the entire map is built
-            if campaign_created:
-                self.campaign_list.append(TempCampaign(campaign_node.id))
+            # Whether this run has met the campaign yet, which is what the caller and the edge
+            # cleanup both want to know. get_or_create reports whether it wrote the row, and the
+            # two answers differ whenever the node is already in the table: campaign_list is
+            # rebuilt per run, so it would hold nothing for that node and the add_node below
+            # would be reached with None (#2656).
             temp_campaign = self.get_temp_campaign(campaign_node.id)  # not a Django model, so custom method
+            campaign_created = temp_campaign is None
+            if campaign_created:
+                temp_campaign = TempCampaign(campaign_node.id)
+                self.campaign_list.append(temp_campaign)
 
             # TODO: Nodes might be present multiple times through different source nodes?  check and combine
             temp_campaign.add_node(target_node.id, source_node.id)
@@ -1009,10 +1016,30 @@ class CytoScape(models.Model):
         self.save()
 
     def regenerate(self):
+        """Rebuild this map's elements from the objects it maps.
+
+        Raises:
+            InitialObjectDoesNotExist: if the object the map starts from is gone, in which
+                case the map deletes itself, since it has nothing left to draw.
+        """
         if self.initial_content_object is None:
             self.delete()
             raise (self.InitialObjectDoesNotExist)
 
-        # Delete existing nodes
-        CytoElement.objects.all_for_scape(self).delete()
-        self.calculate_nodes()
+        with transaction.atomic():
+            # One regeneration of a map at a time. Saving any Quest, Badge, Rank or Prereq
+            # queues regenerate_map for each related map (djcytoscape/signals.py), so editing a
+            # single quest can put several tasks on the same map. Each of them starts by
+            # deleting the elements the others are midway through building on, and the loser
+            # either meets a campaign node it did not create or writes an edge to a node that
+            # has just been deleted (#2656). Taking the map's own row makes the second task
+            # wait for the first and then rebuild from a settled starting point.
+            #
+            # Holding it for the whole rebuild is also what keeps the map readable throughout:
+            # the delete and the nodes replacing it land together, so nobody loading the page
+            # meets the empty gap between them.
+            CytoScape.objects.select_for_update().get(pk=self.pk)
+
+            # Delete existing nodes
+            CytoElement.objects.all_for_scape(self).delete()
+            self.calculate_nodes()
