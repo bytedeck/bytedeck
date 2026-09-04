@@ -275,6 +275,26 @@ class QuestionSubmission(models.Model):
         return self.comment_id is not None
 
     @property
+    def is_valid_portfolio_type(self):
+        """Whether this answer's file is one a portfolio can show (#2573).
+
+        Mirrors ``comments.Document.is_valid_portfolio_type``, so a file answer offers the
+        same Add to Portfolio action as the same file attached to the comment box. The import
+        is local for the reason that one gives: portfolios' views reach back into comments,
+        and importing them at module scope would close the circle.
+
+        Returns:
+            bool: True for an image or video file, False for anything else, including an
+            answer that is text or has no file at all.
+        """
+        if not self.response_file:
+            return False
+        # import here to prevent circular imports!
+        from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
+        filename = os.path.basename(self.response_file.name)
+        return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
+
+    @property
     def response_file_is_script_capable(self):
         """Whether this answer's file is one a browser would run a script from (#2559).
 

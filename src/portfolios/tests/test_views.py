@@ -6,7 +6,7 @@ from django.contrib.auth import get_user_model
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, TempMediaRootMixin
 from portfolios.models import Artwork, Portfolio
 from portfolios.views import is_acceptable_vid_type
 
@@ -34,45 +34,14 @@ def generate_test_png_file():
     return uploaded_file
 
 
-class PortfolioViewTests(ByteDeckTenantTestCase):
-    """ url(r'^$', views.PortfolioList.as_view(), name='list'),
-        url(r'^public/$', views.public_list, name='public_list'),
-        url(r'^create/$', views.PortfolioCreate.as_view(), name='create'),
-        url(r'^(?P<pk>[0-9]+)/$', views.detail, name='detail'),
-        url(r'^detail/$', views.detail, name='current_user'),
-        url(r'^(?P<uuid>[0-9a-z-]+)/$', views.public, name='public'),
-        # url(r'^(?P<pk>[0-9]+)/update/$', views.PortfolioUpdate.as_view(), name='update'),
-        url(r'^(?P<pk>[0-9]+)/edit/$', views.edit, name='edit'),
+class PortfolioViewTests(TempMediaRootMixin, ByteDeckTenantTestCase):
+    """Every view in `portfolios.urls`: who may reach each one, and what it does.
 
-        url(r'^art/(?P<pk>[0-9]+)/create/$', views.ArtworkCreate.as_view(), name='art_create'),
-
-        url(r'^art/create/(?P<doc_id>[0-9]+)$', views.art_add, name='art_add'),
-        url(r'^art/(?P<pk>[0-9]+)/delete/$', views.ArtworkDelete.as_view(), name='art_delete'),
-        url(r'^art/(?P<pk>[0-9]+)/edit/$', views.ArtworkUpdate.as_view(), name='art_update'),
+    A portfolio is a student's own page, so most of what these cover is who is allowed where:
+    the owner, a teacher, another student, and an anonymous visitor holding the public UUID.
+    The artwork routes are the other half, adding a file to a portfolio and editing or
+    deleting what is already in one.
     """
-
-    @classmethod
-    def setUpClass(cls):
-        """Isolate MEDIA_ROOT in a per-run temp dir before any uploads happen.
-
-        The uploads these tests make (e.g. clip.mp4) otherwise land in the
-        project's real _media_uploads and stay there: on the NEXT run Django's
-        storage dedupes the repeat filename to clip_XXXX.mp4, so the view titles
-        the Artwork "clip_XXXX" and the get(title="clip") assertions error --
-        the suite passes once, then fails on every rerun in the same workspace.
-        A throwaway MEDIA_ROOT keeps runs deterministic and the repo clean.
-        """
-        import shutil
-        import tempfile
-
-        from django.test import override_settings
-
-        cls._temp_media = tempfile.mkdtemp(prefix='test-media-portfolios-')
-        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
-        cls._media_override.enable()
-        cls.addClassCleanup(cls._media_override.disable)
-        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
-        super().setUpClass()
 
     @classmethod
     def setUpTestData(cls):
@@ -278,6 +247,164 @@ class PortfolioViewTests(ByteDeckTenantTestCase):
         artwork = Artwork.objects.get(title="clip")
         self.assertTrue(artwork.video_file)
         self.assertFalse(artwork.image_file)
+
+    def added_artwork(self):
+        """The one artwork a test added, told apart from the fixture's own.
+
+        Not looked up by title: the title comes from the file name, and Django's storage
+        dedupes a repeated name (minimal.png becomes minimal_XXXX.png) across tests that
+        share this class's MEDIA_ROOT, so a title assertion would pass for the first test
+        to run and fail for the rest.
+
+        Returns:
+            Artwork: the artwork created during the test.
+        """
+        return Artwork.objects.exclude(pk=self.art.pk).get(portfolio=self.portfolio)
+
+    def answer_with_file(self, uploaded_file, user=None):
+        """A published file answer, the way a completed submission leaves one behind.
+
+        Args:
+            uploaded_file: the file to store as the answer's response_file.
+            user (User): whose submission it is; defaults to self.test_student.
+
+        Returns:
+            QuestionSubmission: the published answer row.
+        """
+        user = user or self.test_student
+        quest_submission = baker.make('quest_manager.QuestSubmission', user=user)
+        return baker.make(
+            'questions.QuestionSubmission',
+            quest_submission=quest_submission,
+            question=baker.make('questions.Question', quest=quest_submission.quest, type='file_upload'),
+            response_file=uploaded_file,
+            # an explicit target keeps model_bakery from filling the comment's content type
+            # with a random installed model (see CLAUDE.md on GenericForeignKeys)
+            comment=baker.make('comments.Comment', user=user, target_object=quest_submission),
+        )
+
+    def test_art_add_answer__student_adds_their_own_image_answer(self):
+        """A student's image answer to a file_upload question goes into their portfolio (#2573).
+
+        `art_add` takes a comment attachment, so without this route the identical file handed
+        in as an answer has nowhere to go, and asking for work as a question is the one way of
+        handing it in that keeps it out of a portfolio.
+        """
+        answer = self.answer_with_file(generate_test_png_file())
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        artwork = self.added_artwork()
+        self.assertTrue(artwork.image_file)
+        self.assertFalse(artwork.video_file)
+        self.assertEqual(artwork.portfolio, self.portfolio)
+
+    def test_art_add_answer__video_answer_creates_video_artwork(self):
+        """A video answer becomes a video artwork, not an image one."""
+        answer = self.answer_with_file(
+            SimpleUploadedFile("clip.mp4", b"fake-video-bytes", content_type="video/mp4"))
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        artwork = self.added_artwork()
+        self.assertTrue(artwork.video_file)
+        self.assertFalse(artwork.image_file)
+
+    def test_art_add_answer__staff_add_it_to_the_students_portfolio(self):
+        """A teacher may add a student's answer, and it lands in the student's portfolio.
+
+        The marker sees the button beside the answer they are marking, so it has to add the
+        work to the person who did it, not to whoever clicked.
+        """
+        answer = self.answer_with_file(generate_test_png_file())
+        teacher = baker.make(User, is_staff=True)
+        self.client.force_login(teacher)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        self.assertEqual(self.added_artwork().portfolio, self.portfolio)
+        self.assertFalse(Portfolio.objects.filter(user=teacher).exists())
+
+    def test_art_add_answer__an_answer_whose_question_was_deleted_still_works(self):
+        """Deleting the question does not take the student's own file away from them.
+
+        ``QuestionSubmission.question`` is ``on_delete=SET_NULL``, and the question list's help
+        text promises that deleting a question keeps the answers students have already
+        submitted. Eligibility follows the stored file rather than the question, so a student
+        can still put their own picture in their portfolio after a teacher tidies up the quest
+        it was asked for.
+        """
+        answer = self.answer_with_file(generate_test_png_file())
+        answer.question.delete()
+        answer.refresh_from_db()
+        self.assertIsNone(answer.question, "the answer must outlive its question")
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertRedirects(response, reverse('portfolios:detail', args=[self.portfolio.pk]))
+        self.assertTrue(self.added_artwork().image_file)
+
+    def test_art_add_answer__another_student_is_refused(self):
+        """Someone else's answer is not theirs to publish, so the view 404s and adds nothing."""
+        answer = self.answer_with_file(generate_test_png_file())
+        self.client.force_login(baker.make(User))
+
+        self.assert404('portfolios:art_add_answer', args=[answer.pk])
+        self.assertFalse(Artwork.objects.exclude(pk=self.art.pk).exists())
+
+    def test_art_add_answer__anonymous_redirects_to_login(self):
+        """The view is login-only, like every other portfolio view."""
+        answer = self.answer_with_file(generate_test_png_file())
+        self.assertRedirectsLogin('portfolios:art_add_answer', args=[answer.pk])
+
+    def test_art_add_answer__unsupported_format_returns_404(self):
+        """An answer that is neither an image nor a video is not artwork."""
+        answer = self.answer_with_file(
+            SimpleUploadedFile("notes.txt", b"not media", content_type="text/plain"))
+        self.client.force_login(self.test_student)
+
+        self.assert404('portfolios:art_add_answer', args=[answer.pk])
+
+    def test_art_add_answer__text_answer_has_nothing_to_add(self):
+        """A text answer has no file, so the view refuses it rather than failing on an empty one."""
+        quest_submission = baker.make('quest_manager.QuestSubmission', user=self.test_student)
+        answer = baker.make(
+            'questions.QuestionSubmission',
+            quest_submission=quest_submission,
+            question=baker.make('questions.Question', quest=quest_submission.quest, type='short_answer'),
+            response_text="not a file",
+            comment=baker.make('comments.Comment', user=self.test_student, target_object=quest_submission),
+        )
+        self.client.force_login(self.test_student)
+
+        self.assert404('portfolios:art_add_answer', args=[answer.pk])
+
+    def test_art_add_answer__a_draft_row_is_dated_from_its_own_creation(self):
+        """An answer with no comment yet is still dated, rather than failing on the missing one.
+
+        Drafts have no published comment, and the button is only ever rendered on published
+        answers, so this is the defensive path: it must not 500 if the URL is visited directly.
+        """
+        quest_submission = baker.make('quest_manager.QuestSubmission', user=self.test_student)
+        answer = baker.make(
+            'questions.QuestionSubmission',
+            quest_submission=quest_submission,
+            question=baker.make('questions.Question', quest=quest_submission.quest, type='file_upload'),
+            response_file=generate_test_png_file(),
+            comment=None,
+        )
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_add_answer', args=[answer.pk]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self.added_artwork().date, answer.datetime_created.date())
 
     def test_art_add__unsupported_format_returns_404(self):
         """Adding art from a comment document that is neither an image nor a video is rejected (404)."""
