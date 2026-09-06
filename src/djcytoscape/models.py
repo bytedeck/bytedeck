@@ -227,7 +227,23 @@ class CytoElement(models.Model):
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.id)
+        return CytoElement.generate_selector_id_for(type(obj), obj.id)
+
+    @staticmethod
+    def generate_selector_id_for(model_class, object_id):
+        """The same selector id as `generate_selector_id`, from a model and an id.
+
+        For a caller that holds those without the object: a Prereq's generic foreign key
+        columns, say, which name their target without loading it.
+
+        Args:
+            model_class: the model the object is an instance of.
+            object_id: the object's primary key.
+
+        Returns:
+            str: the selector id, e.g. "Quest: 21".
+        """
+        return str(model_class.__name__) + ": " + str(object_id)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):
@@ -430,11 +446,56 @@ class CytoScapeManager(models.Manager):
 
     def get_related_maps(self, object_):
         """ returns all CytoScape maps associated with object as a queryset """
-        selector_id = CytoElement.generate_selector_id(object_)
+        return self._maps_drawing([CytoElement.generate_selector_id(object_)])
 
+    def get_maps_to_regenerate_for(self, object_):
+        """The maps a change to `object_` should rebuild: the ones drawing it, and the ones
+        drawing its prerequisites.
+
+        The prerequisites are what make this more than `get_related_maps`. A map draws only
+        objects that are active, so a draft quest is drawn on no map, and asking which maps
+        draw it answers "none" for the one change that should put it on one: publishing it
+        (#2663). Where it lands is not a mystery, though. A map is built by walking forward
+        from its initial object to the objects that rely on what it has already drawn, so a
+        quest joins a map exactly where one of its prerequisites already sits, and those
+        maps are the ones with something new to draw.
+
+        Reading the prerequisites rather than every map also keeps the answer honest in the
+        other direction: a quest waiting behind a prerequisite that is itself off the map
+        has nothing to add to any map, and gets none.
+
+        Args:
+            object_: the Quest, Badge or Rank that changed.
+
+        Returns:
+            QuerySet: the CytoScape maps to rebuild, without duplicates.
+        """
+        selector_ids = [CytoElement.generate_selector_id(object_)]
+
+        # Rank has no prerequisites of its own (only Quest and Badge carry HasPrereqsMixin),
+        # so it contributes just its own node.
+        prereqs = object_.prereqs() if hasattr(object_, 'prereqs') else []
+
+        for prereq in prereqs:
+            for content_type_id, object_id in (
+                (prereq.prereq_content_type_id, prereq.prereq_object_id),
+                (prereq.or_prereq_content_type_id, prereq.or_prereq_object_id),
+            ):
+                # built from the generic foreign key's own columns rather than by following
+                # it. The model and the id are all a selector needs, and ContentType.get_for_id
+                # is cached for the process, so a run of saves does not pay a query per
+                # prerequisite; a Prereq whose target is gone is simply skipped.
+                if content_type_id is not None and object_id is not None:
+                    model_class = ContentType.objects.get_for_id(content_type_id).model_class()
+                    selector_ids.append(CytoElement.generate_selector_id_for(model_class, object_id))
+
+        return self._maps_drawing(selector_ids)
+
+    def _maps_drawing(self, selector_ids):
+        """The maps carrying a node for any of these selector ids, as a queryset."""
         related_ids = CytoElement.objects.filter(
             group=CytoElement.NODES,
-            selector_id=selector_id,
+            selector_id__in=selector_ids,
         ).values_list('scape__id', flat=True)
 
         return self.get_queryset().filter(id__in=related_ids)

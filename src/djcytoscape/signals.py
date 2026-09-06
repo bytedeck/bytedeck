@@ -30,11 +30,12 @@ def regenerate_related_maps(instance):
     if not SiteConfig.get().map_auto_update:
         return
 
-    # get related maps, claiming each one that has no regeneration waiting yet. cache.add
-    # writes only where the key is absent, so of several saves arriving together exactly
-    # one claims a given map and the rest are collapsed into the rebuild it queues.
+    # get the maps with something to redraw, claiming each one that has no regeneration
+    # waiting yet. cache.add writes only where the key is absent, so of several saves
+    # arriving together exactly one claims a given map and the rest are collapsed into the
+    # rebuild it queues.
     map_ids_to_regenerate = [
-        map_id for map_id in CytoScape.objects.get_related_maps(instance).values_list('id', flat=True)
+        map_id for map_id in CytoScape.objects.get_maps_to_regenerate_for(instance).values_list('id', flat=True)
         if cache.add(pending_regeneration_key(map_id), True, MAP_REGENERATION_PENDING_TIMEOUT)
     ]
     if not map_ids_to_regenerate:
