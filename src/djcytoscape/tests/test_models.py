@@ -1,11 +1,14 @@
 import json
 from collections import defaultdict
 from itertools import cycle
+from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
 from django.test import SimpleTestCase
+from django.test.utils import CaptureQueriesContext
 
 from model_bakery import baker
 
@@ -583,6 +586,109 @@ class CytoScapeModelTest(JSONTestCaseMixin, ByteDeckTenantTestCase):
 
         # should have been deleted at this point
         self.assertFalse(CytoScape.objects.filter(name="bad map").exists())
+
+    def test_calculate_nodes__campaign_nodes_already_in_the_table_are_still_tracked(self):
+        """Building a map whose campaign nodes are already there tracks them all the same.
+
+        `campaign_list` is rebuilt for each run, so a campaign node that is in the table but was
+        not written by this run has nothing in it. Deciding whether to track a campaign from
+        whether `get_or_create` wrote the row is what left `get_temp_campaign` returning None on
+        the line before it is asked to add a node (#2656). Two regenerations of one map racing
+        each other is how that state arises: each starts by deleting what the other is building
+        on, and the one that loses meets the winner's campaign nodes.
+        """
+        campaign_nodes = CytoElement.objects.all_for_scape(self.map).filter(classes='campaign')
+        self.assertTrue(campaign_nodes.exists(), "fixture has no campaigns to exercise this with")
+
+        # No delete first: this is the map's own elements standing in for another run's.
+        self.map.calculate_nodes()
+
+        tracked = {campaign.node_id for campaign in self.map.campaign_list}
+        self.assertTrue(tracked, "no campaign was tracked for the edge cleanup")
+        self.assertTrue(
+            tracked.issubset(set(campaign_nodes.values_list('id', flat=True))),
+            "a tracked campaign does not correspond to a campaign node on the map",
+        )
+
+    def test_regenerate__takes_the_maps_row_so_two_of_them_cannot_interleave(self):
+        """Regenerating locks the map's own row, so a second regeneration waits for the first.
+
+        Saving any Quest, Badge, Rank or Prereq queues `regenerate_map` for every related map,
+        so several tasks land on one map routinely. Each begins by deleting the elements the
+        others are building on, which leaves the loser writing edges to nodes that no longer
+        exist (#2656). The lock is what stops them overlapping, so its absence is the failure.
+        """
+        with CaptureQueriesContext(connection) as queries:
+            self.map.regenerate()
+
+        locking = [
+            query['sql'] for query in queries
+            if 'FOR UPDATE' in query['sql'] and 'djcytoscape_cytoscape' in query['sql']
+        ]
+        self.assertTrue(locking, "regenerate() did not lock the map row it is about to rebuild")
+
+    def test_regenerate__builds_from_the_initial_object_as_it_is_once_the_row_is_taken(self):
+        """The rebuild reads the object the map starts from after it holds the map's row.
+
+        Waiting for that row can take as long as the rebuild ahead of it, and every save
+        made during the wait is collapsed into this rebuild rather than given one of its
+        own (#2658), so building from what was loaded before the wait would publish a map
+        without those saves and queue nothing to correct it.
+
+        The wait is stood in for by resolving the initial object and then changing it in
+        the database behind the loaded instance, which is the state a task that waited is
+        in: `initial_content_object` is a GenericForeignKey, so the instance it hands back
+        is cached from whenever it was first asked for.
+        """
+        scape = CytoScape.objects.get(pk=self.map.pk)  # a fresh instance, as the task loads one
+        initial_quest = scape.initial_content_object  # resolved and cached before the wait
+        Quest.objects.filter(pk=initial_quest.pk).update(name='renamed while the rebuild waited')
+
+        scape.regenerate()
+
+        labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+        self.assertTrue(
+            any('renamed while the rebuild waited' in (label or '') for label in labels),
+            "the map's first node was built from the initial object as it was before the wait",
+        )
+
+    def test_regenerate__runs_on_lock_acquired_between_taking_the_row_and_reading(self):
+        """`on_lock_acquired` runs once the map's row is held and before anything is read.
+
+        `regenerate_map` gives up its claim on the map there (#2658), so where it runs is
+        exactly what decides which saves are collapsed into that task. Everything up to
+        this point is still covered by it, the wait for the row included, and nothing
+        after it is.
+        """
+        seen = {}
+
+        def record():
+            seen['row taken'] = any(
+                'FOR UPDATE' in query['sql'] and 'djcytoscape_cytoscape' in query['sql']
+                for query in queries.captured_queries
+            )
+            seen['nothing read yet'] = CytoElement.objects.all_for_scape(self.map).exists()
+
+        with CaptureQueriesContext(connection) as queries:
+            self.map.regenerate(on_lock_acquired=record)
+
+        self.assertEqual(seen, {'row taken': True, 'nothing read yet': True})
+
+    def test_regenerate__a_failure_part_way_through_leaves_the_map_alone(self):
+        """A regeneration that raises leaves the map that was there, rather than a deleted one.
+
+        The rebuild drops every element before writing the new ones, so without a transaction
+        around the pair, anything that goes wrong in between leaves the deck with an empty map.
+        """
+        before = list(CytoElement.objects.all_for_scape(self.map).values_list('id', flat=True))
+        self.assertTrue(before, "fixture map has no elements to preserve")
+
+        with patch.object(CytoScape, 'calculate_nodes', side_effect=RuntimeError('boom')):
+            with self.assertRaises(RuntimeError):
+                self.map.regenerate()
+
+        after = list(CytoElement.objects.all_for_scape(self.map).values_list('id', flat=True))
+        self.assertEqual(after, before)
 
     def test_get_related_maps__counts_maps_per_quest(self):
         """ Check if CytoScape.objects.get_related_maps returns the correct maps per quest.

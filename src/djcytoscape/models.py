@@ -8,7 +8,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ObjectDoesNotExist
 from django.urls import reverse
-from django.db import models
+from django.db import models, transaction
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.utils.html import format_html, format_html_join
@@ -227,7 +227,23 @@ class CytoElement(models.Model):
         # Todo, this seems uneccessary, because we just have to parse it when building the json dict.
         # Just save the model name and the id seperately?
         """
-        return str(type(obj).__name__) + ": " + str(obj.id)
+        return CytoElement.generate_selector_id_for(type(obj), obj.id)
+
+    @staticmethod
+    def generate_selector_id_for(model_class, object_id):
+        """The same selector id as `generate_selector_id`, from a model and an id.
+
+        For a caller that holds those without the object: a Prereq's generic foreign key
+        columns, say, which name their target without loading it.
+
+        Args:
+            model_class: the model the object is an instance of.
+            object_id: the object's primary key.
+
+        Returns:
+            str: the selector id, e.g. "Quest: 21".
+        """
+        return str(model_class.__name__) + ": " + str(object_id)
 
     @staticmethod
     def get_selector_styles_json_dict(selector, styles):
@@ -430,11 +446,56 @@ class CytoScapeManager(models.Manager):
 
     def get_related_maps(self, object_):
         """ returns all CytoScape maps associated with object as a queryset """
-        selector_id = CytoElement.generate_selector_id(object_)
+        return self._maps_drawing([CytoElement.generate_selector_id(object_)])
 
+    def get_maps_to_regenerate_for(self, object_):
+        """The maps a change to `object_` should rebuild: the ones drawing it, and the ones
+        drawing its prerequisites.
+
+        The prerequisites are what make this more than `get_related_maps`. A map draws only
+        objects that are active, so a draft quest is drawn on no map, and asking which maps
+        draw it answers "none" for the one change that should put it on one: publishing it
+        (#2663). Where it lands is not a mystery, though. A map is built by walking forward
+        from its initial object to the objects that rely on what it has already drawn, so a
+        quest joins a map exactly where one of its prerequisites already sits, and those
+        maps are the ones with something new to draw.
+
+        Reading the prerequisites rather than every map also keeps the answer honest in the
+        other direction: a quest waiting behind a prerequisite that is itself off the map
+        has nothing to add to any map, and gets none.
+
+        Args:
+            object_: the Quest, Badge or Rank that changed.
+
+        Returns:
+            QuerySet: the CytoScape maps to rebuild, without duplicates.
+        """
+        selector_ids = [CytoElement.generate_selector_id(object_)]
+
+        # Rank has no prerequisites of its own (only Quest and Badge carry HasPrereqsMixin),
+        # so it contributes just its own node.
+        prereqs = object_.prereqs() if hasattr(object_, 'prereqs') else []
+
+        for prereq in prereqs:
+            for content_type_id, object_id in (
+                (prereq.prereq_content_type_id, prereq.prereq_object_id),
+                (prereq.or_prereq_content_type_id, prereq.or_prereq_object_id),
+            ):
+                # built from the generic foreign key's own columns rather than by following
+                # it. The model and the id are all a selector needs, and ContentType.get_for_id
+                # is cached for the process, so a run of saves does not pay a query per
+                # prerequisite; a Prereq whose target is gone is simply skipped.
+                if content_type_id is not None and object_id is not None:
+                    model_class = ContentType.objects.get_for_id(content_type_id).model_class()
+                    selector_ids.append(CytoElement.generate_selector_id_for(model_class, object_id))
+
+        return self._maps_drawing(selector_ids)
+
+    def _maps_drawing(self, selector_ids):
+        """The maps carrying a node for any of these selector ids, as a queryset."""
         related_ids = CytoElement.objects.filter(
             group=CytoElement.NODES,
-            selector_id=selector_id,
+            selector_id__in=selector_ids,
         ).values_list('scape__id', flat=True)
 
         return self.get_queryset().filter(id__in=related_ids)
@@ -747,7 +808,7 @@ class CytoScape(models.Model):
             # Create a node for this campaign (or get it if it already exists).
             # selector_id ties the compound node back to its Category (like quest/badge nodes do),
             # so the map can order campaigns left-to-right by Category.map_order (issue #1977).
-            campaign_node, campaign_created = CytoElement.objects.get_or_create(
+            campaign_node, _ = CytoElement.objects.get_or_create(
                 scape=self,
                 group=CytoElement.NODES,
                 label=CytoScape.generate_label(obj.campaign),
@@ -760,9 +821,16 @@ class CytoScape(models.Model):
             target_node.save()
 
             # TempCampaign utility for cleaning up the edges and making the resulting map look good, after the entire map is built
-            if campaign_created:
-                self.campaign_list.append(TempCampaign(campaign_node.id))
+            # Whether this run has met the campaign yet, which is what the caller and the edge
+            # cleanup both want to know. get_or_create reports whether it wrote the row, and the
+            # two answers differ whenever the node is already in the table: campaign_list is
+            # rebuilt per run, so it would hold nothing for that node and the add_node below
+            # would be reached with None (#2656).
             temp_campaign = self.get_temp_campaign(campaign_node.id)  # not a Django model, so custom method
+            campaign_created = temp_campaign is None
+            if campaign_created:
+                temp_campaign = TempCampaign(campaign_node.id)
+                self.campaign_list.append(temp_campaign)
 
             # TODO: Nodes might be present multiple times through different source nodes?  check and combine
             temp_campaign.add_node(target_node.id, source_node.id)
@@ -1008,11 +1076,55 @@ class CytoScape(models.Model):
         self.update_cache()
         self.save()
 
-    def regenerate(self):
-        if self.initial_content_object is None:
-            self.delete()
-            raise (self.InitialObjectDoesNotExist)
+    def regenerate(self, on_lock_acquired=None):
+        """Rebuild this map's elements from the objects it maps.
 
-        # Delete existing nodes
-        CytoElement.objects.all_for_scape(self).delete()
-        self.calculate_nodes()
+        Args:
+            on_lock_acquired: optional callable, run once this map's row is held and
+                immediately before the rebuild reads anything. `regenerate_map` releases
+                its claim on the map there (djcytoscape/tasks.py): up to that moment the
+                rebuild has read nothing it keeps, so it still covers every save made
+                while it waited for the row, and past it, it does not.
+
+        Raises:
+            InitialObjectDoesNotExist: if the object the map starts from is gone, in which
+                case the map deletes itself, since it has nothing left to draw.
+        """
+        try:
+            with transaction.atomic():
+                # One regeneration of a map at a time. Saving any Quest, Badge, Rank or Prereq
+                # queues regenerate_map for each related map (djcytoscape/signals.py), so editing a
+                # single quest can put several tasks on the same map. Each of them starts by
+                # deleting the elements the others are midway through building on, and the loser
+                # either meets a campaign node it did not create or writes an edge to a node that
+                # has just been deleted (#2656). Taking the map's own row makes the second task
+                # wait for the first and then rebuild from a settled starting point.
+                #
+                # Holding it for the whole rebuild is also what keeps the map readable throughout:
+                # the delete and the nodes replacing it land together, so nobody loading the page
+                # meets the empty gap between them.
+                CytoScape.objects.select_for_update().get(pk=self.pk)
+
+                # Load this map, and the object it starts from, again now that the row is
+                # ours. Waiting for it can take as long as the whole rebuild ahead of it, and
+                # every save made during that wait is collapsed into this rebuild rather than
+                # given one of its own (djcytoscape/tasks.py), so building from what was read
+                # before the wait would publish a map missing them with nothing queued to
+                # correct it. refresh_from_db clears the cached initial_content_object too,
+                # which is the one calculate_nodes builds the map's first node from.
+                self.refresh_from_db()
+
+                if on_lock_acquired is not None:
+                    on_lock_acquired()
+
+                if self.initial_content_object is None:
+                    raise self.InitialObjectDoesNotExist
+
+                # Delete existing nodes
+                CytoElement.objects.all_for_scape(self).delete()
+                self.calculate_nodes()
+        except self.InitialObjectDoesNotExist:
+            # Out here rather than inside the block above: raising rolls that block back,
+            # so a delete made in it would be undone along with everything else.
+            self.delete()
+            raise
