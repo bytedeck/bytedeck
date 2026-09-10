@@ -22,9 +22,24 @@ set -uo pipefail   # deliberately NOT -e: one failing probe must not abandon the
 COMPOSE="docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml"
 LOOP_SECONDS=""
 
+# How many lines of nginx log to read per run. The log is the container's stdout
+# (see the NGINX section), so this bounds how far back a snapshot looks.
+NGINX_LOG_LINES="${NGINX_LOG_LINES:-5000}"
+
 while [ $# -gt 0 ]; do
     case "$1" in
-        --loop) LOOP_SECONDS="${2:-60}"; shift 2 ;;
+        # Take a following value only when one is actually there and looks like a
+        # number; a bare trailing `--loop` means the default rather than swallowing
+        # the next flag or setting a value `sleep` would reject every iteration.
+        --loop)
+            if [ $# -ge 2 ] && printf '%s' "$2" | grep -qE '^[0-9]+$'; then
+                LOOP_SECONDS="$2"; shift 2
+            elif [ $# -ge 2 ] && [ "${2#-}" = "$2" ]; then
+                echo "--loop takes a number of seconds, got: $2" >&2; exit 2
+            else
+                LOOP_SECONDS=60; shift
+            fi
+            ;;
         -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
@@ -59,13 +74,23 @@ fi
 
 # ------------------------------------------------------------------- OOM kills
 section "OOM KILLS (the known failure mode, see issue #2081)"
-OOM=$(sudo dmesg -T 2>/dev/null | grep -iE 'out of memory|killed process' | tail -5)
-if [ -n "$OOM" ]; then
-    echo "$OOM"
-    verdict "A process was OOM-killed. Find the request in the nginx section, then lower --processes."
+# -n so sudo never sits waiting for a password: this script is run at peak and in
+# --loop, where a hidden prompt would stall every iteration. Read dmesg first and
+# judge the result second, so "no OOM kills" is never reported for a dmesg that
+# was refused.
+DMESG=$(sudo -n dmesg -T 2>/dev/null || dmesg -T 2>/dev/null)
+if [ -z "$DMESG" ]; then
+    note "could not read dmesg (needs root: try 'sudo -v' first, then rerun)"
+    verdict "UNKNOWN, not clean: this check could not run. Rerun it with sudo before trusting a quiet result."
 else
-    note "none in dmesg"
-    verdict "clean"
+    OOM=$(printf '%s\n' "$DMESG" | grep -iE 'out of memory|killed process' | tail -5)
+    if [ -n "$OOM" ]; then
+        echo "$OOM"
+        verdict "A process was OOM-killed. Find the request in the nginx section, then lower --processes."
+    else
+        note "none in dmesg"
+        verdict "clean"
+    fi
 fi
 
 # ----------------------------------------------------------------- disk
@@ -87,30 +112,48 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\
 section "UWSGI: worker saturation (the web-tier bottleneck signal)"
 STATS=$($COMPOSE exec -T web curl -s --max-time 3 localhost:9191 2>/dev/null)
 if [ -n "$STATS" ] && echo "$STATS" | grep -q listen_queue; then
-    echo "$STATS" | python3 -c '
-import json,sys
+    # Held in a variable rather than a fixed /tmp path: nothing to collide with a
+    # parallel run or to leave behind, and the exit status stays readable. Each
+    # value is pulled into a name before it is formatted, so no f-string reuses
+    # the quote around it: that is only legal from Python 3.12, and the host
+    # python3 here may be older.
+    if ! UWSGI_OUT=$(echo "$STATS" | python3 -c '
+import json, sys
 d = json.load(sys.stdin)
 workers = d.get("workers", [])
 busy = sum(1 for w in workers if w.get("status") == "busy")
-print(f"  workers: {len(workers)}   busy: {busy}   listen_queue: {d.get(\"listen_queue\")} / {d.get(\"listen_queue_errors\")} errors")
-slow = sorted(workers, key=lambda w: w.get("avg_rt", 0), reverse=True)[:3]
-for w in slow:
-    print(f"    worker {w.get(\"id\")}: avg_rt {w.get(\"avg_rt\",0)/1000:.0f}ms  requests {w.get(\"requests\")}  rss {w.get(\"rss\",0)//1048576}MB")
-q = d.get("listen_queue", 0)
-print("QUEUE" if q else "OK")
-' 2>/dev/null | tee /tmp/.spike_uwsgi
-    if grep -q QUEUE /tmp/.spike_uwsgi 2>/dev/null; then
-        verdict "listen_queue > 0: requests are WAITING for a free worker. That is the bottleneck."
-        verdict "  If RAM has headroom: raise --processes in UWSGI_EXTRA_ARGS, then systemctl restart bytedeck.com"
-        verdict "  If RAM is tight: scale the instance instead (runbook section 4)."
+queue = d.get("listen_queue", 0)
+errors = d.get("listen_queue_errors", 0)
+print(f"  workers: {len(workers)}   busy: {busy}   listen_queue: {queue} / {errors} errors")
+for w in sorted(workers, key=lambda w: w.get("avg_rt", 0), reverse=True)[:3]:
+    wid = w.get("id")
+    ms = w.get("avg_rt", 0) / 1000
+    reqs = w.get("requests")
+    rss = w.get("rss", 0) // 1048576
+    print(f"    worker {wid}: avg_rt {ms:.0f}ms  requests {reqs}  rss {rss}MB")
+print("QUEUE" if queue else "OK")
+' 2>&1) || [ -z "$UWSGI_OUT" ]; then
+        # Last line only: that carries the exception, and a full traceback is noise
+        # in a snapshot meant to be skimmed mid-spike.
+        note "uwsgi stats were reachable but could not be parsed:"
+        note "  $(printf '%s\n' "${UWSGI_OUT:-<no output>}" | tail -1)"
+        verdict "UNKNOWN, not clean: treat worker saturation as unmeasured for this run."
     else
-        verdict "No queue: workers are keeping up. If pages are slow, the cause is downstream (database)."
+        printf '%s\n' "$UWSGI_OUT" | grep -v '^QUEUE$\|^OK$'
+        if printf '%s\n' "$UWSGI_OUT" | grep -q '^QUEUE$'; then
+            verdict "listen_queue > 0: requests are WAITING for a free worker. That is the bottleneck."
+            verdict "  If RAM has headroom: raise --processes in UWSGI_EXTRA_ARGS, then systemctl restart bytedeck.com"
+            verdict "  If RAM is tight: scale the instance instead (runbook section 4)."
+        else
+            verdict "No queue: workers are keeping up. If pages are slow, the cause is downstream (database)."
+        fi
     fi
-    rm -f /tmp/.spike_uwsgi
 else
     note "uwsgi stats socket not enabled."
     verdict "TO ENABLE (needs one restart, do it BEFORE peak, not during):"
-    verdict "  add to ~/bytedeck/.env:  UWSGI_EXTRA_ARGS=--stats 127.0.0.1:9191 --stats-http"
+    verdict "  APPEND to the existing UWSGI_EXTRA_ARGS in ~/bytedeck/.env, keeping any flags"
+    verdict "  already there (e.g. --processes 8), so the line reads something like:"
+    verdict "    UWSGI_EXTRA_ARGS=--processes 8 --stats 127.0.0.1:9191 --stats-http"
     verdict "  then: sudo systemctl restart bytedeck.com"
     note "Meanwhile, worker count only:"
     $COMPOSE exec -T web ps aux 2>/dev/null | grep -c '[u]wsgi' | sed 's/^/     uwsgi processes: /'
@@ -118,51 +161,60 @@ fi
 
 # ------------------------------------------------------------- nginx: what is slow
 section "NGINX: slowest requests and hottest decks"
-LOGLINE=$($COMPOSE exec -T nginx sh -c 'tail -1 /var/log/nginx/access.log 2>/dev/null' 2>/dev/null)
-if echo "$LOGLINE" | grep -q 'urt='; then
+# The access log is read back through `docker compose logs`, not from a file in
+# the container. The official nginx image symlinks /var/log/nginx/access.log to
+# /dev/stdout, so the log is the container's stdout and is captured by Docker's
+# json-file driver; opening that symlink for reading yields nothing and blocks.
+# Rotation is Docker's (DOCKER_LOG_MAX_SIZE x DOCKER_LOG_MAX_FILE in .env), which
+# also bounds how far back --tail can reach: raise them if a spike outruns it.
+NGINX_LOG=$($COMPOSE logs --no-color --no-log-prefix --tail "$NGINX_LOG_LINES" nginx 2>/dev/null)
+if [ -z "$NGINX_LOG" ]; then
+    # --no-log-prefix arrived in Compose v2; without it each line carries a
+    # "nginx-1  | " prefix, so strip it back off rather than shifting every field.
+    NGINX_LOG=$($COMPOSE logs --no-color --tail "$NGINX_LOG_LINES" nginx 2>/dev/null | sed 's/^[A-Za-z0-9_.-]*[[:space:]]*| //')
+fi
+
+if printf '%s\n' "$NGINX_LOG" | grep -q 'urt='; then
     note "Slowest ENDPOINTS by average app time (ids collapsed to #), count first:"
-    $COMPOSE exec -T nginx sh -c '
-        awk "{
-            urt=\"\"; for(i=1;i<=NF;i++) if(\$i ~ /^urt=/){split(\$i,a,\"=\"); urt=a[2]}
-            if(urt==\"\" || urt==\"-\") next
-            if(match(\$0, /\"[A-Z]+ [^ ]+/)) {
-                r=substr(\$0, RSTART+1, RLENGTH-1); split(r, m, \" \"); p=m[2]
-                sub(/\?.*/, \"\", p); gsub(/[0-9]+/, \"#\", p)
-                n[m[1]\" \"p]++; t[m[1]\" \"p]+=urt
-            }
-        } END { for(k in n) printf \"%7.3fs avg  x%-5d %s\n\", t[k]/n[k], n[k], k }" /var/log/nginx/access.log 2>/dev/null | sort -rn | head -10
-    ' 2>/dev/null
+    printf '%s\n' "$NGINX_LOG" | awk '{
+        urt=""; for(i=1;i<=NF;i++) if($i ~ /^urt=/){split($i,a,"="); urt=a[2]}
+        if(urt=="" || urt=="-") next
+        if(match($0, /"[A-Z]+ [^ ]+/)) {
+            r=substr($0, RSTART+1, RLENGTH-1); split(r, m, " "); p=m[2]
+            sub(/\?.*/, "", p); gsub(/[0-9]+/, "#", p)
+            n[m[1]" "p]++; t[m[1]" "p]+=urt
+        }
+    } END { for(k in n) printf "%7.3fs avg  x%-5d %s\n", t[k]/n[k], n[k], k }' | sort -rn | head -10
     note ""
     note "Slowest INDIVIDUAL requests (the one-off 30s outliers):"
-    $COMPOSE exec -T nginx sh -c '
-        awk "{
-            urt=\"\"; host=\"\"
-            for(i=1;i<=NF;i++){
-                if(\$i ~ /^urt=/){split(\$i,a,\"=\"); urt=a[2]}
-                if(\$i ~ /^host=/){split(\$i,b,\"=\"); host=b[2]}
-            }
-            if(urt==\"\" || urt==\"-\") next
-            if(match(\$0, /\"[A-Z]+ [^\"]*\"/)) printf \"%8.3fs  %-28s %s\n\", urt, host, substr(\$0, RSTART+1, RLENGTH-2)
-        }" /var/log/nginx/access.log 2>/dev/null | sort -rn | head -8
-    ' 2>/dev/null
+    printf '%s\n' "$NGINX_LOG" | awk '{
+        urt=""; host=""
+        for(i=1;i<=NF;i++){
+            if($i ~ /^urt=/){split($i,a,"="); urt=a[2]}
+            if($i ~ /^host=/){split($i,b,"="); host=b[2]}
+        }
+        if(urt=="" || urt=="-") next
+        if(match($0, /"[A-Z]+ [^"]*"/)) printf "%8.3fs  %-28s %s\n", urt, host, substr($0, RSTART+1, RLENGTH-2)
+    }' | sort -rn | head -8
     note ""
     note "Requests per deck (which tenant is carrying the load):"
-    $COMPOSE exec -T nginx sh -c "
-        grep -o 'host=[^ ]*' /var/log/nginx/access.log 2>/dev/null | sort | uniq -c | sort -rn | head -8
-    " 2>/dev/null
+    # Only lines that actually carry timing, so interleaved error-log output on the
+    # same stream cannot be counted as traffic.
+    printf '%s\n' "$NGINX_LOG" | awk '/urt=/{for(i=1;i<=NF;i++) if($i ~ /^host=/) print $i}' \
+        | sort | uniq -c | sort -rn | head -8
     note ""
     note "Status codes:"
-    $COMPOSE exec -T nginx sh -c "
-        awk '{for(i=1;i<=NF;i++) if(\$i ~ /^[0-9][0-9][0-9]\$/) {print \$i; break}}' /var/log/nginx/access.log 2>/dev/null | sort | uniq -c | sort -rn | head -6
-    " 2>/dev/null
+    printf '%s\n' "$NGINX_LOG" | awk '/urt=/{for(i=1;i<=NF;i++) if($i ~ /^[0-9][0-9][0-9]$/) {print $i; break}}' \
+        | sort | uniq -c | sort -rn | head -6
     verdict "rt high but urt low  = slow client or big upload. Not your problem, ignore it."
     verdict "urt high on a few URLs = one slow endpoint. Take its query to RDS Database Insights."
     verdict "urt high everywhere    = the database is the bottleneck, not the web tier."
-elif [ -n "$LOGLINE" ]; then
+elif printf '%s\n' "$NGINX_LOG" | grep -qE '"(GET|POST|HEAD|PUT|DELETE) '; then
     note "Access log is on, but without timing fields, so slow requests cannot be ranked."
     verdict "Deploy the nginx.conf on this branch to get rt= and urt= and host=."
 else
-    note "NGINX ACCESS LOG IS OFF. You cannot tell which request is slow."
+    note "NGINX ACCESS LOG IS OFF (or the nginx container is not running: $COMPOSE ps)."
+    note "You cannot tell which request is slow."
     verdict "THIS IS THE BIGGEST GAP. Deploy the nginx.conf change on this branch"
     verdict "  (production/server-update.sh), which turns it on with timing fields."
 fi
@@ -188,7 +240,7 @@ fi
 
 # --------------------------------------------------------------- postgres/RDS
 section "RDS: connections and slow in-flight queries"
-$COMPOSE exec -T web python src/manage.py shell 2>/dev/null <<'PY'
+if ! $COMPOSE exec -T web python src/manage.py shell 2>/dev/null <<'PY'
 from django.db import connection
 with connection.cursor() as c:
     c.execute("SELECT count(*) FROM pg_stat_activity")
@@ -215,7 +267,9 @@ with connection.cursor() as c:
     else:
         print("   no queries in flight right now")
 PY
-[ $? -ne 0 ] && note "could not reach the database through the web container"
+then
+    note "could not reach the database through the web container"
+fi
 
 # ---------------------------------------------------- what this cannot see
 section "CHECK THESE YOURSELF (not visible from this host)"

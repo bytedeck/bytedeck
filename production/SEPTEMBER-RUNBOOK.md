@@ -202,6 +202,13 @@ them the evening before rather than during:**
    cannot attribute a slow page to a URL or a deck, which the OOM step below
    depends on.
 
+   The log is the nginx container's stdout (the image symlinks
+   `/var/log/nginx/access.log` to `/dev/stdout`), so read it with
+   `docker compose ... logs nginx`, not by opening that path in the container.
+   Docker's json-file driver rotates it, which also caps how far back you can
+   look: raise `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE` in `.env` before a
+   peak if you want more history than the default 10m x 5.
+
 <details>
 <summary>The individual probes the script runs</summary>
 
@@ -245,8 +252,9 @@ sudo dmesg -T | grep -iE 'out of memory|killed process' | tail
 
 Longer form:
 - **Swap climbing + OOM lines** → a worker is ballooning; find the request
-  (nginx access log around the time), lower `UWSGI_EXTRA_ARGS` processes if
-  needed, and prioritize the request-code fix.
+  (the script's NGINX section, or
+  `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs --tail 5000 nginx`),
+  lower `UWSGI_EXTRA_ARGS` processes if needed, and prioritize the request-code fix.
 - **Redis `used_memory` approaching `maxmemory`, or any `errorstat_OOM`** →
   memory-increasing writes are about to be (or are being) refused. Give the box
   room *first*: raise host RAM (§4) or drop a uwsgi/celery worker. Only then
