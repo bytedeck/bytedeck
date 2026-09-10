@@ -175,36 +175,55 @@ if [ -z "$NGINX_LOG" ]; then
 fi
 
 if printf '%s\n' "$NGINX_LOG" | grep -q 'urt='; then
-    note "Slowest ENDPOINTS by average app time (ids collapsed to #), count first:"
-    printf '%s\n' "$NGINX_LOG" | awk '{
-        urt=""; for(i=1;i<=NF;i++) if($i ~ /^urt=/){split($i,a,"="); urt=a[2]}
-        if(urt=="" || urt=="-") next
-        if(match($0, /"[A-Z]+ [^ ]+/)) {
-            r=substr($0, RSTART+1, RLENGTH-1); split(r, m, " "); p=m[2]
-            sub(/\?.*/, "", p); gsub(/[0-9]+/, "#", p)
-            n[m[1]" "p]++; t[m[1]" "p]+=urt
+    # Normalise each access line once into
+    #   urt \t host \t status \t METHOD \t collapsed-path \t raw request
+    # and report off that, so the four reports below share one parser.
+    #
+    # The fields are read POSITIONALLY, anchored on the canonical
+    # `rt=N urt=N host=H` triple the log_format emits, rather than by scanning
+    # the line for anything shaped like `urt=`. The format puts $http_referer and
+    # $http_user_agent AFTER that triple, and both are client-controlled: a
+    # request sent with `User-Agent: probe urt=999 host=forged.example` would
+    # otherwise overwrite the real values and forge a slow request against
+    # whatever deck it named. status and bytes are the two fields immediately
+    # before the triple, and $request is the line's first quoted string (nginx
+    # escapes any quote inside it, so it cannot break out).
+    NGINX_PARSED=$(printf '%s\n' "$NGINX_LOG" | awk '{
+        urt=""; host=""; status=""
+        for(i=1;i<=NF-2;i++) {
+            if($i ~ /^rt=[0-9.-]+$/ && $(i+1) ~ /^urt=/ && $(i+2) ~ /^host=/) {
+                split($(i+1), a, "="); urt=a[2]
+                split($(i+2), b, "="); host=b[2]
+                if(i >= 3) status=$(i-2)
+                break
+            }
         }
-    } END { for(k in n) printf "%7.3fs avg  x%-5d %s\n", t[k]/n[k], n[k], k }' | sort -rn | head -10
+        if(urt=="" || urt=="-") next
+        if(status !~ /^[0-9][0-9][0-9]$/) status="???"
+        if(!match($0, /"[^"]*"/)) next
+        req=substr($0, RSTART+1, RLENGTH-2)
+        split(req, m, " ")
+        if(m[1] !~ /^[A-Z]+$/) next
+        path=m[2]
+        sub(/\?.*/, "", path); gsub(/[0-9]+/, "#", path)
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n", urt, host, status, m[1], path, req
+    }')
+
+    note "Slowest ENDPOINTS by average app time (ids collapsed to #), count first:"
+    printf '%s\n' "$NGINX_PARSED" | awk -F'\t' '
+        NF>=5 { k=$4" "$5; n[k]++; t[k]+=$1 }
+        END { for(k in n) printf "%7.3fs avg  x%-5d %s\n", t[k]/n[k], n[k], k }' | sort -rn | head -10
     note ""
     note "Slowest INDIVIDUAL requests (the one-off 30s outliers):"
-    printf '%s\n' "$NGINX_LOG" | awk '{
-        urt=""; host=""
-        for(i=1;i<=NF;i++){
-            if($i ~ /^urt=/){split($i,a,"="); urt=a[2]}
-            if($i ~ /^host=/){split($i,b,"="); host=b[2]}
-        }
-        if(urt=="" || urt=="-") next
-        if(match($0, /"[A-Z]+ [^"]*"/)) printf "%8.3fs  %-28s %s\n", urt, host, substr($0, RSTART+1, RLENGTH-2)
-    }' | sort -rn | head -8
+    printf '%s\n' "$NGINX_PARSED" | awk -F'\t' 'NF>=6 { printf "%8.3fs  %-28s %s\n", $1, $2, $6 }' \
+        | sort -rn | head -8
     note ""
     note "Requests per deck (which tenant is carrying the load):"
-    # Only lines that actually carry timing, so interleaved error-log output on the
-    # same stream cannot be counted as traffic.
-    printf '%s\n' "$NGINX_LOG" | awk '/urt=/{for(i=1;i<=NF;i++) if($i ~ /^host=/) print $i}' \
+    printf '%s\n' "$NGINX_PARSED" | awk -F'\t' 'NF>=2 && $2!="" { print $2 }' \
         | sort | uniq -c | sort -rn | head -8
     note ""
     note "Status codes:"
-    printf '%s\n' "$NGINX_LOG" | awk '/urt=/{for(i=1;i<=NF;i++) if($i ~ /^[0-9][0-9][0-9]$/) {print $i; break}}' \
+    printf '%s\n' "$NGINX_PARSED" | awk -F'\t' 'NF>=3 { print $3 }' \
         | sort | uniq -c | sort -rn | head -6
     verdict "rt high but urt low  = slow client or big upload. Not your problem, ignore it."
     verdict "urt high on a few URLs = one slow endpoint. Take its query to RDS Database Insights."
