@@ -4,8 +4,8 @@ from django.core.cache import cache
 
 from model_bakery import baker
 
-from djcytoscape.models import CytoScape
-from djcytoscape.tasks import MAP_REGENERATION_DELAY
+from djcytoscape.models import CytoElement, CytoScape
+from djcytoscape.tasks import MAP_REGENERATION_DELAY, regenerate_map
 from djcytoscape.tests.utils import simulate_regeneration_starting
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
@@ -183,6 +183,103 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         quest.save()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [map_a.id], "map B's pending regeneration should still cover it")
+
+    def test_regenerate_related_maps__publishing_a_quest_regenerates_the_map_it_joins(self, task):
+        """Publishing a draft quest rebuilds the map its prerequisite is drawn on.
+
+        A map only draws active objects, so a draft quest is on none, and the maps a save
+        rebuilds are the ones the saved object appears on. That pair means publishing, the
+        one change that should put a quest on a map, is the change that can queue nothing
+        (#2663). The prerequisite is where the quest attaches, so its map is the one to
+        rebuild.
+        """
+        origin = baker.make(Quest, name='origin', published=True)
+        draft = baker.make(Quest, name='draft', published=False)
+        draft.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Map")
+
+        self.assertEqual(CytoScape.objects.get_related_maps(draft).count(), 0, "a draft quest should not be on the map")
+        task.reset_mock()
+        cache.clear()
+
+        draft.published = True
+        draft.save()
+
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+
+    def test_regenerate_related_maps__the_queued_rebuild_draws_the_published_quest(self, task):
+        """End to end: the rebuild the signal queues puts the newly published quest on the map.
+
+        Naming the right map is only half of it. This runs the task the save queued and
+        looks at the map afterwards, which is what a teacher who ticks Published is
+        actually waiting to see (#2663).
+        """
+        origin = baker.make(Quest, name='origin', published=True)
+        draft = baker.make(Quest, name='newly published quest', published=False)
+        draft.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Map")
+
+        def drawn():
+            labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+            return any('newly published quest' in (label or '') for label in labels)
+
+        self.assertFalse(drawn(), "a draft quest should not be on the map to begin with")
+        task.reset_mock()
+        cache.clear()
+
+        draft.published = True
+        draft.save()
+
+        # run exactly what the signal queued
+        self.assertEqual(task.call_count, 1, "publishing the quest queued no regeneration at all")
+        regenerate_map.apply(args=task.call_args.kwargs['args'], queue='default').get()
+
+        self.assertTrue(drawn(), "the rebuild did not draw the quest that was just published")
+
+    def test_regenerate_related_maps__an_or_prerequisite_also_names_the_map(self, task):
+        """A quest attaches at its OR alternative too, so that map is rebuilt as well.
+
+        `Prereq` carries two generic foreign keys and either can be what puts the quest on
+        a map, so reading only the first would leave a quest whose alternative is the
+        mapped one just as stuck as before (#2663).
+        """
+        or_origin = baker.make(Quest, name='or origin', published=True)
+        unrelated = baker.make(Quest, name='unrelated', published=True)
+        draft = baker.make(Quest, name='draft', published=False)
+        Prereq.add_simple_prereq(draft, unrelated)
+        prereq = draft.prereqs()[0]
+        prereq.or_prereq_object = or_origin
+        prereq.save()
+
+        scape = CytoScape.generate_map(or_origin, "Or Map")
+        task.reset_mock()
+        cache.clear()
+
+        draft.published = True
+        draft.save()
+
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+
+    def test_regenerate_related_maps__a_prerequisite_on_no_map_queues_nothing(self, task):
+        """A quest whose prerequisites are on no map still queues nothing.
+
+        The rebuild set grows by the maps the prerequisites are drawn on, not by every
+        map: a quest waiting behind a draft of its own is not on a map yet either, and
+        rebuilding for it would be work with no change to show.
+        """
+        off_map = baker.make(Quest, name='off map', published=True)
+        draft = baker.make(Quest, name='draft', published=False)
+        draft.add_simple_prereqs([off_map])
+        CytoScape.generate_map(baker.make(Quest, name='elsewhere', published=True), "Elsewhere")
+        task.reset_mock()
+        cache.clear()
+
+        draft.published = True
+        draft.save()
+
+        self.assertEqual(task.call_count, 0)
 
     def test_prereq_signal__handles_all_registered_parent_models(self, task):
         """Saving a Prereq must not crash the map-regeneration signal for any
