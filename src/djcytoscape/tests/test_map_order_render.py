@@ -358,3 +358,175 @@ class CampaignColumnOverlapRenderTest(SimpleTestCase):
 
         by_label = {b["label"]: b for b in self._campaign_boxes(order_i=0, order_a=2, order_b=1)}
         self.assertLess(by_label["Path B"]["x1"], by_label["Path A"]["x1"])
+
+
+# Three campaigns side by side, fed by one campaign-less intro quest, with WIDELY DIFFERENT widths:
+# "Wide" branches into three parallel quests so its column is several quests across, while "Narrow
+# One" and "Narrow Two" are straight chains one quest across. The stacked fixture above cannot show
+# this, because every campaign in it is a chain and so every column there is the same width.
+_UNEVEN_WIDTH_PAGE_TEMPLATE = """<!doctype html><html><head>
+<style>#cy {{ width: 1600px; height: 900px; position: absolute; top: 0; left: 0; }}</style>
+</head><body><div id="cy"></div>
+<script>{jquery_stub}</script>
+<script src="file://{js_dir}/cytoscape.min.js"></script>
+<script src="file://{js_dir}/dagre.min.js"></script>
+<script src="file://{js_dir}/cytoscape-dagre.js"></script>
+<script>
+var elements = {{
+  nodes: [
+    {{ data: {{ id: '1', label: 'Intro' }} }},
+    {{ data: {{ id: '10', label: 'Wide', campaignOrder: {order_w} }} }},
+    {{ data: {{ id: '100', parent: '10', label: 'W0', campaignOrder: {order_w} }} }},
+    {{ data: {{ id: '101', parent: '10', label: 'W1', campaignOrder: {order_w} }} }},
+    {{ data: {{ id: '102', parent: '10', label: 'W2', campaignOrder: {order_w} }} }},
+    {{ data: {{ id: '103', parent: '10', label: 'W3', campaignOrder: {order_w} }} }},
+    {{ data: {{ id: '20', label: 'Narrow One', campaignOrder: {order_1} }} }},
+    {{ data: {{ id: '200', parent: '20', label: 'P0', campaignOrder: {order_1} }} }},
+    {{ data: {{ id: '201', parent: '20', label: 'P1', campaignOrder: {order_1} }} }},
+    {{ data: {{ id: '30', label: 'Narrow Two', campaignOrder: {order_2} }} }},
+    {{ data: {{ id: '300', parent: '30', label: 'Q0', campaignOrder: {order_2} }} }},
+    {{ data: {{ id: '301', parent: '30', label: 'Q1', campaignOrder: {order_2} }} }}
+  ],
+  edges: [
+    {{ data: {{ id: 'w1', source: '100', target: '101' }} }},
+    {{ data: {{ id: 'w2', source: '100', target: '102' }} }},
+    {{ data: {{ id: 'w3', source: '100', target: '103' }} }},
+    {{ data: {{ id: 'p1', source: '200', target: '201' }} }},
+    {{ data: {{ id: 'q1', source: '300', target: '301' }} }},
+    {{ data: {{ id: 'iw', source: '1', target: '100' }} }},
+    {{ data: {{ id: 'ip', source: '1', target: '200' }} }},
+    {{ data: {{ id: 'iq', source: '1', target: '300' }} }}
+  ]
+}};
+var cy = cytoscape({{ container: document.getElementById('cy'), elements: elements, style: [] }});
+</script>
+<script src="file://{js_dir}/maps.js"></script>
+</body></html>"""
+
+
+@skipUnless(HAS_PLAYWRIGHT and _CHROMIUM, "Playwright and a Chromium build are required")
+class UnevenWidthCampaignOverlapRenderTest(SimpleTestCase):
+    """Campaigns of different widths are never drawn on top of each other (#2675).
+
+    Campaigns are not all the same width: one that branches is several quests across where a
+    straight chain is one. dagre sizes each column for the campaign it puts there, so the columns
+    are not interchangeable slots. Reordering by moving a campaign onto the centre another campaign
+    vacated therefore lands a wide campaign in a narrow campaign's space, where it reaches past the
+    gap on either side and is drawn over its neighbour for their whole shared height. Reordering has
+    to place each campaign by its edge and give it the width it actually has.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Start one headless browser and locate the vendored cytoscape assets for the class."""
+        super().setUpClass()
+        cls.js_dir = os.path.join(apps.get_app_config("djcytoscape").path, "static", "djcytoscape", "js")
+        cls._pw = sync_playwright().start()
+        cls._browser = cls._pw.chromium.launch(executable_path=_CHROMIUM)
+
+    @classmethod
+    def tearDownClass(cls):
+        """Close the browser and stop Playwright."""
+        cls._browser.close()
+        cls._pw.stop()
+        super().tearDownClass()
+
+    def _campaign_boxes(self, order_w=0, order_1=0, order_2=0):
+        """Render the uneven-width map and return each campaign's rendered box.
+
+        The box is the campaign's quests' own extent rather than the compound node's, because the
+        compound adds padding that would report neighbouring campaigns as touching when the quests
+        themselves are clear.
+
+        Args:
+            order_w (int): map_order of the wide, branching campaign.
+            order_1 (int): map_order of the first narrow campaign.
+            order_2 (int): map_order of the second narrow campaign.
+
+        Returns:
+            list[dict]: one ``{'label', 'x1', 'x2', 'y1', 'y2'}`` per campaign.
+        """
+        html = _UNEVEN_WIDTH_PAGE_TEMPLATE.format(
+            jquery_stub=_JQUERY_STUB, js_dir=self.js_dir,
+            order_w=order_w, order_1=order_1, order_2=order_2,
+        )
+        with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False) as fh:
+            fh.write(html)
+            html_path = fh.name
+        page = self._browser.new_page()
+        try:
+            page.goto("file://" + html_path)
+            page.wait_for_timeout(300)
+            return page.evaluate(
+                "() => cy.nodes().filter(n => n.isParent()).map(function (c) {"
+                "  var b = c.children().boundingBox();"
+                "  return { label: c.data('label'), x1: b.x1, x2: b.x2, y1: b.y1, y2: b.y2 }; })"
+            )
+        finally:
+            page.close()
+            os.unlink(html_path)
+
+    def _overlaps(self, boxes):
+        """Return a readable description of each pair of campaign boxes that intersect.
+
+        Args:
+            boxes (list[dict]): campaign boxes from `_campaign_boxes`.
+
+        Returns:
+            list[str]: one entry per overlapping pair, empty when the columns are clear of each
+            other. Touching edges do not count; only a positive area in both axes does.
+        """
+        found = []
+        for i, first in enumerate(boxes):
+            for second in boxes[i + 1:]:
+                across = min(first["x2"], second["x2"]) - max(first["x1"], second["x1"])
+                down = min(first["y2"], second["y2"]) - max(first["y1"], second["y1"])
+                if across > 0 and down > 0:
+                    found.append(
+                        f"{first['label']} and {second['label']} overlap by "
+                        f"{round(across)}x{round(down)} px"
+                    )
+        return found
+
+    def test_campaign_columns__wide_campaign_moved_along_the_row_does_not_overlap(self):
+        """Every ordering of a wide campaign among narrow ones leaves the columns clear.
+
+        The wide campaign starts leftmost, so the first ordering leaves it where dagre put it and
+        passes either way; the rest move it into a narrow campaign's space, which is where it used
+        to be drawn over its neighbour.
+        """
+        for orders in ((1, 2, 3), (3, 1, 2), (2, 1, 3), (3, 2, 1)):
+            with self.subTest(orders=orders):
+                boxes = self._campaign_boxes(*orders)
+                overlaps = self._overlaps(boxes)
+                self.assertEqual(overlaps, [], "campaign columns overlap: " + "; ".join(overlaps))
+
+    def test_campaign_columns__uneven_widths_still_obey_map_order(self):
+        """Placing campaigns by edge still puts them in map_order, which is the point of doing it.
+
+        Guards the obvious wrong fix for the overlap: leaving the campaigns where dagre put them
+        would never overlap and would also ignore map_order entirely.
+        """
+        for orders, expected in (
+            ((1, 2, 3), ["Wide", "Narrow One", "Narrow Two"]),
+            ((3, 1, 2), ["Narrow One", "Narrow Two", "Wide"]),
+            ((2, 1, 3), ["Narrow One", "Wide", "Narrow Two"]),
+            ((3, 2, 1), ["Narrow Two", "Narrow One", "Wide"]),
+        ):
+            with self.subTest(orders=orders):
+                boxes = sorted(self._campaign_boxes(*orders), key=lambda b: b["x1"])
+                self.assertEqual([b["label"] for b in boxes], expected)
+
+    def test_campaign_columns__reordering_does_not_widen_the_map(self):
+        """A reordered row spans what dagre gave it, so ordering a map never spreads it out.
+
+        Each campaign keeps its width and the gaps between them are preserved, so the row's total
+        extent is the same whichever order the campaigns are in.
+        """
+        def extent(boxes):
+            return max(b["x2"] for b in boxes) - min(b["x1"] for b in boxes)
+
+        natural = extent(self._campaign_boxes(1, 2, 3))
+        for orders in ((3, 1, 2), (2, 1, 3), (3, 2, 1)):
+            with self.subTest(orders=orders):
+                self.assertAlmostEqual(extent(self._campaign_boxes(*orders)), natural, places=3)
