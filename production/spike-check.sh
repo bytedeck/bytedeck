@@ -110,7 +110,10 @@ docker stats --no-stream --format 'table {{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\
 
 # ------------------------------------------------------------- uwsgi saturation
 section "UWSGI: worker saturation (the web-tier bottleneck signal)"
-STATS=$($COMPOSE exec -T web curl -s --max-time 3 localhost:9191 2>/dev/null)
+STATS=$($COMPOSE exec -T web python -c "
+import urllib.request
+print(urllib.request.urlopen('http://127.0.0.1:9191', timeout=3).read().decode())
+" 2>/dev/null)
 if [ -n "$STATS" ] && echo "$STATS" | grep -q listen_queue; then
     # Held in a variable rather than a fixed /tmp path: nothing to collide with a
     # parallel run or to leave behind, and the exit status stays readable. Each
@@ -149,12 +152,13 @@ print("QUEUE" if queue else "OK")
         fi
     fi
 else
-    note "uwsgi stats socket not enabled."
-    verdict "TO ENABLE (needs one restart, do it BEFORE peak, not during):"
-    verdict "  APPEND to the existing UWSGI_EXTRA_ARGS in ~/bytedeck/.env, keeping any flags"
-    verdict "  already there (e.g. --processes 8), so the line reads something like:"
+    note "uwsgi stats socket did not answer."
+    verdict "This host has not taken the deploy that turns it on (src/uwsgi.aws.ini):"
+    verdict "  run production/server-update.sh, which restarts uwsgi as part of the deploy."
+    verdict "To turn it on WITHOUT a deploy, APPEND to the existing UWSGI_EXTRA_ARGS"
+    verdict "in the .env beside this script, keeping any flags already there:"
     verdict "    UWSGI_EXTRA_ARGS=--processes 8 --stats 127.0.0.1:9191 --stats-http"
-    verdict "  then: sudo systemctl restart bytedeck.com"
+    verdict "  then: sudo systemctl restart bytedeck.com (do it BEFORE peak, not during)"
     note "Meanwhile, worker count only:"
     $COMPOSE exec -T web ps aux 2>/dev/null | grep -c '[u]wsgi' | sed 's/^/     uwsgi processes: /'
 fi

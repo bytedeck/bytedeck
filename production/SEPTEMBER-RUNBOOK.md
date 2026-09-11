@@ -188,14 +188,21 @@ consoles it cannot read for you (RDS metrics, Database Insights, the slow query
 log, EC2 CPU) and where to find each. Anything below is what the script already
 runs, kept for reference and for when you want one probe on its own.
 
-**Two things to switch on before the first peak, both needing a restart, so do
-them the evening before rather than during:**
+**Both of the signals the script leans on arrive with a deploy, so deploy the
+evening before a peak rather than during one:**
 
-1. **uwsgi stats.** In `.env`, append `--stats 127.0.0.1:9191 --stats-http` to
-   `UWSGI_EXTRA_ARGS`, then `sudo systemctl restart bytedeck.com`. Without it
-   there is no way to tell "out of workers" apart from "slow database": the
-   `listen_queue` number is what separates them, and above 0 means requests are
-   queuing for a worker.
+1. **uwsgi stats.** On as of this runbook's companion change
+   (`stats`/`stats-http` in `src/uwsgi.aws.ini`), so the deploy's own uwsgi
+   restart is all it takes. Without it there is no way to tell "out of workers"
+   apart from "slow database": the `listen_queue` number is what separates them,
+   and above 0 means requests are queuing for a worker. The socket is bound to
+   loopback inside the web container and no compose file publishes 9191, so it
+   is reachable only from the container itself.
+
+   On a host that has not taken the deploy yet, append
+   `--stats 127.0.0.1:9191 --stats-http` to `UWSGI_EXTRA_ARGS` in `.env`
+   (keeping whatever is already there) and `sudo systemctl restart
+   bytedeck.com`.
 2. **The nginx access log.** It is on as of this runbook's companion change, with
    `rt=`, `urt=` and `host=` fields, and needs a deploy
    (`production/server-update.sh`) to take effect. Until it is deployed you
