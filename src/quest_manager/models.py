@@ -136,12 +136,14 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
         " Only change this value if you want to disconnect your campaign from the Library."
     )
 
+    # Nothing reads this. Quest maps are laid out entirely by dagre, which places campaigns
+    # where its own crossing-minimization puts them, and the campaign forms no longer offer
+    # the field (#2675). It is kept rather than dropped because removing a column takes two
+    # releases (CONTRIBUTING.md, "Migrations and the deploy window") and because it still
+    # holds whatever ordering decks set, should map ordering be attempted again.
     map_order = models.PositiveIntegerField(
         default=0,
-        help_text="Controls where this campaign sits, left to right, on quest maps: campaigns with a lower "
-        "number are placed further to the left. Campaigns sharing a number (including the default 0) keep "
-        "their creation order. Exact placement is still up to the map's layout engine, so this is a "
-        "preference rather than a guarantee when campaigns are tangled together by prerequisites."
+        help_text="Not currently used. Quest map layout is decided by the map's layout engine."
     )
 
     objects = CategoryManager()

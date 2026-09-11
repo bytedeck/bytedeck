@@ -3997,15 +3997,12 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         data = {
             'title': 'New category',
             'published': True,
-            'map_order': 5,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
 
         course = Category.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
-        # map_order is a writable create field (issue #1977), so the posted value persists
-        self.assertEqual(course.map_order, data['map_order'])
 
     def test_CategoryUpdate_view__staff_can_update(self):
         """ Admin should be able to update a course. Saving returns to the campaign's
@@ -4015,7 +4012,6 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         data = {
             'title': 'My Updated Title',
             'published': False,
-            'map_order': 0,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
@@ -4023,16 +4019,21 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
 
-    def test_CategoryUpdate_view__sets_map_order(self):
-        """The campaign update form exposes map_order (the quest-map left-to-right ordering,
-        issue #1977) and saves it."""
+    def test_CategoryUpdate_view__offers_no_map_order_field(self):
+        """The campaign form no longer offers map_order (#2675).
+
+        Quest maps are laid out by dagre alone now, so a teacher setting a map order would be
+        adjusting something nothing reads. Posting one is ignored rather than saved.
+        """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('quests:category_update', args=[1]))
-        self.assertContains(response, 'name="map_order"')
+        self.assertNotContains(response, 'name="map_order"')
 
-        data = {'title': 'Ordered Campaign', 'published': True, 'map_order': 5}
-        self.client.post(reverse('quests:category_update', args=[1]), data=data)
-        self.assertEqual(Category.objects.get(id=1).map_order, 5)
+        self.client.post(
+            reverse('quests:category_update', args=[1]),
+            data={'title': 'Ordered Campaign', 'published': True, 'map_order': 5},
+        )
+        self.assertEqual(Category.objects.get(id=1).map_order, 0)
 
     def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
         """The cancel button on the campaign update form must link back to the
