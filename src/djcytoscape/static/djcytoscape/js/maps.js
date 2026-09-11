@@ -182,20 +182,25 @@ addedCampaignLayoutEdges.remove();
  * dagre decides the order of same-rank nodes with a crossing-minimization heuristic and ignores the
  * order the elements were fed in, so campaign order has to be imposed on the finished layout.
  *
- * Rather than repack every column left-to-right (which spreads the map out whenever campaign-less
+ * Rather than repack the whole map left-to-right (which spreads it out whenever campaign-less
  * "bridge" nodes: a shared badge, or the intro quest, sit between campaigns, and which merged two
- * campaigns into one un-orderable column when one branches off the other), we PERMUTE the campaigns
- * among the x-slots dagre already gave them: sort the campaigns by (map_order, smallest quest id)
- * and drop the i-th into the i-th slot from the left. The set of x positions is unchanged, so the
- * map stays exactly as compact as dagre made it and campaign-less nodes don't move.
+ * campaigns into one un-orderable column when one branches off the other), we reorder the campaigns
+ * WITHIN each row of columns: sort that row's campaigns by (map_order, smallest quest id) and lay
+ * them out again from the row's own left edge, each keeping its width and the gaps dagre left
+ * between them. A row therefore still spans exactly what dagre gave it, so the map stays as compact
+ * as dagre made it and nothing outside the row moves.
  *
- * Campaigns only trade places with the campaigns they stand BESIDE, though: those whose quests share
- * vertical space (#2627). An x-slot is only wide enough for the campaign dagre put in it, and dagre
- * sizes a slot from what competes for that x at the same ranks. A campaign that sits above the
- * others gets its x for free, with room on either side, so handing that slot to one of a row of
- * side-by-side campaigns squeezes it against its neighbour and the two are drawn on top of each
- * other. Grouping by shared vertical space keeps every swap inside one row of slots, which dagre
- * did space to fit them.
+ * Laying the row out by EDGE, rather than dropping each campaign onto a centre another campaign
+ * vacated, is what keeps campaigns off each other (#2675). Campaigns differ in width: a branching
+ * campaign is several quests wide where a straight chain is one, and dagre sized each x-slot for
+ * the campaign it put there. Land a wide campaign on a narrow one's centre and it reaches past the
+ * gap on either side, drawing over its neighbour for their whole shared height.
+ *
+ * Campaigns only trade places with the campaigns they stand BESIDE: those whose quests share
+ * vertical space (#2627). A campaign sitting alone above the others has room on either side that a
+ * campaign in a side-by-side row does not, so their positions are not interchangeable, and the two
+ * are not part of one left-to-right sequence to reorder. Grouping by shared vertical space keeps
+ * every move inside one row of columns, which dagre did space to fit together.
  *
  * Each campaign's quests shift together as a rigid block, so their internal shape and every node's
  * vertical position (the #1787 vertical stacking) are untouched. Because both the sorted slots and
@@ -219,8 +224,12 @@ addedCampaignLayoutEdges.remove();
         // The quests' own extent, not the campaign box's: the box adds padding that makes campaigns
         // in different bands appear to touch, which would merge two rows of slots into one.
         var bb = kids.boundingBox();
-        // A campaign's column x is its compound node's centre (which follows its children).
-        return { kids: kids, x: camp.position('x'), order: order, minId: minId, y1: bb.y1, y2: bb.y2 };
+        // A campaign's column x is its compound node's centre (which follows its children);
+        // x1/x2 are how wide it actually is, which is what decides where it can be put.
+        return {
+            kids: kids, x: camp.position('x'), order: order, minId: minId,
+            x1: bb.x1, x2: bb.x2, y1: bb.y1, y2: bb.y2,
+        };
     });
 
     // Rows of campaigns that stand side by side: sweep by vertical extent and start a new row
@@ -244,18 +253,28 @@ addedCampaignLayoutEdges.remove();
     rows.forEach(function (row) {
         if (row.length < 2) { return; }
 
-        // The x-slots this row's campaigns currently occupy, left to right.
-        var slots = row.map(function (i) { return i.x; }).sort(function (a, b) { return a - b; });
-
         // Desired left-to-right order: campaign map_order, then smallest quest id (the deterministic
         // #2012 order) so ties, and every campaign at the default map_order 0, stay stable.
         var desired = row.slice().sort(function (a, b) { return (a.order - b.order) || (a.minId - b.minId); });
 
-        // Drop the i-th campaign (desired order) into the i-th slot, shifting its quests horizontally
-        // as a rigid block. Positions were all read before any shift, so swaps don't interfere.
+        // The gaps dagre left between this row's campaigns, in left-to-right order.
+        var byX = row.slice().sort(function (a, b) { return a.x1 - b.x1; });
+        var gaps = [];
+        for (var g = 1; g < byX.length; g++) { gaps.push(byX[g].x1 - byX[g - 1].x2); }
+
+        // Lay the row out from its own left edge, giving each campaign in turn the width it has and
+        // then the next gap. Campaigns differ in width (a branching campaign is several quests wide,
+        // a straight chain is one), so a campaign has to be placed by its EDGE, not dropped onto the
+        // centre of the slot another campaign vacated: dagre sized each slot for the campaign it put
+        // there, so a wide campaign landing on a narrow campaign's centre reaches past the gap on
+        // either side and is drawn over its neighbour (#2675). Widths and gaps are both preserved
+        // here, so the row still spans exactly what dagre gave it and no campaign can overlap
+        // another; positions were all read before any shift, so the moves don't interfere.
+        var cursor = byX[0].x1;
         desired.forEach(function (item, idx) {
-            var dx = slots[idx] - item.x;
+            var dx = cursor - item.x1;
             if (dx !== 0) { item.kids.shift({ x: dx, y: 0 }); moved = true; }
+            cursor += (item.x2 - item.x1) + (gaps[idx] || 0);
         });
     });
 
