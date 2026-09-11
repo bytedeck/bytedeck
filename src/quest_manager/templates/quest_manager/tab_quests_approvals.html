@@ -133,7 +133,7 @@
         <li class="list-group-item">
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
-            {{ quick_reply_form | crispy }}
+            {{ s.quick_reply_form | crispy }}
             <div>
               {% include "quest_manager/submission_buttons_form.html" %}
               {% include "quest_manager/submission_buttons_other.html" %}

@@ -383,13 +383,45 @@ class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
 
 
 class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    """A teacher's reply to one quest submission, rendered once per row on the approvals page."""
+
+    comment_text = forms.CharField(
+        label='', required=False,
+        # autocomplete="off" asks the browser not to remember what was typed here. Replies are
+        # written about one specific submission, so a browser refilling the box on a reload is
+        # never what a teacher wants, and the approvals list is rebuilt on every load (#2685).
+        widget=forms.Textarea(attrs={'rows': 2, 'autocomplete': 'off'}),
+    )
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
-    def __init__(self, *args, **kwds):
+    def __init__(self, *args, award_choices=None, **kwds):
+        """Build the form, optionally reusing an award list that has already been fetched.
+
+        Args:
+            award_choices: the `(value, label)` pairs to offer in the award select, from
+                `build_award_choices()`. `Badge.objects.all_manually_granted()` costs a
+                prerequisite count per badge, so a page rendering one of these per row fetches
+                the list once and hands the same pairs to every row. This sets the select's
+                options only, which is all a form being rendered needs; a form that has to
+                clean a submitted award leaves it out and gets the queryset that validates it.
+        """
         super().__init__(*args, **kwds)
-        self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        if award_choices is None:
+            self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        else:
+            # Assigning .queryset instead would re-run the query for every row: ModelChoiceField
+            # copies what it is given, and the copy carries no result cache.
+            self.fields['award'].choices = award_choices
+
+    @classmethod
+    def build_award_choices(cls):
+        """Fetch the award select's options once, for a page that renders many of these forms.
+
+        Returns:
+            list[tuple]: `(value, label)` pairs to pass back in as `award_choices`.
+        """
+        return list(cls().fields['award'].choices)
 
 
 class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
