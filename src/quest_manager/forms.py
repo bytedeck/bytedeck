@@ -399,12 +399,17 @@ class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
         """Build the form, optionally reusing an award list that has already been fetched.
 
         Args:
+            *args: positional arguments passed through to ``forms.Form``.
+            **kwds: keyword arguments passed through to ``forms.Form``.
             award_choices: the `(value, label)` pairs to offer in the award select, from
                 `build_award_choices()`. `Badge.objects.all_manually_granted()` costs a
                 prerequisite count per badge, so a page rendering one of these per row fetches
                 the list once and hands the same pairs to every row. This sets the select's
                 options only, which is all a form being rendered needs; a form that has to
                 clean a submitted award leaves it out and gets the queryset that validates it.
+
+        Returns:
+            None.
         """
         super().__init__(*args, **kwds)
         if award_choices is None:

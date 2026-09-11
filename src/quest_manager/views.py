@@ -1795,9 +1795,6 @@ class ApprovalsViewTabTypes:
 def approvals(request, quest_id=None, template="quest_manager/quest_approval.html"):
     """A view for Teachers' Quest Approvals section.
 
-    If a quest_id is provided, then filter the queryset to only include
-    submissions for that quest.
-
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
         In progress
@@ -1805,6 +1802,18 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         Approved
         Flagged
 
+    Each submission on the page carries its own unbound ``SubmissionQuickReplyForm``, so the
+    reply boxes start empty and have DOM ids of their own.
+
+    Args:
+        request: the staff member's request. Its path picks the tab, and ``?page``, ``?sort``,
+            ``?order`` and ``?q`` page, order and search the submissions in it.
+        quest_id: when given, the queryset is filtered to submissions of that quest, and the
+            page offers the current-semester / all-semesters toggle for its past approvals.
+        template: the template to render.
+
+    Returns:
+        HttpResponse: the rendered approvals page.
     """
 
     # If we are looking up past approvals of a specific quest
