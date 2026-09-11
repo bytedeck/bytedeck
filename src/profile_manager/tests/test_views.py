@@ -1007,6 +1007,22 @@ class ProfileViewTests(ByteDeckTenantTestCase):
                 response = self.client.get(reverse(name, args=args))
                 self.assertNotIn('block_filter_choices', response.context, msg=name)
 
+    def test_profile_list__filters_sit_in_the_table_toolbar(self):
+        """The group filter and search box share a row with the column show/hide button.
+
+        bootstrap-table relocates whatever element data-toolbar names into the table's own
+        toolbar, which is what pulls the filters to the left of that row instead of leaving
+        them on a row of their own above the table. The attribute and the form's id are the
+        only thing connecting the two, so a rename on either side silently undoes the layout.
+        """
+        self.client.force_login(self.test_teacher)
+        html = self.client.get(reverse('profiles:profile_list')).content.decode()
+
+        toolbar = re.search(r"""data-toolbar=['"]([^'"]+)['"]""", html)
+        self.assertIsNotNone(toolbar, 'the student table declares no data-toolbar')
+        self.assertEqual(toolbar.group(1), '#profile-list-filters')
+        self.assertIn('id="profile-list-filters"', html)
+
     def test_profile_list__non_staff_cannot_search_by_username(self):
         """A student may not search the username column, which is rendered only to staff.
 
