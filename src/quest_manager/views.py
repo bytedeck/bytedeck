@@ -1349,36 +1349,29 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         return SubmissionQuickReplyForm(self.request.POST)
 
     def form_valid(self):
-        """ handles response when form is valid
-        - returns HttpResponse if standard
-        - returns JsonResponse if ajax
-        """
-        if not self.is_ajax:
-            return redirect("quests:approvals")
+        """Send the teacher back where they were once their decision is recorded.
 
-        # for ajax call. Need to replicate standard view's procedure where
-        # - quest submission container disappears  (handled client side)
-        # - message box container shows (handled here)
-        template_name = 'messages-snippet.html'
-        context = {
-            'messages': list(messages.get_messages(self.request))
-        }
-        html = render_to_string(template_name, context)
-        return JsonResponse(data={'messages_html': html})
+        The page they return to is rebuilt from the database, so the submission just dealt
+        with is gone from it and the message about it is displayed once (#2687, #2689).
+
+        Returns:
+            HttpResponseRedirect: to the approvals tab the form was submitted from, or to the
+            default approvals page when the form named nowhere to go back to.
+        """
+        # only follow `next` if it stays on this host (and keeps https when the
+        # request came in over https), to prevent open redirects and downgrades
+        next_url = self.request.POST.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
+            return redirect(next_url)
+        return redirect("quests:approvals")
 
     def form_invalid(self):
-        """ handles response when form is invalid
-        - returns HttpResponse if standard
-        - returns JsonResponse if ajax
+        """Re-render the submission page so the form's validation errors are visible.
+
+        Returns:
+            HttpResponse: the submission page, carrying the bound form and its errors.
         """
-        # need to return a failing status code for ajax request
-        # without this should return a response with 200 status code
-        if self.is_ajax:
-            return JsonResponse({'error': 'Bad Request'}, status=400)
-
-        # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
-        # return redirect(origin_path)
-
         # rendering here with the context allows validation errors to be displayed
         context = {
             "heading": self.submission.quest.name,
@@ -1557,7 +1550,6 @@ class ApproveView(NonPublicOnlyViewMixin, View):
     def dispatch(self, request, *args, **kwargs):
         """ requests are only allowed if:
         - POST method
-        - optionally POST AJAX method
         """
         # this is a POST only view
         if request.method != "POST":
@@ -1565,8 +1557,6 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
         if not self.post_has_valid_button():
             raise Http404("unrecognized submit button")
-
-        self.is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
 
         return super().dispatch(request, *args, **kwargs)
 
