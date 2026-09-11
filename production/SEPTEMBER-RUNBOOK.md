@@ -173,7 +173,52 @@ The app already emails `ADMINS` on celery task failures and unhandled 5xx.
 
 ## 6. During week 1: what to watch
 
-Run on the host during peak:
+**Run one script, not a list of commands:**
+
+```bash
+cd ~/bytedeck
+./production/spike-check.sh              # snapshot
+./production/spike-check.sh --loop 60    # every 60s, Ctrl-C to stop
+./production/spike-check.sh --loop 60 | tee -a /tmp/spike.log   # keep the history
+```
+
+It is read-only and safe to run at peak. Each section ends with a verdict
+naming what the number means and what to do, and it finishes with the AWS
+consoles it cannot read for you (RDS metrics, Database Insights, the slow query
+log, EC2 CPU) and where to find each. Anything below is what the script already
+runs, kept for reference and for when you want one probe on its own.
+
+**Both of the signals the script leans on arrive with a deploy, so deploy the
+evening before a peak rather than during one:**
+
+1. **uwsgi stats.** On as of this runbook's companion change
+   (`stats`/`stats-http` in `src/uwsgi.aws.ini`), so the deploy's own uwsgi
+   restart is all it takes. Without it there is no way to tell "out of workers"
+   apart from "slow database": the `listen_queue` number is what separates them,
+   and above 0 means requests are queuing for a worker. The socket is bound to
+   loopback inside the web container and no compose file publishes 9191, so it
+   is reachable only from the container itself.
+
+   On a host that has not taken the deploy yet, append
+   `--stats 127.0.0.1:9191 --stats-http` to `UWSGI_EXTRA_ARGS` in `.env`
+   (keeping whatever is already there) and `sudo systemctl restart
+   bytedeck.com`.
+2. **The nginx access log.** It is on as of this runbook's companion change, with
+   `rt=`, `urt=` and `host=` fields, and needs a deploy
+   (`production/server-update.sh`) to take effect. Until it is deployed you
+   cannot attribute a slow page to a URL or a deck, which the OOM step below
+   depends on.
+
+   The log is the nginx container's stdout (the image symlinks
+   `/var/log/nginx/access.log` to `/dev/stdout`), so read it with
+   `docker compose ... logs nginx`, not by opening that path in the container.
+   Docker's json-file driver rotates it, which also caps how far back you can
+   look: raise `DOCKER_LOG_MAX_SIZE` / `DOCKER_LOG_MAX_FILE` in `.env` before a
+   peak if you want more history than the default 10m x 5.
+
+<details>
+<summary>The individual probes the script runs</summary>
+
 ```bash
 cd ~/bytedeck   # the -f compose files below are referenced relatively, so run from the repo dir
                 # (an SSH session lands in ~ by default; the app lives in ~/bytedeck -- see the systemd unit)
@@ -196,10 +241,27 @@ PY
 # Did anything get OOM-killed?
 sudo dmesg -T | grep -iE 'out of memory|killed process' | tail
 ```
-Signals and responses:
+</details>
+
+### Signal to action
+
+| What you see | Where | Means | Do |
+|---|---|---|---|
+| `listen_queue` > 0, RAM has headroom | uwsgi stats | Out of workers | Raise `--processes` in `UWSGI_EXTRA_ARGS`, restart |
+| `listen_queue` > 0, RAM tight | uwsgi stats + `free -h` | Out of box | Scale EC2 (§4). Do **not** just add workers |
+| `urt` high on a few URLs only | nginx log | One slow endpoint | Take its query to RDS Database Insights |
+| `urt` high everywhere, RDS CPU pegged | nginx + CloudWatch | The database is the bottleneck | Bump the RDS class; index the top query |
+| `rt` high, `urt` low | nginx log | Slow clients or big uploads | Ignore it |
+| Swap climbing, `dmesg` OOM lines | `free -h` | A worker ballooned | See below, and #2081 |
+| Redis `used_memory` near cap | `redis-cli` | The broker is about to stall | RAM to the box **first**, then raise the cap |
+| `llen default` growing | `redis-cli` | Celery is behind | Raise `-c 3` if RAM allows |
+| A query running > 5s | `pg_stat_activity` | Very likely the whole problem | Database Insights → plan → index |
+
+Longer form:
 - **Swap climbing + OOM lines** → a worker is ballooning; find the request
-  (nginx access log around the time), lower `UWSGI_EXTRA_ARGS` processes if
-  needed, and prioritize the request-code fix.
+  (the script's NGINX section, or
+  `docker compose -f docker-compose.yml -f docker-compose.prod.aws.yml logs --tail 5000 nginx`),
+  lower `UWSGI_EXTRA_ARGS` processes if needed, and prioritize the request-code fix.
 - **Redis `used_memory` approaching `maxmemory`, or any `errorstat_OOM`** →
   memory-increasing writes are about to be (or are being) refused. Give the box
   room *first*: raise host RAM (§4) or drop a uwsgi/celery worker. Only then
