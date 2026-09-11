@@ -29,7 +29,7 @@ def invalidate_profile_xp_cache_on_schema():
     DB error while saving) is logged and skipped rather than aborting the whole
     schema's refresh, so a single bad row can't leave every later profile stale.
     """
-    profiles_qs = Profile.objects.all_for_active_semester()
+    profiles_qs = Profile.objects.all_in_open_semesters()
 
     invalidated = 0
     failed = 0

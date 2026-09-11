@@ -4,16 +4,36 @@
 #
 # run automatically with `docker compose up` on top of the the settings in docker-compose.yml
 #
-# docker-compose.overide.yml
+# docker-compose.override.yml
 # https://docs.docker.com/compose/extends/
 ################################################################################
 
+# Development and CI run the app straight from the host checkout, so the three
+# app services bind-mount it over /app and run as root to write back into it
+# (coverage output, makemigrations, __pycache__). The image's own unprivileged
+# `app` user applies everywhere this override is not loaded, which is
+# production. Aliased into each app service below.
+x-app-dev: &app-dev
+  volumes:
+    - .:/app
+  user: root
+  environment:
+    POSTGRES_HOST: db  # takes precendent over .env file
+    REDIS_HOST: redis  # takes precendent over .env file
+  depends_on:
+    db:
+      condition: service_healthy
+    # (redis dependency is declared in docker-compose.yml)
+
 services:
   db:
-    build: ./postgresql
+    image: postgres:16-alpine
     env_file: .env
     volumes:
       - postgres_data:/var/lib/postgresql/data/
+      # Helper scripts for loading a dump into a tenant schema, see
+      # MULTITENANT-README.md.
+      - ./postgresql/scripts:/scripts:ro
     networks:
       - backend-network
 
@@ -23,48 +43,38 @@ services:
       timeout: 5s
       retries: 5
     ports:
-    - 5432:5432  # Expose port so app can connect to db when developing locally with `python src/manage.py [runserver|test src]
+    # Published on the loopback interface only, so the database isn't reachable
+    # from the local network. Lets the app connect when running outside the
+    # container with `python src/manage.py [runserver|test src]`.
+    - 127.0.0.1:5432:5432
 
   redis:
     # Common config (image, healthcheck, sysctls, network) lives in
     # docker-compose.yml; development only adds the published port.
     ports:
-    - 6379:6379  # Expose port so app can connect to redis when developing locally with `python src/manage.py [runserver|test src]
+    - 127.0.0.1:6379:6379  # loopback only, see the db port above
 
   web:
+    <<: *app-dev
     stdin_open: true
     tty: true   # Enabled together with stdin_open so it won't raise an error when we are in pdb mode. Attach using `docker attach $(docker compose ps -q web)`
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
+    ports:
+      - 8000:8000
     command: bash -c "cd /app/src/ &&
                       python manage.py migrate_schemas --shared &&
                       python manage.py migrate_schemas --executor=multiprocessing &&
                       python manage.py runserver 0.0.0.0:8000"   # no need for uwsgi in development, this is easier
-    depends_on:
-      db:
-        condition: service_healthy
-      # (redis dependency is declared in docker-compose.yml)
 
   celery:
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
-    depends_on:
-      db:
-        condition: service_healthy
-      # (redis dependency is declared in docker-compose.yml)
+    <<: *app-dev
 
   celery-beat:
-    environment:
-      POSTGRES_HOST: db  # takes precendent over .env file
-      REDIS_HOST: redis  # takes precendent over .env file
-    depends_on:
-      db:
-        condition: service_healthy
-      # (redis dependency is declared in docker-compose.yml)
+    <<: *app-dev
 
+  # Optional: start it with `docker compose --profile tools up`, so a normal
+  # `docker compose up` doesn't pay for a service most work never touches.
   pg-admin:
+    profiles: ["tools"]
     image: dpage/pgadmin4
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@admin.com
@@ -79,4 +89,3 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:

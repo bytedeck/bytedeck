@@ -1,11 +1,19 @@
+import html
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from model_bakery import baker
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
-from questions.forms import QuestionForm, QuestionSubmissionForm, QuestionSubmissionFormsetFactory
+from questions.forms import (
+    SHORT_ANSWER_MAX_LENGTH,
+    QuestionForm,
+    QuestionSubmissionForm,
+    QuestionSubmissionFormsetFactory,
+)
 from questions.models import Question, QuestionSubmission
+from utilities.fields import NO_SCRIPT_CAPABLE_TYPES, SVG_SCRIPT_CAPABLE_TYPES
 
 
 class QuestionFormTest(ByteDeckTenantTestCase):
@@ -93,12 +101,36 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertEqual(form.fields["response_text"].max_length, 200)
         self.assertTrue(form.fields["response_text"].required)
 
+    def test_init__short_answer_help_text_states_the_limit_it_enforces(self):
+        """The student is told the length the field holds them to (#2401).
+
+        One constant feeds the field's validation, the input's maxlength and this sentence,
+        so the number a student reads is the number they are actually capped at.
+        """
+        form = QuestionSubmissionForm(instance=self.short_answer)
+        field = form.fields["response_text"]
+
+        self.assertEqual(field.help_text, f"Up to {SHORT_ANSWER_MAX_LENGTH} characters.")
+        self.assertEqual(field.max_length, SHORT_ANSWER_MAX_LENGTH)
+        self.assertEqual(field.widget.attrs["maxlength"], str(SHORT_ANSWER_MAX_LENGTH))
+
     def test_init__long_answer_field(self):
         """Long answer forms get an unbounded rich-text field and no file field."""
         form = QuestionSubmissionForm(instance=self.long_answer)
         self.assertIn("response_text", form.fields)
         self.assertNotIn("response_file", form.fields)
         self.assertIsNone(form.fields["response_text"].max_length)
+
+    def test_init__long_answer_editor_is_shorter_than_the_site_default(self):
+        """The answer editor is sized for a page that stacks several of them (#2169).
+
+        A quest can ask several long answers, each rendered above the submission's own comment
+        editor; at the site-wide height that is metres of scrolling to reach the submit button.
+        """
+        form = QuestionSubmissionForm(instance=self.long_answer)
+        widget = form.fields["response_text"].widget
+
+        self.assertEqual(widget.summernote_settings()["height"], "180")
 
     def test_init__file_upload_field(self):
         """File upload forms get a restricted file field with the question's MIME types,
@@ -107,6 +139,67 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertIn("response_file", form.fields)
         self.assertNotIn("response_text", form.fields)
         self.assertEqual(form.fields["response_file"].content_types, self.file_question.allowed_mime_types())
+
+    def test_init__file_upload_help_text_carries_the_mime_type_popover(self):
+        """The info icon listing exact MIME types sits inside the help text (#2169).
+
+        Rendered as a field of its own it landed on a line below the types it explains, wasting
+        a line of the form; inside the help text it shares that line.
+        """
+        form = QuestionSubmissionForm(instance=self.file_answer)
+        help_text = form.fields["response_file"].help_text
+
+        self.assertIn("Allowed file types: Video", help_text)
+        self.assertIn('data-toggle="popover"', help_text)
+        for mime_type in self.file_question.allowed_mime_types():
+            self.assertIn(mime_type, help_text)
+
+    def test_init__file_upload_help_text_has_no_popover_when_all_types_are_allowed(self):
+        """A question accepting anything says so plainly: there is no MIME list worth showing."""
+        any_file_question = baker.make(
+            Question, quest=self.quest, ordinal=5, type="file_upload", allowed_file_type="all",
+        )
+        answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=any_file_question,
+        )
+
+        help_text = QuestionSubmissionForm(instance=answer).fields["response_file"].help_text
+
+        self.assertEqual(help_text, "Allowed file types: All")
+
+    def test_init__the_answer_field_opts_in_only_as_far_as_the_question_did(self):
+        """The form field carries the question's own opt-in, and nothing wider (#2559).
+
+        ``script_capable_types`` is what lets an HTML or SVG answer through at all. A question
+        with the box unticked, "All" included, must build a field that still refuses both, and
+        an Image question that ticked it must take an SVG while still refusing a page.
+        """
+        svg_question = baker.make(
+            Question, quest=self.quest, ordinal=7, type="file_upload",
+            allowed_file_type="image", allow_script_capable_files=True,
+        )
+        svg_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=svg_question,
+        )
+
+        # "All" is the default, and the setting #2559 was reported against, so it is asserted
+        # directly rather than being taken on trust from another file type behaving
+        all_question = baker.make(
+            Question, quest=self.quest, ordinal=8, type="file_upload", allowed_file_type="all",
+        )
+        all_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=all_question,
+        )
+
+        svg_field = QuestionSubmissionForm(instance=svg_answer).fields["response_file"]
+        all_field = QuestionSubmissionForm(instance=all_answer).fields["response_file"]
+        video_field = QuestionSubmissionForm(instance=self.file_answer).fields["response_file"]
+
+        self.assertEqual(svg_field.script_capable_types, SVG_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(all_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        self.assertEqual(video_field.script_capable_types, NO_SCRIPT_CAPABLE_TYPES)
+        # the allow-list has to name the SVG too, or the field's other rule refuses it
+        self.assertIn("image/svg+xml", svg_field.content_types)
 
     def test_init__optional_question_not_required(self):
         """Answers to non-required questions aren't required fields."""
@@ -143,6 +236,70 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(instance=self.short_answer)
         self.assertEqual(form.fields["response_text"].widget.attrs["aria-label"], "Response")
 
+    def test_init__every_answer_field_gets_a_distinct_aria_label(self):
+        """All three answer types announce their question number, not just the short answer.
+
+        A quest with several questions renders several answer fields with no visible labels of
+        their own (or, for file uploads, the identical one), so without this a screen-reader
+        student hears "Attach files" twice over and an unnamed editor between them (#2570).
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission,
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+
+        labels = [
+            form.fields["response_text" if "response_text" in form.fields else "response_file"]
+            .widget.attrs["aria-label"]
+            for form in formset.forms
+        ]
+        self.assertEqual(
+            labels,
+            ["Response to question 1", "Response to question 2", "Attach files for question 3"],
+        )
+
+    def test_init__file_aria_label_contains_its_visible_label(self):
+        """The file input's accessible name keeps the words of its visible label.
+
+        WCAG 2.5.3 (Label in Name) asks that a control's accessible name contain its visible
+        label text, so someone driving the page by voice can still say "attach files" to reach
+        it. An aria-label of "File for question 3" would read well but break that.
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission, question__type="file_upload",
+        )
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+        field = formset.forms[0].fields["response_file"]
+
+        self.assertIn(field.label.lower(), field.widget.attrs["aria-label"].lower())
+
+    def test_init__long_answer_and_file_aria_label_fallback_without_formset(self):
+        """Standalone forms (no numeric prefix, as for the formset's empty_form) fall back to a
+        generic name rather than erroring on the missing position."""
+        long_form = QuestionSubmissionForm(instance=self.long_answer)
+        file_form = QuestionSubmissionForm(instance=self.file_answer)
+
+        self.assertEqual(long_form.fields["response_text"].widget.attrs["aria-label"], "Response")
+        self.assertEqual(file_form.fields["response_file"].widget.attrs["aria-label"], "Attach files")
+
+    def test_init__answer_fields_render_their_aria_label(self):
+        """The aria-label survives rendering, on the editor's wrapper and on the file input.
+
+        The long-answer editor's attributes are handed to summernote's init script rather than
+        written onto a tag, so this asserts on the call that applies them; the widget template
+        forwards aria-label from that wrapper onto the .note-editable the student focuses.
+        """
+        queryset = QuestionSubmission.objects.filter(
+            quest_submission=self.submission,
+        ).order_by("question__ordinal")
+        formset = QuestionSubmissionFormsetFactory(instance=self.submission, queryset=queryset)
+        long_html = str(formset.forms[1]["response_text"])
+        file_html = str(formset.forms[2]["response_file"])
+
+        self.assertIn("$wrap.attr('aria-label', 'Response to question 2');", long_html)
+        self.assertIn(".note-editable').attr('aria-label', ariaLabel)", long_html)
+        self.assertIn('aria-label="Attach files for question 3"', file_html)
+
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and
         accepts a filled one."""
@@ -152,10 +309,130 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         form = QuestionSubmissionForm(data={"response_text": "An answer"}, instance=self.short_answer)
         self.assertTrue(form.is_valid(), form.errors)
 
-    def test_clean__short_answer_over_200_chars_is_invalid(self):
-        """The 200-character short answer limit is enforced server-side, not just by the widget."""
+    def test_clean__required_long_answer_rejects_an_untouched_editor(self):
+        """A required long answer refuses the markup an editor posts when nothing was typed.
+
+        The summernote editor never posts an empty string, so these are what a student who
+        clicked into the box and pressed space or enter actually sends. Each is truthy, so
+        before #2560 every one of them satisfied the required check and the quest completed
+        with a blank answer nobody was told about.
+
+        The widget catches two exact strings of its own before the form ever sees them (see
+        the test below), which is why they are not repeated here: these are the ones that
+        got past it.
+        """
+        for value in ("<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>", "<p><br/></p><p><br/></p>"):
+            with self.subTest(value=value):
+                form = QuestionSubmissionForm(data={"response_text": value}, instance=self.long_answer)
+                self.assertFalse(form.is_valid())
+                self.assertIn("You must provide a text response", str(form.errors))
+
+    def test_clean__required_long_answer_rejects_the_widget_empty_sentinels(self):
+        """The two strings django-summernote itself treats as empty are refused as well.
+
+        `SummernoteWidgetBase.value_from_datadict` maps exactly `<p><br></p>` and
+        `<p><br/></p>` to None, so the required check already refused those two before #2560.
+        Asserted here so that a summernote upgrade dropping or narrowing that list shows up
+        as a failure rather than as blank answers being accepted again.
+        """
+        for value in ("<p><br></p>", "<p><br/></p>"):
+            with self.subTest(value=value):
+                form = QuestionSubmissionForm(data={"response_text": value}, instance=self.long_answer)
+                self.assertFalse(form.is_valid())
+                self.assertIn("This field is required", str(form.errors))
+
+    def test_clean__required_long_answer_accepts_typed_text(self):
+        """A required long answer with text in it is still accepted, wrapped as the editor sends it."""
+        form = QuestionSubmissionForm(data={"response_text": "<p>An answer</p>"}, instance=self.long_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_clean__required_long_answer_accepts_an_answer_that_is_only_a_picture(self):
+        """A pasted screenshot answers the question even though it contains no text.
+
+        "Show me your work" is often answered with an image and nothing else. Stripping tags
+        leaves an empty string, so this is exactly the case the emptiness test must not treat
+        as a blank answer.
+        """
+        form = QuestionSubmissionForm(
+            data={"response_text": '<p><img src="/media/screenshot.png"></p>'}, instance=self.long_answer,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_clean__required_short_answer_accepts_a_tag_the_student_typed(self):
+        """A short answer that is literally an HTML tag is a real answer, not a blank one.
+
+        "Which tag makes text bold?" is answered with `<b>`, which sanitization keeps as
+        markup, so a strip-the-tags emptiness test would read it as nothing and reject a
+        correct answer. Short answers are a plain text input and cannot produce an untouched
+        editor's markup, so they are judged on the text itself.
+        """
+        form = QuestionSubmissionForm(data={"response_text": "<b>"}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+    def test_has_answer__optional_long_answer_left_untouched(self):
+        """An optional long answer nobody typed in reports itself unanswered.
+
+        Nothing rejects it (it is optional), but the complete view asks each form this to
+        decide whether the submission has content of its own, so an untouched editor must not
+        count as an answer (#2560).
+        """
+        optional_question = baker.make(
+            Question, quest=self.quest, ordinal=4, type="long_answer", required=False,
+        )
+        optional_answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=optional_question,
+        )
+
+        form = QuestionSubmissionForm(data={"response_text": "<p>&nbsp;</p>"}, instance=optional_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertFalse(form.has_answer())
+
+        form = QuestionSubmissionForm(data={"response_text": "<p>Something</p>"}, instance=optional_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.has_answer())
+
+    def test_has_answer__file_upload_reports_the_attached_file(self):
+        """A file question is answered when a file was attached, and not when it wasn't."""
+        form = QuestionSubmissionForm(data={}, files={}, instance=self.file_answer)
+        self.assertFalse(form.is_valid())
+        self.assertFalse(form.has_answer())
+
+        video = SimpleUploadedFile("file.mp4", b"file_content", content_type="video/mp4")
+        form = QuestionSubmissionForm(data={}, files={"response_file": video}, instance=self.file_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertTrue(form.has_answer())
+
+    def test_clean__short_answer_limit_is_on_raw_input_not_escaped_length(self):
+        """The 200-character short-answer limit is on the raw text the student types (matching the
+        input's maxlength), enforced server-side by the field's max_length before sanitization:
+
+        - exactly 200 raw characters is accepted, 201 is rejected;
+        - an answer within the 200-char raw cap is accepted even when HTML-escaping expands it past
+          200 stored characters ('<' -> '&lt;'), because that stored value unescapes back to the
+          same <=200 characters the student typed (#2170).
+        """
+        # The raw boundary: 200 accepted, 201 rejected.
+        form = QuestionSubmissionForm(data={"response_text": "x" * 200}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
         form = QuestionSubmissionForm(data={"response_text": "x" * 201}, instance=self.short_answer)
         self.assertFalse(form.is_valid())
+
+        # Within the raw cap but entity-expanding: accepted, and the stored value is longer than 200
+        # (each '<' escapes to '&lt;'). That is the behaviour #2170 asked about, and it is fine
+        # because unescaping the stored value returns exactly what the student typed. No leading or
+        # trailing whitespace here, so the field's strip=True can't affect the comparison.
+        expanding = "<3" * 99  # 198 raw characters, escaping to 495
+        form = QuestionSubmissionForm(data={"response_text": expanding}, instance=self.short_answer)
+        self.assertTrue(form.is_valid(), form.errors)
+
+        # assert against the value that actually reaches the database, since the claim being
+        # tested is about the *stored* answer (response_text is a TextField, so it fits)
+        form.save()
+        self.short_answer.refresh_from_db()
+        stored = self.short_answer.response_text
+        self.assertGreater(len(stored), 200)
+        self.assertEqual(html.unescape(stored), expanding)
 
     def test_clean__required_file_missing_is_invalid(self):
         """A required file question rejects a POST with no file, and accepts an allowed one."""

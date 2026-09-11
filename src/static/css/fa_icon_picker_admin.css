@@ -1,0 +1,54 @@
+/* The Font Awesome icon picker inside the Django admin (loaded only by
+   utilities.fa_icon_widget.FontAwesomeAdminFormMixin).
+
+   The widget's markup is written for the site, where Bootstrap 3 lays the input group
+   out and paints the panel. The admin loads neither Bootstrap nor the site stylesheets,
+   so these rules stand in for what Bootstrap would have given the widget. Everything is
+   scoped under .fa-icon-picker, so no other admin form is affected, and the colours come
+   from the admin's own CSS variables so the picker follows admin light and dark mode. */
+.fa-icon-picker .input-group {
+    display: flex;
+    align-items: stretch;
+    max-width: 420px;
+}
+.fa-icon-picker .input-group-addon {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    border: 1px solid var(--border-color, #ccc);
+    border-right: 0;
+    background: var(--darkened-bg, #f8f8f8);
+}
+.fa-icon-picker .input-group .fa-icon-picker-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;
+    border-radius: 0;
+}
+.fa-icon-picker .input-group-btn .fa-icon-picker-toggle {
+    height: 100%;
+    padding: 0 10px;
+    cursor: pointer;
+    border: 1px solid var(--border-color, #ccc);
+    border-left: 0;
+    background: var(--darkened-bg, #f8f8f8);
+    color: var(--body-fg, #333);
+}
+.fa-icon-picker .fa-icon-picker-panel {
+    max-width: 420px;
+    padding: 10px;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 4px;
+    background: var(--darkened-bg, #f8f8f8);
+}
+.fa-icon-picker .fa-icon-picker-search {
+    width: 100%;
+    box-sizing: border-box;
+}
+.fa-icon-picker .fa-icon-picker-option {
+    cursor: pointer;
+    border: 1px solid var(--border-color, #ccc);
+    border-radius: 3px;
+    background: var(--body-bg, #fff);
+    color: var(--body-fg, #333);
+}

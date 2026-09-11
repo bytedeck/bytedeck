@@ -1,0 +1,13 @@
+<p>{{ sharer }} shared a {{ content_type }} to the ByteDeck Library from
+    <a href="{{ source_deck_url }}">{{ source_deck_url }}</a>:</p>
+
+<p><strong>{{ content_name }}</strong></p>
+
+<p>It has been added to the Library, but is not visible to other decks until a Library admin
+    reviews and publishes it.</p>
+
+<p>Review and publish it here:</p>
+
+<p><a href="{{ review_url }}">{{ review_url }}</a></p>
+
+{% include "tenant/email/_email_footer.html" %}

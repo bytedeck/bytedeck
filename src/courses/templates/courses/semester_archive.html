@@ -12,7 +12,7 @@
     <p>Last Day: {{ semester.last_day }}</p>
   </div>
 
-  {% if semester.closed %}
+  {% if semester.is_archived %}
   <p class="text-danger"><b>This semester has already been archived.</b></p>
   <a href="{% url 'courses:semester_list' %}" role="button" class="btn btn-info">Back to Semesters</a>
   {% else %}

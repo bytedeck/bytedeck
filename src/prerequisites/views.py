@@ -13,6 +13,7 @@ from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.edit import FormView
+from django.utils.html import format_html
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -63,7 +64,7 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
             if maps:
                 messages.success(
                     self.request,
-                    f"These maps are being updated: {maps.get_maps_as_formatted_string()} "
+                    format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()),
                 )
 
         return HttpResponseRedirect(self.get_success_url())

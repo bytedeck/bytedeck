@@ -173,6 +173,9 @@ TENANT_APPS = (
     'utilities',
     'siteconfig',
     'tags',
+    # The Shared Library's own models live per schema: the deck that is the Library keeps
+    # its content's origins in its schema, beside the content they describe (#2377).
+    'library',
 )
 
 
@@ -708,6 +711,13 @@ GITHUB_API_TOKEN = env('GITHUB_API_TOKEN', default='')
 # owner/name of the repo whose Announcements discussions carry the changelog.
 RELEASE_ANNOUNCEMENT_REPO = env('RELEASE_ANNOUNCEMENT_REPO', default='bytedeck/bytedeck')
 
+# External hosts a notification click-through may redirect to. The notifications
+# read view forwards its ?next= target, which for most notices is an internal
+# relative path but for the release-announcement notice is the GitHub Discussion
+# link, so github.com is trusted here; any other absolute URL is refused and the
+# user is sent to their notifications list instead (closes an open redirect).
+NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS = env.list('NOTIFICATIONS_ALLOWED_REDIRECT_HOSTS', default=['github.com'])
+
 # STRIPE ##########################################################
 
 # Automated deck subscriptions (epic #1729). All default to None: when the keys
@@ -976,6 +986,7 @@ SUMMERNOTE_CONFIG = {
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
     ),
     'js_for_inplace': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),
@@ -1008,6 +1019,7 @@ SUMMERNOTE_CONFIG = {
     # To use external plugins,
     # Include them within `css` and `js`.
     'js': (
+        os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
         os.path.join(STATIC_URL, 'summernote-faicon/summernote-ext-faicon.js'),
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.js'),
         os.path.join(STATIC_URL, 'js/summernote-video-attributes.js'),

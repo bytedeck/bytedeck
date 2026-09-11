@@ -1,8 +1,12 @@
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
+        # Leave vendored font files alone. fontawesome-webfont.svg ships with
+        # trailing whitespace on 709 lines, so a `pre-commit run --all-files`
+        # rewrites it and drifts it from upstream for no benefit.
+        exclude: ^src/static/fonts/
       - id: check-yaml
       - id: check-merge-conflict
       - id: debug-statements
@@ -20,11 +24,19 @@ repos:
   # autoflake (unused-import/variable removal via --fix on the F rules).
   # Config lives in pyproject.toml ([tool.ruff]); the formatter (ruff-format)
   # is deliberately not enabled.
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.22
+  # This runs the ruff already installed from requirements.txt rather than a
+  # copy pinned here, so requirements.txt is the only place the version is set
+  # and the hook, CI and a local venv cannot lint with different rule sets.
+  # The wrapper checks the ruff it found against that pin before linting, so a
+  # stray ruff on PATH fails here rather than as a CI-only lint disagreement.
+  - repo: local
     hooks:
       - id: ruff
-        args: [ "--fix" ]
+        name: ruff
+        entry: scripts/run-ruff.sh
+        language: system
+        types_or: [ python, pyi ]
+        require_serial: true
 
   ## Packages here are subjective...
   # - repo: https://github.com/asottile/reorder_python_imports

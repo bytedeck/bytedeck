@@ -80,6 +80,20 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
                          {% for k, v in attrs.items %}
                          $wrap.attr('{{ k }}', '{{ v }}');
                          {% endfor %}
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/2570, put a widget's accessible name on the element that takes
+focus. The loop above writes every attr onto the wrapper div, and a name on a generic div is
+ignored by screen readers, so aria-label set on a summernote widget announced nothing at all.
+.note-editable is the element summernote gives role="textbox", so the name belongs there.
+Widgets that set no aria-label are untouched.
+{% endcomment %}
+                         var ariaLabel = $wrap.attr('aria-label');
+                         if (ariaLabel) {
+                             $nEditor.find('.note-editable').attr('aria-label', ariaLabel);
+                             $wrap.removeAttr('aria-label');
+                         }
+{% comment %} End changes {% endcomment %}
 {% endif %}
 
                          // Move dropdown dialog when it exceeds the bound of the editor

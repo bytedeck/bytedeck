@@ -3,9 +3,10 @@
 Evaluates, records, and delivers deck status notices -- run per deck by the
 nightly ``deck_status_check`` task, right after the cached counts refresh:
 
-* EXPIRY cadence: a reminder at 30, 14, and 7 days before the governing deadline
-  (trial end, or paid_until), then daily through the final week and the paid
-  grace window. At most one expiry notice per deck per day.
+* EXPIRY cadence: a reminder at 30, 14, 7, and 1 days before the governing
+  deadline (trial end, or paid_until). Four notices per period and nothing
+  after: the deck keeps running through the grace window that follows, and the
+  SUSPENDED notice closes the story out when that window ends.
 * LIMIT warnings: when the current-student count reaches 80% / 100% of the
   effective cap; re-armed monthly so owners are reminded but not spammed.
 * SUSPENDED: once per suspension (a deck whose clocks all lapsed).
@@ -36,7 +37,15 @@ from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
 # expiry thresholds, most specific first: the first unfired one whose window has
 # been entered is the one that fires (so a deck first seen at 10 days out gets
 # ONE notice -- d14 -- not a d30+d14 double)
-EXPIRY_THRESHOLDS = (('d7', 7), ('d14', 14), ('d30', 30))
+EXPIRY_THRESHOLDS = (('d1', 1), ('d7', 7), ('d14', 14), ('d30', 30))
+
+# How many days before an auto-renewing subscription's renewal date its single
+# heads-up goes out. Deliberately NOT Stripe's 7 days: every ByteDeck plan bills
+# at 6 months or a year, so Stripe's own reminder (where the dashboard toggle is
+# on) lands at 7 days for all of them. Going out at 14 makes ours the early,
+# deck-specific heads-up and leaves Stripe's as a closer second nudge, instead of
+# two emails about the same charge on the same day (#2586).
+RENEWAL_NOTICE_DAYS = 14
 
 LIMIT_WARNING_FRACTION = 0.8
 
@@ -78,21 +87,32 @@ def close_semester_on_new_suspension(deck):
         if not created:
             return 'semester close already handled this episode'
 
-        returned = 0
-        for submission in QuestSubmission.objects.all_awaiting_approval():
-            submission.mark_returned()
-            returned += 1
-
-        result = Semester.objects.complete_active_semester(clamp_negative_xp=True)
-        if result == Semester.CLOSED:
+        # every open semester, not just the one the deck points at: suspension stops the
+        # whole deck, so a second cohort's semester has to close with the first
+        open_semesters = list(Semester.objects.open())
+        if not open_semesters:
             # nothing was open; the episode is recorded so this isn't re-checked
-            return 'semester was already closed'
-        if result in (Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
-            # can't happen (submissions were just returned; negative XP is clamped),
-            # but if it ever does, roll everything back and retry next run instead
-            # of recording a close that didn't happen
-            raise RuntimeError(f'semester close failed with sentinel {result}')
-    return f'closed semester "{result}" (returned {returned} awaiting-approval submission(s))'
+            return 'no open semester to close'
+
+        returned = 0
+        closed = []
+        for semester in open_semesters:
+            # this semester's own pending approvals, cleared before it closes. Returning
+            # only the deck-pointed semester's queue would leave a second open semester
+            # blocked on its own, which rolls the whole suspension close back.
+            for submission in QuestSubmission.objects.all_awaiting_approval(semester=semester):
+                submission.mark_returned()
+                returned += 1
+
+            result = Semester.objects.complete_semester(semester, clamp_negative_xp=True)
+            if result in (Semester.NO_OPEN_SEMESTER, Semester.QUEST_AWAITING_APPROVAL, Semester.STUDENTS_WITH_NEGATIVE_XP):
+                # can't happen (submissions were just returned; negative XP is clamped),
+                # but if it ever does, roll everything back and retry next run instead
+                # of recording a close that didn't happen
+                raise RuntimeError(f'semester close failed with sentinel {result}')
+            closed.append(str(result))
+    names = ', '.join(f'"{name}"' for name in closed)
+    return f'closed semester {names} (returned {returned} awaiting-approval submission(s))'
 
 
 def evaluate_deck_notices(deck):
@@ -100,7 +120,16 @@ def evaluate_deck_notices(deck):
 
     Pure evaluation -- no ledger writes, no delivery. Reads the deck's derived
     status properties and the DeckNotice ledger.
+
+    A deck whose owner has a standing deletion request gets NO notices of any
+    kind: asking for the deck to be deleted is the strongest possible signal
+    that its owner is done hearing from us, and every notice this engine sends
+    is a nudge toward keeping the deck alive. Canceling the request (from the
+    subscription page) turns the notices back on.
     """
+    if deck.deletion_requested_on is not None:
+        return []
+
     due = []
     today = localdate()
 
@@ -109,6 +138,21 @@ def evaluate_deck_notices(deck):
         period_key = str(deck.governing_deadline)
         if _unfired(deck, DeckNotice.KIND_SUSPENDED, 'suspended', period_key):
             due.append((DeckNotice.KIND_SUSPENDED, 'suspended', period_key))
+    elif deck.auto_renews:
+        # --- auto-renewing: ONE heads-up, not the expiry cadence -----------------
+        # Nothing is expiring on this deck: the card is charged and the period
+        # rolls forward, so the "renew or lose access" cadence was simply wrong
+        # here (#2586). One notice per renewal, keyed to the date being renewed,
+        # so next period's renewal gets its own.
+        # The clock is paid_until, the date Stripe bills on, NOT the governing
+        # deadline: a deck can carry a trial date that outlasts its paid period,
+        # and the charge lands when the subscription bills (#2588 review find).
+        # `auto_renews` guarantees paid_until is set and still ahead.
+        days = (deck.paid_until - today).days
+        if days <= RENEWAL_NOTICE_DAYS:
+            period_key = str(deck.paid_until)
+            if _unfired(deck, DeckNotice.KIND_RENEWAL, 'upcoming', period_key):
+                due.append((DeckNotice.KIND_RENEWAL, 'upcoming', period_key))
     else:
         # --- expiry cadence (not for suspended decks; their deadline is history) --
         days = deck.days_until_expiry
@@ -117,19 +161,16 @@ def evaluate_deck_notices(deck):
             # and the email reports), so a stale paid key can never suppress
             # reminders for a later governing trial date (#1734 B4)
             period_key = str(deck.governing_deadline)
-            # the first (most specific) milestone whose window we're inside governs --
-            # broader milestones are superseded, never fired late. The guard above
-            # guarantees at least the broadest window matches.
+            # the first (most specific) milestone whose window we're inside governs:
+            # broader milestones are superseded, never fired late, and d1 ends the
+            # cadence. Past the deadline `days` goes negative and d1 still matches, so
+            # a deck that reaches us already inside its grace window gets that one
+            # catch-up notice and then nothing: it is still fully usable in there, and
+            # the suspension notice covers the day that stops being true (maintainer
+            # decision, 2026-08-23). The guard above guarantees a window matches.
             threshold = [t for t, t_days in EXPIRY_THRESHOLDS if days <= t_days][0]
-            fired_milestone = _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key)
-            if fired_milestone:
+            if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
                 due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
-            # daily through the final week and the grace window (days goes negative),
-            # but never two expiry notices on the same day
-            if not fired_milestone and days <= EXPIRY_THRESHOLDS[0][1]:
-                threshold = f'daily-{today}'
-                if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
-                    due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
 
     # --- current-student limit warnings, re-armed monthly ------------------------
     # not for suspended decks: students cannot sign in there at all, so a
@@ -208,6 +249,10 @@ def _notification_detail(deck, kind):
         return detail + '.'
     if kind == DeckNotice.KIND_LIMIT:
         return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+    if kind == DeckNotice.KIND_RENEWAL:
+        # the billing date, not the governing deadline: those differ on a deck
+        # whose trial date outlasts its paid period (#2588 review find)
+        return f'this deck renews automatically on {date_format(deck.paid_until)}, with nothing for you to do.'
     # expiry cadence: approaching the deadline, or already inside the grace window
     days = deck.days_until_expiry
     if days is not None and days < 0:
@@ -267,10 +312,23 @@ def _deliver(deck, kind):
     # "{site}: {label}" and the in-app notification sentence "sent a {label}."
     templates = {
         DeckNotice.KIND_EXPIRY: ('expiry_reminder', 'subscription expiry reminder'),
+        DeckNotice.KIND_RENEWAL: ('renewal_reminder', 'subscription renewal reminder'),
         DeckNotice.KIND_LIMIT: ('limit_warning', 'current-student limit warning'),
         DeckNotice.KIND_SUSPENDED: ('suspended_notice', 'deck suspended warning'),
         DeckNotice.KIND_PAYMENT_FAILED: ('payment_failed', 'failed-payment warning'),
     }
+    # what the renewal will actually charge, for the one email that has to state
+    # it; cached per subscription by the billing helper, and None when Stripe
+    # cannot say (the template then omits the plan line rather than guessing)
+    if kind == DeckNotice.KIND_RENEWAL:
+        from tenant.billing import subscription_plan_summary
+        context['plan_summary'] = subscription_plan_summary(deck)
+        # the renewal email counts to the BILLING date (paid_until), while `days`
+        # above counts to the governing deadline: the two differ on a deck whose
+        # trial date outlasts its paid period (#2588 review find)
+        context['renewal_date'] = deck.paid_until
+        context['renewal_days'] = (deck.paid_until - localdate()).days
+
     template_name, verb = templates[kind]
     subject = f"{config.site_name_short}: {verb}"
     message = render_to_string(f'tenant/email/{template_name}.html', context)
@@ -331,6 +389,12 @@ def record_and_deliver_payment_failure(deck, invoice_id):
     Returns:
         str: A short summary string for the webhook log.
     """
+    # a standing deletion request mutes this like every other lifecycle notice
+    # (the webhook path doesn't go through evaluate_deck_notices, so the mute
+    # has to be applied here too); the operator, not the owner, untangles any
+    # still-live Stripe subscription when honoring the request
+    if deck.deletion_requested_on is not None:
+        return 'deletion requested: payment-failure notice muted'
     period_key = invoice_id[:32]  # ledger column width; ids are ~27 chars
     if not settings.DECK_NOTICES_ENABLED:
         return f"REPORT-ONLY (DECK_NOTICES_ENABLED off): would send [payment_failed/{period_key}]"

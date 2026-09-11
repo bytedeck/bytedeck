@@ -7,6 +7,7 @@ from django.test import TestCase
 from model_bakery import baker
 from model_bakery.recipe import Recipe
 
+from announcements.models import Announcement
 from comments.models import Comment, Document, clean_html
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -276,3 +277,41 @@ class DocumentModelTest(ByteDeckTenantTestCase):
         self.assertTrue(Document(docfile=SimpleUploadedFile("art.png", b"x")).is_valid_portfolio_type())
         self.assertTrue(Document(docfile=SimpleUploadedFile("clip.mp4", b"x")).is_valid_portfolio_type())
         self.assertFalse(Document(docfile=SimpleUploadedFile("notes.txt", b"x")).is_valid_portfolio_type())
+
+
+class CommentManagerPrefetchTest(ByteDeckTenantTestCase):
+    """The comments template reads each comment's attached documents and published question
+    answers, so all_with_target_object() prefetches both: a page with a long comment thread
+    must not cost a query per comment (#2168)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """An announcement with three commenting students: the announcements list renders these
+        threads and its comments carry no answers, the case that made the N+1 cost pure waste."""
+        cls.announcement = baker.make(Announcement)
+        cls.students = [User.objects.create_user(f"student{i}") for i in range(3)]
+
+    def setUp(self):
+        """Comment on the announcement as each student, one with a file attached."""
+        for student in self.students:
+            comment = Comment.objects.create_comment(
+                user=student, path="/announcements/", text="Nice announcement.", target=self.announcement)
+            if student is self.students[0]:
+                baker.make(Document, comment=comment,
+                           docfile=SimpleUploadedFile("notes.txt", b"file_content"))
+
+    def test_all_with_target_object__prefetches_documents_and_answers(self):
+        """Reading every comment's documents and answers costs no further queries.
+
+        Announcement comments never have question answers, so before the prefetch each one ran an
+        always-empty query for them, plus another for its documents.
+        """
+        comments = list(self.announcement.get_comments())
+        self.assertEqual(len(comments), 3)
+
+        with self.assertNumQueries(0):
+            attached = [document for comment in comments for document in comment.document_set.all()]
+            answers = [answer for comment in comments for answer in comment.question_submissions.all()]
+
+        self.assertEqual(len(attached), 1)
+        self.assertEqual(answers, [])

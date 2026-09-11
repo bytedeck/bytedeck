@@ -24,7 +24,7 @@
   {% for object in object_list %}
   <tr>
     <td>{{ object.label }}</td>
-    <td>{% if object.fa_icon %}<i class='fa fa-{{ object.fa_icon }}'></i>{% endif %}</td>
+    <td>{% if object.fa_icon_class %}<i class='{{ object.fa_icon_class }}'></i>{% endif %}</td>
     <td><a href="{{ object.url }}">{{ object.url }}</a></td>
     <td>{{ object.sort_order }}</td>
     <td><i class="{{ object.visible | checkcross }}"></i></td>

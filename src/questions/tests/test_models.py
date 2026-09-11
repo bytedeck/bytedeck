@@ -11,7 +11,12 @@ from comments.models import Comment
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
 from questions.models import ALLOWED_FILE_TYPE_CHOICES, Question, QuestionSubmission
-from utilities.fields import FILE_MIME_TYPES
+from utilities.fields import (
+    ALL_SCRIPT_CAPABLE_TYPES,
+    FILE_MIME_TYPES,
+    NO_SCRIPT_CAPABLE_TYPES,
+    SVG_SCRIPT_CAPABLE_TYPES,
+)
 
 
 class QuestionModelTest(ByteDeckTenantTestCase):
@@ -173,6 +178,60 @@ class QuestionModelTest(ByteDeckTenantTestCase):
         self.assertEqual(question.allowed_mime_types(), FILE_MIME_TYPES["audio"])
         # the default 'all' resolves to the "accept anything" sentinel
         question = baker.make(Question, quest=self.quest2, ordinal=131)
+        self.assertEqual(question.allowed_mime_types(), "All")
+
+    def test_script_capable_types__nothing_until_the_teacher_ticks_the_opt_in(self):
+        """No file type accepts a script-capable file on its own (#2559).
+
+        The tick is what lifts the refusal in ``RestrictedFileFormField.validate_file``, so
+        every choice, "all" included, has to come back empty while it is off: a teacher who
+        picked "All" asked for any ordinary file, not for a page that runs in their session.
+        """
+        for index, (key, _label) in enumerate(ALLOWED_FILE_TYPE_CHOICES):
+            question = baker.make(
+                Question, quest=self.quest2, ordinal=140 + index,
+                type="file_upload", allowed_file_type=key, allow_script_capable_files=False,
+            )
+            with self.subTest(allowed_file_type=key):
+                self.assertEqual(question.script_capable_types(), NO_SCRIPT_CAPABLE_TYPES)
+
+    def test_script_capable_types__the_opt_in_reaches_as_far_as_the_file_type(self):
+        """Ticking the opt-in adds what the chosen file type has to add, and no more (#2559).
+
+        SVG is an image, so that is what the two image choices gain; "All" gains the whole set,
+        which is what a web design quest asks for. Video and audio have no script-capable
+        member, so the tick is a no-op there rather than quietly widening them.
+        """
+        expected = {
+            "image": SVG_SCRIPT_CAPABLE_TYPES,
+            "media": SVG_SCRIPT_CAPABLE_TYPES,
+            "all": ALL_SCRIPT_CAPABLE_TYPES,
+            "video": NO_SCRIPT_CAPABLE_TYPES,
+            "audio": NO_SCRIPT_CAPABLE_TYPES,
+        }
+        for index, (key, _label) in enumerate(ALLOWED_FILE_TYPE_CHOICES):
+            question = baker.make(
+                Question, quest=self.quest2, ordinal=160 + index,
+                type="file_upload", allowed_file_type=key, allow_script_capable_files=True,
+            )
+            with self.subTest(allowed_file_type=key):
+                self.assertEqual(question.script_capable_types(), expected[key])
+
+    def test_allowed_mime_types__lists_the_opted_in_types_too(self):
+        """An opted-in SVG is in the allow-list as well, or the other rule would refuse it.
+
+        ``validate_file`` checks its ``content_types`` allow-list separately from the
+        script-capable rule, so a question that accepts SVG has to name it in both (#2559).
+        """
+        question = baker.make(
+            Question, quest=self.quest2, ordinal=180, type="file_upload",
+            allowed_file_type="image", allow_script_capable_files=True,
+        )
+        self.assertIn("image/svg+xml", question.allowed_mime_types())
+        self.assertEqual(question.allowed_mime_types()[:-1], FILE_MIME_TYPES["image"])
+
+        # "all" is the sentinel string, which has nothing to add to
+        question.allowed_file_type = "all"
         self.assertEqual(question.allowed_mime_types(), "All")
 
     def test_solution_file__saved_regardless_of_allowed_file_type(self):

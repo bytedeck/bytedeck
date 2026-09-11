@@ -125,7 +125,7 @@ class DeckNotice(models.Model):
     """Idempotence/audit log for deck status notices (one row per sent notice)."""
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="notices")
     kind = models.CharField(max_length=20, choices=...)   # expiry / limit / suspended / payment_failed
-    threshold = models.CharField(max_length=20)           # 'd30','d14','d7','daily-2026-08-01','pct80','pct100'
+    threshold = models.CharField(max_length=20)           # 'd30','d14','d7','d1','upcoming','pct80','pct100'
     period_key = models.CharField(max_length=32)          # str(governing deadline) or 'YYYY-MM' for limit notices
     sent_on = models.DateField(auto_now_add=True)
     class Meta:
@@ -269,7 +269,7 @@ The original question here offered two options: Option A (soft: the cap reverts 
 
 In its **first** shipped version (PR 2) the per-schema task only calls `tenant.update_cached_fields()` — replacing the `TenantAdmin.get_queryset` N+1 loop. Later PRs extend the same task body (never the beat entry name) with:
 
-1. **Expiry cadence** against `days_until_expiry` (governing deadline: `paid_until` if subscribed else `trial_end_date`): thresholds `d30`, `d14`, `d7`, then `daily-YYYY-MM-DD` inside the final week **and through the grace window**. Exactly-once via `DeckNotice` `(tenant, kind, threshold, period_key)`; a renewal advances `paid_until` → new `period_key` → cadence re-arms with no reset code. Date-based predicates (not tick-based) make multi-day beat outages catch-up-safe: late, never duplicated.
+1. **Expiry cadence** against `days_until_expiry` (governing deadline: `paid_until` if subscribed else `trial_end_date`): thresholds `d30`, `d14`, `d7`, `d1`, and **nothing through the grace window** (the deck still works in there, and the suspension notice covers the day it stops). Exactly-once via `DeckNotice` `(tenant, kind, threshold, period_key)`; a renewal advances `paid_until` → new `period_key` → cadence re-arms with no reset code. Date-based predicates (not tick-based) make multi-day beat outages catch-up-safe: late, never duplicated. A deck whose Stripe subscription auto-renews leaves this cadence entirely and gets one `renewal`/`upcoming` heads-up instead (#2586).
 2. **Limit warnings** at ≥80 % and ≥100 % of `effective_max_active_users` (`pct80`/`pct100`, `period_key='YYYY-MM'` so they re-arm monthly rather than firing once forever or daily).
 3. **Suspension notice** once, the day `is_suspended` flips true.
 4. **Stripe reconcile** (§5.3) for linked tenants.
@@ -343,7 +343,7 @@ Suspension (this epic) is where a deck's lifecycle *pauses*; #2044 defines where
 
 1. **#1734 semantics:** ANSWERED 2026-07-30. Neither original option: suspended decks are owner-only, the semester auto-closes, and the admin-set cap is untouched (§0.2). Implementation is planned as steps B1 (#2210) through B5; the rollout table in §0.2 tracks each step's live status.
 2. **Grace period:** ANSWERED 2026-07-30. 30 days, and it applies to trials too: a trial is treated as a kind of subscription, so every deck falls back on the same 30-day grace before suspension (step B4).
-3. **Reminder cadence confirmation (#1733 said "every day until it ends?"):** shipped as proposed in #2083 (30 d / 14 d / 7 d then daily through expiry + grace); no objection raised.
+3. **Reminder cadence confirmation (#1733 said "every day until it ends?"):** ANSWERED 2026-08-23. Shipped in #2083 as 30 d / 14 d / 7 d then daily through expiry + grace, and trimmed to **30 d / 14 d / 7 d / 1 d with a silent grace window** (#2586): the grace period already carries a deck that has not renewed, so the daily run of emails was pressure rather than information.
 4. **Tiers:** confirm 40/80/120 active students with monthly + annual prices, and that tier limits should live as Stripe Price metadata (no repo record of amounts needed).
 5. **Trial length:** the model default is 60 days; #1730 mentions nothing else. Keep 60?
 

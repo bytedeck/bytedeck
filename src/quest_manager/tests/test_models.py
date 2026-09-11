@@ -10,7 +10,7 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 from comments.models import Comment
 
-from courses.models import Semester
+from courses.models import Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
@@ -326,6 +326,12 @@ class QuestTestModel(ByteDeckTenantTestCase):
 
         baker.make(User, is_staff=True)  # need a teacher or student creation will fail.
         student = baker.make(User)
+        # registered, so their submissions land in this semester and the per-semester
+        # repeat limits below count them
+        baker.make(
+            CourseStudent, user=student, course=baker.make(Course),
+            semester=SiteConfig.get().active_semester,
+        )
         quest_not_repeatable = baker.make(Quest, name="quest-not-repeatable")
         quest_infinite_repeat = baker.make(Quest, name="quest-infinite-repeatable", max_repeats=-1)
         quest_repeat_1hr = baker.make(Quest, name="quest-repeatable-1hr", max_repeats=1, hours_between_repeats=1)
@@ -389,9 +395,11 @@ class QuestTestModel(ByteDeckTenantTestCase):
         # No repeat left this semester
         self.assertFalse(quest_semester.is_repeat_available(student))
 
-        # change semesters and the quest should appear
+        # change semesters and the quest should appear. Moving the student's registration
+        # is what puts them in the new semester: the deck's pointer is only the default
         new_active_sem = baker.make(Semester)
         SiteConfig.get().set_active_semester(new_active_sem.id)
+        CourseStudent.objects.filter(user=student).update(semester=new_active_sem)
         self.assertTrue(quest_semester_repeat.is_repeat_available(student))
 
         # Repeat this semester, another two should be available
@@ -455,13 +463,18 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
 
         quest = baker.make(Quest, name="test quest")
         user = baker.make(User, username="test_user")
+        # registered, so the user= filter below reads this semester as theirs
+        baker.make(CourseStudent, user=user, course=baker.make(Course), semester=self.active_semester)
 
         # various submissions
         baker.make(QuestSubmission, semester=self.active_semester)  # in progress shoulnd't appear
         baker.make(QuestSubmission, is_completed=True, semester=self.active_semester)  # completed/submitted shouldn't appear
         sub_approved = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True, semester=self.active_semester)
         sub_approved_different_quest = baker.make(QuestSubmission, is_completed=True, is_approved=True, semester=self.active_semester)
-        sub_approved_other_semester = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True)
+        sub_approved_other_semester = baker.make(
+            QuestSubmission, quest=quest, is_completed=True, is_approved=True,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
         sub_approved_no_xp = baker.make(QuestSubmission, quest=quest, is_completed=True, is_approved=True,
                                         do_not_grant_xp=True, semester=self.active_semester)
         sub_approved_user = baker.make(QuestSubmission, user=user, quest=quest, is_completed=True, is_approved=True,
@@ -538,6 +551,8 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
     def test_all_returned__with_user_returns_that_users_returned_submissions(self):
         """all_returned(user) returns the given user's returned submissions."""
         user = baker.make(User)
+        # registered, so the user= filter reads this semester as theirs
+        baker.make(CourseStudent, user=user, course=baker.make(Course), semester=self.active_semester)
         returned = baker.make(
             QuestSubmission, user=user, is_completed=False, time_completed=timezone.now(), semester=self.active_semester,
         )
@@ -563,11 +578,20 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a semester, teacher, student, and a base submission shared across the tests."""
+        """Create a semester, teacher, student, and a base submission shared across the tests.
+
+        The student is left unregistered so each test can put them in the semester it needs:
+        their registration is what names the semester a returned submission moves to, and
+        some of these tests are about a student who holds none.
+        """
         cls.semester = baker.make(Semester)
         cls.teacher = Recipe(User, is_staff=True).make()  # need a teacher or student creation will fail.
         cls.student = baker.make(User)
         cls.submission = baker.make(QuestSubmission, quest__name="Test")
+
+    def register_student(self, semester):
+        """Register the shared student in `semester`, which is what makes it theirs."""
+        return baker.make(CourseStudent, user=self.student, course=baker.make(Course), semester=semester)
 
     def test_submission__creation_and_quest_name(self):
         """Creating a QuestSubmission yields a QuestSubmission linked to its quest."""
@@ -697,10 +721,11 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         """
         past_semester = baker.make(
             Semester, name="Past", first_day=datetime.date(2020, 1, 1),
-            last_day=datetime.date(2020, 6, 1), closed=True,
+            last_day=datetime.date(2020, 6, 1), status=Semester.Status.ARCHIVED,
         )
         active_semester = SiteConfig.get().active_semester
         self.assertNotEqual(past_semester, active_semester)
+        self.register_student(active_semester)
 
         # A quest completed and approved back in the past (closed) semester.
         sub = baker.make(
@@ -714,6 +739,40 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         sub.refresh_from_db()
         self.assertEqual(sub.semester, active_semester)
 
+    def test_mark_returned__moves_submission_to_the_students_own_semester(self):
+        """The redo lands in the semester the student is in, not the one the deck points at
+        (issue #2157 Phase 3): a returned quest is re-attached from their registration."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        self.register_student(other_semester)
+        sub = baker.make(
+            QuestSubmission, user=self.student,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.semester, other_semester)
+        self.assertNotEqual(sub.semester, SiteConfig.get().open_semester)
+
+    def test_mark_returned__does_not_stamp_a_semester_that_is_not_open(self):
+        """Returning always happens "now", so with no semester open the submission is left
+        belonging to none rather than being stamped with a semester students aren't in."""
+        config = SiteConfig.get()
+        upcoming = baker.make(Semester, status=Semester.Status.UPCOMING)
+        config.active_semester = upcoming
+        config.save()
+        sub = baker.make(
+            QuestSubmission, user=self.student, semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+            is_completed=True, is_approved=True,
+        )
+
+        sub.mark_returned()
+
+        sub.refresh_from_db()
+        self.assertIsNone(sub.semester)
+
     def test_mark_returned__keeps_active_semester_submission_on_active_semester(self):
         """Returning a submission already in the active semester leaves it there (issue #1231).
 
@@ -721,6 +780,7 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         made -- must not be disturbed by the re-attachment above.
         """
         active_semester = SiteConfig.get().active_semester
+        self.register_student(active_semester)
         sub = baker.make(
             QuestSubmission, user=self.student, semester=active_semester,
             is_completed=True, is_approved=True,

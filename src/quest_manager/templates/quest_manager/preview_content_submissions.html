@@ -28,7 +28,12 @@
       </a>
 
       {% if request.user.profile.not_earning_xp %}
-        <a class="btn btn-warning" href="{% url 'quests:skip' s.id %}" role="button">Skip</a>
+        {# Skipping completes and approves the submission, so it posts rather than links (#2383). #}
+        <form method="post" action="{% url 'quests:skip' s.id %}" class="preview-action-form">
+          {% csrf_token %}
+          <button type="submit" class="btn btn-warning"
+            title="Skip Quest: mark this quest as completed, but you won't get XP for it.">Skip</button>
+        </form>
       {% endif %}
     {% else %}
       <a title="View Details: view the content of this quest or add to the submission."
@@ -41,7 +46,7 @@
        The copy view (quests:quest_copy) already allows TAs; this exposes it from the submission tabs,
        where a started quest lives once it leaves the Available list. {% endcomment %}
     {% if request.user.profile.is_TA %}
-      <a title="Copy Quest &mdash; available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
+      <a title="Copy Quest, available to you because you're a TA: creates a new draft quest using this one as a template, with this quest set as a prerequisite for the new one by default."
          class="btn btn-default" role="button" href="{% url 'quests:quest_copy' s.quest.id %}">
         <i class="fa fa-fw fa-copy"></i>
       </a>

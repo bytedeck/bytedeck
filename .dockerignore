@@ -1,7 +1,8 @@
 # Keep the build context (COPY . /app/) small, cache-friendly, and free of
-# secrets. Note: at runtime docker-compose bind-mounts the repo over /app, so
-# this governs what's baked into the image itself (size, layer caching, and
-# anything that could leak if the image is ever shared).
+# secrets. This governs what is baked into the image itself: its size, its layer
+# caching, and anything that could leak if the image is ever shared. Production
+# runs that image directly, so what is excluded here is simply absent there;
+# development mounts the host checkout over /app, which puts it all back.
 
 # Secrets -- never bake these into an image layer
 .env

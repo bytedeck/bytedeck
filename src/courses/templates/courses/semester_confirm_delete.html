@@ -13,8 +13,8 @@
         <p>Last Day: {{object.last_day}}</p>
     </div>
 
-    {% if object.closed %}
-    <p class="text-danger"><b>Unable to delete Semester as it has been closed.</b></p>
+    {% if object.is_archived %}
+    <p class="text-danger"><b>Unable to delete Semester as it has been archived.</b></p>
     {% elif object == config.active_semester %}
     <p class="text-danger"><b>Unable to delete Semester as it is currently the active semester.</b></p>
     {% elif registrations %}

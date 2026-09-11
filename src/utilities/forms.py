@@ -4,6 +4,7 @@ from django.contrib.flatpages.forms import FlatpageForm
 
 from bytedeck_summernote.widgets import ByteDeckSummernoteAdvancedInplaceWidget
 
+from .fa_icon_widget import FontAwesomeIconPickerWidget
 from .models import VideoResource, MenuItem
 
 
@@ -71,7 +72,17 @@ class CustomFlatpageForm(FlatpageForm):
 
 
 class MenuItemForm(forms.ModelForm):
+    """Add/edit form for one of the links in the "Links" menu.
+
+    The Font Awesome icon field uses the searchable icon picker
+    (:class:`utilities.fa_icon_widget.FontAwesomeIconPickerWidget`), the same one the
+    rank and badge type forms use, so the icon set is browsable rather than something
+    a teacher has to know by heart.
+    """
+
     class Meta:
+        """Binds the URL text input and the icon picker onto the menu item's fields."""
+
         model = MenuItem
         fields = '__all__'
 
@@ -81,4 +92,9 @@ class MenuItemForm(forms.ModelForm):
         # That's why we just let the user enter any text or URL and let Django perform the validation
         widgets = {
             'url': forms.TextInput(),
+            'fa_icon': FontAwesomeIconPickerWidget(),
+        }
+        labels = {
+            # "Fa icon" is jargon; call it what it is.
+            'fa_icon': 'Icon',
         }

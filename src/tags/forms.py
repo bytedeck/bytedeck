@@ -2,6 +2,7 @@ from django import forms
 from django.utils.text import slugify
 from django.core.validators import validate_slug
 from django.core.exceptions import ValidationError
+from django.templatetags.static import static
 
 from taggit.models import Tag
 
@@ -12,7 +13,11 @@ class BootstrapTaggitSelect2Widget(TaggitSelect2Widget):
     """A TaggitSelect2 widget with a bootstrap theme"""
 
     class Media:
-        js = ('/static/js/select2-set-theme-bootstrap.js',)
+        # Route through STATIC_URL (via static()) rather than a hardcoded "/static/" path, so it
+        # resolves to the CDN on the S3 deployment where static is served from CloudFront, not the
+        # app's own (unpopulated) /static/ which 404s. Matches how every other Media reference and
+        # static asset is loaded.
+        js = (static('js/select2-set-theme-bootstrap.js'),)
         css = {
             'all': ('https://cdnjs.cloudflare.com/ajax/libs/select2-bootstrap-theme/0.1.0-beta.10/select2-bootstrap.min.css',)
         }

@@ -18,6 +18,19 @@ User = get_user_model()
 
 class TagHelper:
 
+    @staticmethod
+    def register_in_active_semester(user):
+        """Register `user` in the deck's semester and return the registration.
+
+        A user's semester is the one their own registration names (issue #2441), so without
+        one they are in none and the semester-scoped XP totals these tests read come back
+        empty however much work is stamped with the deck's semester.
+        """
+        return baker.make(
+            'courses.CourseStudent', user=user, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
+
     def create_quest_and_submissions(self, xp, quest_submission_quantity=1):
         """
         Creates and returns quest with linked quest submission objects for self.user
@@ -56,7 +69,13 @@ class TagHelper:
             tuple[Badge, list[BadgeAssertion]]: tuple of Badge object + list of BadgeAssertion objects
         """
         badge = baker.make(Badge, xp=xp)
-        badge_assertion = baker.make(BadgeAssertion, badge=badge, user=self.user, _quantity=badge_assertion_quantity,)
+        # stamp the active semester, as BadgeAssertion.objects.create_assertion() does: the
+        # field is nullable (an assertion granted with no semester open belongs to none), so
+        # baker would otherwise leave it unset and the assertion wouldn't count this semester
+        badge_assertion = baker.make(
+            BadgeAssertion, badge=badge, user=self.user,
+            semester=SiteConfig.get().active_semester, _quantity=badge_assertion_quantity,
+        )
 
         return badge, badge_assertion
 
@@ -67,8 +86,10 @@ class Tag_get_quest_submission_badge_assertion_by_tag_Tests(TagHelper, ByteDeckT
     """
     @classmethod
     def setUpTestData(cls):
-        """Create a shared user for the tag/xp helper tests."""
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
         cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
     def test_get_quest_submission_by_tag__multiple_tags(self):
         """  check if multiple tags can be caught by get_quest_submission_by_tag """
@@ -171,8 +192,10 @@ class Tag_get_user_tags_and_xp_Tests(TagHelper, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a shared user for the tag/xp helper tests."""
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
         cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
     def test_get_user_tags_and_xp__unique_tag_quest_badges(self):
         """
@@ -293,8 +316,10 @@ class Tag_get_tags_from_user_Tests(TagHelper, ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a shared user for the tag/xp helper tests."""
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
         cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
     def test_get_tags_from_user__unique_tag_per_quest_badges(self):
         """
@@ -368,8 +393,10 @@ class Tag_total_xp_by_tags_and_quest_badges_total_xp_Tests(TagHelper, ByteDeckTe
 
     @classmethod
     def setUpTestData(cls):
-        """Create a shared user for the tag/xp helper tests."""
+        """Create a shared user for the tag/xp helper tests, registered in the deck's
+        semester so the work stamped with it counts as theirs."""
         cls.user = baker.make(User)
+        cls.register_in_active_semester(cls.user)
 
     # MISC. TEST
 

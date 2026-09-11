@@ -191,6 +191,22 @@ class ViewTestUtilsMixin():
         )
         return response
 
+    def assert405(self, url_name, *args, **kwargs):
+        """
+        Assert that a GET response to reverse(url_name, *args, **kwargs) is rejected: 405 Method Not Allowed.
+        For a view decorated with `require_POST`, i.e. one that changes state and so must not be
+        reachable by following a link or loading an image (issue #2383).
+        Provide any url and path parameters as args or kwargs.
+
+        Returns the response object.
+        """
+        response = self.client.get(reverse(url_name, *args, **kwargs))
+        self.assertEqual(
+            response.status_code,
+            405
+        )
+        return response
+
     def get_message_list(self, response):
         """ Django messages missing from context of redirected views, so get another way
         https://stackoverflow.com/questions/2897609/how-can-i-unit-test-django-messages

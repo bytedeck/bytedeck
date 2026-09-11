@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 from redis import exceptions as redis_exceptions
 
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig, get_default_deck_owner, invalidate_siteconfig_cache_signal
 
@@ -43,8 +44,10 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.assertEqual(SiteConfig.objects.count(), 1)
 
     def test_active_semester__created_by_default(self):
-        """If one doesn't exist yet, a semester is created to act as the active semester."""
+        """If one doesn't exist yet, an open semester is created to act as the active semester,
+        so students can join a course in a brand new deck without staff opening one first."""
         self.assertIsNotNone(self.config.active_semester)
+        self.assertEqual(self.config.active_semester.status, Semester.Status.OPEN)
 
     def test_get_absolute_url__returns_update_form_url(self):
         """Provides url to the update form."""
@@ -133,6 +136,79 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         # make sure it is now the active semester
         self.assertEqual(self.config.active_semester.id, new_semester.id)
 
+    def test_set_active_semester__opens_the_semester(self):
+        """The semester being made active is opened, so students can join a course in it."""
+        new_semester = baker.make('courses.Semester', status=Semester.Status.UPCOMING)
+
+        self.config.set_active_semester(new_semester)
+
+        new_semester.refresh_from_db()
+        self.assertTrue(new_semester.is_open)
+        self.assertFalse(self.config.has_no_open_semester())
+
+    def test_set_active_semester__leaves_the_other_open_semester_running(self):
+        """Starting a semester opens it alongside the ones already open (issue #1781): a deck
+        can run two course groups on different calendars, and starting the second cohort's
+        term must not stop the first cohort's."""
+        already_open = self.config.active_semester
+        self.assertTrue(already_open.is_open)
+
+        self.config.set_active_semester(baker.make('courses.Semester'))
+
+        already_open.refresh_from_db()
+        self.assertTrue(already_open.is_open)
+        self.assertEqual(Semester.objects.open().count(), 2)
+
+    def test_set_active_semester__points_at_the_semester_just_started(self):
+        """The pointer follows the most recently started semester, which is the default a
+        student is offered first when several are open."""
+        newly_started = baker.make('courses.Semester')
+
+        self.config.set_active_semester(newly_started)
+
+        self.assertEqual(SiteConfig.get().active_semester, newly_started)
+        self.assertEqual(SiteConfig.get().open_semester, newly_started)
+
+    def test_set_active_semester__accepts_a_semester_id(self):
+        """A semester id can be passed instead of the object (what the semester views hold)."""
+        new_semester = baker.make('courses.Semester')
+
+        self.config.set_active_semester(new_semester.id)
+
+        self.assertEqual(self.config.active_semester, new_semester)
+
+    def test_has_no_open_semester__true_when_no_semester_is_open_at_all(self):
+        """No open semester anywhere is the between-semesters state (issue #1177), not an error."""
+        Semester.objects.all().update(status=Semester.Status.ARCHIVED)
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_any_semester_is_open(self):
+        """It asks about the deck, not the pointer: a semester the pointer doesn't name is
+        still one students can join, so the deck isn't between semesters (issue #2157 Phase 3)."""
+        baker.make('courses.Semester', status=Semester.Status.OPEN)
+        self.config.active_semester = None
+        self.config.save()
+
+        self.assertFalse(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__true_when_the_active_semester_is_archived(self):
+        """A config left pointing at an archived semester counts as having none open, so a deck
+        can't get stuck with students unable to join."""
+        semester = self.config.active_semester
+        semester.status = Semester.Status.ARCHIVED
+        semester.save()
+
+        self.assertTrue(SiteConfig.get().has_no_open_semester())
+
+    def test_has_no_open_semester__false_while_a_semester_is_open(self):
+        """With an open semester, students can join a course."""
+        self.assertTrue(self.config.active_semester.is_open)
+
+        self.assertFalse(self.config.has_no_open_semester())
+
     def test_get__caches_config(self):
         """SiteConfig should be in cache after get()."""
         cached_config = cache.get(SiteConfig.cache_key())
@@ -201,6 +277,11 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         current_schema = "test"
         library_schema = get_library_schema_name()
 
+        # Exporting is part of the Shared Library feature, so the deck has to have it on
+        self.config.enable_shared_library = True
+        self.config.full_clean()
+        self.config.save()
+
         # Owner should always be able to export
         owner = self.config.deck_owner
         self.assertTrue(self.config.can_user_export_to_library(owner, current_schema))
@@ -234,3 +315,18 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         # Anonymous users cannot export
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), current_schema))
         self.assertFalse(self.config.can_user_export_to_library(AnonymousUser(), library_schema))
+
+    def test_can_user_export_to_library__false_when_shared_library_disabled(self):
+        """Nobody can export from a deck that has the Shared Library turned off.
+
+        The views 404 in that case, so the buttons this method controls must not render.
+        """
+        self.config.enable_shared_library = False
+        self.config.allow_staff_export = True
+        self.config.full_clean()
+        self.config.save()
+
+        staff_user = baker.make('auth.User', is_staff=True)
+
+        self.assertFalse(self.config.can_user_export_to_library(self.config.deck_owner, "test"))
+        self.assertFalse(self.config.can_user_export_to_library(staff_user, "test"))

@@ -61,13 +61,6 @@ ZERO_DECIMAL_CURRENCIES = frozenset((
     'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf',
 ))
 
-# How long a deck's Billing Portal configuration id (the one whose headline names
-# the deck) is remembered. Configurations are permanent Stripe objects, so this
-# only decides how often we re-create one: on a cache miss the deck gets a fresh
-# configuration, leaving the previous one unused on the account.
-PORTAL_CONFIGURATION_CACHE_SECONDS = 60 * 60 * 24 * 30
-
-
 def deck_label(deck):
     """The deck's domain, the name its owner recognizes it by.
 
@@ -86,7 +79,10 @@ def deck_label(deck):
 
 
 def _portal_configuration_cache_key(schema_name):
-    """The cache key holding one deck's Billing Portal configuration id.
+    """The cache key that held one deck's Billing Portal configuration id before
+    the id lived on ``Tenant.stripe_portal_configuration_id``. Read only by the
+    adoption branch of :func:`portal_configuration_id`, which promotes a still-
+    cached id into the field so no duplicate configuration is created.
 
     Args:
         schema_name (str): The deck's schema name, which namespaces the entry so
@@ -116,10 +112,17 @@ def portal_configuration_id(deck):
         str | None: The configuration id (``bpc_...``), or None if Stripe could
         not provide one.
     """
+    if deck.stripe_portal_configuration_id:
+        return deck.stripe_portal_configuration_id
+    # adoption path: an id still sitting in the cache (where it lived before the
+    # Tenant field existed) is promoted into the field rather than cloning a
+    # duplicate configuration for a deck that already has one
     cache_key = _portal_configuration_cache_key(deck.schema_name)
-    configuration_id = cache.get(cache_key)
-    if configuration_id:
-        return configuration_id
+    cached_id = cache.get(cache_key)
+    if cached_id:
+        _store_portal_configuration_id(deck, cached_id)
+        cache.delete(cache_key)
+        return cached_id
     try:
         defaults = stripe.billing_portal.Configuration.list(
             api_key=settings.STRIPE_SECRET_KEY, is_default=True, limit=1)
@@ -129,6 +132,14 @@ def portal_configuration_id(deck):
         login_page = to_plain_dict(default.login_page) if getattr(default, 'login_page', None) else {}
         configuration = stripe.billing_portal.Configuration.create(
             api_key=settings.STRIPE_SECRET_KEY,
+            # concurrent first visits both reach this create; the shared key makes
+            # Stripe return ONE configuration to both, so the row converges on a
+            # single id instead of orphaning a duplicate. Day-scoped like the
+            # checkout key: within a day a replay with CHANGED parameters (an
+            # operator cleared the field right after editing the account default)
+            # is rejected by Stripe and lands in the except below, so that visit
+            # falls back to the unnamed account-default portal until the key ages out
+            idempotency_key=f'deck-portal-config-{deck.schema_name}-{localdate()}',
             business_profile={
                 **to_plain_dict(default.business_profile),
                 'headline': f'Subscription for {deck_label(deck)}',
@@ -142,8 +153,28 @@ def portal_configuration_id(deck):
         # portal still works without a configuration, so never block on this
         logger.warning("could not prepare a portal configuration for %s: %s", deck.schema_name, e)
         return None
-    cache.set(cache_key, configuration.id, PORTAL_CONFIGURATION_CACHE_SECONDS)
+    _store_portal_configuration_id(deck, configuration.id)
     return configuration.id
+
+
+def _store_portal_configuration_id(deck, configuration_id):
+    """Persist a deck's portal configuration id, on the row and the instance.
+
+    A configuration is a permanent Stripe object, so once a deck has one it is
+    reused forever; storing on the row is what stops every later portal visit
+    from cloning another. The queryset update deliberately skips ``save()``
+    (nothing else on the instance should be written from a billing lookup), and
+    the in-memory attribute is set so the caller's instance agrees with the row.
+
+    Args:
+        deck (Tenant): The deck the configuration belongs to.
+        configuration_id (str): The Stripe configuration id (``bpc_...``).
+
+    Returns:
+        None: The row and the instance are updated in place.
+    """
+    type(deck).objects.filter(pk=deck.pk).update(stripe_portal_configuration_id=configuration_id)
+    deck.stripe_portal_configuration_id = configuration_id
 
 
 def to_plain_dict(stripe_obj):
@@ -522,6 +553,27 @@ def subscription_period_end_date(subscription):
     return timezone.localtime(datetime.fromtimestamp(period_end, tz=dt_timezone.utc)).date()
 
 
+def subscription_auto_renews(subscription):
+    """Whether this subscription will bill again on its own when its period ends.
+
+    A live subscription renews unless its end is already scheduled: the owner
+    turned on "cancel at period end" in the billing portal, or an operator set an
+    explicit ``cancel_at``. Only a paying status counts as renewing: a
+    ``past_due`` subscription is a renewal that IS ALREADY FAILING, and such a
+    deck needs its expiry reminders back rather than a reassuring "renews
+    automatically".
+
+    Args:
+        subscription (dict): A Stripe Subscription object (or test double).
+
+    Returns:
+        bool: True when the deck can expect this subscription to bill again.
+    """
+    if subscription.get('status') not in ('active', 'trialing'):
+        return False
+    return not subscription.get('cancel_at_period_end') and not subscription.get('cancel_at')
+
+
 def reconcile_checkout_session(deck, session_id):
     """Link the deck to its just-completed Checkout Session, if it completed.
 
@@ -566,6 +618,10 @@ def reconcile_checkout_session(deck, session_id):
     paid_until = subscription_period_end_date(subscription)
     if paid_until is not None:
         updates['paid_until'] = paid_until
+    # this write path bypasses sync_from_stripe_subscription, so it carries the
+    # auto-renew fact itself: a deck fresh from checkout renews on its own, and
+    # the lifecycle copy must say so from the first page load
+    updates['stripe_auto_renews'] = subscription_auto_renews(subscription)
     # stamp only on a fresh link, so repeat polls of the status endpoint don't
     # re-write the customer on every poll
     newly_linked = bool(updates['stripe_customer_id']) and deck.stripe_customer_id != updates['stripe_customer_id']

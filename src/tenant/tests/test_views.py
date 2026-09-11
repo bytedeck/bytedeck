@@ -856,6 +856,179 @@ class DeckStatusBannerTest(ByteDeckTenantTestCase):
         self.set_deck(paid_until=None)
 
 
+class DeckDeletionRequestViewTest(ByteDeckTenantTestCase):
+    """The owner's standing deletion request and its withdrawal (#2330): the
+    subscription page's request/cancel actions, their owner-only guard, the
+    operator notification email, and the page states around them."""
+
+    def setUp(self):
+        """Log in the deck owner (the only user the actions accept) on a deck
+        with a known live trial."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        from model_bakery import baker
+
+        self.owner = SiteConfig.get().deck_owner
+        self.staff = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.client.force_login(self.owner)
+        self.set_deck(
+            trial_end_date=localdate() + timedelta(days=30), paid_until=None,
+            deletion_requested_on=None, deletion_requested_by='')
+
+    def set_deck(self, **fields):
+        """Persist fields on this deck's Tenant row and refresh the instance."""
+        Tenant.objects.filter(schema_name=self.tenant.schema_name).update(**fields)
+        self.tenant.refresh_from_db()
+
+    def request_deletion(self):
+        """POST the deletion request and return the response."""
+        return self.client.post(reverse('decks:request_deletion'))
+
+    def test_request_and_cancel__drop_the_cached_deck_row(self):
+        """Both actions write with a queryset update (no post_save signal), so they
+        must drop the hour-long cached row get_current_deck() serves; a cached
+        consumer must never see pre-action state (CodeRabbit find on the #2330
+        PR). The page itself reads the middleware-fresh request.tenant."""
+        from tenant.utils import get_current_deck, deck_cache_key
+
+        with patch("tenant.tasks.send_email_message.apply_async"):
+            get_current_deck()  # populate the cached row (no request standing)
+            self.client.post(reverse('decks:request_deletion'))
+            cached = get_current_deck()  # a fresh cache fill after the action
+            self.assertIsNotNone(cached.deletion_requested_on)
+
+            self.client.post(reverse('decks:cancel_deletion_request'))
+            self.assertIsNone(get_current_deck().deletion_requested_on)
+        cache.delete(deck_cache_key(self.tenant.schema_name))  # leave no cross-test residue
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__records_the_request_and_emails_the_operators(self, mock_apply_async):
+        """The owner's POST stamps who asked and when, queues ONE operator email
+        to SUPPORT_EMAIL naming the deck and requester, and redirects back with
+        the received-and-nothing-deleted confirmation."""
+        from django.utils.timezone import localdate
+
+        response = self.client.post(reverse('decks:request_deletion'), follow=True)
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.deletion_requested_on, localdate())
+        self.assertEqual(self.tenant.deletion_requested_by, self.owner.get_username())
+
+        mock_apply_async.assert_called_once()
+        kwargs = mock_apply_async.call_args.kwargs["kwargs"]
+        self.assertEqual(kwargs["recipient_list"], [settings.SUPPORT_EMAIL])
+        self.assertEqual(kwargs["subject"], f"Deck deletion request: {self.tenant.schema_name}")
+        self.assertIn(self.tenant.primary_domain_url, kwargs["message"])
+        self.assertIn(self.tenant.schema_name, kwargs["message"])
+        self.assertIn(self.owner.get_username(), kwargs["message"])
+        self.assertIn("Nothing happens on its own", kwargs["message"])
+        # addressed to the operators, so no user-facing footer: ByteDeck should
+        # not be inviting itself to "contact us" (review find on the #2330 PR)
+        self.assertIn("ByteDeck operations", kwargs["message"])
+        self.assertNotIn("contact us", kwargs["message"].lower())
+
+        messages_text = [m.message for m in response.context['messages']]
+        self.assertTrue(any("Nothing is deleted yet" in m for m in messages_text))
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__second_request_is_a_no_op(self, mock_apply_async):
+        """Requesting again while a request stands changes nothing and sends no
+        second operator email."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by='someone-earlier')
+        self.request_deletion()
+        self.tenant.refresh_from_db()
+        self.assertEqual(self.tenant.deletion_requested_by, 'someone-earlier')
+        mock_apply_async.assert_not_called()
+
+    @patch("tenant.tasks.send_email_message.apply_async")
+    def test_request__owner_only(self, mock_apply_async):
+        """Anonymous users are sent to login; students get 403; non-owner staff
+        are refused with an error naming the owner; none of them create a request."""
+        self.client.logout()
+        response = self.request_deletion()
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/accounts/login/', response.url)
+
+        self.client.force_login(self.student)
+        self.assertEqual(self.request_deletion().status_code, 403)
+
+        self.client.force_login(self.staff)
+        response = self.request_deletion()
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.deletion_requested_on)
+        mock_apply_async.assert_not_called()
+
+    def test_request__get_not_allowed(self):
+        """The action mutates state, so GET is refused (405) for both routes."""
+        self.assertEqual(self.client.get(reverse('decks:request_deletion')).status_code, 405)
+        self.assertEqual(self.client.get(reverse('decks:cancel_deletion_request')).status_code, 405)
+
+    def test_cancel__clears_the_request(self):
+        """The owner's cancel clears both request fields and confirms; canceling
+        with nothing pending is a friendly no-op."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.post(reverse('decks:cancel_deletion_request'))
+        self.assertRedirects(response, reverse('decks:subscription'))
+        self.tenant.refresh_from_db()
+        self.assertIsNone(self.tenant.deletion_requested_on)
+        self.assertEqual(self.tenant.deletion_requested_by, '')
+
+        response = self.client.post(reverse('decks:cancel_deletion_request'), follow=True)
+        messages_text = [m.message for m in response.context['messages']]
+        self.assertTrue(any("no deletion request" in m for m in messages_text))
+
+    def test_cancel__owner_only(self):
+        """Non-owner staff cannot withdraw the owner's request."""
+        from django.utils.timezone import localdate
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        self.client.force_login(self.staff)
+        self.client.post(reverse('decks:cancel_deletion_request'))
+        self.tenant.refresh_from_db()
+        self.assertIsNotNone(self.tenant.deletion_requested_on)
+
+    def test_SubscriptionDetail__shows_the_request_panel_and_pending_state(self):
+        """The subscription page offers the request to the owner (button + the
+        review-first explanation); once a request stands it shows who asked and
+        when, the nothing-deleted reassurance, and the cancel action instead."""
+        from django.utils.timezone import localdate
+
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Request deck deletion')
+        self.assertContains(response, 'reviews every request')
+
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Deletion requested')
+        self.assertContains(response, self.owner.get_username())
+        self.assertContains(response, 'Cancel deletion request')
+        self.assertNotContains(response, 'Request deck deletion')
+
+    def test_SubscriptionDetail__non_owner_staff_see_disabled_buttons(self):
+        """Other staff see the section with the action disabled and the owner
+        named in its popup, mirroring the manage-subscription button."""
+        from django.utils.timezone import localdate
+
+        self.client.force_login(self.staff)
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Request deck deletion')
+        self.assertContains(response, f'Only the deck owner, {self.owner.get_username()}, can request')
+
+        # with a request standing, the same staff see the disabled cancel action
+        self.set_deck(deletion_requested_on=localdate(), deletion_requested_by=self.owner.get_username())
+        response = self.client.get(reverse('decks:subscription'))
+        self.assertContains(response, 'Cancel deletion request')
+        self.assertContains(response, f'Only the deck owner, {self.owner.get_username()}, can cancel')
+
+
 class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
     """Access and rendering tests for the staff-facing Subscription details page
     (epic #1729 PR 6; maintainer-requested admin-menu page)."""
@@ -887,7 +1060,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         response = self.assert200('decks:subscription')
         return response
 
-    def test_page__staff_only(self):
+    def test_SubscriptionDetail__staff_only(self):
         """Anonymous users are redirected to login; students get 403; staff get 200."""
         self.client.logout()
         self.assertRedirectsLogin('decks:subscription')
@@ -898,7 +1071,28 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.staff)
         self.get_page()
 
-    def test_page__shows_dates_seats_and_status(self):
+    def test_SubscriptionDetail__auto_renewing_deck_reads_as_renewing_not_expiring(self):
+        """An auto-renewing subscription says what actually happens on its date:
+        it renews and the card is charged, with the Dates row labelled "Renews
+        on" rather than "Paid until" (#2586). The same deck set to cancel goes
+        back to expiry wording."""
+        from datetime import timedelta
+
+        from django.utils.timezone import localdate
+
+        self.set_deck(paid_until=localdate() + timedelta(days=10), stripe_auto_renews=True)
+        response = self.get_page()
+        self.assertContains(response, 'Renews automatically on')
+        self.assertContains(response, 'Renews on')
+        self.assertContains(response, 'renews in 10 days')
+        self.assertNotContains(response, 'Paid until')
+
+        self.set_deck(stripe_auto_renews=False)  # cancelled at period end
+        response = self.get_page()
+        self.assertContains(response, 'Paid until')
+        self.assertNotContains(response, 'Renews automatically on')
+
+    def test_SubscriptionDetail__shows_dates_seats_and_status(self):
         """A subscribed deck shows its status, the governing date, days remaining,
         and the three seat rows (maximum / current / remaining)."""
         response = self.get_page()
@@ -910,7 +1104,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Remaining students')
         self.assertContains(response, '30')
 
-    def test_page__dates_show_relative_time_in_every_state(self):
+    def test_SubscriptionDetail__dates_show_relative_time_in_every_state(self):
         """Every Dates row carries a relative phrase: time remaining while the date
         is ahead, or how long ago it passed -- for Paid until, the grace period's
         end, and Trial ends alike (maintainer request from staging live testing)."""
@@ -949,7 +1143,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=None, paid_until=localdate() - timedelta(days=30))  # final grace day
         self.assertIn('(ends today)', ' '.join(self.get_page().content.decode().split()))
 
-    def test_page__dates_show_only_the_governing_deadline(self):
+    def test_SubscriptionDetail__dates_show_only_the_governing_deadline(self):
         """The Dates table shows ONE deadline row -- the governing (LATEST) clock's
         (#1734 B4): Paid until when the paid clock governs, Trial ends when the
         trial clock governs (even with both dates set), and a never-expires row
@@ -975,7 +1169,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
-    def test_page__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
+    def test_SubscriptionDetail__extended_trial_outlasting_an_old_paid_date_reads_as_trial(self):
         """With BOTH dates set and the trial the LATER clock (an admin-extended
         trial on a deck whose paid period lapsed earlier), the grace status and
         the Dates table follow the governing trial clock: trial wording,
@@ -994,7 +1188,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Trial ends')
         self.assertNotContains(response, 'Paid until')
 
-    def test_page__remaining_seats_counts_down_and_clamps_at_zero(self):
+    def test_SubscriptionDetail__remaining_seats_counts_down_and_clamps_at_zero(self):
         """Remaining students = cap minus the LIVE current-student count, clamped
         at 0 when over the limit; None (rendered "Unlimited") on unlimited decks."""
         from model_bakery import baker
@@ -1013,7 +1207,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(max_active_users=-1)
         self.assertIsNone(self.get_page().context['remaining_seats'])
 
-    def test_page__grace_period_states_suspension_ahead(self):
+    def test_SubscriptionDetail__grace_period_states_suspension_ahead(self):
         """A deck in its paid grace window gets its own DANGER "Grace period" label --
         never the green "Subscribed" badge (maintainer review find) -- and explains
         what follows: suspension, with only the deck owner able to sign in and the
@@ -1031,7 +1225,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('otherwise the deck will be suspended (only the deck owner will be able to sign in, '
                       'and the 365-day countdown to deck deletion begins)', text)
 
-    def test_page__lapsed_trial_gets_the_same_grace_status(self):
+    def test_SubscriptionDetail__lapsed_trial_gets_the_same_grace_status(self):
         """A lapsed trial lands in the SAME grace state (#1734 B4): the danger
         "Grace period" label, trial-specific wording ("free trial ended",
         subscribe rather than renew), and the trial Dates rows with the grace
@@ -1049,7 +1243,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('subscribe to keep full access', text)
         self.assertIn('extends 30 days after your trial ends (ends in 25 days)', text)
 
-    def test_page__suspended_deck_states_owner_only_and_deletion_countdown(self):
+    def test_SubscriptionDetail__suspended_deck_states_owner_only_and_deletion_countdown(self):
         """A suspended deck's status copy states the suspension rules -- only
         the deck owner can sign in, and the 365-day deletion countdown -- while
         the seats table still shows the ADMIN-SET cap, whatever it is (the
@@ -1069,7 +1263,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         text = ' '.join(response.content.decode().split())
         self.assertIn('<th>Maximum allowed</th> <td>1</td>', text)
 
-    def test_page__lifecycle_overview_lists_every_stage(self):
+    def test_SubscriptionDetail__lifecycle_overview_lists_every_stage(self):
         """The "How subscriptions work" section walks the owner through the whole
         lifecycle -- valid subscription, grace period, suspension (owner-only
         sign-in + deletion countdown), deletion -- and pitches the Maintenance
@@ -1084,7 +1278,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertIn('Only the deck owner can sign in, and the 365-day countdown to deck deletion begins', text)
         self.assertIn('max 5 current students', text)  # the Maintenance pitch states the trial cap
 
-    def test_page__maintenance_subscription_gets_its_own_status(self):
+    def test_SubscriptionDetail__maintenance_subscription_gets_its_own_status(self):
         """A paid deck whose cap sits at the trial limit is on MAINTENANCE: its own
         status label and copy (kept alive, capped, upgradable) instead of the
         plain green Subscribed badge -- while a paid deck with a higher cap keeps
@@ -1103,7 +1297,25 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         # the lifecycle overview always PITCHES Maintenance, so pin the status label only
         self.assertNotContains(response, 'Maintenance</span>')
 
-    def test_page__trial_suspended_and_manual_states(self):
+    def test_SubscriptionDetail__maintenance_promises_no_expiry_only_while_it_renews(self):
+        """A maintenance subscription that renews is the one case where the page
+        can say the deck won't expire, be suspended, or time out for deletion.
+        Cancel it and that promise is false, so the page states what really
+        happens instead: paid through the date, then the grace period, then
+        suspension. The trial-limit cap applies either way (#2589)."""
+        self.set_deck(max_active_users=5, stripe_auto_renews=True)  # paid 100 days out from setUp
+        response = self.get_page()
+        self.assertContains(response, 'automatically renews in 100 days')
+        self.assertContains(response, "it won't expire")
+
+        self.set_deck(stripe_auto_renews=False)  # cancelled, or a renewal that started failing
+        response = self.get_page()
+        self.assertNotContains(response, "it won't expire")
+        self.assertContains(response, 'paid through')
+        self.assertContains(response, 'grace period and is suspended after that')
+        self.assertContains(response, 'capped at the trial limit')
+
+    def test_SubscriptionDetail__trial_suspended_and_manual_states(self):
         """The status section adapts to trial, suspended, and never-expires decks."""
         from datetime import date, timedelta
 
@@ -1118,12 +1330,12 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.set_deck(trial_end_date=None, paid_until=None)
         self.assertContains(self.get_page(), 'Managed manually')
 
-    def test_page__unlimited_cap_shown_as_unlimited(self):
+    def test_SubscriptionDetail__unlimited_cap_shown_as_unlimited(self):
         """The -1 unlimited sentinel renders as "Unlimited" rather than -1."""
         self.set_deck(max_active_users=-1)
         self.assertContains(self.get_page(), 'Unlimited')
 
-    def test_page__mid_trial_checkout_note_promises_no_lost_trial_time(self):
+    def test_SubscriptionDetail__mid_trial_checkout_note_promises_no_lost_trial_time(self):
         """While the deck is on trial (with enough trial left for checkout to
         preserve it), the subscribe button's help text says the card isn't
         charged until the trial ends; a paid deck gets the plain portal/checkout
@@ -1143,7 +1355,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
             text = ' '.join(self.get_page().content.decode().split())
             self.assertNotIn("won't cut your free trial short", text)
 
-    def test_page__not_configured_falls_back_to_public_subscribe_page(self):
+    def test_SubscriptionDetail__not_configured_falls_back_to_public_subscribe_page(self):
         """Without Stripe keys the page says billing isn't configured and links the
         public subscribe page instead of rendering the checkout form."""
         from tenant.utils import get_public_subscribe_url
@@ -1153,7 +1365,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, get_public_subscribe_url())
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__configured_shows_checkout_portal_or_manual_note(self):
+    def test_SubscriptionDetail__configured_shows_checkout_portal_or_manual_note(self):
         """With Stripe configured: an unlinked trial deck gets "Subscribe now", a
         linked deck gets "Manage subscription" (billing portal), and an unlinked
         deck still inside its paid period gets the managed-manually note instead
@@ -1173,7 +1385,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'managed manually')
         self.assertNotContains(response, 'Subscribe now')
 
-    def test_page__status_names_the_plan_after_the_subscribed_badge(self):
+    def test_SubscriptionDetail__status_names_the_plan_after_the_subscribed_badge(self):
         """A linked, subscribed deck's status line names the Stripe plan and its
         renewal terms after the badge -- "Subscribed to <product>, renewed
         annually at $75.00 per year. Paid through ..." (maintainer request,
@@ -1193,22 +1405,29 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
             text = ' '.join(self.get_page().content.decode().split())
         self.assertIn('Subscribed</span> Paid through', text)
 
-    def test_page__maintenance_status_names_the_plan_when_known(self):
+    def test_SubscriptionDetail__maintenance_status_names_the_plan_when_known(self):
         """A maintenance deck's status parenthesizes its plan when Stripe data is
         available: "on a maintenance subscription (<product>, renewed annually
-        at $10.00 per year) through ..."."""
+        at $10.00 per year) paid through ..." (the renewing deck reads "through",
+        since its date is a renewal rather than an end, #2589)."""
         self.set_deck(max_active_users=5, stripe_customer_id='cus_9', stripe_subscription_id='sub_9')
         summary = {'name': 'Bytedeck Maintenance', 'renewal_phrase': 'renewed annually at $10.00 per year'}
         with patch('tenant.billing.subscription_plan_summary', return_value=summary):
             text = ' '.join(self.get_page().content.decode().split())
         self.assertIn(
             'maintenance subscription (<strong>Bytedeck Maintenance</strong>, '
-            'renewed annually at $10.00 per year) through',
+            'renewed annually at $10.00 per year) paid through',
             text,
         )
 
+        self.set_deck(stripe_auto_renews=True)
+        with patch('tenant.billing.subscription_plan_summary', return_value=summary):
+            text = ' '.join(self.get_page().content.decode().split())
+        self.assertIn(
+            'renewed annually at $10.00 per year) through <strong>', text)
+
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__manage_button_shows_at_top_and_bottom_owner_only(self):
+    def test_SubscriptionDetail__manage_button_shows_at_top_and_bottom_owner_only(self):
         """The manage action appears TWICE -- under Status and in Upgrade-or-renew
         (maintainer request, 2026-08-09). Staff who are not the deck owner get
         both copies disabled with a popup naming who can act; the owner gets the
@@ -1218,23 +1437,27 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         owner = SiteConfig.get().deck_owner
         self.set_deck(stripe_customer_id='cus_9')
 
+        # Match the manage-subscription form by its action, so the shared navbar's own
+        # sign-out POST form (present on every authenticated page) is never miscounted.
+        manage_form = f'<form method="post" action="{reverse("decks:subscription")}">'
+
         # setUp's staff user is NOT the owner: disabled buttons, owner named in the popup
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
         self.assertContains(
             response, f'Only the deck owner, {owner.get_username()}, can manage the subscription.', count=2
         )
-        self.assertNotContains(response, '<form method="post"')
+        self.assertNotContains(response, manage_form)
 
         # the owner: two live forms, the help text riding on the buttons' title popups
         self.client.force_login(owner)
         response = self.get_page()
         self.assertContains(response, 'Manage subscription', count=2)
-        self.assertContains(response, '<form method="post"', count=2)
+        self.assertContains(response, manage_form, count=2)
         self.assertNotContains(response, 'disabled')
 
     @override_settings(STRIPE_SECRET_KEY='sk_test_123', STRIPE_PRICE_ID='price_123')
-    def test_page__lapsed_linked_deck_button_says_renew(self):
+    def test_SubscriptionDetail__lapsed_linked_deck_button_says_renew(self):
         """A linked deck past its governing deadline (grace or suspended) labels
         the manage action "Renew subscription" with renewal help text: the POST
         routes such a deck to renewal, so the button says so up front
@@ -1259,7 +1482,7 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'Renew subscription', count=2)
         self.assertNotContains(response, 'Manage subscription')
 
-    def test_page__contact_copy_links_the_support_address(self):
+    def test_SubscriptionDetail__contact_copy_links_the_support_address(self):
         """Copy that says to contact ByteDeck links the support address as a
         mailto (maintainer request, 2026-08-09): the managed-manually status, the
         manual-billing note, and the activating page's check-later copy."""
@@ -1448,7 +1671,8 @@ class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
         with patch('tenant.billing.stripe.checkout.Session.create',
                    side_effect=stripe_lib.StripeError('boom')):
             response = self.client.post(reverse('decks:subscription'), follow=True)
-        self.assertContains(response, "couldn't be reached")
+        # No apostrophe in the needle: messages are escaped now, so it arrives as an entity.
+        self.assertContains(response, "be reached")
 
     def test_activating_page__renders_for_staff_with_polling_script(self):
         """The post-checkout page renders the activating message and polls the

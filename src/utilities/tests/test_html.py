@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
-from utilities.html import textify, urlize
+from utilities.html import EMBEDDED_CONTENT_TAGS, is_empty_html, textify, urlize
 from comments.models import clean_html
 
 
@@ -256,3 +256,64 @@ class UrlizeTests(SimpleTestCase):
         # Ensure prefixes are NOT inside the links
         self.assertNotIn('<a href="http://1.', result)
         self.assertNotIn('<a href="http://2.', result)
+
+
+class IsEmptyHtmlTests(SimpleTestCase):
+    """Tests for `utilities.html.is_empty_html`, the "would this render as nothing?" test."""
+
+    def test_is_empty_html__nothing_at_all(self):
+        """A missing or empty value is empty, so callers need no None check of their own."""
+        for value in (None, "", "   "):
+            with self.subTest(value=value):
+                self.assertTrue(is_empty_html(value))
+
+    def test_is_empty_html__untouched_summernote_editor(self):
+        """The markup an editor posts when the user typed nothing is empty (#2560).
+
+        These are the payloads a student actually produces: clicking into the editor and
+        leaving gives `<p><br></p>`, typing a space gives `<p>&nbsp;</p>`, and pressing enter
+        a few times gives a run of empty paragraphs. None of them are an answer.
+        """
+        for value in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>", "<br>"):
+            with self.subTest(value=value):
+                self.assertTrue(is_empty_html(value))
+
+    def test_is_empty_html__real_text(self):
+        """Text a user typed is content, however it is wrapped or formatted."""
+        for value in ("hello", "<p>hello</p>", "<p><strong>hi</strong></p>", "<ul><li>one</li></ul>", "<p>0</p>"):
+            with self.subTest(value=value):
+                self.assertFalse(is_empty_html(value))
+
+    def test_is_empty_html__entity_that_is_not_whitespace(self):
+        """An entity is judged by the character it renders as, not by the text spelling it.
+
+        `&amp;` decodes to a visible "&", unlike `&nbsp;`, so a value made only of it is
+        content. Decoding before the whitespace test is what tells the two apart.
+        """
+        self.assertFalse(is_empty_html("<p>&amp;</p>"))
+
+    def test_is_empty_html__embedded_content_without_text(self):
+        """A picture or an embed is an answer even though stripping tags leaves nothing.
+
+        A student answering "show me your work" by pasting a screenshot, or by embedding a
+        video, has answered. Every tag in `EMBEDDED_CONTENT_TAGS` is treated this way.
+        """
+        for tag in EMBEDDED_CONTENT_TAGS:
+            with self.subTest(tag=tag):
+                self.assertFalse(is_empty_html(f"<p><{tag} src='x'></{tag}></p>"))
+
+    def test_is_empty_html__embed_tag_is_matched_however_it_is_written(self):
+        """Whitespace and capitals inside a tag don't hide it from the content check."""
+        for value in ("<P><  IMG SRC='x'></P>", "<p><Iframe src='x'></Iframe></p>"):
+            with self.subTest(value=value):
+                self.assertFalse(is_empty_html(value))
+
+    def test_is_empty_html__typed_tag_name_is_not_an_embed(self):
+        """An escaped tag the user typed about is text, not embedded content.
+
+        A student answering "which tag embeds a picture?" with `<img>` posts `&lt;img&gt;`
+        from a rich-text editor. That is a real answer, and it must be counted as one for
+        its text rather than mistaken for an actual picture.
+        """
+        self.assertFalse(is_empty_html("<p>&lt;img&gt;</p>"))
+

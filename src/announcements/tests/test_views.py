@@ -115,6 +115,17 @@ class AnnouncementViewTests(ByteDeckTenantTestCase):
             expected_url=reverse('announcements:list', args=[self.ann_pk]),
         )
 
+    @patch('announcements.views.publish_announcement.apply_async')
+    def test_publish__get_is_rejected_and_broadcasts_nothing(self, mock_publish):
+        """Publishing broadcasts and emails an announcement to every student, so it must not happen
+        on a GET: a teacher following a link, or a page with an <img> pointing here, would otherwise
+        send it (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('announcements:publish', args=[self.ann_pk])
+
+        self.assertFalse(mock_publish.called)
+
     def test_archive_button__visible_to_teachers(self):
         """Teachers see the 'Archived' button on the announcements list."""
         self.client.force_login(self.test_teacher)
@@ -465,7 +476,7 @@ class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
         draft_ann = baker.make(Announcement, archived=False, draft=True)
 
         self.client.force_login(self.test_teacher)
-        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
         draft_ann.refresh_from_db()
         self.assertFalse(draft_ann.archived)
@@ -476,7 +487,7 @@ class AnnouncementArchivedViewTests(ByteDeckTenantTestCase):
         announcements = [baker.make(Announcement, archived=False, draft=False) for _ in range(5)]
 
         self.client.force_login(self.test_teacher)
-        self.client.post(reverse('courses:semester_archive'), data={'archive_announcements': 'on'})
+        self.client.post(reverse('courses:semester_archive', args=[SiteConfig.get().active_semester.id]), data={'archive_announcements': 'on'})
 
         for announcement in announcements:
             announcement.refresh_from_db()

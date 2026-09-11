@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
@@ -27,7 +28,8 @@ from django.utils import timezone
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
-from courses.models import Block, Rank
+from badges.models import BadgeAssertion
+from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
@@ -38,7 +40,7 @@ from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 
 
 User = get_user_model()
@@ -131,7 +133,8 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assert302('quests:start', args=[q2_pk])
         self.assert302('quests:hide', args=[q_pk])
         self.assert302('quests:unhide', args=[q_pk])
-        self.assert404('quests:skip_for_quest', args=[q_pk])
+        # skip_for_quest is POST-only (#2383); posting still 404s for a student who may not skip
+        self.assertEqual(self.client.post(reverse('quests:skip_for_quest', args=[q_pk])).status_code, 404)
         self.assert403('quests:unarchive', args=[archived_quest_pk])
 
         self.assert403('quests:quest_prereqs_update', args=[q_pk])
@@ -158,7 +161,7 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assert200('quests:quest_prereqs_update', args=[q_pk])
         # unarchiving unpublishes the quest, so it lands on the Drafts tab where the quest now is
         self.assertRedirects(
-            response=self.client.get(reverse('quests:unarchive', args=[archived_quest_pk])),
+            response=self.client.post(reverse('quests:unarchive', args=[archived_quest_pk])),
             expected_url=reverse('quests:drafts'),
         )
 
@@ -365,6 +368,12 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student')
         cls.test_student2 = baker.make(User)
+        # the registration is what makes the deck's semester theirs, so sub4 below reads as
+        # their current work rather than as another term's
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student1, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
 
         cls.quest1 = baker.make(Quest)
         cls.quest2 = baker.make(Quest)
@@ -397,8 +406,9 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Students shouldn't have access to these
         self.assert403('quests:flagged')
 
-        # Student's own submission
-        self.assert404('quests:skip', args=[s1_pk])
+        # Student's own submission. skip is POST-only (#2383), so post to reach the view's own
+        # 404 for a student who isn't allowed to skip.
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[s1_pk])).status_code, 404)
         self.assert403('quests:approve', args=[s1_pk])
         self.assert200('quests:submission_past', args=[s1_pk])
         self.assert403('quests:flag', args=[s1_pk])
@@ -408,14 +418,14 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Not this student's submission: sent back to their own quests page, not shown someone else's work
         self.assertRedirectsQuests('quests:submission', args=[s2_pk])
         self.assertRedirectsQuests('quests:drop', args=[s2_pk])
-        self.assert404('quests:skip', args=[s2_pk])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[s2_pk])).status_code, 404)
         self.assertRedirectsQuests('quests:submission_past', args=[s2_pk])
         self.assert404('quests:complete', args=[s2_pk])
 
         # Non existent submissions
         self.assert404('quests:submission', args=[0])
         self.assert404('quests:drop', args=[0])
-        self.assert404('quests:skip', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[0])).status_code, 404)
         self.assert404('quests:submission_past', args=[0])
         self.assert404('quests:complete', args=[0])
 
@@ -447,6 +457,27 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student1)
         response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
         self.assertNotContains(response, status_url)
+
+    def test_submission_view__both_forms_warn_about_unsaved_changes(self):
+        """The student's form and the marker's form opt into the unsaved-changes guard (#2572).
+
+        Answers, the comment box and marking feedback all sit in a form that only reaches the
+        server on a submit or the 60-second autosave, so leaving the page in between loses
+        whatever was typed since. `data-warn-unsaved` is the attribute the site-wide
+        warn-unsaved-changes.js binds to.
+
+        Matched inside a form tag, not anywhere on the page: base.html names the attribute in
+        the HTML comment above the script, so a plain substring assertion passes on every page
+        in the site whether or not any form opted in.
+        """
+        guarded_form = r"<form[^>]*\sdata-warn-unsaved"
+        url = reverse('quests:submission', args=[self.sub1.pk])
+
+        self.client.force_login(self.test_student1)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
+
+        self.client.force_login(self.test_teacher)
+        self.assertRegex(self.client.get(url).content.decode(), guarded_form)
 
     def test_submission_view__quest_quick_reply_button_shown_when_set(self):
         """When a quest has quick_reply text, staff reviewing a submission of it get a quest-specific quick-reply button (#161)."""
@@ -665,20 +696,27 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         # Non existent submissions
         self.assert404('quests:submission', args=[0])
         self.assert404('quests:drop', args=[0])
-        self.assert404('quests:skip', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[0])).status_code, 404)
         self.assert404('quests:submission_past', args=[0])
 
         # These Needs to be completed via POST
         # self.assertEqual(self.client.get(reverse('quests:complete', args=[s1_pk])).status_code, 404)
         # skipping is a staff transfer, so it returns the teacher to the approvals queue
         self.assertRedirects(
-            response=self.client.get(reverse('quests:skip', args=[s1_pk])),
+            response=self.client.post(reverse('quests:skip', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
         self.assert404('quests:approve', args=[s1_pk])
 
     def test_submission__quest_not_visible_returns_404(self):
-        """When a quest is hidden from students, they should still be able to to see their submission in a static way"""
+        """Unpublishing a quest hides an in-progress submission of it: the student gets a 404,
+        because the default QuestSubmission queryset excludes unpublished quests and the view's
+        fallback lookup only covers completed submissions.
+
+        A completed submission survives the quest being unpublished and still renders (see
+        test_submission__unavailable_quest_shows_notice_and_hides_form_for_student), so only
+        work the student hadn't finished disappears on them.
+        """
         # log in a student
         self.client.force_login(self.test_student1)
 
@@ -687,7 +725,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.quest1.save()
         self.assertFalse(self.quest1.published)
 
-        # TODO: should redirect, not 404?
+        self.assertFalse(self.sub1.is_completed)
         self.assert404('quests:submission', args=[self.sub1.pk])
 
     def test_submission__xp_entered_remains_when_submission_returned(self):
@@ -818,6 +856,125 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
 
+    def _draft_xp_submission(self, xp_can_be_entered_by_students=True, **submission_kwargs):
+        """A logged-in student mid-submission on a quest worth 10 XP.
+
+        Args:
+            xp_can_be_entered_by_students (bool): whether the quest offers the custom XP field.
+            **submission_kwargs: extra fields for the QuestSubmission (is_approved, ...).
+
+        Returns:
+            QuestSubmission: the submission to draft-save against.
+        """
+        self.client.force_login(self.test_student1)
+        quest = baker.make(Quest, name="Custom XP Quest", xp=10,
+                           xp_can_be_entered_by_students=xp_can_be_entered_by_students)
+        return baker.make(
+            QuestSubmission, user=self.test_student1, quest=quest,
+            draft_comment=baker.make(Comment, text="draft"), **submission_kwargs,
+        )
+
+    def _save_draft_xp(self, sub, xp_requested):
+        """POST a draft save carrying an xp_requested, as the submission page does.
+
+        Args:
+            sub (QuestSubmission): the submission being drafted.
+            xp_requested: the value to send, as the page would send it (a string).
+
+        Returns:
+            HttpResponse: the view's response.
+        """
+        return self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'comment': "draft", 'submission_id': sub.id, 'xp_requested': xp_requested},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_save_draft__saves_the_custom_xp_the_student_entered(self):
+        """A drafted XP is stored, so it is still there when the student comes back.
+
+        The submission form seeds the field from sub.xp_requested, so an XP the draft did not
+        store reappears as the quest's default and can be submitted without the student
+        noticing it changed (#2562).
+        """
+        sub = self._draft_xp_submission()
+
+        response = self._save_draft_xp(sub, '50')
+
+        self.assertEqual(response.status_code, 200)
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 50)
+
+    def test_ajax_save_draft__custom_xp_survives_to_the_reloaded_form(self):
+        """The point of storing it: the submission page shows the drafted XP, not the default."""
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '50')
+
+        response = self.client.get(reverse('quests:submission', args=[sub.id]))
+
+        self.assertEqual(response.context['submission_form'].initial['xp_requested'], 50)
+
+    def test_ajax_save_draft__ignores_custom_xp_when_the_quest_does_not_offer_it(self):
+        """A quest whose XP students cannot enter keeps its own value whatever is posted.
+
+        The field is only built for quests that offer it, so a request carrying one is not
+        coming from the page as rendered.
+        """
+        sub = self._draft_xp_submission(xp_can_be_entered_by_students=False)
+
+        self._save_draft_xp(sub, '999')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0)
+
+    def test_ajax_save_draft__ignores_custom_xp_once_the_submission_is_approved(self):
+        """An approved submission's XP is settled, and the page stops offering the field."""
+        sub = self._draft_xp_submission(is_approved=True)
+
+        self._save_draft_xp(sub, '999')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0)
+
+    def test_ajax_save_draft__leaves_the_stored_xp_alone_for_an_unusable_value(self):
+        """Blank, non-numeric, zero and negative values leave what is already stored.
+
+        The page sends '' whenever the field is absent, and xp_requested is a
+        PositiveIntegerField, so a negative cannot be stored at all. Zero is this app's
+        sentinel for "no custom XP requested", so storing it would say the same thing as
+        storing nothing while destroying the number the student had already saved. An
+        autosave lands mid-typing, so a box holding '0' for one keystroke is routine.
+        """
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '50')
+
+        for unusable in ('', 'lots', '-5', '0'):
+            with self.subTest(xp_requested=unusable):
+                self._save_draft_xp(sub, unusable)
+                sub.refresh_from_db()
+                self.assertEqual(sub.xp_requested, 50)
+
+    def test_ajax_save_draft__zero_xp_does_not_come_back_as_the_quest_default(self):
+        """Storing zero would read back as the quest's XP, so it is never stored.
+
+        The submission form seeds the field with `sub.xp_requested or sub.quest.xp`, so a
+        stored zero is indistinguishable from never having chosen an XP: the student would
+        be shown the quest's default rather than the zero they typed. Leaving the field
+        alone reaches the same screen without discarding a real saved value on the way.
+        """
+        sub = self._draft_xp_submission()
+        self._save_draft_xp(sub, '0')
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.xp_requested, 0, "nothing was stored, so the field is still at its default")
+
+        self.client.force_login(self.test_student1)
+        response = self.client.get(reverse('quests:submission', args=[sub.id]))
+        self.assertEqual(
+            response.context['submission_form'].initial['xp_requested'], sub.quest.xp,
+            "a zero reads back as the quest default, which is why it is not worth storing",
+        )
+
     def test_ajax_save_draft__non_numeric_submission_id_returns_404(self):
         """A non-numeric submission id is a 404, not the ValueError the pk lookup would raise (a 500)."""
         self.client.force_login(self.test_student1)
@@ -920,6 +1077,12 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         cls.test_student = User.objects.create_user('test_student')
 
         cls.semester = SiteConfig.get().active_semester
+        # the registration is what puts the student in this semester, so the submissions
+        # stamped with it count toward the XP that completing them earns
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=cls.semester,
+        )
         cls.quest = baker.make(Quest, xp=5)
         cls.draft_comment = baker.make(Comment, text="test draft comment")
         cls.sub = baker.make(QuestSubmission, user=cls.test_student, quest=cls.quest,
@@ -929,6 +1092,230 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         """Set up a tenant-aware test client and log in the student for all tests."""
         # log in the student for all tests here
         self.client.force_login(self.test_student)
+
+    def test_approve__grants_an_award_toward_the_submissions_course(self):
+        """A badge a teacher grants while approving a quest counts toward whichever course the
+        student put that quest against, so the badge and the work it recognises land together
+        rather than the badge being shared across their courses (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        baker.make('courses.CourseStudent', user=self.test_student, course=maths,
+                   block=baker.make('courses.Block'), semester=self.semester)
+        badge = baker.make('badges.Badge', xp=15, badge_type=baker.make('badges.BadgeType'))
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, course=maths, is_completed=True)
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(
+            reverse('quests:approve', args=[submission.id]),
+            data={'approve_button': True, 'comment_text': 'nice work', 'awards': [badge.pk]},
+        )
+
+        assertion = BadgeAssertion.objects.filter(user=self.test_student, badge=badge).first()
+        self.assertIsNotNone(assertion, 'the badge was not granted')
+        self.assertEqual(assertion.course, maths)
+
+    def submit_with_payload(self, quest, extra=None):
+        """Hand in `quest` with an event-handler payload as the comment text.
+
+        Args:
+            quest (Quest): the quest to hand in.
+            extra (dict | None): extra POST data, which decides which submission form
+                the view builds.
+
+        Returns:
+            tuple[str, str]: the stored comment text, and the page a teacher then sees.
+        """
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        data = {'complete': True, 'comment_text': '<img src=x onerror="alert(1)">'}
+        data.update(extra or {})
+
+        self.client.force_login(self.test_student)
+        self.client.post(reverse('quests:complete', args=[submission.id]), data=data, follow=True)
+        stored = Comment.objects.order_by('-id').first()
+
+        self.client.force_login(self.test_teacher)
+        page = self.client.get(reverse('quests:submission', args=[submission.id]), follow=True)
+        return stored.text, page.content.decode()
+
+    def test_complete__strips_an_event_handler_from_a_submission_with_an_attachment(self):
+        """A comment handed in alongside a file cannot carry an event handler.
+
+        Attaching a file puts request.FILES on the POST, which is what makes the view build
+        SubmissionForm rather than the quick-reply form. Comment text is rendered with |safe
+        to the teacher who marks the work, so an `onerror` surviving here runs for them.
+        """
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+
+        stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
+        """The same holds on a quest whose XP the student enters.
+
+        That branch builds SubmissionFormCustomXP, which is the other form the view can
+        choose, and it inherits the sanitizing now that SubmissionForm does it.
+        """
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True, max_xp=10)
+
+        stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
+
+        self.assertNotIn('onerror', stored)
+        self.assertIn('<img src="x">', stored)
+        self.assertNotIn('onerror="alert(1)"', page)
+
+    def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
+        """Sanitizing must not cost the rich formatting the editor is there to provide."""
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        upload = SimpleUploadedFile('notes.txt', b'hello', content_type='text/plain')
+        self.client.force_login(self.test_student)
+
+        self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': '<b>bold</b> and <i>italic</i>', 'attachments': upload},
+            follow=True,
+        )
+
+        stored = Comment.objects.order_by('-id').first()
+        self.assertIn('<b>bold</b>', stored.text)
+        self.assertIn('<i>italic</i>', stored.text)
+
+    def test_complete__auto_approved_message_signs_off_on_its_own_line(self):
+        """Handing in an auto-approved quest signs off with a line break, not a literal <br>.
+
+        Messages are escaped unless they are built safely (#2498), and this one carries a break
+        and the deck AI's name, so it has to be built with format_html or the student reads the
+        tag as text.
+        """
+        quest = baker.make(Quest, xp=5, verification_required=False)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=quest,
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done'},
+            follow=True,
+        )
+
+        self.assertContains(response, 'Try refreshing your browser in a few moments.')
+        self.assertContains(response, 'Thanks! <br>')
+        self.assertNotContains(response, '&lt;br&gt;')
+        # The deck AI is a User, so its name reaches the page as an escaped format_html argument.
+        self.assertContains(response, str(SiteConfig.get().deck_ai))
+
+    def test_complete__records_the_course_the_student_chose(self):
+        """Handing in a quest with a course selected stamps that course on the submission, so the
+        XP counts toward it rather than being shared across their courses (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done', 'course': maths.pk},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, maths)
+
+    def test_complete__lets_a_redo_go_back_to_splitting_evenly(self):
+        """A submission a teacher returned keeps the course it was handed in against, so redoing
+        it with "split evenly" selected has to be able to clear that course again rather than
+        leaving the old choice in place (issue #2440)."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester,
+                                course=maths)
+
+        # the empty value is what the "Split evenly between my courses" choice posts
+        self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'redone', 'course': ''},
+        )
+
+        submission.refresh_from_db()
+        self.assertIsNone(submission.course)
+
+    def test_submission__shows_the_course_the_submission_already_counts_toward(self):
+        """The picker starts on the submission's own course, so a student coming back to the page
+        sees what they chose rather than a form offering to reset it."""
+        maths = baker.make('courses.Course', title='Maths')
+        art = baker.make('courses.Course', title='Art')
+        for course in (maths, art):
+            baker.make('courses.CourseStudent', user=self.test_student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester,
+                                course=maths)
+
+        response = self.client.get(reverse('quests:submission', args=[submission.id]))
+
+        # a bound field's value is the raw pk the widget renders as selected
+        self.assertEqual(response.context['submission_form']['course'].value(), maths.pk)
+
+    def test_complete__leaves_the_course_unset_when_the_student_was_not_asked(self):
+        """A student in a single course is never asked, so their submission stays unassigned and
+        its XP is shared, which for one course is the whole of it."""
+        baker.make('courses.CourseStudent', user=self.test_student, course=baker.make('courses.Course'),
+                   block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                                draft_comment=baker.make(Comment, text='draft'), semester=self.semester)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[submission.id]),
+            data={'complete': True, 'comment_text': 'done'},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        submission.refresh_from_db()
+        self.assertIsNone(submission.course)
+
+    def test_complete__another_student_cannot_complete_someone_elses_submission(self):
+        """A student POSTing complete for another student's submission 404s and changes nothing (#2167).
+
+        Completing publishes the submission's comment and question answers as the owner and marks
+        their quest done, so a forged POST would otherwise let one student submit work in another
+        student's name.
+        """
+        other_student = User.objects.create_user('other_student')
+        self.client.force_login(other_student)
+
+        response = self.client.post(
+            reverse('quests:complete', args=[self.sub.id]),
+            data={'complete': True, 'comment_text': "not my submission"},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertFalse(self.sub.is_completed)
+        self.assertEqual(self.sub.draft_comment.text, "test draft comment")
+
+    def test_complete__staff_can_complete_another_users_submission(self):
+        """Staff are not blocked by the ownership guard, matching submission() and drop() (#2167)."""
+        self.client.force_login(self.test_teacher)
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            response = self.client.post(
+                reverse('quests:complete', args=[self.sub.id]),
+                data={'complete': True, 'comment_text': "marked on the student's behalf"},
+            )
+
+        self.assertNotEqual(response.status_code, 404)
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
 
     def test_complete__no_comment_and_not_completed_returns_404(self):
         """POSTing complete for an in-progress submission with no draft comment 404s.
@@ -944,6 +1331,91 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
         self.assertEqual(response.status_code, 404)
 
+    def custom_xp_submission(self):
+        """Return a fresh in-progress submission (with its draft comment) of a quest whose XP the
+        student enters: POSTing it without an XP value is the simplest way to fail form validation."""
+        quest = baker.make(Quest, xp=5, xp_can_be_entered_by_students=True)
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=quest, semester=self.semester)
+        sub.draft_comment = Comment.objects.create_comment(
+            user=self.test_student, path=sub.get_absolute_url(), text="", target=None)
+        sub.save()
+        return sub
+
+    def test_complete__attached_file_survives_a_failed_submit(self):
+        """A file attached alongside a missing XP value is kept, not silently dropped (#2427).
+
+        Browsers never repopulate a file input, so without saving the upload the student's file
+        vanishes on the re-render with nothing to say so, and they submit again believing the
+        file went with it.
+        """
+        sub = self.custom_xp_submission()
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        # no xp_requested, which the custom-XP form requires, so the page re-renders with errors
+        response = self.client.post(
+            reverse('quests:complete', args=[sub.id]),
+            data={'complete': True, 'comment_text': "<p>my work is attached</p>", 'attachments': upload},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        sub.refresh_from_db()
+        documents = list(sub.draft_comment.document_set.all())
+        self.assertEqual(len(documents), 1, "the attachment was dropped on re-render")
+        self.assertIn("my-work", documents[0].docfile.name)
+        # the re-rendered page lists it, so the student can see it was kept
+        self.assertContains(response, "my-work")
+        self.assertIn(
+            "Your attached file was saved, so you don't need to choose it again. "
+            "Fix the problems below and submit the quest again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__several_attached_files_survive_a_failed_submit(self):
+        """Every attachment is kept, and the notice reads for more than one file (#2427)."""
+        sub = self.custom_xp_submission()
+        uploads = [
+            SimpleUploadedFile("first-file.png", b"file_content", content_type="image/png"),
+            SimpleUploadedFile("second-file.png", b"file_content", content_type="image/png"),
+        ]
+
+        response = self.client.post(
+            reverse('quests:complete', args=[sub.id]),
+            data={'complete': True, 'comment_text': "<p>both attached</p>", 'attachments': uploads},
+        )
+
+        sub.refresh_from_db()
+        self.assertEqual(sub.draft_comment.document_set.count(), 2)
+        self.assertContains(response, "first-file")
+        self.assertContains(response, "second-file")
+        self.assertIn(
+            "Your attached files were saved, so you don't need to choose them again. "
+            "Fix the problems below and submit the quest again.",
+            [str(message) for message in get_messages(response.wsgi_request)],
+        )
+
+    def test_complete__kept_attachment_publishes_with_the_comment_on_the_retry(self):
+        """The file kept from a failed submit publishes with the comment when the student submits
+        again, without re-choosing it and without it being attached twice (#2427).
+
+        The second attempt only fixes the XP, leaving the file input empty as browsers force the
+        student to; that must neither lose the kept file nor duplicate it.
+        """
+        sub = self.custom_xp_submission()
+        url = reverse('quests:complete', args=[sub.id])
+        upload = SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png")
+
+        self.client.post(url, data={'complete': True, 'comment_text': "<p>attached</p>", 'attachments': upload})
+        sub.refresh_from_db()
+        kept_comment = sub.draft_comment
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[self.test_teacher]):
+            self.client.post(url, data={'complete': True, 'comment_text': "<p>attached</p>", 'xp_requested': 5})
+
+        sub.refresh_from_db()
+        self.assertTrue(sub.is_completed)
+        self.assertEqual(kept_comment.document_set.count(), 1)
+        self.assertIn(kept_comment, sub.get_comments())
+
     def test_skip__student_not_earning_xp_transfers_their_own_submission(self):
         """A student who is not earning XP can skip their own submission: it is approved as a transfer.
 
@@ -954,7 +1426,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         profile.not_earning_xp = True
         profile.save()
 
-        response = self.client.get(reverse('quests:skip', args=[self.sub.id]))
+        response = self.client.post(reverse('quests:skip', args=[self.sub.id]))
 
         self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
         self.sub.refresh_from_db()
@@ -1143,6 +1615,43 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
 
         self.assertErrorMessage(response)
 
+    def test_complete__empty_looking_comment_but_verification_required(self):
+        """An editor nobody typed in does not satisfy the attach-or-comment rule (#2609).
+
+        The summernote editor never posts an empty string. It posts markup, and markup is
+        truthy, so each of these reads as a real comment unless the check asks what the
+        markup renders as. On a verification-required quest that means the student completes
+        with nothing for the teacher to verify, and the teacher gets a submission whose
+        comment renders as blank space.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                response = self.post_complete(submission_comment=empty)
+
+                self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+                self.sub.refresh_from_db()
+                self.assertFalse(self.sub.is_completed)
+                self.assertErrorMessage(response)
+
+    def test_complete__comment_that_is_only_an_image_satisfies_verification(self):
+        """A comment made entirely of a pasted image is a real comment and completes.
+
+        Stripping the tags out of it leaves nothing, so an emptiness test judging on text
+        alone would bounce a student who answered "show me your work" the way the quest
+        invites. Refusing a real comment is worse for them than accepting a blank one.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+
+        response = self.post_complete(submission_comment='<p><img src="/media/screenshot.png"></p>')
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
     def test_quest_not_available__unpublished(self):
         """ If a quest is unpublished (moved to drafts) while a student's submission is
         in progress, they should not be able to complete it by entering the completion
@@ -1226,6 +1735,27 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
 
         notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
         self.assertEqual(notifications.count(), 0)
+
+    def test_complete__no_notification_for_an_empty_looking_comment(self):
+        """No teacher notification for a comment box the student typed nothing into (#2609).
+
+        On an auto-approved quest a comment is the only reason to notify a teacher, since the
+        quest never reaches the approvals tab. The editor posts markup rather than an empty
+        string, so each of these looked like a comment and sent the teacher to read one that
+        renders as blank space. Every payload here got through, the exact `<p><br></p>`
+        included: the POST path builds SubmissionQuickReplyFormStudent, whose comment_text is
+        a plain Textarea, so summernote's own empty-string handling never runs.
+        """
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                Notification.objects.all().delete()
+                self.post_complete(submission_comment=empty)
+
+                notifications = Notification.objects.all_for_user_target(self.test_teacher, self.sub)
+                self.assertEqual(notifications.count(), 0)
 
     def test_complete__specific_teacher_is_own_teacher_no_notification(self):
         """
@@ -1774,6 +2304,26 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         usernames = [entry['user'].username for entry in response.context['user_status_list']]
         self.assertEqual(usernames, [self.student1.username])
 
+    def test_quest_user_status__scope_my_blocks_spans_every_open_semester(self):
+        """A teacher's group in the deck's other open semester is still their group (#2157 Phase 3).
+        The current-students count already spans every open semester, so scoping my_blocks to the
+        deck's default alone would count a student as current and then leave them out of the group
+        their own teacher teaches."""
+        other_semester = baker.make('courses.Semester', status=Semester.Status.OPEN)
+        block = baker.make('courses.Block', current_teacher=self.staff_user)
+        self.student1.coursestudent_set.all().delete()
+        baker.make(
+            'courses.CourseStudent', user=self.student1, semester=other_semester,
+            block=block, course=baker.make('courses.Course'),
+        )
+
+        url = reverse('quests:quest_user_status', args=[self.quest.id]) + '?scope=my_blocks'
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        usernames = [entry['user'].username for entry in response.context['user_status_list']]
+        self.assertEqual(usernames, [self.student1.username])
+
     def test_quest_user_status__completed_date_and_breakdown_groups(self):
         """Approved submissions expose a completion date, and the breakdown counts each of the three
         student groups (my blocks / current / active) — issue #1973."""
@@ -1837,6 +2387,35 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['scope'], 'active')
 
+    def test_quest_user_status__export_button_shown_when_user_can_export(self):
+        """A user who may export to the Shared Library gets the export button on the status page.
+
+        This page includes the same quest button bar as the detail page, and the bar
+        asks the `can_export_to_library` tag itself, so the export button appears here
+        exactly as it does everywhere else the bar renders (issue #2536).
+        """
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertContains(response, 'Export this quest to the Library')
+
+    def test_quest_user_status__export_button_hidden_when_library_disabled(self):
+        """With the Shared Library turned off, the status page offers no export button."""
+        site_config = SiteConfig.get()
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Export this quest to the Library')
+
 
 class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     """ Tests for:
@@ -1864,6 +2443,17 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             'time_available': "14:30:59",
         }
 
+    def _make_TA(self, username='test_ta'):
+        """Create and return a TA (a student with permission to work on quest drafts).
+
+        Profiles are created automatically by a User post_save signal, so the flag goes on
+        the profile that already exists.
+        """
+        test_ta = User.objects.create_user(username)
+        test_ta.profile.is_TA = True
+        test_ta.profile.save()
+        return test_ta
+
     def test_quest_form__quick_reply_field_below_tags(self):
         """The Quick Reply Text field renders below the Tags field on the quest form (#2114)."""
         self.client.force_login(self.test_teacher)
@@ -1881,6 +2471,45 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
             response = self.client.get(url)
             self.assertContains(response, 'data-warn-unsaved')
             self.assertContains(response, 'warn-unsaved-changes.js')
+
+    def test_quest_form__manage_questions_button_links_to_the_quests_questions(self):
+        """Editing a quest offers a Manage Questions button linking to that quest's question list (#2347)."""
+        self.client.force_login(self.test_teacher)
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+
+        response = self.client.get(reverse('quests:quest_update', args=[quest.pk]))
+
+        # assert the label and the href together, so the test can't pass on a button that
+        # merely sits near an unrelated occurrence of the URL
+        questions_url = reverse('questions:list', args=[quest.pk])
+        self.assertContains(response, f'href="{questions_url}">Manage Questions</a>')
+
+    def test_quest_form__manage_questions_button_disabled_when_creating(self):
+        """On the create form there is no quest to hang questions on yet, so the button is disabled (#2347)."""
+        self.client.force_login(self.test_teacher)
+
+        content = self.client.get(reverse('quests:quest_create')).content.decode()
+
+        self.assertIn('Manage Questions', content)
+        # the disabled placeholder is a <button>, not a link to the (non-existent) quest's questions
+        self.assertIn('disabled title="You need to create this new quest first, '
+                      'before you can add submission questions."', content)
+        self.assertNotIn('/questions/quest/', content)
+
+    def test_quest_form__manage_questions_button_hidden_from_tas(self):
+        """TAs can edit their draft quests but can't manage questions (staff-only), so they don't see the button (#2347)."""
+        test_ta = User.objects.create_user('test_ta_questions')
+        test_ta.profile.is_TA = True  # profiles are created automatically via User post_save signal
+        test_ta.profile.save()
+        self.client.force_login(test_ta)
+
+        # a TA may only edit an unpublished quest they are the editor of
+        quest = Quest.objects.create(**self.minimal_valid_form_data, editor=test_ta, published=False)
+
+        content = self.client.get(reverse('quests:quest_update', args=[quest.pk])).content.decode()
+
+        self.assertNotIn('Manage Questions', content)
+        self.assertNotIn(reverse('questions:list', args=[quest.pk]), content)
 
     def test_quest_create__teacher_can_create_and_delete(self):
         """Teachers can create quests and delete both live and archived quests."""
@@ -1922,9 +2551,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_create__TA_creates_drafts_and_deletes_own(self):
         """TAs can create draft quests (as editor) and delete their own but not others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # Can access the Create view
@@ -1998,9 +2625,7 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
     def test_quest_update__ta_can_update_own_draft(self):
         """TAs can update only their own unpublished quests, not published ones or others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
-        test_ta = User.objects.create_user('test_ta')
-        test_ta.profile.is_TA = True  # profiles are create automatically via User post_save signal
-        test_ta.profile.save()
+        test_ta = self._make_TA()
         self.client.force_login(test_ta)
 
         # make a quest for us to update, use the form data so easier to track what we're updating
@@ -2065,9 +2690,133 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertEqual(len(messages), 1)
         self.assertIn(scape.name, str(messages[0]))
 
-    # TODO
-    # TAs should not be able to make a quest published
-    # When a quest is published by a teacher, the editor should be removed
+    def test_quest_create__TA_publishing_is_overridden(self):
+        """A TA who posts published (the field is on their form, only hidden) still gets a draft
+        with themselves as editor: QuestFormViewMixin.form_valid overrides both, so a hand-made
+        POST can't put a TA's quest in front of students.
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,  # and they can't hand the draft to someone else
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        new_quest = Quest.objects.latest('datetime_created')
+        self.assertRedirects(response, new_quest.get_absolute_url())
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+
+    def test_quest_update__TA_publishing_their_draft_is_overridden(self):
+        """The same override applies when a TA updates the draft they own: it stays unpublished
+        and stays theirs, so publishing remains a teacher's decision.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(test_ta)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
+
+    def test_quest_create__TA_cannot_set_the_restricted_fields_by_post(self):
+        """A TA who hand-posts the fields their form leaves off gets none of them: the new quest
+        is an ordinary draft of their own, not archived and not available outside a course (#2384).
+        """
+        test_ta = self._make_TA()
+        self.client.force_login(test_ta)
+
+        form_data = {
+            **self.minimal_valid_form_data,
+            'published': True,
+            'editor': self.test_teacher.id,
+            'archived': True,
+            'available_outside_course': True,
+        }
+        response = self.client.post(reverse('quests:quest_create'), data=form_data)
+
+        # an archived quest drops out of the default manager, so look it up either way and let
+        # the assertions below name what actually went wrong
+        new_quest = Quest.objects.all_including_archived().latest('datetime_created')
+        self.assertFalse(new_quest.published)
+        self.assertEqual(new_quest.editor, test_ta)
+        self.assertFalse(new_quest.archived)
+        self.assertFalse(new_quest.available_outside_course)
+        self.assertRedirects(response, new_quest.get_absolute_url())
+
+    def test_quest_update__TA_post_leaves_the_teachers_settings_alone(self):
+        """A TA editing a draft can't clear the settings a teacher made, whether by posting a new
+        value or by omitting the field: neither is bound to their form, so both are left alone (#2384).
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.available_outside_course = True  # a teacher's setting, absent from the TA's form
+        quest.save()
+        self.client.force_login(test_ta)
+
+        # 'available_outside_course' is omitted entirely, which for a bound BooleanField would
+        # read as False; 'archived' is posted as True to show a claimed value is ignored too.
+        form_data = {**self.minimal_valid_form_data, 'name': "Edited by the TA", 'archived': True}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertEqual(quest.name, "Edited by the TA")
+        self.assertTrue(quest.available_outside_course)
+        self.assertFalse(quest.archived)
+
+    def test_quest_update__teacher_publishing_removes_the_editor(self):
+        """When a teacher publishes a TA's draft, the TA's editor access is removed with it, so
+        they can no longer edit a quest students are now working on.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        form_data = {**self.minimal_valid_form_data, 'published': True, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertTrue(quest.published)
+        self.assertIsNone(quest.editor)
+        # and the TA has indeed lost access to it
+        self.assertFalse(quest.is_editable(test_ta))
+
+    def test_quest_update__teacher_leaving_a_quest_unpublished_keeps_the_editor(self):
+        """A teacher editing a draft without publishing it leaves the TA as editor, so the TA can
+        keep working on it.
+        """
+        test_ta = self._make_TA()
+        quest = Quest.objects.create(**self.minimal_valid_form_data)
+        quest.editor = test_ta
+        quest.published = False
+        quest.save()
+        self.client.force_login(self.test_teacher)
+
+        # 'published' is a checkbox: leaving it out of the POST is how the form says "draft"
+        form_data = {**self.minimal_valid_form_data, 'editor': test_ta.id}
+        response = self.client.post(reverse('quests:quest_update', args=[quest.pk]), data=form_data)
+
+        self.assertRedirects(response, quest.get_absolute_url())
+        quest.refresh_from_db()
+        self.assertFalse(quest.published)
+        self.assertEqual(quest.editor, test_ta)
 
     def test_quest_create__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest creation """
@@ -2166,7 +2915,10 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
     def test_post_save_button__defaults(self):
-        """ Save button should redirect to the quest detail view, no changes to form data"""
+        """Posting the prereq back unchanged saves nothing: the view redirects to the quest
+        detail page, the prereq keeps its original values, and no "Prerequisites have been
+        updated" message is shown (the has_changed() early return, issue #1980).
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2191,8 +2943,25 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
+        # nothing was saved: the same single prereq, with the values it started with
+        prereqs = self.parent_quest.prereqs()
+        self.assertEqual(prereqs.count(), 1)
+        unchanged_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(unchanged_prereq.prereq_object, self.prereq_quest)
+        self.assertEqual(unchanged_prereq.prereq_count, 1)
+        # the alternate (OR) half is still empty, as add_simple_prereqs left it: the form posts
+        # or_prereq_count but no or_prereq_object, so a save would be free to write to these
+        self.assertIsNone(unchanged_prereq.or_prereq_object)
+        self.assertEqual(unchanged_prereq.or_prereq_count, 1)
+
+        # and the teacher isn't told anything was updated
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertFalse(any("Prerequisites have been updated" in m for m in messages))
+
     def test_post_save_button__delete(self):
-        """ Flag the prereq for deletion by setting the DELETE field to true"""
+        """Flagging the prereq for deletion (DELETE field true) removes it: the quest is left
+        with no prerequisites and the Prereq row is gone from the database.
+        """
         self.client.force_login(self.test_teacher)
 
         ct = ContentType.objects.get_for_model(self.prereq_quest)
@@ -2218,11 +2987,15 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         # If get 200 then means probably a form is invalid.
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
 
-        # TODO should no longer have the prereq.. but this doesn't work for some reason....
-        # self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        # the prereq was deleted, so the quest has none left
+        self.assertEqual(self.parent_quest.prereqs().count(), 0)
+        self.assertFalse(Prereq.objects.filter(pk=self.existing_prereq.pk).exists())
 
     def test_post_save_button__new_values(self):
-        """ New prereq data in form should change the prereqs for the parent quest."""
+        """New prereq data in the form changes the parent quest's prereqs: the existing row is
+        updated in place to point at a different quest (with a new count), and the extra form
+        adds a second prereq.
+        """
         self.client.force_login(self.test_teacher)
         new_quest = baker.make(Quest, name="New Quest")
         new_quest_2 = baker.make(Quest, name="New Quest 2")
@@ -2261,10 +3034,17 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         prereqs = self.parent_quest.prereqs()
         self.assertEqual(prereqs.count(), 2)
 
-        # TODO For some reason the original prereq is not getting replaced by the first form in the formset.
-        # print(prereqs)
-        # self.assertEqual(prereqs[0].prereq_object, new_quest)
-        # self.assertEqual(prereqs[1].prereq_object, new_quest_2)
+        # the first form edited the existing prereq row rather than adding another one, so it
+        # now requires new_quest (3 times) instead of the prereq_quest it was created with.
+        # Looked up by pk because prereqs() is unordered.
+        updated_prereq = prereqs.get(pk=self.existing_prereq.pk)
+        self.assertEqual(updated_prereq.prereq_object, new_quest)
+        self.assertEqual(updated_prereq.prereq_count, 3)
+
+        # the second (extra) form added the other quest as a new prereq
+        added_prereq = prereqs.exclude(pk=self.existing_prereq.pk).get()
+        self.assertEqual(added_prereq.prereq_object, new_quest_2)
+        self.assertEqual(added_prereq.prereq_count, 1)
 
     def _changed_formset_data(self):
         """Build POST data that changes the existing prereq (prereq_count 1 -> 3) so
@@ -2322,8 +3102,8 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(any('being updated' in m and scape.name in m for m in messages))
 
-        # TODO doesn't work.  Only one new prereq was added, the second one.  The first didn't change from original value.... WHY?!
-        # self.assertEqual(Prereq.objects.count(), old_num_prereqs + 2)
+        # the edit itself was saved: the same prereq row, with its new count
+        self.assertEqual(self.parent_quest.prereqs().get(pk=self.existing_prereq.pk).prereq_count, 3)
 
 
 class QuestCopyViewTest(ByteDeckTenantTestCase):
@@ -2576,6 +3356,31 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         cls.other_student = User.objects.create_user('other_student')
         cls.quest = baker.make(Quest)
 
+    def test_hide__escapes_markup_in_the_quest_name(self):
+        """A quest name carrying markup reaches the message as text, not as markup.
+
+        Messages are rendered as HTML when they are built safely, so a name interpolated
+        into one has to be escaped on the way in or it becomes part of the page (#2498).
+        """
+        self.quest.name = "<script>alert(1)</script>"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertNotContains(response, "<script>alert(1)</script>")
+        self.assertContains(response, "&lt;script&gt;alert(1)&lt;/script&gt;")
+
+    def test_hide__keeps_the_messages_own_markup(self):
+        """Escaping the name must not also escape the emphasis the message adds."""
+        self.quest.name = "A Quest To Hide"
+        self.quest.save()
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
+
+        self.assertContains(response, "<strong>A Quest To Hide</strong>")
+
     def test_hide__adds_the_quest_to_the_students_hidden_list(self):
         """Hiding a quest hides it for that student and sends them back to their quests page."""
         self.client.force_login(self.test_student)
@@ -2699,11 +3504,30 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
             QuestSubmission, user=cls.transfer_student, quest=cls.quest, semester=cls.semester,
         )
 
+    def test_skip__get_is_rejected_and_leaves_the_submission_unapproved(self):
+        """Skipping approves a submission outright, so it must not happen on a GET: a teacher
+        following a link, or a page with an <img> pointing here, would otherwise approve a
+        student's quest for them (#2383)."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('quests:skip', args=[self.submission.pk])
+
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_approved)
+
+    def test_skip_for_quest__get_is_rejected_and_starts_nothing(self):
+        """The same for the url that starts the quest before approving it: nothing is created."""
+        self.client.force_login(self.test_teacher)
+
+        self.assert405('quests:skip_for_quest', args=[self.quest.pk])
+
+        self.assertFalse(QuestSubmission.objects.filter(user=self.test_teacher, quest=self.quest).exists())
+
     def test_skip__teacher_approves_the_submission_as_a_transfer(self):
         """A teacher skipping a submission marks it completed and approved, and back to the approvals queue."""
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('quests:skip', args=[self.submission.pk]))
+        response = self.client.post(reverse('quests:skip', args=[self.submission.pk]))
 
         self.assertRedirects(response, reverse('quests:approvals'), fetch_redirect_response=False)
         self.submission.refresh_from_db()
@@ -2711,12 +3535,34 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_approved)
         self.assertSuccessMessage(response)
 
+    def test_skip__keeps_the_students_draft_comment(self):
+        """Skipping leaves the student's unsubmitted draft comment on the submission (#2431).
+
+        Completing a quest publishes the draft comment, which is why marking a submission
+        completed clears it. Skipping publishes nothing, so clearing it would put the row beyond
+        reach and empty the student's comment box, even though a transferred quest can still be
+        commented on.
+        """
+        draft = Comment.objects.create_comment(
+            user=self.transfer_student, path=self.submission.get_absolute_url(),
+            text="half-written, not sent yet", target=None)
+        self.submission.draft_comment = draft
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+
+        self.client.post(reverse('quests:skip', args=[self.submission.pk]))
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_approved)
+        self.assertEqual(self.submission.draft_comment, draft)
+        self.assertEqual(self.submission.draft_comment.text, "half-written, not sent yet")
+
     def test_skip__grants_the_student_no_xp(self):
         """The point of skipping: the quest is approved, but its XP is not added to the student's total."""
         self.client.force_login(self.test_teacher)
         xp_before = self.transfer_student.profile.xp_cached
 
-        self.client.get(reverse('quests:skip', args=[self.submission.pk]))
+        self.client.post(reverse('quests:skip', args=[self.submission.pk]))
 
         self.submission.refresh_from_db()
         self.assertTrue(self.submission.do_not_grant_xp)
@@ -2731,7 +3577,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         """
         self.client.force_login(self.transfer_student)
 
-        self.assert404('quests:skip', args=[self.submission.pk])
+        self.assertEqual(self.client.post(reverse('quests:skip', args=[self.submission.pk])).status_code, 404)
 
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_approved)
@@ -2744,7 +3590,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student)
         self.assertFalse(QuestSubmission.objects.filter(user=self.test_student, quest=self.quest).exists())
 
-        response = self.client.get(reverse('quests:skip_for_quest', args=[self.quest.pk]))
+        response = self.client.post(reverse('quests:skip_for_quest', args=[self.quest.pk]))
 
         self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
         submission = QuestSubmission.objects.get(user=self.test_student, quest=self.quest)
@@ -2755,7 +3601,7 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         """A skip url for a missing quest 404s rather than creating a submission for nothing."""
         self.client.force_login(self.test_teacher)
 
-        self.assert404('quests:skip_for_quest', args=[0])
+        self.assertEqual(self.client.post(reverse('quests:skip_for_quest', args=[0])).status_code, 404)
 
         self.assertFalse(QuestSubmission.objects.filter(user=self.test_teacher).exists())
 
@@ -2808,6 +3654,47 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         # should now see the quest
         self.assertContains(response, f'id="heading-quest-{self.quest1.id}')
 
+    def test_quest_list__default_order_is_sort_order_then_expired_then_name(self):
+        """A quest tab comes up in the teacher's manual order, expired first, then by name (#2623).
+
+        Each key earns its place: `sort_order` is the manual ordering a teacher sets on the
+        quest form, so nothing may override it; expired quests are the ones needing attention,
+        so they group ahead of the rest; and the name settles everything else, which is what
+        makes the bulk of a deck read alphabetically since almost every quest is `sort_order` 0.
+
+        Two of the names cut against the key that decides their place, so dropping that key
+        reorders the list: "Aardvark" would lead on name alone, and its `sort_order` sends it
+        last; "Zulu" would trail on name alone, and being expired brings it first. "Alpha" and
+        "Bravo" tie on both of those, so the name is the only thing separating them.
+        """
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Aardvark", sort_order=9)
+        baker.make(Quest, name="Zulu", date_expired=date(2020, 1, 1))  # in the past: expired
+        baker.make(Quest, name="Bravo", date_expired=date(2030, 1, 1))  # in the future: not yet
+        baker.make(Quest, name="Alpha")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(
+            [quest.name for quest in response.context['quests']], ["Zulu", "Alpha", "Bravo", "Aardvark"])
+        # no single heading owns this order, so none of them claims to
+        self.assertEqual(response.context['quest_sort_column'], '')
+        self.assertFalse(response.context['quest_sort_descending'])
+
+    def test_quest_list__a_chosen_sort_still_wins_over_the_default(self):
+        """Clicking a column heading orders by it, so the default is only a starting point."""
+        Quest.objects.all().delete()
+        baker.make(Quest, name="Alpha", xp=30)
+        baker.make(Quest, name="Bravo", xp=10)
+        baker.make(Quest, name="Charlie", xp=20)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quests'), {'sort': 'xp'})
+
+        self.assertEqual([quest.name for quest in response.context['quests']], ["Bravo", "Charlie", "Alpha"])
+        self.assertEqual(response.context['quest_sort_column'], 'xp')
+
     def test_quest_list__student_sees_quests_available_outside_course(self):
         """A quest flagged available_outside_course appears for a student not in a course."""
         self.client.force_login(self.test_student)
@@ -2824,7 +3711,12 @@ class QuestListViewTest(ByteDeckTenantTestCase):
         self.client.force_login(self.test_student)
 
         # a returned submission (completed once, then sent back by a teacher):
-        # is_completed is False but time_completed is set, so is_returned() is True
+        # is_completed is False but time_completed is set, so is_returned() is True.
+        # Registered in the semester it names, or their in-progress tab is not scoped to it
+        baker.make(
+            'courses.CourseStudent', user=self.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
         returned_sub = baker.make(
             QuestSubmission,
             user=self.test_student,
@@ -3233,9 +4125,11 @@ class CategoryViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(before, after)
         self.assertTrue(Category.objects.filter(id=race_campaign.id).exists())
+        # The apostrophe is left out of the needle: messages are escaped now, so it arrives
+        # as an entity. What is asserted is the part that identifies the message.
         self.assertContains(
             response,
-            "You can't delete this campaign because it contains published quests"
+            "delete this campaign because it contains published quests",
         )
 
     def test_CategoryPublish_view__publishes_campaign_and_quests(self):
@@ -3355,6 +4249,119 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:categories'))
         self.assertNotContains(response, reverse('quests:category_publish', args=[published_campaign.id]))
 
+    def test_CategoryList_view__lists_campaigns_in_alphabetical_order(self):
+        """The campaign list comes up sorted by title (#2624).
+
+        The list annotates a quest count and an XP sum, and an aggregate annotation groups the
+        query, for which Django emits no ORDER BY at all: `Category.Meta.ordering` is dropped
+        and the database returns the rows however it finds them. These are created in an order
+        that is not alphabetical, so a queryset that lost its ordering fails this.
+        """
+        for title in ("Zebra Robotics", "Intro to Python", "Animation", "Music Production"):
+            baker.make(Category, title=title, published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        titles = [campaign.title for campaign in response.context['object_list']]
+        self.assertEqual(titles, sorted(titles))
+
+    def test_CategoryList_view__loads_the_bootstrap_table_stylesheet(self):
+        """The campaigns page keeps the stylesheet its table is styled by (#2624).
+
+        The page used to blank the `head` block it inherits, which is where
+        `quest_manager/base.html` loads bootstrap-table's CSS. Without it the headings carry
+        the sortable classes but nothing draws the arrow or reserves room for it, so the table
+        offered a sort with no way to see which column it was on.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, 'bootstrap-table-1.20.2.min.css')
+
+    def test_CategoryList_view__table_names_the_column_it_is_sorted_by(self):
+        """The campaigns table declares its default sort, so a heading shows the arrow (#2624)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertContains(response, "data-sort-name='title'")
+        self.assertContains(response, "data-sort-order='asc'")
+
+    def test_CategoryList_view__shows_the_decks_own_campaign_actions(self):
+        """The deck's campaign list offers the local actions (details, edit, delete), not the
+        Library's import action, and doesn't carry the Library's introductory blurb.
+
+        This page and the Library's campaign list share
+        `quest_manager/tab_campaigns_list.html`, which tells them apart by the
+        `is_library_view` context flag, so this guards the flag being set here (issue #2380).
+        """
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        self.assertFalse(response.context['is_library_view'])
+        self.assertContains(response, reverse('quests:category_update', args=[campaign.id]))
+        self.assertContains(response, 'Edit this campaign')
+        # the Library's import action and its blurb belong to the Library's copy of this table
+        self.assertNotContains(response, 'Import this Campaign into your Deck')
+        self.assertNotContains(response, 'EXPERIMENTAL!')
+
+    def test_CategoryList_view__export_button_follows_export_permission(self):
+        """The campaign list renders each campaign's Library export button only for a user
+        who may export.
+
+        The campaign table asks the `can_export_to_library` tag itself (issue #2536),
+        and this guards the table's copy of the button.
+        """
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertContains(response, 'Export this Campaign to the Library')
+
+        # with the Shared Library off nobody may export, so the button goes away
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:categories'))
+        self.assertNotContains(response, 'Export this Campaign to the Library')
+
+    def test_CategoryDetail_view__export_button_follows_export_permission(self):
+        """The campaign detail page renders its Library export button only for a user who
+        may export, via the same `can_export_to_library` tag as the campaign list (issue #2536)."""
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, campaign=campaign, published=True)
+        self.client.force_login(self.test_teacher)
+
+        site_config = SiteConfig.get()
+        site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertContains(response, 'Export this Campaign to the Library')
+
+        # with the Shared Library off nobody may export, so the button goes away
+        site_config.enable_shared_library = False
+        site_config.full_clean()
+        site_config.save()
+
+        response = self.client.get(reverse('quests:category_detail', args=[campaign.id]))
+        self.assertNotContains(response, 'Export this Campaign to the Library')
+
     def test_CategoryDetail_view__staff_see_unpublished_quests_of_unpublished_campaign(self):
         """Staff must see a campaign's unpublished quests on the campaign detail page
         regardless of whether the campaign itself is published; only archived quests
@@ -3372,6 +4379,32 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertIn(published_quest, displayed_quests)
         self.assertIn(unpublished_quest, displayed_quests)
         self.assertNotIn(archived_quest, displayed_quests)
+
+
+    def test_CategoryPublish__message_links_to_the_published_campaign(self):
+        """The publish message names the campaign as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        campaign = baker.make(Category, title='Robotics', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{campaign.get_absolute_url()}">Robotics</a>')
+
+    def test_CategoryPublish__escapes_markup_in_the_campaigns_title(self):
+        """A campaign whose title contains markup is named as text in the publish message (#2498)."""
+        campaign = baker.make(Category, title='Robotics <script>alert(1)</script>', published=False)
+        baker.make(Quest, campaign=campaign, published=False)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('quests:category_publish', args=[campaign.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
 
 
 class AjaxSubmissionCountTest(ByteDeckTenantTestCase):
@@ -3560,6 +4593,7 @@ class AjaxQuestInfoTest(ByteDeckTenantTestCase):
         """
         site_config = SiteConfig.get()
         site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
         site_config.full_clean()
         site_config.save()
         self.client.force_login(self.test_teacher)
@@ -3713,8 +4747,15 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """Create a student, a quest, and one of the student's submissions shared across the tests."""
+        """Create a student registered in the deck's semester, a quest, and one of the
+        student's submissions shared across the tests."""
         cls.test_student = User.objects.create_user('test_student')
+        # the registration is what makes the deck's semester theirs, so a submission stamped
+        # with it reads as current work and one from another semester reads as past
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=SiteConfig.get().active_semester,
+        )
         cls.quest = baker.make(Quest)
         cls.submission = baker.make(QuestSubmission, user=cls.test_student)
         # cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
@@ -3804,12 +4845,15 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
         url(r'^ajax_submission_info/(?P<submission_id>[0-9]+)/past/$', views.ajax_submission_info, name='ajax_info_past')
         """
         self.submission.mark_completed()
+        # a term the student has behind them, which is what "past" means: their current
+        # semester comes from their registration, and this is not it
+        self.submission.semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        self.submission.save()
         response = self.client.post(
             reverse('quests:ajax_info_past', args=[self.submission.id]),
             content_type='application/json',
             HTTP_X_REQUESTED_WITH='XMLHttpRequest'
         )
-        # Submission is NOT in current semester (cus setUp doesn't put it there)
         self.assertEqual(response.status_code, 200)
 
         # Check context variables
@@ -3843,6 +4887,38 @@ class AjaxSubmissionInfoTest(ByteDeckTenantTestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, reverse('quests:quest_copy', args=[self.submission.quest.id]))
+
+    def test_ajax_submission_info__student_cannot_fetch_another_students_submission(self):
+        """A regular student requesting another student's in-progress submission gets a 404 (#2558).
+
+        The in-progress preview is scoped to the requester unless they are staff or a TA, so a regular
+        student cannot read another student's answers and comment thread by posting someone else's id.
+        """
+        # setUp logs in test_student (a regular, non-TA student); other_submission belongs to a different student
+        other_student = User.objects.create_user('other_student')
+        other_submission = baker.make(QuestSubmission, user=other_student)
+
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[other_submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_ajax_submission_info__staff_can_fetch_another_students_submission(self):
+        """Staff may still preview any student's in-progress submission (#2558)."""
+        teacher = User.objects.create_user('test_teacher', is_staff=True)
+        self.client.force_login(teacher)
+
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['s'], self.submission)
 
 
 class AjaxFlagTest(ByteDeckTenantTestCase):
@@ -3966,32 +5042,30 @@ class DetailViewTest(ByteDeckTenantTestCase):
         # Should redirect them to the submission's page
         self.assertRedirects(response, reverse('quests:submission', args=[sub.id]))
 
-    def test_detail__can_export_context(self):
-        """
-        Verify 'can_export' context variable is correctly set in quest detail view
-        for staff and students, and that it is disabled in the library schema.
+    def test_detail__export_button_follows_export_permission(self):
+        """The detail page renders the Library export button for a user who may export,
+        and not for one who may not.
+
+        The button bar asks the `can_export_to_library` template tag itself (issue
+        #2536), so this exercises the tag through a full page render.
         """
         # Make a staff user
         self.client.force_login(self.test_teacher)
 
         site_config = SiteConfig.get()
         site_config.allow_staff_export = True
+        site_config.enable_shared_library = True
         site_config.full_clean()
         site_config.save()
 
-        # Staff user in a normal tenant schema
+        # Staff user in a normal tenant schema, with staff export allowed
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
+        self.assertContains(response, 'Export this quest to the Library')
 
-        # Should be in the context
-        self.assertIn('can_export', response.context)
-
-        # Since staff and export allowed, should be True
-        self.assertTrue(response.context['can_export'])
-
-        # Now test as normal student
+        # A student may not export, so they get no export button
         self.client.force_login(self.test_student)
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
-        self.assertFalse(response.context['can_export'])
+        self.assertNotContains(response, 'Export this quest to the Library')
 
 
 class ApproveViewTest(ByteDeckTenantTestCase):
@@ -4177,6 +5251,48 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
+
+    def test_approve__empty_looking_comment_uses_default_text(self):
+        """An editor the teacher typed nothing into gets the default text too (#2609).
+
+        The editor posts markup rather than an empty string, so without asking what that
+        markup renders as, a teacher who clicked into the box and pressed space or enter
+        stores that markup as their approval comment. The student then sees an approval
+        whose comment is blank space instead of the deck's configured wording.
+        """
+        from comments.models import Comment
+
+        for empty in ("<p><br></p>", "<p></p>", "<p> </p>", "<p>&nbsp;</p>", "<p><br></p><p><br></p>"):
+            with self.subTest(comment=empty):
+                # a fresh quest each time: only one in-progress submission per quest per
+                # student is allowed, so reusing one would trip that unique constraint
+                sub = baker.make(QuestSubmission, quest=baker.make(Quest), user=self.test_student)
+                self.client.post(
+                    reverse('quests:approve', args=[sub.id]),
+                    data={'comment_text': empty, 'approve_button': True},
+                )
+
+                comments = Comment.objects.all_with_target_object(sub)
+                self.assertEqual(comments.count(), 1)
+                self.assertEqual(comments.first().text, f"<p>{SiteConfig.get().blank_approval_text}</p>")
+
+    def test_approve__comment_that_is_only_an_image_is_kept(self):
+        """An approval comment made entirely of a pasted image is kept, not replaced.
+
+        Stripping its tags leaves nothing, so an emptiness test judging on text alone would
+        throw away a teacher's screenshot and substitute the default wording.
+        """
+        from comments.models import Comment
+
+        image_comment = '<p><img src="/media/marked-up-work.png"></p>'
+        self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_text': image_comment, 'approve_button': True},
+        )
+
+        comments = Comment.objects.all_with_target_object(self.sub)
+        self.assertEqual(comments.count(), 1)
+        self.assertIn("marked-up-work.png", comments.first().text)
 
     def test_approve__with_multiple_badges_staff_form(self):
         """ Test that multiple badges can be granted from the SubmissionFormStaff form"""
@@ -4384,6 +5500,527 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class QuestTabListingTests(ByteDeckTenantTestCase):
+    """The available, drafts and archived tabs are read a page at a time.
+
+    Searching and ordering happen in the database, so each covers every quest in the tab
+    rather than the page that was sent to the browser. A deck with a few hundred quests
+    costs one page of rendering per request.
+    """
+
+    #: More quests than `paginate`'s default page, so the list spills onto a second page.
+    QUEST_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Publish a tab's worth of quests whose names and XP run opposite ways.
+
+        Named so they sort into creation order and given XP that climbs with the name, so
+        the highest-XP quests are exactly the ones the default order leaves on page two.
+        """
+        cls.teacher = User.objects.create_user('tab_listing_teacher', is_staff=True)
+        cls.campaign = baker.make('quest_manager.Category', title='Aardvark Campaign')
+
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(cls.QUEST_COUNT):
+            baker.make(Quest, name=f'Zsort quest {i:02d}', xp=i, campaign=cls.campaign)
+
+    def setUp(self):
+        """Sign the teacher in: the available tab shows every published quest to staff."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name='quests:quests', **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        return [quest.name for quest in response.context['quests']]
+
+    def test_quest_list__the_available_tab_sends_one_page_of_quests(self):
+        """The tab carries a page rather than every quest the deck has published."""
+        response = self.client.get(reverse('quests:quests'))
+
+        page = response.context['quests']
+        self.assertEqual(len(page), 30)
+        self.assertGreater(page.paginator.count, 30)
+        self.assertContains(response, 'page=2')
+
+    def test_quest_list__searching_finds_a_quest_that_is_not_on_this_page(self):
+        """The search covers the whole tab, so it reaches page two.
+
+        A match on a later page is exactly what a search confined to the rendered rows
+        cannot find, and the reader is told there is nothing rather than which page to try.
+        """
+        last = f'Zsort quest {self.QUEST_COUNT - 1:02d}'
+        self.assertNotIn(last, self._names())
+
+        self.assertEqual(self._names(q=last), [last])
+
+    def test_quest_list__searching_matches_name_campaign_and_tag(self):
+        """A quest matches on its own name, its campaign's title, or one of its tags."""
+        tagged = baker.make(Quest, name='Recursion base cases', campaign=self.campaign)
+        tagged.tags.add('python')
+
+        self.assertIn('Recursion base cases', self._names(q='Recursion'))
+        self.assertIn('Recursion base cases', self._names(q='python'))
+        self.assertIn('Recursion base cases', self._names(q='Aardvark'))
+        # Every word has to match something, though not all the same thing
+        self.assertIn('Recursion base cases', self._names(q='recursion python'))
+        self.assertNotIn('Recursion base cases', self._names(q='recursion ruby'))
+
+    def test_quest_list__sorting_reaches_quests_that_are_not_on_the_current_page(self):
+        """Ordering by XP brings the tab's highest-XP quests onto the first page."""
+        default_first_page = self._names()
+        highest_xp_first = self._names(sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_quest_list__a_search_and_a_sort_apply_together(self):
+        """Ordering a search reorders its results rather than dropping the search."""
+        names = self._names(q='Zsort', sort='-xp')
+
+        self.assertEqual(names[0], f'Zsort quest {self.QUEST_COUNT - 1:02d}')
+        for name in names:
+            self.assertTrue(name.startswith('Zsort quest'), f'{name} is not one of the searched-for quests')
+
+    def test_quest_list__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
+        default_order = self._names()
+
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('quests:quests'), {'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([q.name for q in response.context['quests']], default_order)
+                self.assertEqual(response.context['quest_sort_column'], '')
+
+    def test_quest_list__the_table_carries_no_client_side_search_or_sort(self):
+        """The tab's searching and ordering are the server's, so the table asks for neither.
+
+        bootstrap-table would filter and reorder the rows it holds, which is one page, and
+        answer a narrower question than the control appears to ask.
+        """
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertNotContains(response, 'data-sortable="true"')
+        self.assertNotContains(response, 'data-custom-search="multiKeywordSearch"')
+        self.assertContains(response, 'name="q"')
+
+    def test_quest_list__the_drafts_and_archived_tabs_are_paginated_and_searchable(self):
+        """The other two quest tabs get the same treatment, since they share the template."""
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(self.QUEST_COUNT):
+            baker.make(Quest, name=f'Zdraft quest {i:02d}', published=False)
+
+        for url_name in ('quests:drafts', 'quests:archived'):
+            with self.subTest(tab=url_name):
+                response = self.client.get(reverse(url_name))
+
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, 'name="q"')
+
+        drafts = self._names('quests:drafts')
+        self.assertEqual(len(drafts), 30)
+        self.assertEqual(self._names('quests:drafts', q='Zdraft quest 34'), ['Zdraft quest 34'])
+
+    def test_quest_list__the_badge_count_reports_the_tab_not_the_search(self):
+        """The tab's badge keeps counting what the tab holds while a search narrows it.
+
+        A count that moved with the search would leave the reader unable to tell how much
+        the tab has without clearing what they typed.
+        """
+        # The deck is seeded with quests of its own, so the badge is measured rather than
+        # assumed: what matters is that searching does not move it
+        unsearched = self.client.get(reverse('quests:quests'))
+        searched = self.client.get(reverse('quests:quests'), {'q': 'Zsort quest 00'})
+
+        self.assertEqual(searched.context['num_available'], unsearched.context['num_available'])
+        self.assertEqual(searched.context['num_matching_quests'], 1)
+        self.assertGreater(searched.context['num_available'], 1)
+
+
+class SubmissionTabSortTests(ByteDeckTenantTestCase):
+    """The approvals and submissions tabs order the whole tab, not one page of it.
+
+    Both are paginated, so the browser holds a page rather than the list. A sort applied
+    there answers a question about that page: which of these thirty was handed in first,
+    rather than which submission in the queue was (#2582).
+    """
+
+    #: More submissions than `paginate`'s default page, so the list spills onto a second page.
+    SUBMISSION_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Hand in one submission per quest, each a minute earlier than the last.
+
+        The queue's own order is newest first, so the oldest submissions are the ones left
+        on page two. XP climbs with age, which puts the highest-XP submissions there too:
+        a sort that only reached the current page could not bring them forward.
+        """
+        cls.teacher = User.objects.create_user('sort_tab_teacher', is_staff=True)
+        cls.student = User.objects.create_user('sort_tab_student')
+        semester = SiteConfig.get().active_semester
+
+        cls.campaign_a = baker.make('quest_manager.Category', title='Aardvark Campaign')
+        cls.campaign_z = baker.make('quest_manager.Category', title='Zebra Campaign')
+        # all_completed() reads the student's own registration, so their completed tab is
+        # empty without one however many submissions they have
+        baker.make('courses.CourseStudent', user=cls.student, semester=semester)
+
+        cls.submissions = []
+        for i in range(cls.SUBMISSION_COUNT):
+            quest = baker.make(
+                Quest,
+                name=f'Zsort quest {i:02d}',
+                # From 5 up, so a skipped submission's 0 and a small requested amount
+                # are both below every quest here rather than tying with one
+                xp=i + 5,
+                campaign=cls.campaign_a if i % 2 else cls.campaign_z,
+            )
+            cls.submissions.append(baker.make(
+                QuestSubmission,
+                quest=quest,
+                user=cls.student,
+                semester=semester,
+                is_completed=True,
+                is_approved=False,
+                time_completed=timezone.now() - timedelta(minutes=i),
+            ))
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name, **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.quest.name for submission in tab['submissions']]
+
+    def test_approvals__sorting_reaches_submissions_that_are_not_on_the_current_page(self):
+        """Sorting by XP brings the queue's highest-XP submissions onto the first page.
+
+        Those sit on page two in the default order, so a sort confined to the rows the
+        browser holds could never surface them.
+        """
+        default_first_page = self._names('quests:submitted_all')
+        highest_xp_first = self._names('quests:submitted_all', sort='-xp')
+
+        self.assertEqual(highest_xp_first[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+        self.assertNotIn(highest_xp_first[0], default_first_page)
+
+    def test_approvals__a_sort_applies_ascending_and_reverses_with_a_leading_minus(self):
+        """`?sort=name` runs A to Z and `?sort=-name` runs the other way."""
+        ascending = self._names('quests:submitted_all', sort='name')
+        descending = self._names('quests:submitted_all', sort='-name')
+
+        self.assertEqual(ascending[0], 'Zsort quest 00')
+        self.assertEqual(descending[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+
+    def test_approvals__sorting_by_status_orders_by_the_time_the_column_shows(self):
+        """The Status column shows when a submission was handed in, and sorts by that.
+
+        The fixture hands each one in a minute earlier than the last, so ordering by status
+        ascending puts the oldest first, which is the order a teacher works a queue in.
+        """
+        oldest_first = self._names('quests:submitted_all', sort='status')
+
+        self.assertEqual(oldest_first[0], f'Zsort quest {self.SUBMISSION_COUNT - 1:02d}')
+
+    def test_approvals__the_in_progress_tab_offers_no_sort_by_status(self):
+        """In progress submissions show no time under Status, so it is not a sort link.
+
+        Offering it would move nothing while still looking like a control that works.
+        """
+        response = self.client.get(reverse('quests:in_progress'))
+
+        self.assertNotIn('status', response.context['sortable_columns'])
+        self.assertNotContains(response, 'sort=status')
+
+    def test_approvals__the_many_valued_columns_are_not_sort_links(self):
+        """A submission's blocks have no single value to order by, so that column is plain.
+
+        The same reasoning the Library's quests tab applied to its tags (#2410).
+        """
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotIn('group_name', response.context['sortable_columns'])
+        self.assertNotContains(response, 'sort=group_name')
+        # bootstrap-table's own sort would reorder the page underneath the links
+        self.assertNotContains(response, 'data-sortable="true"')
+
+    def test_approvals__a_column_this_tab_does_not_offer_is_ignored(self):
+        """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
+        default_order = self._names('quests:submitted_all')
+
+        for unknown in ('group_name', 'nonsense', 'name; drop table', '-'):
+            with self.subTest(sort=unknown):
+                response = self.client.get(reverse('quests:submitted_all'), {'sort': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(self._names('quests:submitted_all', sort=unknown), default_order)
+                self.assertEqual(response.context['sort_column'], '')
+                self.assertFalse(response.context['sort_descending'])
+
+    def test_approvals__a_skipped_submission_sorts_by_the_zero_it_shows(self):
+        """A skipped submission grants no XP and shows 0, so it sorts as 0, not as its quest's XP.
+
+        Its quest is worth more than any other here, so ordering by `quest__xp` would put
+        it last ascending, while the reader is looking at a 0 in that cell.
+        """
+        rich_quest = baker.make(Quest, name='Zsort skipped quest', xp=999)
+        baker.make(
+            QuestSubmission, quest=rich_quest, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, do_not_grant_xp=True,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort skipped quest')
+
+    def test_approvals__a_student_entered_xp_submission_sorts_by_what_was_requested(self):
+        """A quest whose XP the student enters sorts by the requested amount it shows.
+
+        The quest is worth 999 but the student asked for 1, and 1 is what the cell shows.
+        """
+        student_priced = baker.make(
+            Quest, name='Zsort requested quest', xp=999, xp_can_be_entered_by_students=True,
+        )
+        baker.make(
+            QuestSubmission, quest=student_priced, user=self.student,
+            semester=SiteConfig.get().active_semester,
+            is_completed=True, is_approved=False, xp_requested=1,
+            time_completed=timezone.now(),
+        )
+
+        lowest_xp_first = self._names('quests:submitted_all', sort='xp')
+        highest_xp_first = self._names('quests:submitted_all', sort='-xp')
+
+        self.assertEqual(lowest_xp_first[0], 'Zsort requested quest')
+        self.assertNotEqual(highest_xp_first[0], 'Zsort requested quest')
+
+    def test_approvals__the_headings_link_to_the_server_and_start_a_new_first_page(self):
+        """A heading is a link carrying `sort=`, and drops the page it was clicked from.
+
+        Page 2 of a queue by name holds different submissions than page 2 of it by XP.
+        """
+        response = self.client.get(reverse('quests:submitted_all'), {'page': 2})
+
+        self.assertContains(response, 'sort=xp')
+        self.assertNotContains(response, 'sort=xp&amp;page=2')
+
+    def test_quest_list__the_completed_tab_sorts_by_campaign(self):
+        """A student's own submissions tab sorts on the server too, campaign included."""
+        self.client.force_login(self.student)
+        for submission in self.submissions:
+            QuestSubmission.objects.filter(pk=submission.pk).update(is_approved=True)
+
+        response = self.client.get(reverse('quests:completed'), {'sort': 'campaign'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['sort_column'], 'campaign')
+        campaigns = [s.quest.campaign.title for s in response.context['completed_submissions']]
+        # Asserted non-empty: an ordering check passes vacuously on an empty tab
+        self.assertGreater(len(campaigns), 1)
+        self.assertEqual(campaigns, sorted(campaigns))
+
+    def test_quest_list__a_tab_that_is_not_paginated_offers_no_sort(self):
+        """The available tab's headings stay plain until that tab is paginated too.
+
+        Its list is sent whole, so its client-side sort still reaches every row it holds.
+        """
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('quests:quests'))
+
+        self.assertEqual(response.context['sortable_columns'], {})
+        self.assertEqual(response.context['sort_column'], '')
+
+
+class SubmissionTabSearchTests(ByteDeckTenantTestCase):
+    """The approvals and submissions tabs search the whole tab, not the page on screen.
+
+    Each searches what its own columns show: the approvals tabs name the student, and the
+    submissions tabs name the campaign and tags. A match the reader cannot see in any
+    column would look like the list ignoring what they typed (#2597).
+    """
+
+    #: More submissions than `paginate`'s default page, so a match can sit on page two.
+    SUBMISSION_COUNT = 35
+
+    @classmethod
+    def setUpTestData(cls):
+        """Fill a queue with submissions, and put one distinctive student at the end of it.
+
+        The queue runs newest first, so the student handed in longest ago is on page two:
+        a search confined to the rendered rows could not reach them.
+        """
+        cls.teacher = User.objects.create_user('search_tab_teacher', is_staff=True)
+        cls.filler_student = User.objects.create_user('search_tab_filler')
+        semester = SiteConfig.get().active_semester
+        now = timezone.now()
+
+        cls.campaign = baker.make('quest_manager.Category', title='Cartography Campaign')
+
+        # Quest.name is unique, so these can't be made in one _quantity call
+        for i in range(cls.SUBMISSION_COUNT):
+            quest = baker.make(Quest, name=f'Zfiller quest {i:02d}', campaign=cls.campaign)
+            baker.make(
+                QuestSubmission, quest=quest, user=cls.filler_student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=now - timedelta(minutes=i),
+            )
+
+        # Last in, so oldest, so on the far side of the first page
+        cls.needle_student = User.objects.create_user(
+            'zzoldest', first_name='Ignatius', last_name='Featherstonehaugh',
+        )
+        cls.needle_student.profile.preferred_name = 'Iggy'
+        cls.needle_student.profile.save()
+        # all_completed() reads the student's own registration, so the completed tab is
+        # empty without one however many submissions they have
+        baker.make('courses.CourseStudent', user=cls.needle_student, semester=semester)
+        cls.needle_quest = baker.make(Quest, name='Astrolabe Assembly', campaign=cls.campaign)
+        cls.needle_quest.tags.add('navigation')
+        cls.needle = baker.make(
+            QuestSubmission, quest=cls.needle_quest, user=cls.needle_student, semester=semester,
+            is_completed=True, is_approved=False, time_completed=now - timedelta(days=2),
+        )
+        # A second submission of theirs that matches none of the search terms, so the
+        # student's own tab has something for the search to leave out
+        cls.decoy_quest = baker.make(Quest, name='Sundial Basics', campaign=None)
+        cls.decoy = baker.make(
+            QuestSubmission, quest=cls.decoy_quest, user=cls.needle_student, semester=semester,
+            is_completed=True, is_approved=False, time_completed=now - timedelta(days=3),
+        )
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _names(self, url_name='quests:submitted_all', **params):
+        """The quest names on a tab's current page, in the order rendered.
+
+        Args:
+            url_name (str): the tab's url name.
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the quest names on that page, in order.
+        """
+        response = self.client.get(reverse(url_name), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.quest.name for submission in tab['submissions']]
+
+    def test_approvals__searching_finds_a_submission_that_is_not_on_this_page(self):
+        """The search covers the queue, so it reaches a submission on a later page."""
+        self.assertNotIn('Astrolabe Assembly', self._names())
+
+        self.assertEqual(self._names(q='Astrolabe'), ['Astrolabe Assembly'])
+
+    def test_approvals__searching_matches_every_name_the_user_column_shows(self):
+        """The username and the preferred full name under it are all searchable.
+
+        A teacher types whichever of them they know, so a surname has to find the student
+        whether or not they set a preferred name.
+        """
+        # Searching a student turns up everything of theirs in the queue, not one row
+        for term in ('zzoldest', 'Iggy', 'Featherstonehaugh'):
+            with self.subTest(term=term):
+                self.assertEqual(sorted(self._names(q=term)), ['Astrolabe Assembly', 'Sundial Basics'])
+
+    def test_approvals__searching_matches_the_account_first_name_behind_a_preferred_one(self):
+        """A student's account first name still matches when a preferred name is set.
+
+        `Ignatius` is not on screen, `Iggy` is, but a teacher who only knows the roll can
+        reasonably type either.
+        """
+        self.assertEqual(sorted(self._names(q='Ignatius')), ['Astrolabe Assembly', 'Sundial Basics'])
+
+    def test_approvals__several_words_narrow_the_queue(self):
+        """Every word has to match something, so adding a word cannot widen the results."""
+        self.assertEqual(self._names(q='Astrolabe Iggy'), ['Astrolabe Assembly'])
+        self.assertEqual(self._names(q='Astrolabe Nobody'), [])
+
+    def test_approvals__a_column_this_tab_does_not_show_is_not_searched(self):
+        """The approvals tabs have no campaign or tag column, so neither is searched.
+
+        Matching on something the reader cannot see in any column reads as the list
+        returning rows at random.
+        """
+        self.assertEqual(self._names(q='Cartography'), [])
+        self.assertEqual(self._names(q='navigation'), [])
+
+    def test_quest_list__the_submissions_tab_searches_its_campaign_and_tag_columns(self):
+        """The student's own tabs show campaign and tags, so those are searchable there."""
+        self.client.force_login(self.needle_student)
+        QuestSubmission.objects.filter(pk__in=[self.needle.pk, self.decoy.pk]).update(is_approved=True)
+
+        unsearched = self.client.get(reverse('quests:completed'))
+        self.assertEqual(len(unsearched.context['completed_submissions']), 2)
+
+        for term in ('Astrolabe', 'Cartography', 'navigation'):
+            with self.subTest(term=term):
+                response = self.client.get(reverse('quests:completed'), {'q': term})
+                names = [s.quest.name for s in response.context['completed_submissions']]
+                self.assertEqual(names, ['Astrolabe Assembly'])
+
+    def test_approvals__a_search_that_matches_nothing_says_so_and_keeps_the_box(self):
+        """An empty result explains itself, and the box keeps what was typed to clear it."""
+        response = self.client.get(reverse('quests:submitted_all'), {'q': 'Nothingmatchesthis'})
+
+        self.assertContains(response, 'No submissions in this tab match')
+        self.assertContains(response, 'Nothingmatchesthis')
+        self.assertEqual(response.context['num_matching_submissions'], 0)
+
+    def test_approvals__the_match_count_agrees_with_its_number(self):
+        """One result reads "1 submission matches", not "1 submission match"."""
+        response = self.client.get(reverse('quests:submitted_all'), {'q': 'Astrolabe'})
+
+        self.assertContains(response, '1 submission matches')
+
+    def test_approvals__the_table_carries_no_client_side_search(self):
+        """The tab's searching is the server's, so the table asks bootstrap-table for none.
+
+        bootstrap-table would filter the rows it holds, which is one page, and report
+        nothing found for a student sitting on the next one.
+        """
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotContains(response, 'data-custom-search="multiKeywordSearch"')
+        self.assertNotContains(response, 'data-search="true"')
+        self.assertContains(response, 'name="q"')
+
+    def test_approvals__a_search_and_a_sort_apply_together(self):
+        """Ordering a search reorders its results rather than dropping the search."""
+        names = self._names(q='Zfiller', sort='name')
+
+        self.assertEqual(names[0], 'Zfiller quest 00')
+        for name in names:
+            self.assertTrue(name.startswith('Zfiller quest'), f'{name} is not one of the searched-for quests')
+
+
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
 
@@ -4452,6 +6089,12 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         # baker.make('courses.CourseStudent', block=other_teacher_block, user=cls.test_student, semester=SiteConfig.get().active_semester)
 
         cls.semester = SiteConfig.get().active_semester
+        # the registration is what puts the student in this semester, so the submissions
+        # stamped with it below count toward the XP the approvals here grant
+        baker.make(
+            'courses.CourseStudent', user=cls.test_student, course=baker.make('courses.Course'),
+            semester=cls.semester,
+        )
         cls.quest = baker.make(Quest, name="Test Quest")
         cls.sub = baker.make(QuestSubmission, quest=cls.quest)
 
@@ -4464,7 +6107,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         A student in a course (StudentCourse) in the teacher's block (Block) should have their submissions
         appear here
         """
-        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:submitted'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -4478,7 +6121,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__submitted_all_tab(self):
         """ All completed quests awaiting approvel, even for students with another teacher (teachers are connected by Block)
         """
-        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_awaiting_approval', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:submitted_all'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -4503,7 +6146,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__approved_tab(self):
         """ Completed quests (submissions) that have been approved by a teacher """
 
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -4571,7 +6214,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
 
     def test_approvals__flagged_tab(self):
         """The flagged tab lists flagged submissions and activates the Flagged tab."""
-        with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.flagged', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -4584,7 +6227,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__approved_for_quest(self):
         """ Approved submissions of only this specific quest, regardless of teacher """
 
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved_for_quest', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, str(self.sub))
@@ -4596,7 +6239,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
 
     def test_approvals__approved_for_quest_all(self):
         """The 'all' variant shows approvals of this quest across all semesters (past_approvals_all=True)."""
-        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=[self.sub]):
+        with patch('quest_manager.views.QuestSubmission.objects.all_approved', return_value=QuestSubmission.objects.filter(id=self.sub.id)):
             response = self.client.get(reverse('quests:approved_for_quest_all', args=[self.quest.id]))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['quest'], self.quest)
@@ -4943,6 +6586,45 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
         url = reverse('quests:quest_archive', args=[nonexistent_id])
         self.assertEqual(self.client.post(url).status_code, 404)
+
+    def test_unarchive__get_is_rejected_and_leaves_the_quest_archived(self):
+        """Unarchiving changes the quest, so it must not happen on a GET (#2383). The button in
+        the template already posts; this closes the url itself."""
+        archived_quest = baker.make(Quest, archived=True)
+
+        self.assert405('quests:unarchive', args=[archived_quest.id])
+
+        archived_quest.refresh_from_db()
+        self.assertTrue(archived_quest.archived)
+
+    def test_post__message_links_to_the_archived_quest(self):
+        """The archive message names the quest as a working link.
+
+        Messages are escaped by default (#2498), so this one has to build its anchor
+        safely to still arrive as a link rather than as literal tags.
+        """
+        response = self.client.post(reverse('quests:quest_archive', args=[self.quest_b.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{self.quest_b.get_absolute_url()}">Quest B</a>')
+
+    def test_post__escapes_markup_in_the_archived_quests_name(self):
+        """A quest whose name contains markup is named as text in the archive message (#2498)."""
+        quest = baker.make(Quest, name='Quest <script>alert(1)</script>', archived=False, published=True)
+
+        response = self.client.post(reverse('quests:quest_archive', args=[quest.id]), follow=True)
+
+        self.assertContains(response, '&lt;script&gt;alert(1)&lt;/script&gt;')
+        self.assertNotContains(response, '<script>alert(1)</script>')
+
+    def test_unarchive__message_links_to_the_unarchived_quest(self):
+        """The unarchive message names the quest as a working link, for the same reason
+        the archive message does (#2498).
+        """
+        archived_quest = baker.make(Quest, name='Archived Quest', archived=True)
+
+        response = self.client.post(reverse('quests:unarchive', args=[archived_quest.id]), follow=True)
+
+        self.assertContains(response, f'<a href="{archived_quest.get_absolute_url()}">Archived Quest</a>')
 
     def test_unarchive__nonexistent_quest_returns_404(self):
         """Unarchiving a quest id that does not exist 404s cleanly (#1856).

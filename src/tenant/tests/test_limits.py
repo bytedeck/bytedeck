@@ -7,6 +7,7 @@ from django.utils.timezone import localdate
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
+from courses.models import Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
 from tenant.limits import can_add_current_student
@@ -45,6 +46,29 @@ class CanAddCurrentStudentTest(ByteDeckTenantTestCase):
         (e.g. a second course) even with the deck at its cap."""
         occupant = self.fill_the_single_seat()
         self.assertTrue(can_add_current_student(occupant))
+
+    def test_can_add_current_student__no_open_semester_frees_the_seats(self):
+        """Archiving the semester frees every seat (that is what it is for), so the deck is
+        no longer at its cap even though the registrations are still there."""
+        occupant = self.fill_the_single_seat()
+        self.assertFalse(can_add_current_student(baker.make(User)))
+
+        Semester.objects.complete_semester()
+
+        self.assertTrue(can_add_current_student(baker.make(User)))
+        self.assertTrue(can_add_current_student(occupant))
+
+    def test_can_add_current_student__seat_is_held_in_whichever_semester_they_joined(self):
+        """A student in the open semester the deck's pointer does not name still holds their
+        seat, so adding a second course does not ask for another one (issue #2157 Phase 3).
+        Reading the deck's pointer instead would treat them as a newcomer and refuse them
+        once the deck is full."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        occupant = baker.make(User)
+        baker.make('courses.CourseStudent', user=occupant, active=True, semester=other_semester)
+
+        self.assertTrue(can_add_current_student(occupant))
+        self.assertFalse(can_add_current_student(baker.make(User)))  # the deck is full because of them
 
     def test_can_add_current_student__staff_superusers_and_test_accounts_never_blocked(self):
         """Users who never count toward the cap (students-only counting, #2047) are

@@ -34,7 +34,7 @@
 
     {% if messages %}{% for message in messages %}
     <div class="alert BD-flash alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'warning' }}{% endif %} alert-dismissible fade show text-center lead" role="alert">
-        <b>{{ message|safe }}</b>
+        <b>{% include "_message_body.html" %}</b>
         <button type="button" class="close" data-dismiss="alert" aria-label="Close">
           <span aria-hidden="true">&times;</span>
         </button>

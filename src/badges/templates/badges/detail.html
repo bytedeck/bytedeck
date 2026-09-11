@@ -65,7 +65,7 @@
         <div class="col-sm-6">
           <ul class="list-unstyled">
             <li><h4>XP: {{badge.xp}}</h4></li>
-            <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="fa {{badge.badge_type.fa_icon}}"></i> {{badge.badge_type}}</span></p></li>
+            <li><p>Type: <span title="{{badge.badge_type.description}}"><i class="{{ badge.badge_type.fa_icon_class }}"></i> {{badge.badge_type}}</span></p></li>
             <li><p>Rarity: {{badge.get_rarity_icon|safe}} {{badge.percent_of_active_users_granted_this|floatformat:1 }}% have earned this {{ config.custom_name_for_badge|lower }}</p></li>
           </ul>
         </div>

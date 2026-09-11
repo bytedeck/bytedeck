@@ -10,6 +10,7 @@ from django.urls import reverse_lazy
 from django.urls.base import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_POST
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
 from hackerspace_online.decorators import staff_member_required
@@ -171,6 +172,7 @@ def copy(request, ann_id):
 
 @non_public_only_view
 @staff_member_required
+@require_POST
 def publish(request, ann_id):
     publish_announcement.apply_async(args=[request.user.id, ann_id, get_root_url()], queue='default')
 

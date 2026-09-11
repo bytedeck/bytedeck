@@ -1,13 +1,28 @@
+from django.contrib.auth import get_user_model
 from django.utils import timezone
+
+from crispy_forms.utils import render_crispy_form
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
+from model_bakery import baker
+
+from courses.models import Block, Course, CourseStudent
+from siteconfig.models import SiteConfig
 from quest_manager.forms import (
+    TA_RESTRICTED_QUEST_FIELDS,
     QuestForm,
+    SubmissionForm,
+    SubmissionFormCustomXP,
+    SubmissionFormStaff,
     SubmissionQuickReplyForm,
     SubmissionQuickReplyFormStudent,
     SubmissionReplyForm,
+    TAQuestForm,
 )
+from quest_manager.models import Quest
+
+User = get_user_model()
 
 
 class QuestFormTest(ByteDeckTenantTestCase):
@@ -93,6 +108,101 @@ class QuestFormTest(ByteDeckTenantTestCase):
         form = QuestForm(data=form_data)
         self.assertTrue(form.is_valid())
 
+    def test_QuestForm__still_binds_the_TA_restricted_fields(self):
+        """A teacher's quest form keeps the fields TAQuestForm drops: restricting a TA
+        must not take those settings away from the teachers who are meant to have them."""
+        form = QuestForm()
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertIn(field_name, form.fields)
+
+
+class TAQuestFormTest(ByteDeckTenantTestCase):
+    """A student TA's quest form must not carry the fields only a teacher may set (#2384)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Provide minimal valid quest form data and the users a TA form needs."""
+        cls.minimal_valid_data = {
+            "name": "Test Quest",
+            "xp": 0,
+            "max_repeats": 0,
+            "max_xp": -1,
+            "hours_between_repeats": 0,
+            "sort_order": 0,
+            "date_available": str(timezone.now().date()),
+            "time_available": "0:00:00",
+            "tags": "",
+        }
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.ta = User.objects.create_user('test_ta')
+        cls.ta.profile.is_TA = True
+        cls.ta.profile.save()
+
+    def test_TAQuestForm__does_not_bind_the_restricted_fields(self):
+        """The restricted fields are absent from the form, not merely hidden: a hidden widget
+        still binds whatever is posted, so hiding them only removed the control from the page."""
+        form = TAQuestForm()
+        rendered = str(form)
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(field=field_name):
+                self.assertNotIn(field_name, form.fields)
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__crispy_layout_drops_the_restricted_fields_and_keeps_the_rest(self):
+        """The form renders through its crispy layout, which QuestForm builds naming fields this
+        form no longer has. Those are taken back out, and everything a TA may edit still renders."""
+        rendered = render_crispy_form(TAQuestForm())
+
+        for field_name in TA_RESTRICTED_QUEST_FIELDS:
+            with self.subTest(dropped=field_name):
+                self.assertNotIn(f'name="{field_name}"', rendered)
+
+        # fields from the layout's top level and from inside its Advanced accordion, so a
+        # too-eager removal that emptied a nested group would be caught
+        for field_name in ('name', 'xp', 'instructions', 'sort_order', 'blocking'):
+            with self.subTest(kept=field_name):
+                self.assertIn(f'name="{field_name}"', rendered)
+
+    def test_TAQuestForm__posted_restricted_fields_cannot_change_a_quest(self):
+        """A TA's POST claiming every restricted field leaves all of them as the teacher set
+        them: an unbound field is one a ModelForm never writes to its instance."""
+        quest = Quest.objects.create(
+            name="Teacher's Quest",
+            published=False,
+            archived=True,
+            available_outside_course=True,
+            editor=self.ta,
+        )
+
+        form = TAQuestForm(
+            data={
+                **self.minimal_valid_data,
+                'published': True,
+                'archived': False,
+                'available_outside_course': False,
+                'editor': self.teacher.id,
+            },
+            instance=quest,
+        )
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertFalse(saved.published)
+        self.assertTrue(saved.archived)
+        self.assertTrue(saved.available_outside_course)
+        self.assertEqual(saved.editor, self.ta)
+
+    def test_TAQuestForm__saves_the_editable_fields(self):
+        """The restrictions don't stop a TA from doing their job: an ordinary edit still saves."""
+        quest = Quest.objects.create(name="Draft", published=False, editor=self.ta)
+
+        form = TAQuestForm(data={**self.minimal_valid_data, 'name': "Renamed by the TA"}, instance=quest)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+
+        self.assertEqual(saved.name, "Renamed by the TA")
+
 
 class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):
     """The plain-text (non-wysiwyg) reply forms are accessible to all users and
@@ -136,3 +246,90 @@ class QuickReplyFormsSanitizeHTMLTest(ByteDeckTenantTestCase):
                 self.assertIn('<b>bold</b>', cleaned)
                 self.assertIn('<a href="http://example.com">link</a>', cleaned)
                 self.assertIn('<p>', cleaned)
+
+
+class XPCourseChoiceTest(ByteDeckTenantTestCase):
+    """Whether a student is asked which course a submission's XP counts toward (issue #2440)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A student in two courses, which is the only situation where the question arises."""
+        cls.student = baker.make(User)
+        cls.semester = SiteConfig.get().active_semester
+        cls.maths = baker.make(Course, title='Maths')
+        cls.art = baker.make(Course, title='Art')
+        for course in (cls.maths, cls.art):
+            baker.make(CourseStudent, user=cls.student, course=course, block=baker.make(Block), semester=cls.semester)
+
+    def test_course_field__offers_the_students_own_courses(self):
+        """The choices are the courses this student is actually taking, not every course the
+        deck runs: assigning XP to a course they are not in would be meaningless."""
+        someone_elses_course = baker.make(Course, title='Woodwork')
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertNotIn(someone_elses_course, form.fields['course'].queryset)
+
+    def test_course_field__offers_splitting_evenly_and_defaults_to_it(self):
+        """A student can decline to pick, and that is the default: someone who ignores the
+        question gets the even split every submission used to get, rather than having their
+        work silently land in whichever course happened to sort first."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+        self.assertIsNone(form['course'].value())
+        self.assertFalse(form.fields['course'].required)
+
+    def test_course_field__is_dropped_for_a_student_with_one_course(self):
+        """With a single course there is nothing to ask, so the student is not asked. Their
+        submission stays unassigned, which for one course amounts to the same thing."""
+        one_course_student = baker.make(User)
+        baker.make(
+            CourseStudent, user=one_course_student, course=self.maths,
+            block=baker.make(Block), semester=self.semester,
+        )
+
+        form = SubmissionQuickReplyFormStudent(student=one_course_student)
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_dropped_when_the_deck_turns_the_setting_off(self):
+        """Staff can switch the question off, and then every student's XP goes back to being
+        shared evenly, so there is nothing to ask even in two courses."""
+        config = SiteConfig.get()
+        config.students_choose_xp_course = False
+        config.save()
+
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_dropped_when_no_student_is_filling_the_form_in(self):
+        """A staff member commenting on someone's submission is not choosing where that
+        student's XP goes."""
+        form = SubmissionQuickReplyFormStudent()
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_offered_on_the_full_submission_form_too(self):
+        """The submission page renders SubmissionForm, so the picker has to be there and filled
+        in on that one as well: it is the form most students actually see."""
+        form = SubmissionForm(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+
+    def test_course_field__is_dropped_on_the_staff_form(self):
+        """SubmissionFormStaff extends the same base, and a teacher commenting is not choosing
+        where this student's XP goes, so the field must not follow it up the inheritance chain."""
+        form = SubmissionFormStaff()
+
+        self.assertNotIn('course', form.fields)
+
+    def test_course_field__is_offered_on_the_custom_xp_form_too(self):
+        """A quest where the student enters their own XP asks the same question: which form
+        they get depends on the quest and whether they attached a file, not on the choice."""
+        form = SubmissionFormCustomXP(student=self.student)
+
+        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])

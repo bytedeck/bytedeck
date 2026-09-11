@@ -14,7 +14,6 @@
     <table class="table table-striped">
       <thead>
         <tr>
-          <th></th>
           <th>Mark</th>
           <th>Minimum Mark</th>
           <th>Color</th>
@@ -26,7 +25,6 @@
       <tbody>
         {% for object in object_list %}
           <tr {% if not object.active %} class="text-muted" {% endif %}>
-            <td class="text-center"><i class="{{object.fa_icon}} fa-lg fa-fw text-warning"></i></td>
             <td>{{object.name}}</td>
             <td>{{object.minimum_mark}}%</td>
             <td>

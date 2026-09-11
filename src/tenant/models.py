@@ -4,6 +4,7 @@ from datetime import date
 from django.apps import apps
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.db.models.functions import Greatest
 from django.utils.timezone import localdate, now, timedelta
 from django.contrib.auth import get_user_model
 
@@ -112,9 +113,25 @@ class Tenant(TenantMixin):
         # the #2044 retirement policy; the help text stays free of issue numbers
         # (they mean nothing to an admin reading the form)
         help_text="Arms this deck for deletion: deletion from the admin is refused until an "
-                  "admin deliberately turns this on -- and even then only a deck that has been suspended "
-                  "for over a year, counted from when its owner was first sent the suspension notice, "
-                  "can actually be deleted."
+                  "admin deliberately turns this on -- and even then only a suspended deck whose "
+                  "owner has requested deletion, or one that has been suspended for over a year "
+                  "(counted from when its owner was first sent the suspension notice), can "
+                  "actually be deleted."
+    )
+
+    # An owner's standing request to have the deck deleted, made from the deck's
+    # subscription page. Advisory: an operator still reviews it and arms
+    # can_delete to honor it (the owner may not be a school deck's only
+    # stakeholder), but it lets deletion skip the year-long suspension clock,
+    # and it silences the deck's lifecycle reminder emails.
+    deletion_requested_on = models.DateField(
+        blank=True, null=True, editable=False,
+        help_text="When the deck owner asked for this deck to be deleted; blank = no standing request. "
+                  "Set and cleared by the owner from the deck's subscription page."
+    )
+    deletion_requested_by = models.CharField(
+        max_length=255, blank=True, default='', editable=False,
+        help_text="Who asked (their username at the time of the request), for the audit trail."
     )
 
     # Stripe linkage (epic #1729 PR 6). Blank on decks whose subscriptions are managed
@@ -127,6 +144,19 @@ class Tenant(TenantMixin):
     stripe_subscription_id = models.CharField(
         max_length=255, blank=True, default='',
         help_text="The Stripe Subscription id (sub_...) paying for this deck. Blank = no Stripe subscription."
+    )
+    stripe_auto_renews = models.BooleanField(
+        default=False, editable=False,
+        help_text="Whether Stripe says the linked subscription bills again on its own. Cleared when the "
+                  "owner sets it to cancel at period end, when a renewal starts failing, and on decks "
+                  "with no Stripe subscription. Synced from Stripe, never edited here."
+    )
+    stripe_portal_configuration_id = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="The Billing Portal configuration (bpc_...) whose headline names this deck, created "
+                  "automatically on the owner's first portal visit. Clear it to have the next portal visit "
+                  "rebuild the configuration from the account default (e.g. after changing the default's "
+                  "features in the Stripe dashboard)."
     )
 
     # These are calculated / cached fields that are needed so they can be filterable/sortable in Django Admin
@@ -308,13 +338,17 @@ class Tenant(TenantMixin):
 
     # one human label per subscription_status slug; the subscription page's badge
     # and the tenant admin's Subscription column both render from this map, so
-    # the same state always shows the same word everywhere
+    # the same state always shows the same word everywhere. The KEY ORDER is
+    # meaningful: it is the branch order of the subscription_status chain below,
+    # and doubles as the sort rank annotate_subscription_status() applies, so
+    # sorting the admin's Subscription column ascending lists the decks that
+    # need attention (suspended, then grace) before the settled ones.
     SUBSCRIPTION_STATUS_LABELS = {
         'suspended': 'Suspended',
         'grace': 'Grace period',
+        'trial': 'Free trial',
         'maintenance': 'Maintenance',
         'subscribed': 'Subscribed',
-        'trial': 'Free trial',
         'manual': 'Managed manually',
     }
 
@@ -353,6 +387,64 @@ class Tenant(TenantMixin):
             return 'subscribed'
         return 'manual'
 
+    @classmethod
+    def annotate_subscription_status(cls, queryset):
+        """Annotate `subscription_status_rank`: the subscription_status precedence
+        chain, expressed in SQL so a list view can SORT on the status.
+
+        `subscription_status` is derived in Python, and a column of derived values
+        has nothing for the database to order by, which is why the tenant admin's
+        Subscription column needs this to be sortable at all.
+
+        Each `When` mirrors the property of the same name, and the rank is the
+        slug's position in SUBSCRIPTION_STATUS_LABELS, so ascending lists suspended
+        decks first and managed-manually ones last. The two implementations must
+        agree: `test_annotate_subscription_status__matches_the_python_chain` builds
+        a deck in every status and asserts the annotation reproduces the property
+        exactly, so changing one without the other fails the suite.
+
+        Args:
+            queryset (QuerySet): Any Tenant queryset.
+
+        Returns:
+            QuerySet: The same queryset with `governing_deadline_date` and
+            `subscription_status_rank` annotated. The deadline alias deliberately
+            differs from the `governing_deadline` property so it doesn't shadow it
+            on the returned instances.
+        """
+        today = localdate()
+        # the day a deck's grace window closes: a governing deadline older than
+        # this is suspended, one on or after it is still inside grace
+        grace_cutoff = today - timedelta(days=GRACE_PERIOD_DAYS)
+        rank = {slug: position for position, slug in enumerate(cls.SUBSCRIPTION_STATUS_LABELS)}
+        # subscription_active: a paid clock whose grace tail has not run out
+        paid_access = models.Q(paid_until__isnull=False, paid_until__gte=grace_cutoff)
+        return queryset.annotate(
+            # Postgres GREATEST skips NULLs, so this is governing_deadline: the
+            # later of the two clocks, and NULL only when neither is set (a NULL
+            # then fails every date comparison below and falls through to 'manual')
+            governing_deadline_date=Greatest('trial_end_date', 'paid_until'),
+        ).annotate(
+            subscription_status_rank=models.Case(
+                models.When(governing_deadline_date__lt=grace_cutoff, then=models.Value(rank['suspended'])),
+                # past the deadline; anything that also outlived the grace
+                # window was already claimed by the branch above
+                models.When(governing_deadline_date__lt=today, then=models.Value(rank['grace'])),
+                models.When(
+                    models.Q(trial_end_date__isnull=False)
+                    & (models.Q(paid_until__isnull=True) | models.Q(trial_end_date__gt=models.F('paid_until'))),
+                    then=models.Value(rank['trial']),
+                ),
+                models.When(
+                    paid_access & ~models.Q(max_active_users=-1) & models.Q(max_active_users__lte=TRIAL_MAX_ACTIVE_USERS),
+                    then=models.Value(rank['maintenance']),
+                ),
+                models.When(paid_access, then=models.Value(rank['subscribed'])),
+                default=models.Value(rank['manual']),
+                output_field=models.IntegerField(),
+            ),
+        )
+
     @property
     def subscription_status_label(self):
         """The human-readable label for ``subscription_status``, e.g. 'Free trial'.
@@ -371,9 +463,8 @@ class Tenant(TenantMixin):
         The latest-clock rule matters because trial_end_date is set at creation and
         never cleared when a deck subscribes: a lapsed subscriber should read as
         "expired N days ago" relative to its recent paid_until, not its ancient trial
-        date. Negative once the deadline has passed (the reminder cadence keeps firing
-        through the grace window); None when the deck has no dates at all
-        (comped/legacy decks).
+        date. Negative once the deadline has passed (the deck is then inside its
+        grace window); None when the deck has no dates at all (comped/legacy decks).
         """
         deadline = self.governing_deadline
         if deadline is None:
@@ -397,15 +488,37 @@ class Tenant(TenantMixin):
         return self.get_active_user_count() > self.effective_max_active_users
 
     @property
+    def auto_renews(self):
+        """Whether this deck's paid access renews on its own, so every lifecycle
+        surface should say "renews" rather than "expires" (#2586).
+
+        ``stripe_auto_renews`` is what Stripe last told us; this adds the sanity
+        check that the date Stripe charges on has not already passed. A renewal
+        that never landed (a payment failing while its webhook is late, or a
+        webhook outage) would otherwise leave the flag set on a deck whose paid
+        period is history, and that deck really is expiring: it falls back to the
+        expiry cadence, the grace-window banner, and eventually suspension
+        rather than sitting reassured and silent.
+
+        The clock is ``paid_until`` specifically, never the governing deadline:
+        a deck can carry a trial date that outlasts its paid period (an
+        admin-extended trial), and the trial running on says nothing about
+        whether the subscription billed (#2588 review find).
+        """
+        return bool(self.stripe_auto_renews and self.paid_until is not None and self.paid_until >= localdate())
+
+    @property
     def is_expiring_soon(self):
         """Whether the governing deadline is within EXPIRY_WARNING_DAYS (or already
         past, while still in the paid grace window) -- i.e. the status banner should
         escalate from "info" to "warning".
 
-        False for suspended decks (they get the suspension banner instead) and for
-        unmanaged/comped decks (no deadline at all).
+        False for suspended decks (they get the suspension banner instead), for
+        auto-renewing decks (nothing is expiring: the card is charged and the
+        period rolls forward, #2586), and for unmanaged/comped decks (no
+        deadline at all).
         """
-        if self.is_suspended:
+        if self.is_suspended or self.auto_renews:
             return False
         days = self.days_until_expiry
         return days is not None and days <= EXPIRY_WARNING_DAYS
@@ -457,24 +570,44 @@ class Tenant(TenantMixin):
         #2044 retirement policy. ALL of these must hold:
 
         * ``can_delete`` was deliberately armed by an admin (default False);
-        * the deck is SUSPENDED -- an active subscription, a running trial, or a
-          managed-manually deck (both dates blank) is never deletable;
-        * the deck's ``deletion_date`` has arrived: a year of suspension, measured
-          from the later of the suspension start and the episode's first suspended
-          notice, so deletion can never outrun the year the warning email
-          promised. A deck that was never warned is never deletable (its clock
-          has not started);
-        * never the public schema (deleting it would take down the installation).
+        * the deck's waiting is over (``deletion_eligibility``): it is SUSPENDED
+          and either its owner has a standing deletion request or its
+          ``deletion_date`` has arrived (a year of suspension, measured from the
+          later of the suspension start and the episode's first suspended
+          notice, so unrequested deletion can never outrun the year the warning
+          email promised; a deck never warned at all never times out, since its
+          clock has not started). The public schema is never eligible.
+        """
+        return self.can_delete and self.deletion_eligibility is not None
+
+    @property
+    def deletion_eligibility(self):
+        """Why this deck's deletion waiting is over: ``'request'`` (its owner has a
+        standing deletion request, which outranks the year clock), ``'timeout'``
+        (the year-long suspension clock has run out), or None while neither
+        holds. Only a SUSPENDED deck is ever eligible (an active subscription, a
+        running trial, or a managed-manually deck is not, and the operator can
+        suspend a live deck by editing its dates), and the public schema never is.
+
+        Arming ``can_delete`` is the operator's remaining step: ``is_deletable``
+        is exactly this eligibility plus that arming, and the tenant admin's
+        "deletable" column shows this value so decks whose waiting is over
+        surface before anyone opens their change form.
+
+        Returns:
+            str | None: ``'request'``, ``'timeout'``, or None.
         """
         from django_tenants.utils import get_public_schema_name
 
         if self.schema_name == get_public_schema_name():
-            return False
-        if not self.can_delete:
-            return False
+            return None
         if not self.is_suspended:  # active sub, on trial, or managed manually
-            return False
-        return localdate() >= self.deletion_date
+            return None
+        if self.deletion_requested_on is not None:
+            return 'request'
+        if localdate() >= self.deletion_date:
+            return 'timeout'
+        return None
 
     def sync_from_stripe_subscription(self, subscription):
         """The SINGLE write path from a Stripe Subscription object to this deck (plan §5.2).
@@ -513,7 +646,10 @@ class Tenant(TenantMixin):
         Returns:
             str: A short human-readable summary of what changed, for logs.
         """
-        from tenant.billing import clear_plan_summary_cache, subscription_max_active_users, subscription_period_end_date
+        from tenant.billing import (
+            clear_plan_summary_cache, subscription_auto_renews, subscription_max_active_users,
+            subscription_period_end_date,
+        )
         from tenant.utils import invalidate_current_deck_cache
 
         status = subscription.get('status')
@@ -549,6 +685,16 @@ class Tenant(TenantMixin):
                 cap = subscription_max_active_users(subscription)
                 if cap is not None and cap != current.max_active_users:
                     updates['max_active_users'] = cap
+
+            # tracked on every sync, not just while granting access: a renewal
+            # that starts failing (past_due) or an owner's "cancel at period end"
+            # must both put the deck back on the expiry cadence (#2586). Only from
+            # a payload that identifies itself, though: the identity guard above
+            # cannot vet an id-less payload, and this flag is state a bogus event
+            # could otherwise lower, exactly like the unlink below (review find)
+            auto_renews = subscription_auto_renews(subscription)
+            if sub_id and auto_renews != current.stripe_auto_renews:
+                updates['stripe_auto_renews'] = auto_renews
 
             if status in ('canceled', 'incomplete_expired'):
                 # unlink strictly on an id match: with the identity guard above this
@@ -669,10 +815,16 @@ class Tenant(TenantMixin):
         active_only=True further excludes registrations deactivated by a semester
         close (e.g. the suspension auto-close, #1734 redesign B2), so a closed
         semester contributes zero current students.
+
+        The count spans every semester that is open, so a deck running two cohorts on
+        different calendars pays for both (issue #2157 Phase 3).
+
+        Returns:
+            int: how many distinct current students the deck has.
         """
         CourseStudent = apps.get_model('courses', 'CourseStudent')
         return (
-            CourseStudent.objects.all_users_for_active_semester(students_only=True, active_only=True)
+            CourseStudent.objects.all_users_in_open_semesters(students_only=True, active_only=True)
             .exclude(is_superuser=True)
             .count()
         )
@@ -741,11 +893,13 @@ class DeckNotice(models.Model):
     outages catch-up-safe: late, never duplicated.
     """
     KIND_EXPIRY = 'expiry'
+    KIND_RENEWAL = 'renewal'
     KIND_LIMIT = 'limit'
     KIND_SUSPENDED = 'suspended'
     KIND_PAYMENT_FAILED = 'payment_failed'  # reserved for the Stripe webhook phase (plan PR 7)
     KIND_CHOICES = [
         (KIND_EXPIRY, 'Trial/subscription expiry reminder'),
+        (KIND_RENEWAL, 'Subscription auto-renewal reminder'),
         (KIND_LIMIT, 'Current-student limit warning'),
         (KIND_SUSPENDED, 'Deck suspended'),
         (KIND_PAYMENT_FAILED, 'Payment failed'),
@@ -755,7 +909,7 @@ class DeckNotice(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.CharField(
         max_length=20,
-        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7', 'daily-YYYY-MM-DD', 'pct80'/'pct100', or 'suspended'."
+        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7'/'d1', 'upcoming', 'pct80'/'pct100', 'suspended', or 'invoice'."
     )
     period_key = models.CharField(
         max_length=32,

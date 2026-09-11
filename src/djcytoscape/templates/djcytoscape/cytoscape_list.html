@@ -5,8 +5,12 @@
 {% block heading_inner %}Quest Maps
   {% if request.user.is_staff %}
     <a class="btn btn-primary" href="{% url 'djcytoscape:generate_unseeded' %}" role="button"><i class="fa fa-plus-circle"></i> Create</a>
-    <a class="btn btn-primary" href="{% url 'djcytoscape:regenerate_all' %}" role="button"
-    title = "Recalculate ALL Maps.  This may take a few moments." ><i class="fa fa-refresh"></i></a>
+    {# Regenerating rebuilds every map, so it posts rather than links (#2383). #}
+    <form method="post" action="{% url 'djcytoscape:regenerate_all' %}" class="preview-action-form">
+      {% csrf_token %}
+      <button type="submit" class="btn btn-primary"
+        title="Recalculate ALL Maps.  This may take a few moments."><i class="fa fa-refresh"></i></button>
+    </form>
   {% endif %}
 {% endblock %}
 

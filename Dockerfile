@@ -1,85 +1,94 @@
+# syntax=docker/dockerfile:1
+
+###############################################################################
+# Build stage: compiles the packages that need a toolchain (uwsgi, psycopg2)
+# into wheels, so the compilers and dev headers stay out of the runtime image.
+###############################################################################
+FROM python:3.12-slim AS builder
+
+ENV PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# build-essential compiles uwsgi, and libpcre2-dev gives uwsgi its internal
+# routing/regex support (built without it, uwsgi warns at startup and disables
+# those features).
+# https://stackoverflow.com/questions/21669354/rebuild-uwsgi-with-pcre-support
+# libpq-dev is Postgres' client headers. The pinned psycopg2-binary ships its
+# own libpq so nothing needs them today, but they keep the build working if the
+# requirement is ever switched to source-built psycopg2, which is what the
+# psycopg maintainers recommend for production.
+# https://github.com/psycopg/psycopg2/issues/699
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        build-essential \
+        libpcre2-dev \
+        libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# The requirements files are copied on their own so the wheel build below stays
+# cached until a dependency actually changes, rather than on every source edit.
+# https://docs.docker.com/build/cache/
+COPY requirements.txt requirements-production.txt ./
+
+# uwsgi is built here rather than listed in requirements*.txt on purpose: only
+# the container needs it (dev uses runserver, production runs uwsgi), and local
+# venvs on Windows/macOS can't build it. Pinned for reproducible images: bump
+# deliberately.
+RUN pip wheel --wheel-dir /wheels -r requirements.txt uwsgi==2.0.31
+
+
+###############################################################################
+# Runtime stage: installs those wheels onto a clean base, so the image ships
+# the app and its libraries without the build toolchain behind them.
+###############################################################################
 FROM python:3.12-slim
 
-#### For development within the container in VS Code ##
-# https://code.visualstudio.com/docs/remote/containers
-# https://github.com/Microsoft/vscode-remote-try-python
-
-# Allow for an orderly, graceful shutdown of services
-# Specifically in our case:
-# 1. give coverage a chance to send its report to coveralls.io
-# 2. allow celerybeat to delete its pid file (does this actually happen?)
+# uwsgi reads SIGTERM as "brutal reload" rather than "shut down", so a stopping
+# container has to be signalled with SIGINT for the app to exit cleanly. The
+# graceful stop also lets coverage flush its report and celery-beat remove its
+# pid file.
+# https://uwsgi-docs.readthedocs.io/en/latest/Management.html
 STOPSIGNAL SIGINT
 
-# Configure apt
-ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    SHELL=/bin/bash
+
+# libpcre2-8-0 is the runtime half of the uwsgi regex support built above, and
+# libpq5 the runtime half of libpq-dev. procps supplies the pgrep that the
+# celery-beat healthcheck in docker-compose.yml runs.
 RUN apt-get update \
-    && apt-get -y install --no-install-recommends apt-utils 2>&1
-
-RUN pip install pylint
-
-# Install git, process tools, lsb-release (common in install instructions for CLIs)
-RUN apt-get install -y git procps lsb-release
-
-# Required for psycopg2: https://github.com/psycopg/psycopg2/issues/699
-RUN apt-get install -y --no-install-recommends libpq-dev
-
-# Install any missing dependencies for enhanced language service
-RUN apt-get install -y libicu[0-9][0-9]
-
-# Install uwsgi
-RUN apt-get install -y build-essential
-
-#https://stackoverflow.com/questions/21669354/rebuild-uwsgi-with-pcre-support
-RUN apt-get update && \
-    apt-get install -y libpcre2-8-0 libpcre2-dev
-
-RUN python3 -m pip install --upgrade pip
-
-# uwsgi lives here rather than in requirements*.txt on purpose: only the
-# container needs it (dev uses runserver; production runs uwsgi), and local
-# venvs on Windows/macOS can't build it. Pinned for reproducible images --
-# bump deliberately.
-RUN python3 -m pip install uwsgi==2.0.31
-
-# Clean up
-RUN apt-get autoremove -y \
-    && apt-get clean -y \
+    && apt-get install -y --no-install-recommends \
+        libpcre2-8-0 \
+        libpq5 \
+        procps \
     && rm -rf /var/lib/apt/lists/*
-ENV DEBIAN_FRONTEND=dialog
 
-# Set the default shell to bash rather than sh
-ENV SHELL=/bin/bash
+# Created before the source is copied so COPY can assign ownership as it goes:
+# a `chown -R` afterwards would write a second full copy of the tree into its
+# own layer and roughly double the image's application size.
+RUN useradd --create-home --shell /bin/bash app
 
-# Set environment variables
+WORKDIR /app
 
-# Don't create .pyc files (why don't we want these?)
-ENV PYTHONDONTWRITEBYTECODE=1
-# Prevent docker from buffering console output
-ENV PYTHONUNBUFFERED=1
+# --no-index keeps the install offline: every dependency has to come from the
+# wheels the build stage resolved, so the runtime image can't silently pull a
+# different version than the one that was built.
+COPY requirements.txt requirements-production.txt ./
+COPY --from=builder /wheels /wheels
+RUN pip install --no-index --find-links=/wheels -r requirements.txt uwsgi==2.0.31 \
+    && rm -rf /wheels
 
+# Owned by `app` so the running container can write the few things it creates
+# next to the source, such as celery-beat's pid file.
+COPY --chown=app:app . /app/
 
-# Install python requirements
-# Docker only rebuilds when there are changes to these files
-# https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
-COPY ./requirements-production.txt requirements-production.txt
-COPY ./requirements.txt requirements.txt
-RUN python3 -m pip install -r requirements.txt
-######################################################
-
-# Enable below when uwsgi-nginx uses unix sock
-# RUN mkdir /bytedeck-volume
-# ARG WUID
-# ARG WGID
-# RUN chown -R ${WUID}:${WGID} /bytedeck-volume
-
-# Set working directory for subsequent RUN ADD COPY CMD instructions
-COPY . /app/
-WORKDIR /app/
-
-
-#### More from https://github.com/Microsoft/vscode-remote-try-python ##
-
-#######################################################################
-
-# RUN adduser --disabled-password appuser
-# USER appuser
+# Run unprivileged by default so production gets a non-root container without
+# depending on a compose-level override. Development and CI bind-mount the host
+# checkout over /app and have to write into it (coverage output, makemigrations),
+# so those containers run as root: see docker-compose.override.yml.
+USER app
