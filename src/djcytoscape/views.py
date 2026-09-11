@@ -112,8 +112,10 @@ def _quest_status_ids(user):
         awaiting approval. Sorted, so the rendered page is identical between requests.
     """
     # is_completed means handed in; is_approved is the teacher's decision on it. One query
-    # over both, rather than one per status.
-    handed_in = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
+    # over both, rather than one per status. order_by() drops the manager's default ordering,
+    # which the database would have to sort the student's whole submission history to honour:
+    # the rows go into sets here, and the ids come back out sorted.
+    handed_in = QuestSubmission.objects.all_completed(user=user, active_semester_only=False).order_by()
     approved, awaiting = set(), set()
     for quest_id, is_approved in handed_in.values_list('quest_id', 'is_approved'):
         (approved if is_approved else awaiting).add(quest_id)

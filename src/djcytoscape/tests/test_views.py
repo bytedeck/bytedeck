@@ -140,8 +140,7 @@ class ViewTests(ByteDeckTenantTestCase):
         """A student's map reports approved quests apart from ones still waiting (#2678).
 
         Green and yellow are two different facts about a quest, so the view hands the
-        template two lists rather than the single "completed" list it used to, which lumped
-        approved work in with work the teacher has not looked at yet.
+        template two lists: approved work, and work the teacher has not looked at yet.
         """
         approved_quest = baker.make('quest_manager.Quest')
         awaiting_quest = baker.make('quest_manager.Quest')
