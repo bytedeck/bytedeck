@@ -4029,11 +4029,19 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:category_update', args=[1]))
         self.assertNotContains(response, 'name="map_order"')
 
-        self.client.post(
+        # Start from a non-zero order, so "unchanged" is a real claim rather than the field's
+        # default reading back.
+        Category.objects.filter(id=1).update(map_order=7)
+        response = self.client.post(
             reverse('quests:category_update', args=[1]),
             data={'title': 'Ordered Campaign', 'published': True, 'map_order': 5},
         )
-        self.assertEqual(Category.objects.get(id=1).map_order, 0)
+        # Check the save actually went through before reading anything off it: a rejected form
+        # would leave map_order alone too, and pass this test for the wrong reason.
+        self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
+        category = Category.objects.get(id=1)
+        self.assertEqual(category.title, 'Ordered Campaign')
+        self.assertEqual(category.map_order, 7)
 
     def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
         """The cancel button on the campaign update form must link back to the
