@@ -57,7 +57,18 @@ server-side too -- against every student, not just the current page -- via the
 ?q=, ?sort= and ?order= querystring params below. bootstrap-table is kept only
 for its column show/hide toggle and styling of the current page's rows.
 {% endcomment %}
-<form method="get" class="form-inline">
+<form method="get" class="form-inline" id="profile-list-filters">
+    {% if block_filter_choices %}
+    <div class="form-group">
+        <label for="block-filter">{% group_name %}:</label>
+        <select name="block" id="block-filter" class="form-control">
+            <option value="">All {% group_name %}s</option>
+            {% for block in block_filter_choices %}
+            <option value="{{ block.pk }}" {% if block.pk == current_block %}selected{% endif %}>{{ block.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
     <div class="form-group">
         <div class="input-group">
             <input type="text" name="q" class="form-control" value="{{ search_query }}"
@@ -65,14 +76,19 @@ for its column show/hide toggle and styling of the current page's rows.
             <span class="input-group-btn">
                 <button class="btn btn-default" type="submit" title="Search"><i class="fa fa-search"></i></button>
                 {% if search_query %}
-                <a class="btn btn-default" href="?sort={{ current_sort }}&order={{ current_order }}" title="Clear search">
+                {% comment %}
+                Clearing the search keeps the group filter and the sort: only the typed
+                term goes, so a teacher who has narrowed to one group stays there.
+                {% endcomment %}
+                <a class="btn btn-default" title="Clear search"
+                   href="?sort={{ current_sort }}&order={{ current_order }}{% if current_block %}&block={{ current_block }}{% endif %}">
                     <i class="fa fa-times"></i>
                 </a>
                 {% endif %}
             </span>
         </div>
     </div>
-    <!-- keep the active sort when searching -->
+    <!-- keep the active sort when searching or filtering -->
     <input type="hidden" name="sort" value="{{ current_sort }}">
     <input type="hidden" name="order" value="{{ current_order }}">
 </form>
@@ -304,6 +320,12 @@ data-classes="table table-no-bordered table-hover"
 {% endblock %}
 
 {% block js %}
+
+{% comment %}
+Submits the group filter on change; the form works without it (see the file's own
+comment), so it is loaded alongside the table scripts rather than blocking them.
+{% endcomment %}
+<script src="{% static 'profile_manager/js/profile-list-filters.js' %}?v=1.0"></script>
 
 <!-- https://bootstrap-table.com/ -->
 <script src="{% static 'js/bootstrap-table-1.20.2.min.js' %}"></script>

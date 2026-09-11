@@ -94,6 +94,22 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         'alias', 'user__username', 'custom_profile_field',
     ]
 
+    # Search fields a non-staff viewer may match against. Username is staff-only for the
+    # same reason it is excluded from NON_STAFF_SORT_FIELDS: the column is rendered only
+    # to staff, so letting a student search it turns the list into a lookup that confirms
+    # a classmate's username from a guess. The name columns a student can already read
+    # stay searchable. See get_allowed_search_fields().
+    NON_STAFF_SEARCH_FIELDS = [
+        'user__first_name', 'preferred_name', 'user__last_name',
+        'alias', 'custom_profile_field',
+    ]
+
+    # Querystring parameter carrying the group/block filter, and whether this list offers
+    # it at all. ProfileListBlock is already one block, and the staff and inactive lists
+    # render no group column, so only the deck-wide and current-semester lists show it.
+    BLOCK_FILTER_PARAM = 'block'
+    show_block_filter = True
+
     def test_func(self):
         return self.request.user.is_staff
 
@@ -142,6 +158,86 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
             return self.SORT_FIELDS
         return {key: self.SORT_FIELDS[key] for key in self.NON_STAFF_SORT_FIELDS}
 
+    def get_allowed_search_fields(self):
+        """The subset of SEARCH_FIELDS this request is permitted to match against.
+
+        Staff may search every column; non-staff are limited to
+        NON_STAFF_SEARCH_FIELDS, which drops the staff-only username column.
+
+        Returns:
+            list[str]: ORM lookups the ?q= term may be matched against.
+        """
+        if self.request.user.is_staff:
+            return self.SEARCH_FIELDS
+        return self.NON_STAFF_SEARCH_FIELDS
+
+    def show_block_filter_to(self, user):
+        """Whether this request should be offered the group/block filter.
+
+        Staff only, even on the lists a student can reach: the group column is rendered
+        only to staff, so offering a student the filter would let them partition their
+        classmates by a column they cannot see.
+
+        Args:
+            user: the requesting user.
+
+        Returns:
+            bool: True when the filter should be rendered and honoured.
+        """
+        return self.show_block_filter and user.is_staff
+
+    def get_block_filter(self):
+        """Return the Block the ?block= parameter selects, or None for no filter.
+
+        An unknown, non-numeric or not-currently-running block id falls back to no filter,
+        so untrusted querystring input can only ever widen the list back to everybody
+        rather than error or reach a group that is not on offer.
+
+        Returns:
+            Block | None: the selected group, or None when none is selected.
+        """
+        if not self.show_block_filter_to(self.request.user):
+            return None
+        block_pk = self.request.GET.get(self.BLOCK_FILTER_PARAM, '')
+        if not block_pk.isdigit():
+            return None
+        return self.get_block_filter_choices().filter(pk=int(block_pk)).first()
+
+    def get_block_filter_choices(self):
+        """The groups offered in the filter: those running in a semester that is open now.
+
+        Scoped the same way as the group column beside it, which is prefetched from
+        in_open_semesters() registrations, so the dropdown offers exactly the groups the
+        list can actually show and never an option that would return nobody.
+
+        Returns:
+            QuerySet[Block]: the selectable groups, ordered by name (Block.Meta).
+        """
+        return Block.objects.filter(
+            pk__in=CourseStudent.objects.get_queryset().in_open_semesters().values_list('block_id', flat=True)
+        )
+
+    def apply_block_filter(self, profiles_qs):
+        """Narrow ``profiles_qs`` to the students in the selected group.
+
+        Matched through the registrations themselves rather than by joining the profile
+        queryset to CourseStudent, so a student registered in the group more than once
+        is still listed once and cannot inflate the page counts.
+
+        Args:
+            profiles_qs (QuerySet[Profile]): the profiles to narrow.
+
+        Returns:
+            QuerySet[Profile]: filtered to the group, or unchanged when none is selected.
+        """
+        block = self.get_block_filter()
+        if block is None:
+            return profiles_qs
+        in_block = CourseStudent.objects.get_queryset().in_open_semesters().filter(
+            block=block,
+        ).values_list('user_id', flat=True)
+        return profiles_qs.filter(user_id__in=in_block)
+
     def get_sort(self):
         """Return the validated ``(sort, order)`` pair from the querystring.
 
@@ -163,7 +259,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         query = self.get_search_query()
         if query:
             search = Q()
-            for field in self.SEARCH_FIELDS:
+            for field in self.get_allowed_search_fields():
                 search |= Q(**{f'{field}__icontains': query})
             profiles_qs = profiles_qs.filter(search)
         return profiles_qs
@@ -194,6 +290,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     def get_queryset(self):
         """The list's base queryset with shared prefetching, search and sort applied."""
         profiles_qs = self.queryset_append(self.get_base_queryset())
+        profiles_qs = self.apply_block_filter(profiles_qs)
         profiles_qs = self.apply_search(profiles_qs)
         return self.apply_sort(profiles_qs)
 
@@ -209,6 +306,14 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         context['search_query'] = self.get_search_query()
         context['current_sort'] = sort
         context['current_order'] = order
+
+        # The group filter beside the search box, and the group it currently selects.
+        # Absent entirely on the lists that don't offer it, which is what the template
+        # keys off to decide whether to render the control at all.
+        if self.show_block_filter_to(self.request.user):
+            context['block_filter_choices'] = self.get_block_filter_choices()
+            selected = self.get_block_filter()
+            context['current_block'] = selected.pk if selected else ''
 
         # Querystring (minus page) so pagination links keep the active search/sort.
         params = self.request.GET.copy()
@@ -251,6 +356,9 @@ class ProfileListBlock(ProfileList):
     """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
     view_type = ProfileViewTypes.BLOCK
     block_object = None
+    # This list is already one group, so a group filter on it would only ever narrow it
+    # to itself or to nothing.
+    show_block_filter = False
 
     def get_base_queryset(self):
         """The profiles of the students currently in this block.
@@ -284,6 +392,8 @@ class ProfileListBlock(ProfileList):
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListStaff(ProfileList):
     view_type = ProfileViewTypes.STAFF
+    # Teachers are not registered in groups, and this list renders no group column.
+    show_block_filter = False
 
     def get_base_queryset(self):
         return Profile.objects.filter(user__is_staff=True)
@@ -292,6 +402,9 @@ class ProfileListStaff(ProfileList):
 @method_decorator(staff_member_required, name='dispatch')
 class ProfileListInactive(ProfileList):
     view_type = ProfileViewTypes.INACTIVE
+    # An inactive student has no registration in an open semester, so every group would
+    # filter this list down to nobody.
+    show_block_filter = False
 
     def get_base_queryset(self):
         return Profile.objects.all_inactive()
