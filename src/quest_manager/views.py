@@ -1348,6 +1348,24 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         # quick reply
         return SubmissionQuickReplyForm(self.request.POST)
 
+    def safe_next(self):
+        """Where the form says to go once the decision is recorded, if it may be trusted.
+
+        The approvals page has four tabs and a my-groups/all toggle, so the page a decision
+        was made from is rarely the one ``quests:approvals`` resolves to; each reply form
+        posts the page it came from so the teacher is put back on it.
+
+        Returns:
+            str or None: the posted `next`, when it stays on this host and keeps https for a
+            request that came in over https; None otherwise, which includes a form that posted
+            no `next` at all. Anything else would make this view an open redirect.
+        """
+        next_url = self.request.POST.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
+            return next_url
+        return None
+
     def form_valid(self):
         """Send the teacher back where they were once their decision is recorded.
 
@@ -1355,22 +1373,17 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         with is gone from it and the message about it is displayed once (#2687, #2689).
 
         Returns:
-            HttpResponseRedirect: to the approvals tab the form was submitted from, or to the
-            default approvals page when the form named nowhere to go back to.
+            HttpResponseRedirect: to the approvals tab the form named, or to the default
+            approvals page when it named none that may be trusted.
         """
-        # only follow `next` if it stays on this host (and keeps https when the
-        # request came in over https), to prevent open redirects and downgrades
-        next_url = self.request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
-            return redirect(next_url)
-        return redirect("quests:approvals")
+        return redirect(self.safe_next() or "quests:approvals")
 
     def form_invalid(self):
         """Re-render the submission page so the form's validation errors are visible.
 
         Returns:
-            HttpResponse: the submission page, carrying the bound form and its errors.
+            HttpResponse: the submission page, carrying the bound form and its errors, and the
+            page to return to once the teacher has corrected and resubmitted them.
         """
         # rendering here with the context allows validation errors to be displayed
         context = {
@@ -1380,6 +1393,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission_form": self.form,
             "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
+            # Carried through the correction, so the resubmission lands where the first
+            # attempt was going to.
+            "next": self.safe_next(),
             # "reply_comment_form": reply_comment_form,
         }
         return render(self.request, "quest_manager/submission.html", context)
@@ -1548,8 +1564,20 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
     @method_decorator(staff_member_required)
     def dispatch(self, request, *args, **kwargs):
-        """ requests are only allowed if:
-        - POST method
+        """Turn away anything that is not a staff member acting on one of the form's buttons.
+
+        Args:
+            request: the staff member's request. Only POST is served, and it must name one of
+                the four buttons the approvals form carries.
+            *args: positional arguments passed through to ``View.dispatch``.
+            **kwargs: keyword arguments passed through to ``View.dispatch``, including the
+                ``submission_id`` from the url.
+
+        Returns:
+            HttpResponse: whatever ``post()`` returns, a redirect or the submission page.
+
+        Raises:
+            Http404: on any method other than POST, or on a POST naming no known button.
         """
         # this is a POST only view
         if request.method != "POST":
@@ -1569,14 +1597,16 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         the comment, uploaded files are attached to it, and the student is notified.
 
         Args:
-            request: the POST carrying the teacher's comment, any files, any badge, and which
-                button was pressed.
+            request: the POST carrying the teacher's comment, any files, any badge, which
+                button was pressed, and the page to return to.
             submission_id: pk of the submission being acted on.
+            *args: positional arguments passed through from ``dispatch``.
+            **kwargs: keyword arguments passed through from ``dispatch``.
 
         Returns:
-            HttpResponse: `form_valid`'s redirect to the approvals tab, or a JsonResponse when
-            the request was made by ajax. An invalid form returns `form_invalid` instead,
-            which re-renders the submission page (or a 400 for ajax).
+            HttpResponse: `form_valid`'s redirect back to the approvals page, or, for a form
+            that does not validate, `form_invalid`'s render of the submission page carrying
+            the errors.
         """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()

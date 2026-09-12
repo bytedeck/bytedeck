@@ -5455,7 +5455,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         """Each of the four buttons does its job and sends the teacher back to the queue (#2689).
 
         The approvals page is where all four are pressed from, so each one ends in a redirect
-        back to it, and the page is rebuilt from the database rather than patched in place.
+        back to it, and the page it lands on is rebuilt from the database.
         """
         path = reverse('quests:approve', args=[self.sub.pk])
         approvals = reverse('quests:approvals')
@@ -5495,6 +5495,42 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         )
         self.assertRedirects(response, tab)
 
+    def test_approve__a_corrected_resubmission_still_returns_to_that_tab(self):
+        """Where to go back to survives a form that does not validate (#2689).
+
+        A form that fails validation sends the teacher to the submission page to fix it, and
+        the corrected post is a fresh one: it carries only what that page puts in it.
+        """
+        tab = reverse('quests:submitted_all')
+
+        # An 'awards' value routes to SubmissionFormStaff, and an id that is not a
+        # manually-granted badge fails its validation.
+        invalid = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': tab},
+        )
+        self.assertTemplateUsed(invalid, 'quest_manager/submission.html')
+        self.assertContains(invalid, f'name="next" value="{tab}"')
+
+        corrected = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'approve_button': '', 'next': tab},
+        )
+        self.assertRedirects(corrected, tab)
+
+    def test_approve__an_off_host_next_is_not_carried_into_the_correction(self):
+        """A `next` that is not followed is not written into the page either (#2689).
+
+        The submission page renders it as a hidden field, so only a value that has already
+        been checked belongs there.
+        """
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': 'https://evil.example.com/'},
+        )
+        self.assertTemplateUsed(response, 'quest_manager/submission.html')
+        self.assertNotContains(response, 'evil.example.com')
+
     def test_approve__will_not_be_redirected_off_this_host(self):
         """A `next` pointing somewhere else is ignored rather than followed (#2689).
 
@@ -5510,9 +5546,10 @@ class ApproveViewTest(ByteDeckTenantTestCase):
     def test_approve__each_decision_shows_its_own_message_only(self):
         """The message about one approval is gone by the time the next one is made (#2687).
 
-        Django clears a message once it has been displayed, which only happens if the page is
-        loaded again after the decision. Approvals that never reloaded the page left every
-        message from the session stacked at the top of the queue.
+        Django clears a message once it has been displayed, and displaying it is something
+        loading the page does. A decision that does not send the teacher back to a freshly
+        loaded page therefore leaves its message in the session, to stack up at the top of the
+        queue behind the next one.
         """
         # A second quest, since a student may only have one in-progress submission per quest.
         second = baker.make(QuestSubmission, quest=baker.make(Quest), user=self.test_student)
@@ -6135,7 +6172,7 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         """Nothing on the approvals page intercepts the approve and return buttons (#2687, #2689).
 
         A script that posts them in the background and patches the page in place never reloads
-        it, so Django never gets to display and clear its messages and they pile up at the top
+        it, so Django never gets to display and clear its messages, and they pile up at the top
         of the queue, one per decision, for as long as the teacher stays on the page.
         """
         with patch(
@@ -6156,8 +6193,8 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def test_approvals__there_is_no_ajax_only_approve_route(self):
         """Approving goes through one url, the one the form's action names (#2689).
 
-        A second route onto the same view existed only to be posted to in the background, and
-        a url nothing can reach is a url nobody maintains.
+        A second route onto the same view is a url nothing on the site links to, which is a
+        url nobody maintains and nobody notices going wrong.
         """
         with self.assertRaises(NoReverseMatch):
             reverse('quests:ajax_approve', args=[self.sub.id])
