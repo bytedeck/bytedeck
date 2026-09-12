@@ -1231,6 +1231,16 @@ table[data-toggle="table"].bt-reveal {
     align-items: center;
     gap: 15px;
 }
+/* bootstrap-table's stylesheet gives .fixed-table-toolbar a clearfix ::after. A flex container
+   counts that pseudo-element as an item, so the gap above puts 15px of empty space after the
+   last control and the row stops short of the table's right edge. Flex needs no clearfix, so
+   drop it and the controls end flush right, level with the search box on every other table.
+   Scoped under .bootstrap-table to match the specificity of the rule it overrides
+   (`.bootstrap-table .fixed-table-toolbar::after`), since that stylesheet is loaded per page
+   and so comes after this one. */
+.bootstrap-table .fixed-table-toolbar:has(.bt-toolbar-filter)::after {
+    display: none;
+}
 .bt-toolbar-filter label {
     margin-right: 4px;
     font-weight: normal;
