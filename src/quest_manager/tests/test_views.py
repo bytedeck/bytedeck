@@ -28,7 +28,7 @@ from django.utils import timezone
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
-from badges.models import BadgeAssertion
+from badges.models import Badge, BadgeAssertion
 from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
@@ -6401,6 +6401,97 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].FLAGGED)
         self.assertContains(response, 'class="active"')
+
+    def test_approvals__each_quick_reply_box_carries_its_own_ids(self):
+        """Every submission's reply box carries DOM ids of its own (#2685).
+
+        Without that, the boxes are indistinguishable to a browser refilling the page after a
+        reload, and a reply typed for one quest can be put back into another quest's box once
+        the list has changed underneath.
+        """
+        submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(3)]
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id__in=[s.id for s in submissions]),
+        ):
+            html = self.client.get(reverse('quests:submitted')).content.decode()
+
+        self.assertNotIn('id="id_comment_text"', html)
+        self.assertNotIn('id="id_award"', html)
+        for submission in submissions:
+            self.assertIn(f'id="id_quick_reply_{submission.id}_comment_text"', html)
+            self.assertIn(f'id="id_quick_reply_{submission.id}_award"', html)
+
+        # The field NAMES stay shared: that is what ApproveView reads the reply back from.
+        self.assertEqual(html.count('name="comment_text"'), len(submissions))
+
+    def test_approvals__a_posted_reply_is_not_echoed_into_every_box(self):
+        """A reply posted to this page is not rendered back into any of the boxes (#2685).
+
+        The same form renders once per row, so a form bound to request.POST puts whatever was
+        posted into every submission's box at once.
+        """
+        submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(3)]
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id__in=[s.id for s in submissions]),
+        ):
+            response = self.client.post(reverse('quests:submitted'), data={'comment_text': 'ECHOED-REPLY'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'ECHOED-REPLY')
+
+    def test_approvals__quick_reply_boxes_do_not_autocomplete(self):
+        """The reply boxes ask the browser not to remember what was typed in them (#2685).
+
+        A reply is about one specific submission and is sent as soon as the teacher presses a
+        button, so a browser refilling the box on a later load is never wanted here.
+        """
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id=self.sub.id),
+        ):
+            html = self.client.get(reverse('quests:submitted')).content.decode()
+
+        textareas = re.findall(r'<textarea[^>]*name="comment_text"[^>]*>', html)
+        self.assertTrue(textareas, 'the page rendered no quick reply box')
+        for textarea in textareas:
+            self.assertIn('autocomplete="off"', textarea)
+
+    def test_approvals__award_list_is_fetched_once_for_the_whole_page(self):
+        """The page's queries do not grow with the number of submissions on it (#2685).
+
+        Each row has its own form and every one of them offers the same award list. Building
+        that list costs a prerequisite count per badge, so it is fetched once for the page and
+        shared; a form left to fetch its own multiplies the page's queries by the number of
+        rows (750 instead of 25, on a page of 30, when measured).
+        """
+        baker.make(Badge, _quantity=3)
+
+        def queries_for(count):
+            submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(count)]
+            ids = [s.id for s in submissions]
+            with patch(
+                'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+                return_value=QuestSubmission.objects.filter(id__in=ids),
+            ):
+                self.client.get(reverse('quests:submitted'))  # warm anything cached per process
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.get(reverse('quests:submitted'))
+            self.assertEqual(response.content.decode().count('name="comment_text"'), count)
+            return len(queries)
+
+        one_row = queries_for(1)
+        many_rows = queries_for(8)
+        # Some growth is expected: more rows mean more submissions, users and quests to render.
+        # What must not happen is the award list being rebuilt per row, which is several
+        # queries each and would put the difference far above this.
+        self.assertLess(
+            many_rows - one_row, one_row,
+            f'queries grew from {one_row} to {many_rows} over 7 extra rows, which suggests the '
+            'award list is being rebuilt for each one',
+        )
+
 
 
 class Is_staff_or_TA_test(ByteDeckTenantTestCase):

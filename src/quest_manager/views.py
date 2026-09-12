@@ -1815,9 +1815,6 @@ class ApprovalsViewTabTypes:
 def approvals(request, quest_id=None, template="quest_manager/quest_approval.html"):
     """A view for Teachers' Quest Approvals section.
 
-    If a quest_id is provided, then filter the queryset to only include
-    submissions for that quest.
-
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
         In progress
@@ -1825,6 +1822,18 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         Approved
         Flagged
 
+    Each submission on the page carries its own unbound ``SubmissionQuickReplyForm``, so the
+    reply boxes start empty and have DOM ids of their own.
+
+    Args:
+        request: the staff member's request. Its path picks the tab, and ``?page``, ``?sort``,
+            ``?order`` and ``?q`` page, order and search the submissions in it.
+        quest_id: when given, the queryset is filtered to submissions of that quest, and the
+            page offers the current-semester / all-semesters toggle for its past approvals.
+        template: the template to render.
+
+    Returns:
+        HttpResponse: the rendered approvals page.
     """
 
     # If we are looking up past approvals of a specific quest
@@ -1920,7 +1929,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         },
     ]
 
-    quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
+    # Every row gets its own unbound form (#2685).
+    #
+    # Unbound: a reply is written about one specific submission and is sent the moment the
+    # teacher presses a button, so an empty box on every load is the whole of what is wanted.
+    # A form bound to request.POST would render whatever was posted into all of the boxes,
+    # since the same form renders once per row.
+    #
+    # Its own: auto_id then gives each row's fields ids of their own, so a browser refilling
+    # the page after a reload can tell the boxes apart, and a reply typed for one quest cannot
+    # land in another's when the list changes underneath. The field NAMES stay shared, because
+    # that is what ApproveView reads the reply back from.
+    #
+    # The award list costs a prerequisite count per badge, so it is fetched once for the page
+    # and handed to every row; fetched per row, a page of 30 submissions costs 750 queries.
+    award_choices = SubmissionQuickReplyForm.build_award_choices()
+    for tab in tab_list:
+        for submission in tab["submissions"]:
+            submission.quick_reply_form = SubmissionQuickReplyForm(
+                award_choices=award_choices,
+                auto_id=f"id_quick_reply_{submission.id}_%s",
+            )
 
     # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
     show_all_blocks_button = True
@@ -1934,7 +1963,6 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
-        "quick_reply_form": quick_reply_form,
         "VIEW_TYPES": ApprovalsViewTabTypes,
         "view_type": view_type,
         "current_teacher_only": current_teacher_only,
