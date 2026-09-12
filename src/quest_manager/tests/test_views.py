@@ -6165,6 +6165,30 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         """`bo` holds two registrations, and a join on them would put two rows on the page."""
         self.assertEqual(self._usernames(sort='group').count('bo'), 1)
 
+    def test_approvals__the_sort_key_joins_the_names_with_the_separator_on_screen(self):
+        """The joined sort key uses ", ", the separator the cell is rendered with.
+
+        Group names chosen so the separator decides the answer: a student in "A" and "AB"
+        shows "A, AB", which sorts before "AV". Joined with anything that sorts after "V",
+        or with no separator at all, the two swap.
+        """
+        semester = SiteConfig.get().active_semester
+        a, ab, av = (baker.make(Block, name=name) for name in ('A', 'AB', 'AV'))
+
+        multi = User.objects.create_user('multi')          # cell reads "A, AB"
+        single = User.objects.create_user('single')        # cell reads "AV"
+        for student, blocks in ((multi, (a, ab)), (single, (av,))):
+            for block in blocks:
+                baker.make('courses.CourseStudent', user=student, semester=semester, block=block)
+            baker.make(
+                QuestSubmission, quest=baker.make(Quest), user=student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=timezone.now(),
+            )
+
+        ordered = self._usernames(sort='group')
+
+        self.assertLess(ordered.index('multi'), ordered.index('single'))
+
     def test_approvals__filtering_by_group_keeps_only_that_groups_submissions(self):
         """Choosing a group narrows the tab to the students registered in it."""
         self.assertEqual(sorted(self._usernames(block=self.block_a.pk)), ['bo'])
@@ -6228,19 +6252,23 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         """A student's tabs hold only their own submissions, so there is no group to pick between.
 
         The parameter is ignored rather than honoured, so a link copied from an approvals
-        page cannot quietly empty a student's list of their own work.
+        page cannot quietly empty a student's list of their own work. `al` is in 8B, so a
+        filter on 7A would empty the tab if it were read here.
         """
+        in_progress = baker.make(
+            QuestSubmission, quest=baker.make(Quest, name='Still going'), user=self.al,
+            semester=SiteConfig.get().active_semester, is_completed=False, is_approved=False,
+        )
         self.client.force_login(self.al)
-        mine = reverse('quests:quests')
+        mine = reverse('quests:inprogress')
 
         unfiltered = self.client.get(mine)
-        filtered = self.client.get(mine, {'block': self.block_b.pk})
+        filtered = self.client.get(mine, {'block': self.block_a.pk})
 
+        # the tab really does hold their submission, so the comparison below is not empty
+        self.assertEqual([s.pk for s in unfiltered.context['in_progress_submissions']], [in_progress.pk])
+        self.assertEqual([s.pk for s in filtered.context['in_progress_submissions']], [in_progress.pk])
         self.assertNotContains(filtered, 'name="block"')
-        self.assertEqual(
-            [s.pk for s in filtered.context['in_progress_submissions'] or []],
-            [s.pk for s in unfiltered.context['in_progress_submissions'] or []],
-        )
 
     def test_approvals__the_search_form_carries_the_sort_so_searching_keeps_it(self):
         """The filter and search are one GET form, which would otherwise drop an active sort."""

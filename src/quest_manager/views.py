@@ -1734,7 +1734,7 @@ def submission_displayed_group_names():
     # have to group by as well; values('user') is what groups a student's registrations
     # into the single row the subquery is allowed to return.
     joined_names = registrations.order_by().values('user').annotate(
-        names=StringAgg('block__name', delimiter=Value(', '), order_by='block__name'),
+        names=StringAgg('block__name', delimiter=', ', order_by='block__name'),
     ).values('names')
 
     return Subquery(joined_names, output_field=CharField())
