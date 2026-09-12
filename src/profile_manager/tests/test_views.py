@@ -1007,6 +1007,31 @@ class ProfileViewTests(ByteDeckTenantTestCase):
                 response = self.client.get(reverse(name, args=args))
                 self.assertNotIn('block_filter_choices', response.context, msg=name)
 
+    def test_profile_list__filters_sit_in_the_table_toolbar(self):
+        """The group filter and search box share the table's toolbar row, at the right of it.
+
+        bootstrap-table relocates whatever element data-toolbar names into the table's own
+        toolbar, and .bt-toolbar-filter right-aligns that row, which is what puts the search
+        where every other table in the app puts its search. The attribute and the form's id
+        are the only thing connecting the two, so a rename on either side silently undoes the
+        layout, and dropping the class silently moves the search back to the left.
+        """
+        self.client.force_login(self.test_teacher)
+        html = self.client.get(reverse('profiles:profile_list')).content.decode()
+
+        toolbar = re.search(r"""data-toolbar=['"]([^'"]+)['"]""", html)
+        self.assertIsNotNone(toolbar, 'the student table declares no data-toolbar')
+        self.assertEqual(toolbar.group(1), '#profile-list-filters')
+
+        form = re.search(r"""<form[^>]*id="profile-list-filters"[^>]*>""", html)
+        self.assertIsNotNone(form, 'the filter form is not on the page')
+        # As a class token, not a substring of the whole tag: the latter would also be
+        # satisfied by a longer class that merely starts the same way, or by the name
+        # turning up in some other attribute.
+        classes = re.search(r"""\sclass=["']([^"']*)["']""", form.group(0))
+        self.assertIsNotNone(classes, 'the filter form carries no class attribute')
+        self.assertIn('bt-toolbar-filter', classes.group(1).split())
+
     def test_profile_list__non_staff_cannot_search_by_username(self):
         """A student may not search the username column, which is rendered only to staff.
 

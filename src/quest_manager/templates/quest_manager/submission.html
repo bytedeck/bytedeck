@@ -101,6 +101,14 @@
          the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
         <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
+        {% if next %}
+          {% comment %}
+          Set when this page is reached by correcting a form that did not validate, so the
+          corrected submission still returns to the approvals tab the first attempt came from
+          (#2689). ApproveView has already checked it stays on this host.
+          {% endcomment %}
+          <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
       {% else %}
         <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}" data-warn-unsaved>
       {% endif %}

@@ -1,8 +1,10 @@
 import json
+import re
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.urls import reverse
+from django.utils import timezone
 
 from model_bakery import baker
 from unittest.mock import patch
@@ -103,6 +105,247 @@ class ViewTests(ByteDeckTenantTestCase):
         # These will need their own tests:
         # self.assert200('djcytoscape:regenerate', args=[self.map.id])
         # self.assert200('djcytoscape:regenerate_all')
+
+    def _map_context(self, user=None):
+        """Render this map and return its response, as ``user`` if one is given.
+
+        Args:
+            user: the user to log in first; left alone when None.
+
+        Returns:
+            HttpResponse: the rendered quest map.
+        """
+        if user is not None:
+            self.client.force_login(user)
+        return self.client.get(reverse('djcytoscape:quest_map', args=[self.map.id]))
+
+    def _submit(self, quest, user, approved):
+        """Hand ``quest`` in for ``user``, approved or still waiting.
+
+        Args:
+            quest: the Quest being handed in.
+            user: the student handing it in.
+            approved (bool): True for a teacher-approved submission, False for one awaiting
+                approval.
+
+        Returns:
+            QuestSubmission: the submission created.
+        """
+        return baker.make(
+            'quest_manager.QuestSubmission',
+            quest=quest, user=user, is_completed=True, is_approved=approved,
+        )
+
+    def test_quest_map__marks_approved_and_awaiting_quests_separately(self):
+        """A student's map reports approved quests apart from ones still waiting (#2678).
+
+        Green and yellow are two different facts about a quest, so the view hands the
+        template two lists: approved work, and work the teacher has not looked at yet.
+        """
+        approved_quest = baker.make('quest_manager.Quest')
+        awaiting_quest = baker.make('quest_manager.Quest')
+        untouched_quest = baker.make('quest_manager.Quest')
+        self._submit(approved_quest, self.test_student1, approved=True)
+        self._submit(awaiting_quest, self.test_student1, approved=False)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertEqual(response.context['approved_quests'], [approved_quest.id])
+        self.assertEqual(response.context['awaiting_approval_quests'], [awaiting_quest.id])
+        self.assertNotIn(untouched_quest.id, response.context['approved_quests'])
+        self.assertNotIn(untouched_quest.id, response.context['awaiting_approval_quests'])
+
+    def test_quest_map__a_returned_submission_is_neither_approved_nor_awaiting(self):
+        """Work a teacher handed back is not waiting on them, so it colours nothing.
+
+        A returned submission has a completion date but is_completed False, which is what
+        separates it from one sitting in the approval queue.
+        """
+        returned_quest = baker.make('quest_manager.Quest')
+        baker.make(
+            'quest_manager.QuestSubmission',
+            quest=returned_quest, user=self.test_student1,
+            is_completed=False, is_approved=False, time_completed=timezone.now(),
+        )
+
+        response = self._map_context(self.test_student1)
+
+        self.assertNotIn(returned_quest.id, response.context['approved_quests'])
+        self.assertNotIn(returned_quest.id, response.context['awaiting_approval_quests'])
+
+    def test_quest_map__an_approved_quest_stays_approved_when_a_repeat_is_waiting(self):
+        """A quest that has ever been approved keeps saying so, even with a repeat pending.
+
+        Repeatable quests can be both at once; a quest that already counted for the student
+        should not flip back to "waiting" because they handed it in again.
+        """
+        repeatable = baker.make('quest_manager.Quest')
+        self._submit(repeatable, self.test_student1, approved=True)
+        self._submit(repeatable, self.test_student1, approved=False)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertEqual(response.context['approved_quests'], [repeatable.id])
+        self.assertEqual(response.context['awaiting_approval_quests'], [])
+
+    def test_quest_map__covers_quests_from_earlier_semesters(self):
+        """The colours span the student's whole history, not just the semester they are in.
+
+        This is the part of #2678 that is easy to get wrong: the map is a picture of what
+        they have done, and an approved quest from last term is no less done.
+        """
+        from courses.models import Semester
+        old_semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        old_quest = baker.make('quest_manager.Quest')
+        baker.make(
+            'quest_manager.QuestSubmission',
+            quest=old_quest, user=self.test_student1, semester=old_semester,
+            is_completed=True, is_approved=True,
+        )
+
+        response = self._map_context(self.test_student1)
+
+        self.assertIn(old_quest.id, response.context['approved_quests'])
+
+    def test_quest_map__another_students_work_does_not_colour_this_map(self):
+        """The colours are personal: only the viewing student's own submissions count."""
+        other_student = User.objects.create_user('someone_else')
+        Profile.objects.get_or_create(user=other_student)
+        their_quest = baker.make('quest_manager.Quest')
+        self._submit(their_quest, other_student, approved=True)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertNotIn(their_quest.id, response.context['approved_quests'])
+
+    def test_quest_map__staff_get_an_uncoloured_map(self):
+        """A teacher's own map is not personalized, so neither list has anything in it.
+
+        Both are still present and empty rather than None, because the template feeds them
+        straight to json_script.
+        """
+        staff_quest = baker.make('quest_manager.Quest')
+        self._submit(staff_quest, self.test_teacher, approved=True)
+
+        response = self._map_context(self.test_teacher)
+
+        self.assertEqual(response.context['approved_quests'], [])
+        self.assertEqual(response.context['awaiting_approval_quests'], [])
+        self.assertIsNone(response.context['personalized_user'])
+
+    def test_quest_map__the_ids_reach_the_page_as_json(self):
+        """The ids are rendered as JSON the map script reads, not a line of script per quest.
+
+        A deck's map can carry hundreds of quests, so the page should not grow a statement
+        for each one.
+        """
+        approved_quest = baker.make('quest_manager.Quest')
+        self._submit(approved_quest, self.test_student1, approved=True)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertContains(response, 'id="approved-quest-ids"')
+        self.assertContains(response, 'id="awaiting-approval-quest-ids"')
+        page = response.content.decode()
+        payload = re.search(
+            r'<script id="approved-quest-ids"[^>]*>(.*?)</script>', page, re.DOTALL,
+        ).group(1)
+        self.assertEqual(json.loads(payload), [approved_quest.id])
+
+        # The script must not grow with the deck: adding more approved quests adds ids to the
+        # JSON, and no further lines of script.
+        addclass_calls = page.count('.addClass(')
+        for _ in range(5):
+            self._submit(baker.make('quest_manager.Quest'), self.test_student1, approved=True)
+        bigger = self._map_context()
+        self.assertEqual(len(bigger.context['approved_quests']), 6)
+        self.assertEqual(bigger.content.decode().count('.addClass('), addclass_calls)
+
+    def test_quest_map__marks_badges_the_student_holds(self):
+        """Badges appear on maps too, and a badge the student holds gets the same green.
+
+        A badge is granted or not, with nothing corresponding to a submission waiting on a
+        teacher, so there is no yellow for badges.
+        """
+        earned = baker.make('badges.Badge')
+        unearned = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=earned, user=self.test_student1)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertEqual(response.context['earned_badges'], [earned.id])
+        self.assertNotIn(unearned.id, response.context['earned_badges'])
+
+    def test_quest_map__a_badge_granted_twice_is_listed_once(self):
+        """A badge can be granted repeatedly, but it is one node on the map."""
+        badge = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=badge, user=self.test_student1, _quantity=3)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertEqual(response.context['earned_badges'], [badge.id])
+
+    def test_quest_map__badges_cover_earlier_semesters_too(self):
+        """A badge earned in a semester that has ended is still the student's (#2678)."""
+        from courses.models import Semester
+        old_semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        badge = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=badge, user=self.test_student1, semester=old_semester)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertIn(badge.id, response.context['earned_badges'])
+
+    def test_quest_map__another_students_badges_do_not_colour_this_map(self):
+        """Badge colours are personal, the same as the quest ones."""
+        other_student = User.objects.create_user('badge_holder')
+        Profile.objects.get_or_create(user=other_student)
+        their_badge = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=their_badge, user=other_student)
+
+        response = self._map_context(self.test_student1)
+
+        self.assertNotIn(their_badge.id, response.context['earned_badges'])
+
+    def test_quest_map__staff_get_no_badge_colours_either(self):
+        """A teacher's own map is not personalized, so the badge list is empty too."""
+        badge = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=badge, user=self.test_teacher)
+
+        response = self._map_context(self.test_teacher)
+
+        self.assertEqual(response.context['earned_badges'], [])
+
+    def test_quest_map__badge_ids_reach_the_page_under_their_own_data_key(self):
+        """Badge nodes carry their id under "Badge", not "Quest", so the map marks them by it.
+
+        Matching badges on the quest key would colour nothing, or worse, colour the quest that
+        happens to share the id.
+        """
+        badge = baker.make('badges.Badge')
+        baker.make('badges.BadgeAssertion', badge=badge, user=self.test_student1)
+
+        response = self._map_context(self.test_student1)
+
+        page = response.content.decode()
+        payload = re.search(
+            r'<script id="earned-badge-ids"[^>]*>(.*?)</script>', page, re.DOTALL,
+        ).group(1)
+        self.assertEqual(json.loads(payload), [badge.id])
+        self.assertIn("markNodes('earned-badge-ids', 'Badge', 'approved')", page)
+
+    def test_quest_map_personalized__staff_see_a_students_colours(self):
+        """A teacher viewing a student's personalized map sees that student's progress."""
+        approved_quest = baker.make('quest_manager.Quest')
+        self._submit(approved_quest, self.test_student1, approved=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(
+            reverse('djcytoscape:quest_map_personalized', args=[self.map.id, self.test_student1.id])
+        )
+
+        self.assertEqual(response.context['approved_quests'], [approved_quest.id])
+        self.assertEqual(response.context['personalized_user'], self.test_student1)
 
     def test_quest_map__map_scripts_are_cache_busted(self):
         """maps.js (and maps-dark.js) are served with a ?v= cache-buster so browsers don't keep

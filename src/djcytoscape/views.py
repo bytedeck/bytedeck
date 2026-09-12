@@ -16,6 +16,7 @@ from django.utils.html import format_html
 
 from hackerspace_online.decorators import staff_member_required
 
+from badges.models import BadgeAssertion
 from quest_manager.models import QuestSubmission, Quest
 from siteconfig.models import SiteConfig
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
@@ -92,6 +93,55 @@ def quest_map(request, scape_id):
     return quest_map_personalized(request, scape_id, None)
 
 
+def _quest_status_ids(user):
+    """Split the quests this student has handed in into approved and still-waiting.
+
+    Covers their WHOLE history rather than the semester they are in now (#2678): a map is a
+    picture of what they have done, and work from an earlier term is no less done for the
+    term having ended.
+
+    A quest with an approved submission counts as approved even when a later repeat of it is
+    waiting, so a quest that has ever counted for them keeps saying so rather than flipping
+    back on a resubmission.
+
+    Args:
+        user: the student whose map is being drawn.
+
+    Returns:
+        tuple[list[int], list[int]]: the quest ids to mark approved, and those to mark
+        awaiting approval. Sorted, so the rendered page is identical between requests.
+    """
+    # is_completed means handed in; is_approved is the teacher's decision on it. One query
+    # over both, rather than one per status. order_by() drops the manager's default ordering,
+    # which the database would have to sort the student's whole submission history to honour:
+    # the rows go into sets here, and the ids come back out sorted.
+    handed_in = QuestSubmission.objects.all_completed(user=user, active_semester_only=False).order_by()
+    approved, awaiting = set(), set()
+    for quest_id, is_approved in handed_in.values_list('quest_id', 'is_approved'):
+        (approved if is_approved else awaiting).add(quest_id)
+    return sorted(approved), sorted(awaiting - approved)
+
+
+def _earned_badge_ids(user):
+    """The badges this student holds, for colouring the badge nodes on a map (#2678).
+
+    Badges appear on maps alongside quests, and they earn the same green: a badge is either
+    granted or not, with nothing corresponding to a submission waiting on a teacher, so no
+    badge is ever yellow.
+
+    All-time for the same reason quests are: a badge earned last term is still theirs.
+
+    Args:
+        user: the student whose map is being drawn.
+
+    Returns:
+        list[int]: the badge ids to mark earned, sorted and deduplicated (a badge granted
+        more than once is one node on the map).
+    """
+    assertions = BadgeAssertion.objects.get_queryset(active_semester_only=False).get_user(user)
+    return sorted(set(assertions.values_list('badge_id', flat=True)))
+
+
 @non_public_only_view
 @login_required
 def quest_map_personalized(request, scape_id, user_id):
@@ -104,13 +154,11 @@ def quest_map_personalized(request, scape_id, user_id):
     if user == request.user or request.user.is_staff:
         # do not personalize for staff accounts
         if not user.is_staff:
-            completed_qs = QuestSubmission.objects.all_completed(user=user, active_semester_only=False)
-            quest_ids = completed_qs.values_list('quest__id', flat=True)
-            # Evalute and remove doubels by converting to a set
-            quest_ids = set(quest_ids)
+            approved_quest_ids, awaiting_quest_ids = _quest_status_ids(user)
+            earned_badge_ids = _earned_badge_ids(user)
             personalized_user = user
         else:
-            quest_ids = None
+            approved_quest_ids, awaiting_quest_ids, earned_badge_ids = [], [], []
             personalized_user = None
 
         scape = get_object_or_404(CytoScape, id=scape_id)
@@ -122,7 +170,9 @@ def quest_map_personalized(request, scape_id, user_id):
             'scape': scape,
             'elements': scape.elements_json,
             'class_styles': scape.class_styles_json,
-            'completed_quests': quest_ids,
+            'approved_quests': approved_quest_ids,
+            'awaiting_approval_quests': awaiting_quest_ids,
+            'earned_badges': earned_badge_ids,
             'fullscreen': True,
             'personalized_user': personalized_user,
         }

@@ -204,7 +204,7 @@ class CategoryDetail(NonPublicOnlyViewMixin, LoginRequiredMixin, DetailView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
-    fields = ("title", "short_description", "icon", "published", "map_order")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     success_url = reverse_lazy("quests:categories")
 
@@ -228,7 +228,7 @@ class CategoryCreate(NonPublicOnlyViewMixin, CreateView):
 
 @method_decorator(staff_member_required, name="dispatch")
 class CategoryUpdate(NonPublicOnlyViewMixin, UpdateView):
-    fields = ("title", "short_description", "icon", "published", "map_order")
+    fields = ("title", "short_description", "icon", "published")
     model = Category
     # no success_url: UpdateView falls back to the object's get_absolute_url(), returning
     # the user to the campaign detail view they started the edit from (issue #1931)
@@ -1348,37 +1348,43 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         # quick reply
         return SubmissionQuickReplyForm(self.request.POST)
 
-    def form_valid(self):
-        """ handles response when form is valid
-        - returns HttpResponse if standard
-        - returns JsonResponse if ajax
-        """
-        if not self.is_ajax:
-            return redirect("quests:approvals")
+    def safe_next(self):
+        """Where the form says to go once the decision is recorded, if it may be trusted.
 
-        # for ajax call. Need to replicate standard view's procedure where
-        # - quest submission container disappears  (handled client side)
-        # - message box container shows (handled here)
-        template_name = 'messages-snippet.html'
-        context = {
-            'messages': list(messages.get_messages(self.request))
-        }
-        html = render_to_string(template_name, context)
-        return JsonResponse(data={'messages_html': html})
+        The approvals page has four tabs and a my-groups/all toggle, so the page a decision
+        was made from is rarely the one ``quests:approvals`` resolves to; each reply form
+        posts the page it came from so the teacher is put back on it.
+
+        Returns:
+            str or None: the posted `next`, when it stays on this host and keeps https for a
+            request that came in over https; None otherwise, which includes a form that posted
+            no `next` at all. Anything else would make this view an open redirect.
+        """
+        next_url = self.request.POST.get('next')
+        if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
+            return next_url
+        return None
+
+    def form_valid(self):
+        """Send the teacher back where they were once their decision is recorded.
+
+        The page they return to is rebuilt from the database, so the submission just dealt
+        with is gone from it and the message about it is displayed once (#2687, #2689).
+
+        Returns:
+            HttpResponseRedirect: to the approvals tab the form named, or to the default
+            approvals page when it named none that may be trusted.
+        """
+        return redirect(self.safe_next() or "quests:approvals")
 
     def form_invalid(self):
-        """ handles response when form is invalid
-        - returns HttpResponse if standard
-        - returns JsonResponse if ajax
+        """Re-render the submission page so the form's validation errors are visible.
+
+        Returns:
+            HttpResponse: the submission page, carrying the bound form and its errors, and the
+            page to return to once the teacher has corrected and resubmitted them.
         """
-        # need to return a failing status code for ajax request
-        # without this should return a response with 200 status code
-        if self.is_ajax:
-            return JsonResponse({'error': 'Bad Request'}, status=400)
-
-        # messages.error(request, "There was an error with your comment. Maybe you need to type something?")
-        # return redirect(origin_path)
-
         # rendering here with the context allows validation errors to be displayed
         context = {
             "heading": self.submission.quest.name,
@@ -1387,6 +1393,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             "submission_form": self.form,
             "form_media": _submission_page_media(self.form),
             "anchor": "submission-form-" + str(self.submission.quest.id),
+            # Carried through the correction, so the resubmission lands where the first
+            # attempt was going to.
+            "next": self.safe_next(),
             # "reply_comment_form": reply_comment_form,
         }
         return render(self.request, "quest_manager/submission.html", context)
@@ -1555,9 +1564,20 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
     @method_decorator(staff_member_required)
     def dispatch(self, request, *args, **kwargs):
-        """ requests are only allowed if:
-        - POST method
-        - optionally POST AJAX method
+        """Turn away anything that is not a staff member acting on one of the form's buttons.
+
+        Args:
+            request: the staff member's request. Only POST is served, and it must name one of
+                the four buttons the approvals form carries.
+            *args: positional arguments passed through to ``View.dispatch``.
+            **kwargs: keyword arguments passed through to ``View.dispatch``, including the
+                ``submission_id`` from the url.
+
+        Returns:
+            HttpResponse: whatever ``post()`` returns, a redirect or the submission page.
+
+        Raises:
+            Http404: on any method other than POST, or on a POST naming no known button.
         """
         # this is a POST only view
         if request.method != "POST":
@@ -1565,8 +1585,6 @@ class ApproveView(NonPublicOnlyViewMixin, View):
 
         if not self.post_has_valid_button():
             raise Http404("unrecognized submit button")
-
-        self.is_ajax = request.META.get('HTTP_X_REQUESTED_WITH') == 'XMLHttpRequest'
 
         return super().dispatch(request, *args, **kwargs)
 
@@ -1579,14 +1597,16 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         the comment, uploaded files are attached to it, and the student is notified.
 
         Args:
-            request: the POST carrying the teacher's comment, any files, any badge, and which
-                button was pressed.
+            request: the POST carrying the teacher's comment, any files, any badge, which
+                button was pressed, and the page to return to.
             submission_id: pk of the submission being acted on.
+            *args: positional arguments passed through from ``dispatch``.
+            **kwargs: keyword arguments passed through from ``dispatch``.
 
         Returns:
-            HttpResponse: `form_valid`'s redirect to the approvals tab, or a JsonResponse when
-            the request was made by ajax. An invalid form returns `form_invalid` instead,
-            which re-renders the submission page (or a 400 for ajax).
+            HttpResponse: `form_valid`'s redirect back to the approvals page, or, for a form
+            that does not validate, `form_invalid`'s render of the submission page carrying
+            the errors.
         """
         self.submission = self.get_submission(submission_id)
         self.form = self.get_form()
@@ -1795,9 +1815,6 @@ class ApprovalsViewTabTypes:
 def approvals(request, quest_id=None, template="quest_manager/quest_approval.html"):
     """A view for Teachers' Quest Approvals section.
 
-    If a quest_id is provided, then filter the queryset to only include
-    submissions for that quest.
-
     Different querysets are generated based on the url. Each with its own tab.
     Currently:
         In progress
@@ -1805,6 +1822,18 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         Approved
         Flagged
 
+    Each submission on the page carries its own unbound ``SubmissionQuickReplyForm``, so the
+    reply boxes start empty and have DOM ids of their own.
+
+    Args:
+        request: the staff member's request. Its path picks the tab, and ``?page``, ``?sort``,
+            ``?order`` and ``?q`` page, order and search the submissions in it.
+        quest_id: when given, the queryset is filtered to submissions of that quest, and the
+            page offers the current-semester / all-semesters toggle for its past approvals.
+        template: the template to render.
+
+    Returns:
+        HttpResponse: the rendered approvals page.
     """
 
     # If we are looking up past approvals of a specific quest
@@ -1900,7 +1929,27 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         },
     ]
 
-    quick_reply_form = SubmissionQuickReplyForm(request.POST or None)
+    # Every row gets its own unbound form (#2685).
+    #
+    # Unbound: a reply is written about one specific submission and is sent the moment the
+    # teacher presses a button, so an empty box on every load is the whole of what is wanted.
+    # A form bound to request.POST would render whatever was posted into all of the boxes,
+    # since the same form renders once per row.
+    #
+    # Its own: auto_id then gives each row's fields ids of their own, so a browser refilling
+    # the page after a reload can tell the boxes apart, and a reply typed for one quest cannot
+    # land in another's when the list changes underneath. The field NAMES stay shared, because
+    # that is what ApproveView reads the reply back from.
+    #
+    # The award list costs a prerequisite count per badge, so it is fetched once for the page
+    # and handed to every row; fetched per row, a page of 30 submissions costs 750 queries.
+    award_choices = SubmissionQuickReplyForm.build_award_choices()
+    for tab in tab_list:
+        for submission in tab["submissions"]:
+            submission.quick_reply_form = SubmissionQuickReplyForm(
+                award_choices=award_choices,
+                auto_id=f"id_quick_reply_{submission.id}_%s",
+            )
 
     # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
     show_all_blocks_button = True
@@ -1914,7 +1963,6 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
-        "quick_reply_form": quick_reply_form,
         "VIEW_TYPES": ApprovalsViewTabTypes,
         "view_type": view_type,
         "current_teacher_only": current_teacher_only,
