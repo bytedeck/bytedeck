@@ -10,6 +10,7 @@ from django.urls import reverse_lazy
 from django.urls.base import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 from django.views.generic.edit import CreateView, DeleteView, UpdateView
 
@@ -106,6 +107,11 @@ def list(request, ann_id=None, template='announcements/list.html'):
     else:
         object_list = Announcement.objects.get_for_students()
 
+    # Searching is done by the database so it covers the whole list rather than the page the
+    # browser is holding, which is what the quest tabs do for the same reason (#2667, #2379).
+    search_term = request.GET.get('q', '').strip()
+    object_list = object_list.search(search_term)
+
     paginator = Paginator(object_list, 20)
     page = request.GET.get('page')
 
@@ -134,6 +140,9 @@ def list(request, ann_id=None, template='announcements/list.html'):
         'active_id': ann_id,
         'archived': archived,
         'list_url': reverse('announcements:archived' if archived else 'announcements:list'),
+        'search_term': search_term,
+        # Appended to the pagination links below, so a search survives a change of page.
+        'search_query': '&' + urlencode({'q': search_term}) if search_term else '',
     }
     return render(request, template, context)
 
