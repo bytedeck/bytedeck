@@ -56,8 +56,13 @@ only ever loads one page of students. Search and column sorting therefore run
 server-side too -- against every student, not just the current page -- via the
 ?q=, ?sort= and ?order= querystring params below. bootstrap-table is kept only
 for its column show/hide toggle and styling of the current page's rows.
+
+The table's data-toolbar points at this form, so bootstrap-table moves it into
+the table's own toolbar row, and .bt-toolbar-filter (#2115) right-aligns that
+row: the search ends up where every other table in the app puts its search,
+with the group filter beside it.
 {% endcomment %}
-<form method="get" class="form-inline" id="profile-list-filters">
+<form method="get" class="form-inline bt-toolbar-filter" id="profile-list-filters">
     {% if block_filter_choices %}
     <div class="form-group">
         <label for="block-filter">{% group_name %}:</label>
@@ -96,6 +101,7 @@ for its column show/hide toggle and styling of the current page's rows.
 {% include 'snippets/table_loading.html' %}
 <table data-toggle='table'
 data-show-columns='true'
+data-toolbar='#profile-list-filters'
 
 data-icons='icons'
 data-icons-prefix='fa'
