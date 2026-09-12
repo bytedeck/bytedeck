@@ -16,7 +16,9 @@
       <thead>
         <tr>
           <th data-field="mark" data-sortable="true">Mark</th>
-          <th data-field="minimum_mark" data-sortable="true">Minimum Mark</th>
+          {# "49.5%" reads as text, so it sorts on the hidden number beside it. #}
+          <th data-field="minimum_mark" data-sortable="true" data-sort-name="minimum_mark_sort">Minimum Mark</th>
+          <th data-field="minimum_mark_sort" data-visible="false" data-switchable="false"></th>
           <th data-field="color" data-searchable="false">Color</th>
           <th data-field="courses" data-sortable="true">Courses</th>
           <th data-field="active" data-sortable="true">Active</th>
@@ -28,6 +30,7 @@
           <tr {% if not object.active %} class="text-muted" {% endif %}>
             <td>{{object.name}}</td>
             <td>{{object.minimum_mark}}%</td>
+            <td>{{object.minimum_mark}}</td>
             <td>
               {% if request.user.profile.dark_theme %}
                 <i class="fa fa-fw fa-circle" style="color:{{object.color_dark}}"></i>

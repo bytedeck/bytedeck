@@ -17,8 +17,11 @@
         <tr>
           <th data-field="icon" data-searchable="false"></th>
           <th data-field="rank" data-sortable="true">Rank</th>
-          <th data-field="xp" data-sortable="true">XP</th>
-          <th data-field="quest_map" data-sortable="true">Quest Map</th>
+          {# "XP" reads "60 XP", so it sorts on the hidden number beside it rather than as text. #}
+          <th data-field="xp" data-sortable="true" data-sort-name="xp_sort">XP</th>
+          <th data-field="xp_sort" data-visible="false" data-switchable="false"></th>
+          {# An icon link or nothing: no value to sort or match on. #}
+          <th data-field="quest_map" data-searchable="false">Quest Map</th>
           {% if request.user.is_staff %}
           <th data-field="action" data-searchable="false">Action</th>
           {% endif %}
@@ -30,6 +33,7 @@
             <td class="text-center"><i class="{{object.fa_icon_class}} fa-lg fa-fw text-warning"></i></td>
             <td>{{object.name}}</td>
             <td>{{object.xp}} XP</td>
+            <td>{{object.xp}}</td>
             <td>
               {% if object.get_map.get_absolute_url %}
               <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>

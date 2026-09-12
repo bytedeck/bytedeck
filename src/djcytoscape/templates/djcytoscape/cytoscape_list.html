@@ -22,7 +22,9 @@
   <thead>
     <tr>
       <th data-field="name" data-sortable="true">Map Name</th>
-      <th data-field="generated_on" data-sortable="true">Generated On</th>
+      {# A rendered datetime sorts as text, so it orders on the hidden ISO-8601 field beside it. #}
+      <th data-field="generated_on" data-sortable="true" data-sort-name="generated_on_sort">Generated On</th>
+      <th data-field="generated_on_sort" data-visible="false" data-switchable="false"></th>
       {% if request.user.is_staff %}
         <th data-field="action" data-searchable="false">Action</th>
       {% endif %}
@@ -33,6 +35,7 @@
   <tr>
     <td><a href="{% url 'djcytoscape:quest_map' scape.id %}">{{ scape.name }}</a></td>
     <td>{{ scape.last_regeneration }}</td>
+    <td>{{ scape.last_regeneration|date:"Y-m-d H:i" }}</td>
     {% if request.user.is_staff %}
       <td>
           <a class="btn btn-warning" href="{% url 'djcytoscape:update' scape.id %}" role="button" title="Edit this map.">
