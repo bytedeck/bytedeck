@@ -14,6 +14,39 @@
 
 {% block content %}
 {% if archived %}<p>This page is visible to staff only.</p>{% endif %}
+
+{% comment %}
+  Searching is done by the server so it covers the whole list, not just the 20 announcements
+  in view. The action is the plain list URL, so a search started from a permalink such as
+  /announcements/5/ lands on the first page of its own results, and any ?page= is dropped
+  (#2667).
+{% endcomment %}
+<form class="form-inline list-search-form" method="get" action="{{ list_url }}">
+  <div class="form-group">
+    <label class="sr-only" for="announcement-search">Search {{ config.custom_name_for_announcement|lower }}s</label>
+    <div class="input-group">
+      <input type="search" class="form-control" id="announcement-search" name="q"
+             value="{{ search_term }}" placeholder="Search {{ config.custom_name_for_announcement|lower }} titles and text">
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="submit" title="Search every {{ config.custom_name_for_announcement|lower }} in this list">
+          <i class="fa fa-fw fa-search"></i>
+        </button>
+        {% if search_term %}
+          <a class="btn btn-default" href="{{ list_url }}" role="button" title="Clear this search">
+            <i class="fa fa-fw fa-times"></i>
+          </a>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</form>
+
+{% if search_term %}
+  {% with num_matching=object_list.paginator.count %}
+    <p class="text-muted">{{ num_matching }} {{ config.custom_name_for_announcement|lower }}{{ num_matching|pluralize }} match{{ num_matching|pluralize:"es," }} "{{ search_term }}".</p>
+  {% endwith %}
+{% endif %}
+
 <div class="panel-group panel-group-packed" id="accordion" role="tablist" aria-multiselectable="true">
 {% for object in object_list %}
   <div id="{{object.id}}"
@@ -128,19 +161,24 @@
 {% endfor %}
 </div>
 {% if object_list.paginator.num_pages > 1 %}
+{% comment %}
+  Every link carries the search, or page 2 of a search would quietly show page 2 of
+  everything. They point at the plain list URL rather than the current path, because an
+  /announcements/<id>/ URL works out its own page from that announcement and ignores ?page=.
+{% endcomment %}
 <ul class="pagination pagination-centered">
     {% if object_list.has_previous %}
-        <li><a href="{{ list_url }}?page=1">&lt;&lt;</a></li>
-        <li><a href="{{ list_url }}?page={{ object_list.previous_page_number }}">&lt;</a></li>
+        <li><a href="{{ list_url }}?page=1{{ search_query }}">&lt;&lt;</a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.previous_page_number }}{{ search_query }}">&lt;</a></li>
     {% endif %}
 
     {% for i in object_list.paginator.page_range %}
-        <li {% if object_list.number == i %} class="active" {% endif %}><a href="{{ list_url }}?page={{i}}">{{i}}</a></li>
+        <li {% if object_list.number == i %} class="active" {% endif %}><a href="{{ list_url }}?page={{i}}{{ search_query }}">{{i}}</a></li>
     {% endfor %}
 
     {% if object_list.has_next %}
-        <li><a href="{{ list_url }}?page={{ object_list.next_page_number }}">&gt;</a></li>
-        <li><a href="{{ list_url }}?page={{ object_list.paginator.num_pages }}">&gt;&gt;</a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.next_page_number }}{{ search_query }}">&gt;</a></li>
+        <li><a href="{{ list_url }}?page={{ object_list.paginator.num_pages }}{{ search_query }}">&gt;&gt;</a></li>
     {% endif %}
 </ul>
 {% endif %}
