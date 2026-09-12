@@ -111,6 +111,22 @@ cy.style()
         "text-halign": "center",
         "text-margin-x": 0,
       })
+    // A student's own progress on their map (#2678). Bootstrap's brand-success and
+    // brand-warning, the same green and yellow the submission lists already use for
+    // approved and awaiting-approval work, so the map reads the same way as the rest of
+    // the site. Declared last so the status outline wins over .link's blue border: a quest
+    // that leads to another map keeps its blue LABEL, which is what marks it as a link, and
+    // the outline is free to report whether the student has done it.
+    .selector('node.approved')
+      .style({
+        "border-color": "#5cb85c",
+        "border-width": 3,
+      })
+    .selector('node.awaiting-approval')
+      .style({
+        "border-color": "#f0ad4e",
+        "border-width": 3,
+      })
     .update()
 ;
 
