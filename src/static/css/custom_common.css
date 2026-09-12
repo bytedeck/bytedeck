@@ -1241,7 +1241,12 @@ table[data-toggle="table"].bt-reveal {
 .bootstrap-table .fixed-table-toolbar:has(.bt-toolbar-filter)::after {
     display: none;
 }
-.bt-toolbar-filter label {
+/* The filter's label, on either kind of toolbar: the student list drops its filter into a
+   bootstrap-table toolbar, the quest approvals put theirs in a .list-search-form, and it is
+   the same control naming the same thing, so it reads the same on both. Normal weight
+   because it labels the control beside it rather than a field being filled in. */
+.bt-toolbar-filter label,
+.list-search-form label {
     margin-right: 4px;
     font-weight: normal;
 }
@@ -1321,6 +1326,11 @@ table[data-toggle="table"].bt-reveal {
 .list-search-form {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    /* 15px between controls, the same space .bt-toolbar-filter puts between the student
+       list's group filter and its search, so a page carrying both reads as one row rather
+       than two controls stuck together. A form holding only a search has nothing to space. */
+    gap: 15px;
     margin-bottom: 10px;
 }
 /* wide enough for the placeholder naming what the box searches, which is the only
