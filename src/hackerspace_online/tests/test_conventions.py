@@ -269,6 +269,98 @@ class TestNoEmDashes(SimpleTestCase):
         )
 
 
+#: The staff list tables that send their whole list to the browser, so bootstrap-table sorts
+#: and searches it there. Each carries the shared attributes from
+#: ``snippets/list_table_attrs.html`` rather than its own, which is what keeps them behaving
+#: alike; the list grows as more lists are converted.
+#:
+#: A list the SERVER paginates is deliberately absent: the browser holds one page of it, so a
+#: sort or a search applied there answers a question about the page rather than about the list
+#: (#2410, #2582, #2597). Those sort and search in the database, through
+#: ``snippets/sortable_column_heading.html`` and ``.list-search-form``.
+CLIENT_SORTED_LIST_TABLES = (
+    "badges/templates/badges/badgetype_list.html",
+    "courses/templates/courses/block_list.html",
+    "courses/templates/courses/course_list.html",
+    "courses/templates/courses/markrange_list.html",
+    "courses/templates/courses/rank_list.html",
+    "courses/templates/courses/semester_list.html",
+    "djcytoscape/templates/djcytoscape/cytoscape_list.html",
+    "quest_manager/templates/quest_manager/common_quest_info_list.html",
+    "utilities/templates/flatpages/flatpage-list.html",
+    "utilities/templates/utilities/menuitem_list.html",
+)
+
+#: Bases that load bootstrap-table for every template extending them, so those templates do
+#: not include the assets a second time.
+_BASES_LOADING_BOOTSTRAP_TABLE = ('quest_manager/base.html',)
+
+
+def _list_table_violations(text):
+    """What a staff list table is missing to behave like the others.
+
+    Args:
+        text (str): the template's source.
+
+    Returns:
+        list[str]: one line per missing piece, empty when the template conforms.
+    """
+    problems = []
+
+    if "snippets/list_table_attrs.html" not in text:
+        problems.append("no {% include 'snippets/list_table_attrs.html' %} on the <table>")
+
+    loads_assets = "snippets/bootstrap_table.html" in text or any(
+        f'extends "{base}"' in text or f"extends '{base}'" in text
+        for base in _BASES_LOADING_BOOTSTRAP_TABLE
+    )
+    if not loads_assets:
+        problems.append("bootstrap-table's assets are neither included nor inherited from a base")
+
+    if 'data-sortable="true"' not in text:
+        problems.append('no column heading carries data-sortable="true"')
+
+    if "snippets/table_loading.html" not in text:
+        problems.append("no {% include 'snippets/table_loading.html' %} before the <table>")
+
+    if re.search(r'<table[^>]*class="table', text):
+        problems.append('a <table class="table ..."> is back, so that one is not a bootstrap-table')
+
+    return problems
+
+
+class TestListTablesAreConsistent(SimpleTestCase):
+    """Guard that every converted staff list table keeps its shared widget."""
+
+    def test_conventions__client_sorted_list_tables_use_the_shared_attributes(self):
+        """Each list in CLIENT_SORTED_LIST_TABLES is a bootstrap-table, sortable and searchable.
+
+        The attributes come from one snippet rather than from each template, so a list cannot
+        drift into being striped-but-not-sortable, or searchable with a different set of
+        options, one page at a time.
+        """
+        failures = {}
+        for rel in CLIENT_SORTED_LIST_TABLES:
+            problems = _list_table_violations((_SRC_ROOT / rel).read_text())
+            if problems:
+                failures[rel] = problems
+
+        self.assertEqual(
+            failures, {},
+            "Staff list tables that no longer match the shared pattern:\n"
+            + "\n".join(f"{f}:\n  " + "\n  ".join(v) for f, v in failures.items()),
+        )
+
+    def test_list_table_list__names_only_templates_that_exist(self):
+        """Every path in CLIENT_SORTED_LIST_TABLES still points at a template.
+
+        A renamed or deleted template would otherwise take its list out of the check above
+        without anything failing.
+        """
+        missing = [rel for rel in CLIENT_SORTED_LIST_TABLES if not (_SRC_ROOT / rel).is_file()]
+        self.assertEqual(missing, [], f"No such template(s): {missing}")
+
+
 class TestMigrationsSurviveTheDeployWindow(SimpleTestCase):
     """Guard that a new migration cannot break the version it replaces mid-deploy."""
 

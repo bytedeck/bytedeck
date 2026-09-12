@@ -1,7 +1,7 @@
 {% extends "base_sidebar.html" %}
 
 {% block head_title %}Mark Ranges | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-flag pull-right"></i>Mark Ranges
@@ -11,15 +11,16 @@
 {% block content %}
 <p>Mark ranges have two uses: they can be used to change the color of the header of your deck when a student reaches a certain mark; and,
    they will show up as reference lines on the graph in the Mark Calculations page.</p>
-    <table class="table table-striped">
+    {% include 'snippets/table_loading.html' %}
+    <table {% include 'snippets/list_table_attrs.html' %}>
       <thead>
         <tr>
-          <th>Mark</th>
-          <th>Minimum Mark</th>
-          <th>Color</th>
-          <th>Courses</th>
-          <th>Active</th>
-          <th>Action</th>
+          <th data-field="mark" data-sortable="true">Mark</th>
+          <th data-field="minimum_mark" data-sortable="true">Minimum Mark</th>
+          <th data-field="color" data-searchable="false">Color</th>
+          <th data-field="courses" data-sortable="true">Courses</th>
+          <th data-field="active" data-sortable="true">Active</th>
+          <th data-field="action" data-searchable="false">Action</th>
         </tr>
       </thead>
       <tbody>

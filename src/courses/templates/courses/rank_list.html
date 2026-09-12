@@ -1,7 +1,7 @@
 {% extends "base_sidebar.html" %}
 
 {% block head_title %}Ranks | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-star pull-right"></i>Ranks
@@ -11,15 +11,16 @@
 {% endblock %}
 
 {% block content %}
-    <table class="table table-striped">
+    {% include 'snippets/table_loading.html' %}
+    <table {% include 'snippets/list_table_attrs.html' %}>
       <thead>
         <tr>
-          <th></th>
-          <th>Rank</th>
-          <th>XP</th>
-          <th>Quest Map</th>
+          <th data-field="icon" data-searchable="false"></th>
+          <th data-field="rank" data-sortable="true">Rank</th>
+          <th data-field="xp" data-sortable="true">XP</th>
+          <th data-field="quest_map" data-sortable="true">Quest Map</th>
           {% if request.user.is_staff %}
-          <th>Action</th>
+          <th data-field="action" data-searchable="false">Action</th>
           {% endif %}
         </tr>
       </thead>

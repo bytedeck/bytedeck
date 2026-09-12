@@ -2,7 +2,7 @@
 {% load utility_tags %}
 
 {% block head_title %}Menu Items | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading_inner %}Menu Items
@@ -12,15 +12,19 @@
 {% endblock %}
 
 {% block content %}
-<table class="table table-striped">
-  <tr>
-    <th>Label</th>
-    <th>Icon</th>
-    <th>Url</th>
-    <th>Sort Order</th>
-    <th>Visible</th>
-    <th>Action</th>
-  </tr>
+{% include 'snippets/table_loading.html' %}
+<table {% include 'snippets/list_table_attrs.html' %}>
+  <thead>
+    <tr>
+      <th data-field="label" data-sortable="true">Label</th>
+      <th data-field="icon" data-searchable="false">Icon</th>
+      <th data-field="url" data-sortable="true">Url</th>
+      <th data-field="sort_order" data-sortable="true">Sort Order</th>
+      <th data-field="visible" data-searchable="false">Visible</th>
+      <th data-field="action" data-searchable="false">Action</th>
+    </tr>
+  </thead>
+  <tbody>
   {% for object in object_list %}
   <tr>
     <td>{{ object.label }}</td>
@@ -38,6 +42,7 @@
     </td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
 {% endblock %}
 
