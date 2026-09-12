@@ -20,7 +20,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.http import JsonResponse
 from django.utils import timezone
 
@@ -5135,16 +5135,6 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_approved)  # the invalid submission did nothing
 
-    def test_approve__invalid_form_ajax_returns_400(self):
-        """An ajax POST with an invalid awards value returns a 400 JsonResponse (form_invalid)."""
-        response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]),
-            data={'awards': [999999], 'approve_button': True},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {'error': 'Bad Request'})
-
     def test_approve__with_comment_quick_reply_form(self):
         """Approving via the quick reply form approves the submission, adds the comment, and notifies the student."""
         comment_text = "Lorum Ipsum"
@@ -5470,43 +5460,119 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
-    def test_approve__ajax_all_button_types(self):
-        """ Checks functionality of approve using ajax for all valid button types using ajax
-        """
-        post_request = {
-            'path': reverse('quests:approve', args=[self.sub.pk]),
-            'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'
-        }
+    def test_approve__every_button_type_acts_and_returns_to_the_approvals_page(self):
+        """Each of the four buttons does its job and sends the teacher back to the queue (#2689).
 
-        # 'approve_button' self.sub.is_approved is True
-        response = self.client.post(**post_request, data={'approve_button': ''})
-        self.assertEqual(response.status_code, 200)
+        The approvals page is where all four are pressed from, so each one ends in a redirect
+        back to it, and the page it lands on is rebuilt from the database.
+        """
+        path = reverse('quests:approve', args=[self.sub.pk])
+        approvals = reverse('quests:approvals')
+
+        response = self.client.post(path, data={'approve_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_approved)
 
-        # 'return_button' self.sub.is_approved is False
-        response = self.client.post(**post_request, data={'return_button': ''})
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'return_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_approved)
 
-        # 'skip_button' self.sub.is_approved is True
-        response = self.client.post(**post_request, data={'skip_button': ''})
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'skip_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_approved)
 
-        # 'comment_button' new comment should exist
-        response = self.client.post(**post_request, data={
-            'comment_button': '',
-            'comment_text': 'COMMENT TEXT',
-        })
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'comment_button': '', 'comment_text': 'COMMENT TEXT'})
+        self.assertRedirects(response, approvals)
         self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
 
         # no button returns 404
-        response = self.client.post(**post_request)
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.post(path).status_code, 404)
+
+    def test_approve__returns_to_the_tab_the_decision_was_made_from(self):
+        """A teacher working through one tab is put back on it, not on the default one (#2689).
+
+        The approvals page has four tabs and a my-groups/all toggle, so the page a decision was
+        made from is rarely the one `quests:approvals` resolves to.
+        """
+        tab = reverse('quests:submitted_all')
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.pk]),
+            data={'approve_button': '', 'next': tab},
+        )
+        self.assertRedirects(response, tab)
+
+    def test_approve__a_corrected_resubmission_still_returns_to_that_tab(self):
+        """Where to go back to survives a form that does not validate (#2689).
+
+        A form that fails validation sends the teacher to the submission page to fix it, and
+        the corrected post is a fresh one: it carries only what that page puts in it.
+        """
+        tab = reverse('quests:submitted_all')
+
+        # An 'awards' value routes to SubmissionFormStaff, and an id that is not a
+        # manually-granted badge fails its validation.
+        invalid = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': tab},
+        )
+        self.assertTemplateUsed(invalid, 'quest_manager/submission.html')
+        self.assertContains(invalid, f'name="next" value="{tab}"')
+
+        corrected = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'approve_button': '', 'next': tab},
+        )
+        self.assertRedirects(corrected, tab)
+
+    def test_approve__an_off_host_next_is_not_carried_into_the_correction(self):
+        """A `next` that is not followed is not written into the page either (#2689).
+
+        The submission page renders it as a hidden field, so only a value that has already
+        been checked belongs there.
+        """
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': 'https://evil.example.com/'},
+        )
+        self.assertTemplateUsed(response, 'quest_manager/submission.html')
+        self.assertNotContains(response, 'evil.example.com')
+
+    def test_approve__will_not_be_redirected_off_this_host(self):
+        """A `next` pointing somewhere else is ignored rather than followed (#2689).
+
+        The field is posted by the page, so a crafted one is the only way it carries an
+        off-site url, and following it would make this view an open redirect.
+        """
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.pk]),
+            data={'approve_button': '', 'next': 'https://evil.example.com/'},
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+    def test_approve__each_decision_shows_its_own_message_only(self):
+        """The message about one approval is gone by the time the next one is made (#2687).
+
+        Django clears a message once it has been displayed, and displaying it is something
+        loading the page does. A decision that does not send the teacher back to a freshly
+        loaded page therefore leaves its message in the session, to stack up at the top of the
+        queue behind the next one.
+        """
+        # A second quest, since a student may only have one in-progress submission per quest.
+        second = baker.make(QuestSubmission, quest=baker.make(Quest), user=self.test_student)
+
+        self.client.post(reverse('quests:approve', args=[self.sub.pk]), data={'approve_button': ''})
+        first_page = self.client.get(reverse('quests:approvals'))
+        first_messages = [str(m) for m in first_page.context['messages']]
+        self.assertEqual(len(first_messages), 1, first_messages)
+
+        self.client.post(reverse('quests:approve', args=[second.pk]), data={'approve_button': ''})
+        second_page = self.client.get(reverse('quests:approvals'))
+        second_messages = [str(m) for m in second_page.context['messages']]
+        self.assertEqual(len(second_messages), 1, second_messages)
+        self.assertNotEqual(second_messages, first_messages)
 
 
 class QuestTabListingTests(ByteDeckTenantTestCase):
@@ -6110,6 +6176,37 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
         self.client.force_login(self.current_teacher)
+
+    def test_approvals__approve_buttons_post_their_form_normally(self):
+        """Nothing on the approvals page intercepts the approve and return buttons (#2687, #2689).
+
+        A script that posts them in the background and patches the page in place never reloads
+        it, so Django never gets to display and clear its messages, and they pile up at the top
+        of the queue, one per decision, for as long as the teacher stays on the page.
+        """
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id=self.sub.id),
+        ):
+            response = self.client.get(reverse('quests:submitted'))
+
+        self.assertContains(response, 'name=\'approve_button\'')
+        # The two things only a background post needs: the url it posts to, and the key it
+        # reads the rendered messages back out of.
+        self.assertNotContains(response, 'ajax_submission_approve')
+        self.assertNotContains(response, 'messages_html')
+        # Reloading the page is what clears the messages, so the form says which page to
+        # come back to (see test_approve__returns_to_the_tab_the_decision_was_made_from).
+        self.assertContains(response, f'name="next" value="{reverse("quests:submitted")}"')
+
+    def test_approvals__there_is_no_ajax_only_approve_route(self):
+        """Approving goes through one url, the one the form's action names (#2689).
+
+        A second route onto the same view is a url nothing on the site links to, which is a
+        url nobody maintains and nobody notices going wrong.
+        """
+        with self.assertRaises(NoReverseMatch):
+            reverse('quests:ajax_approve', args=[self.sub.id])
 
     def test_approvals__submitted_tab(self):
         """ Completed quests awaiting approval for current teacher (teachers are connected by Block)
