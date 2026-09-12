@@ -943,14 +943,11 @@ class CytoScapeCoverageGapTest(ByteDeckTenantTestCase):
         self.assertTrue(CytoElement.objects.filter(scape=scape, label__contains="ReliantOnCampaign").exists())
 
 
-class CampaignMapOrderTest(ByteDeckTenantTestCase):
-    """Campaigns are placed left-to-right on the quest map in Category.map_order (issue #1977,
-    the ordering half). dagre orders same-rank nodes by crossing-minimization and ignores input
-    order, so the order can't be imposed in the emitted JSON — instead every node carries a
-    ``campaignOrder`` (its campaign's map_order) and maps.js repositions the campaign columns to
-    match after layout. These tests cover the server side of that contract: that the right
-    ``campaignOrder`` is emitted on every node. Two campaigns branch off a common Start quest so
-    they render as siblings.
+class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
+    """What a campaign contributes to the emitted elements: a compound node that points back at
+    its Category, and a deterministic place in the node list.
+
+    Two campaigns branch off a common Start quest so they render as siblings.
     """
 
     @classmethod
@@ -959,8 +956,7 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         prerequisite, so both campaigns render as siblings branching off Start.
         """
         cls.start = baker.make(Quest, name="Start")
-        # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id) —
-        # i.e. A is left of B by default, before any map_order is applied.
+        # "A-quest" sorts before "B-quest", so campaign A's node is created first (lower id).
         cls.camp_a = baker.make(Category, title="AAA Campaign")
         cls.camp_b = baker.make(Category, title="BBB Campaign")
         cls.qa = baker.make(Quest, name="A-quest", campaign=cls.camp_a)
@@ -977,28 +973,18 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
         """Position of a campaign's compound node in the emitted node list."""
         return next(i for i, n in enumerate(nodes) if n['data'].get('Category') == category_id)
 
-    @staticmethod
-    def _campaign_order(nodes, *, category_id=None, quest_id=None):
-        """The campaignOrder emitted on a campaign's compound node or on a quest's node."""
-        for n in nodes:
-            if category_id is not None and n['data'].get('Category') == category_id:
-                return n['data']['campaignOrder']
-            if quest_id is not None and n['data'].get('Quest') == quest_id:
-                return n['data']['campaignOrder']
-        raise AssertionError("node not found")
-
     def test_add_to_campaign__campaign_node_links_back_to_its_category(self):
-        """The compound campaign node carries selector_id 'Category: <pk>' so the map can look up
-        the campaign's map_order — and json_dict surfaces it as a `Category` data attribute.
+        """The compound campaign node carries selector_id 'Category: <pk>', the same way quest and
+        badge nodes point at their objects, and json_dict surfaces it as a `Category` data
+        attribute so the node can be found from the Category it draws.
         """
         scape = CytoScape.generate_map(self.start, "order-test")
         node = scape.cytoelement_set.get(classes='campaign', label__startswith='AAA')
         self.assertEqual(node.selector_id, f'Category: {self.camp_a.id}')
 
-    def test_elements_dict__default_map_order_keeps_deterministic_node_order(self):
-        """With map_order left at its default 0, nodes are emitted in ascending-id order (A's
-        campaign node before B's), preserving the deterministic layout from issue #2012 so maps
-        where nobody set an order are unchanged.
+    def test_elements_dict__nodes_are_emitted_in_deterministic_id_order(self):
+        """Nodes come out in ascending-id order (A's campaign node before B's), the deterministic
+        emission issue #2012 asked for, so a map looks the same between generations.
         """
         nodes = self._emit()['nodes']
         self.assertLess(
@@ -1006,26 +992,13 @@ class CampaignMapOrderTest(ByteDeckTenantTestCase):
             self._index_by_category(nodes, self.camp_b.id),
         )
 
-    def test_elements_dict__emits_campaign_order_on_every_node(self):
-        """Every node carries `campaignOrder` = its campaign's map_order; member quests inherit
-        their campaign's, and campaign-less nodes (the shared Start quest) default to 0. This is
-        the value maps.js reads to order the campaign columns left-to-right — the array position
-        no longer encodes the order (dagre would ignore it), so the data attribute must.
+    def test_elements_dict__carries_no_campaign_order(self):
+        """No node carries a campaignOrder any more (#2675).
+
+        Campaign placement is dagre's alone, so emitting an ordering key would be data nothing
+        reads, in every node of every map.
         """
-        self.camp_a.map_order = 5
-        self.camp_a.full_clean()
-        self.camp_a.save()
-        self.camp_b.map_order = 1
-        self.camp_b.full_clean()
-        self.camp_b.save()
-
         nodes = self._emit()['nodes']
-
-        # campaign compound nodes carry their own map_order
-        self.assertEqual(self._campaign_order(nodes, category_id=self.camp_a.id), 5)
-        self.assertEqual(self._campaign_order(nodes, category_id=self.camp_b.id), 1)
-        # member quests inherit their campaign's map_order
-        self.assertEqual(self._campaign_order(nodes, quest_id=self.qa.id), 5)
-        self.assertEqual(self._campaign_order(nodes, quest_id=self.qb.id), 1)
-        # the campaign-less Start quest defaults to 0
-        self.assertEqual(self._campaign_order(nodes, quest_id=self.start.id), 0)
+        self.assertTrue(nodes)
+        for node in nodes:
+            self.assertNotIn('campaignOrder', node['data'])
