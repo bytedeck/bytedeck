@@ -134,6 +134,12 @@
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
             {{ s.quick_reply_form | crispy }}
+            {% comment %}
+            Acting on a submission sends the teacher back to the tab they were working through,
+            rather than to the default approvals page (#2689). ApproveView only follows this if
+            it stays on this host.
+            {% endcomment %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <div>
               {% include "quest_manager/submission_buttons_form.html" %}
               {% include "quest_manager/submission_buttons_other.html" %}
