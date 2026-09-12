@@ -5831,15 +5831,12 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
         self.assertNotIn('status', response.context['sortable_columns'])
         self.assertNotContains(response, 'sort=status')
 
-    def test_approvals__the_many_valued_columns_are_not_sort_links(self):
-        """A submission's blocks have no single value to order by, so that column is plain.
-
-        The same reasoning the Library's quests tab applied to its tags (#2410).
-        """
+    def test_approvals__the_group_column_is_a_sort_link(self):
+        """The {group} column sorts the whole tab from the server, like every other column (#2697)."""
         response = self.client.get(reverse('quests:submitted_all'))
 
-        self.assertNotIn('group_name', response.context['sortable_columns'])
-        self.assertNotContains(response, 'sort=group_name')
+        self.assertIn('group', response.context['sortable_columns'])
+        self.assertContains(response, 'sort=group')
         # bootstrap-table's own sort would reorder the page underneath the links
         self.assertNotContains(response, 'data-sortable="true"')
 
@@ -5847,7 +5844,7 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
         """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
         default_order = self._names('quests:submitted_all')
 
-        for unknown in ('group_name', 'nonsense', 'name; drop table', '-'):
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
             with self.subTest(sort=unknown):
                 response = self.client.get(reverse('quests:submitted_all'), {'sort': unknown})
 
@@ -6094,6 +6091,190 @@ class SubmissionTabSearchTests(ByteDeckTenantTestCase):
         self.assertEqual(names[0], 'Zfiller quest 00')
         for name in names:
             self.assertTrue(name.startswith('Zfiller quest'), f'{name} is not one of the searched-for quests')
+
+
+class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
+    """Sorting and filtering the approvals tabs by {group} (#2697).
+
+    A student can be in several groups at once, so the column shows their names joined with
+    commas. Both controls work from that: the sort orders by the whole joined string, and
+    the filter keeps the submissions of anyone registered in the chosen group.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Three students whose group cells differ, each with a submission awaiting approval.
+
+        `zoe` is in no group at all, which is the empty cell the sort has to put somewhere,
+        and `bo` is in two, which is the case a plain join would duplicate.
+        """
+        cls.teacher = User.objects.create_user('group_teacher', is_staff=True)
+        semester = SiteConfig.get().active_semester
+
+        cls.block_a = baker.make(Block, name='7A')
+        cls.block_b = baker.make(Block, name='8B')
+
+        cls.al = User.objects.create_user('al')          # cell reads "8B"
+        cls.bo = User.objects.create_user('bo')          # cell reads "7A, 8B"
+        cls.zoe = User.objects.create_user('zoe')        # cell is empty
+
+        baker.make('courses.CourseStudent', user=cls.al, semester=semester, block=cls.block_b)
+        baker.make('courses.CourseStudent', user=cls.bo, semester=semester, block=cls.block_a)
+        baker.make('courses.CourseStudent', user=cls.bo, semester=semester, block=cls.block_b)
+
+        cls.submissions = {}
+        for student in (cls.al, cls.bo, cls.zoe):
+            quest = baker.make(Quest, name=f'Quest for {student.username}')
+            cls.submissions[student.username] = baker.make(
+                QuestSubmission, quest=quest, user=student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=timezone.now(),
+            )
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _usernames(self, **params):
+        """The students on the submitted tab's current page, in the order rendered.
+
+        Args:
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the usernames, in order.
+        """
+        response = self.client.get(reverse('quests:submitted_all'), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.user.username for submission in tab['submissions']]
+
+    def test_approvals__sorting_by_group_orders_by_the_names_the_column_shows(self):
+        """"7A, 8B" sorts between "7A" and "8B", because that is the string in the cell.
+
+        Ordering by any one of a student's groups would put `bo` before or after `al` by a
+        name the reader cannot tell was chosen; ordering by the joined string is the column
+        read the way it is displayed.
+        """
+        self.assertEqual(self._usernames(sort='group'), ['bo', 'al', 'zoe'])
+
+    def test_approvals__sorting_by_group_reverses_and_still_leaves_the_empty_cell_last(self):
+        """Reversing flips the groups; a student in none has nothing to sort by either way."""
+        self.assertEqual(self._usernames(sort='-group'), ['al', 'bo', 'zoe'])
+
+    def test_approvals__sorting_by_group_lists_a_student_in_two_groups_once(self):
+        """`bo` holds two registrations, and a join on them would put two rows on the page."""
+        self.assertEqual(self._usernames(sort='group').count('bo'), 1)
+
+    def test_approvals__the_sort_key_joins_the_names_with_the_separator_on_screen(self):
+        """The joined sort key uses ", ", the separator the cell is rendered with.
+
+        Group names chosen so the separator decides the answer: a student in "A" and "AB"
+        shows "A, AB", which sorts before "AV". Joined with anything that sorts after "V",
+        or with no separator at all, the two swap.
+        """
+        semester = SiteConfig.get().active_semester
+        a, ab, av = (baker.make(Block, name=name) for name in ('A', 'AB', 'AV'))
+
+        multi = User.objects.create_user('multi')          # cell reads "A, AB"
+        single = User.objects.create_user('single')        # cell reads "AV"
+        for student, blocks in ((multi, (a, ab)), (single, (av,))):
+            for block in blocks:
+                baker.make('courses.CourseStudent', user=student, semester=semester, block=block)
+            baker.make(
+                QuestSubmission, quest=baker.make(Quest), user=student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=timezone.now(),
+            )
+
+        ordered = self._usernames(sort='group')
+
+        self.assertLess(ordered.index('multi'), ordered.index('single'))
+
+    def test_approvals__filtering_by_group_keeps_only_that_groups_submissions(self):
+        """Choosing a group narrows the tab to the students registered in it."""
+        self.assertEqual(sorted(self._usernames(block=self.block_a.pk)), ['bo'])
+        self.assertEqual(sorted(self._usernames(block=self.block_b.pk)), ['al', 'bo'])
+
+    def test_approvals__the_group_filter_offers_the_groups_running_this_semester(self):
+        """The dropdown is rendered with the groups a submission could actually be in."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertEqual(
+            sorted(block.name for block in response.context['group_filter_choices']),
+            ['7A', '8B'],
+        )
+        self.assertContains(response, 'name="block"')
+
+    def test_approvals__an_unknown_group_is_ignored_rather_than_refused(self):
+        """A stale or hand-made `?block=` widens the tab back to everyone instead of erroring."""
+        for unknown in ('999999', 'nonsense', '', '-1'):
+            with self.subTest(block=unknown):
+                response = self.client.get(reverse('quests:submitted_all'), {'block': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['current_group'], '')
+                self.assertEqual(sorted(self._usernames(block=unknown)), ['al', 'bo', 'zoe'])
+
+    def test_approvals__a_group_with_no_open_registration_is_not_offered(self):
+        """A group nobody is in this semester would only ever return an empty page."""
+        past_only = baker.make(Block, name='Last year')
+        baker.make(
+            'courses.CourseStudent', user=self.al, block=past_only,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotIn(past_only, list(response.context['group_filter_choices']))
+        # and selecting it anyway leaves the tab alone rather than emptying it
+        self.assertEqual(sorted(self._usernames(block=past_only.pk)), ['al', 'bo', 'zoe'])
+
+    def test_approvals__the_group_filter_and_the_search_apply_together(self):
+        """Searching within a group narrows that group, and the count reports what it found."""
+        response = self.client.get(
+            reverse('quests:submitted_all'), {'block': self.block_b.pk, 'q': 'al'})
+
+        self.assertEqual(response.context['num_matching_submissions'], 1)
+        self.assertContains(response, '1 submission matches "al" in this group.')
+        self.assertEqual(self._usernames(block=self.block_b.pk, q='al'), ['al'])
+
+    def test_approvals__the_group_filter_and_a_sort_apply_together(self):
+        """Ordering a filtered tab reorders its results rather than dropping the filter."""
+        self.assertEqual(self._usernames(block=self.block_b.pk, sort='group'), ['bo', 'al'])
+
+    def test_approvals__the_page_and_sort_links_keep_the_chosen_group(self):
+        """Every link on the page carries ?block=, so reordering does not widen the tab."""
+        response = self.client.get(reverse('quests:submitted_all'), {'block': self.block_a.pk})
+
+        self.assertContains(response, f'block={self.block_a.pk}')
+        self.assertEqual(response.context['current_group'], self.block_a.pk)
+
+    def test_quest_list__a_students_own_tabs_ignore_the_group_filter(self):
+        """A student's tabs hold only their own submissions, so there is no group to pick between.
+
+        The parameter is ignored rather than honoured, so a link copied from an approvals
+        page cannot quietly empty a student's list of their own work. `al` is in 8B, so a
+        filter on 7A would empty the tab if it were read here.
+        """
+        in_progress = baker.make(
+            QuestSubmission, quest=baker.make(Quest, name='Still going'), user=self.al,
+            semester=SiteConfig.get().active_semester, is_completed=False, is_approved=False,
+        )
+        self.client.force_login(self.al)
+        mine = reverse('quests:inprogress')
+
+        unfiltered = self.client.get(mine)
+        filtered = self.client.get(mine, {'block': self.block_a.pk})
+
+        # the tab really does hold their submission, so the comparison below is not empty
+        self.assertEqual([s.pk for s in unfiltered.context['in_progress_submissions']], [in_progress.pk])
+        self.assertEqual([s.pk for s in filtered.context['in_progress_submissions']], [in_progress.pk])
+        self.assertNotContains(filtered, 'name="block"')
+
+    def test_approvals__the_search_form_carries_the_sort_so_searching_keeps_it(self):
+        """The filter and search are one GET form, which would otherwise drop an active sort."""
+        response = self.client.get(reverse('quests:submitted_all'), {'sort': '-group'})
+
+        self.assertContains(response, '<input type="hidden" name="sort" value="-group">')
 
 
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):

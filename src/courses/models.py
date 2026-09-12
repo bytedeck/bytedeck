@@ -727,6 +727,21 @@ class Semester(models.Model):
 
 class BlockManager(models.Manager):
 
+    def in_open_semesters(self):
+        """The groups with at least one registration in a semester that is open now.
+
+        What a deck-wide list of groups to choose between should offer: a group nobody is
+        registered in this semester matches nothing on any list scoped to the semester, so
+        offering it would only ever return an empty page.
+
+        Returns:
+            QuerySet[Block]: those groups, ordered by name (Block.Meta), empty between
+            semesters.
+        """
+        return self.filter(
+            pk__in=CourseStudent.objects.get_queryset().in_open_semesters().values_list('block_id', flat=True)
+        )
+
     def grouped_teachers_blocks(self):
         blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'name')
         grouped = {}
@@ -756,6 +771,20 @@ class Block(IsAPrereqMixin, models.Model):
 
     def __str__(self):
         return self.name
+
+    def current_student_ids(self):
+        """The ids of the users registered in this group in a semester that is open now.
+
+        Returned as ids for an ``__in`` lookup rather than as a join, so a student
+        registered in the group more than once still narrows a list to one row of theirs
+        and cannot inflate its page counts.
+
+        Returns:
+            QuerySet: the user ids, empty when nobody is registered in it this semester.
+        """
+        return CourseStudent.objects.get_queryset().in_open_semesters().filter(
+            block=self,
+        ).values_list('user_id', flat=True)
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """ Returns True if the user has a current course in this block/group.  `num_required` is not used.

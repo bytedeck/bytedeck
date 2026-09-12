@@ -213,9 +213,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         Returns:
             QuerySet[Block]: the selectable groups, ordered by name (Block.Meta).
         """
-        return Block.objects.filter(
-            pk__in=CourseStudent.objects.get_queryset().in_open_semesters().values_list('block_id', flat=True)
-        )
+        return Block.objects.in_open_semesters()
 
     def apply_block_filter(self, profiles_qs):
         """Narrow ``profiles_qs`` to the students in the selected group.
@@ -233,10 +231,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         block = self.get_block_filter()
         if block is None:
             return profiles_qs
-        in_block = CourseStudent.objects.get_queryset().in_open_semesters().filter(
-            block=block,
-        ).values_list('user_id', flat=True)
-        return profiles_qs.filter(user_id__in=in_block)
+        return profiles_qs.filter(user_id__in=block.current_student_ids())
 
     def get_sort(self):
         """Return the validated ``(sort, order)`` pair from the querystring.
