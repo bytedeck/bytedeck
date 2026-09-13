@@ -1,7 +1,7 @@
 {% extends "badges/base.html" %}
 
 {% block head_title %}Badge Types | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading_inner %}{{ config.custom_name_for_badge }} Types
@@ -10,13 +10,14 @@
 
 {% block content %}
 <p>This page is visible to staff only.</p>
-<table class="table table-striped">
+{% include 'snippets/table_loading.html' %}
+<table {% include 'snippets/list_table_attrs.html' %}>
   <thead>
     <tr>
-      <th>Title</th>
-      <th>Icon</th>
-      <th>Sort Order</th>
-      <th>Action</th>
+      <th data-field="title" data-sortable="true">Title</th>
+      <th data-field="icon" data-searchable="false">Icon</th>
+      <th data-field="sort_order" data-sortable="true">Sort Order</th>
+      <th data-field="action" data-searchable="false">Action</th>
     </tr>
   </thead>
   <tbody>

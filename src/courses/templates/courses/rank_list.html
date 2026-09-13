@@ -1,7 +1,7 @@
 {% extends "base_sidebar.html" %}
 
 {% block head_title %}Ranks | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-star pull-right"></i>Ranks
@@ -11,15 +11,19 @@
 {% endblock %}
 
 {% block content %}
-    <table class="table table-striped">
+    {% include 'snippets/table_loading.html' %}
+    <table {% include 'snippets/list_table_attrs.html' %}>
       <thead>
         <tr>
-          <th></th>
-          <th>Rank</th>
-          <th>XP</th>
-          <th>Quest Map</th>
+          <th data-field="icon" data-searchable="false"></th>
+          <th data-field="rank" data-sortable="true">Rank</th>
+          {# "XP" reads "60 XP", so it sorts on the hidden number beside it rather than as text. #}
+          <th data-field="xp" data-sortable="true" data-sort-name="xp_sort">XP</th>
+          <th data-field="xp_sort" data-visible="false" data-switchable="false"></th>
+          {# An icon link or nothing: no value to sort or match on. #}
+          <th data-field="quest_map" data-searchable="false">Quest Map</th>
           {% if request.user.is_staff %}
-          <th>Action</th>
+          <th data-field="action" data-searchable="false">Action</th>
           {% endif %}
         </tr>
       </thead>
@@ -29,6 +33,7 @@
             <td class="text-center"><i class="{{object.fa_icon_class}} fa-lg fa-fw text-warning"></i></td>
             <td>{{object.name}}</td>
             <td>{{object.xp}} XP</td>
+            <td>{{object.xp}}</td>
             <td>
               {% if object.get_map.get_absolute_url %}
               <a href="{{object.get_map.get_absolute_url}}"><i class="fa fa-map-signs"></i> </a>

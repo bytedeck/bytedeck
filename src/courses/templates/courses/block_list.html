@@ -2,7 +2,7 @@
 {% load utility_tags %}
 
 {% block head_title %}{% group_name %}s | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-group pull-right"></i>{% group_name %} List
@@ -13,15 +13,16 @@
 
 {% block content %}
 <p>This page is visible to staff only.</p>
-<table class="table table-striped">
+{% include 'snippets/table_loading.html' %}
+<table {% include 'snippets/list_table_attrs.html' %}>
   <thead>
     <tr>
-      <th>Name</th>
-      <th>Description</th>
-      <th>Active {{ config.custom_name_for_student }}s</th>
-      <th>Current Teacher</th>
-      <th>Active</th>
-      <th>Action</th>
+      <th data-field="name" data-sortable="true">Name</th>
+      <th data-field="description" data-sortable="true">Description</th>
+      <th data-field="students" data-sortable="true">Active {{ config.custom_name_for_student }}s</th>
+      <th data-field="teacher" data-sortable="true">Current Teacher</th>
+      <th data-field="active" data-sortable="true">Active</th>
+      <th data-field="action" data-searchable="false">Action</th>
     </tr>
   </thead>
   <tbody>

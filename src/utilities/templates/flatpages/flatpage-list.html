@@ -1,6 +1,8 @@
 {% extends "flatpages/base.html" %}
 {% load crispy_forms_tags %}
 
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
+
 {% block heading_inner %}
     Custom Pages
 
@@ -10,13 +12,13 @@
 {% endblock %}
 
 {% block content %}
-
-    <table class="table table-striped">
-        <thead class="thead-light">
-            <tr class="row">
-                <th class="col-sm-5" scope="col">Title</th>
-                <th class="col-sm-4" scope="col">Registration Required</th>
-                <th class="col-sm-3" scope="col">Action</th>
+    {% include 'snippets/table_loading.html' %}
+    <table {% include 'snippets/list_table_attrs.html' %}>
+        <thead>
+            <tr>
+                <th data-field="title" data-sortable="true" scope="col">Title</th>
+                <th data-field="registration_required" data-sortable="true" scope="col">Registration Required</th>
+                <th data-field="action" data-searchable="false" scope="col">Action</th>
             </tr>
         </thead>
 
