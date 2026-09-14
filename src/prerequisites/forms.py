@@ -62,6 +62,10 @@ class PrereqFormInline(FutureModelForm):
 
 
 class PrereqFormsetHelper(FormHelper):
+    """Lays out the prereq formset as a table of rows, with the controls that save it,
+    abandon it, and add another row to it.
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -72,3 +76,9 @@ class PrereqFormsetHelper(FormHelper):
         self.form_id = "id_prereq_formset"
         self.add_input(layout.Submit("submit", "Save", css_class='btn-success'))
         self.add_input(layout.Submit("cancel", "Cancel", css_class='btn-danger'))
+        # The control that appends another blank row to the formset, so a teacher can add more
+        # prerequisites than the one spare row the formset renders. It is one of the helper's
+        # inputs, which is what puts it alongside Save and Cancel wherever the template pack
+        # renders those: nothing outside the helper needs to know that markup. The script on
+        # advanced_prereqs_form.html only binds its click handler. Issue #2707.
+        self.add_input(layout.Button("add-form", "Add Another Prerequisite", css_id="add-form", css_class='btn-primary'))
