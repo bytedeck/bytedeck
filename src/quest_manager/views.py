@@ -35,7 +35,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
-from comments.models import Comment, Document
+from comments.models import Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -2353,7 +2353,13 @@ def complete(request, submission_id):
     draft_text = f"<p>{comment_text}</p>"
     if draft_comment:
         # update all comment fields
-        draft_comment.text = draft_text
+        #
+        # Through clean_html(), which is what Comment.objects.create_comment() runs on the text
+        # it is handed in the else branch below. A published comment has to be cleaned the same
+        # way whichever branch produced it: clean_html() is what turns a URL the student typed
+        # out into a link and gives every link in the comment target="_blank", so following one
+        # opens a new tab instead of navigating away from the page (#2711).
+        draft_comment.text = clean_html(draft_text)
         draft_comment.target_object_id = submission.id
         draft_comment.target_object = submission
         # reset timestamp needed otherwise it will use the draft comment's timestamp from when the submission was started
