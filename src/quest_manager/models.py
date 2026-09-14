@@ -472,6 +472,18 @@ class QuestQuerySet(models.QuerySet):
 
           These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
           and don't have to worry about them when considering repeats, which are more complicated.
+
+        Condition 4 is a per-semester cap, so it counts only what the student completed in the
+        semester they are in now (``semester_for(user)``); condition 5 is an all-time cap and
+        counts every submission. Quest.is_repeat_available() answers the same question one quest
+        at a time, for the quest page, so the two have to agree.
+
+        Args:
+            user: the student whose submissions decide what is left, and whose semester the
+                per-semester cap is measured in.
+
+        Returns:
+            QuestQuerySet: the quests still open to them, with the five cases above removed.
         """
 
         # Condition 1: remove inprogress submissions
@@ -523,7 +535,7 @@ class QuestQuerySet(models.QuerySet):
         # every semester, so the goes they used in an earlier one must not come off this
         # semester's allowance: counting all of them hides the quest from a student who has
         # barely started it this term (#2714).
-        from courses.models import semester_for  # locally, since courses imports this module
+        from courses.models import semester_for
 
         completed_this_semester = Q(
             questsubmission__user_id=user.id,
