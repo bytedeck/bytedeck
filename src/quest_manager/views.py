@@ -2693,23 +2693,34 @@ def ajax_delete_draft_attachment(request, document_id):
         Http404: for a document that is not an attachment on one of this user's drafts.
     """
     document = get_object_or_404(Document, pk=document_id)
-    # A document with no comment at all belongs to no draft. Checked before the query below,
-    # which would otherwise match this user's submissions that have no draft comment either,
-    # since both sides would be NULL.
-    submission = None
-    if document.comment_id is not None:
-        submission = QuestSubmission.objects.filter(
-            draft_comment_id=document.comment_id, user=request.user
-        ).first()
-    if submission is None:
-        raise Http404("No such file on one of your drafts.")
+    # The whole check and removal run under a lock on the submission row, because the student
+    # can submit the quest at the same moment: completing publishes the draft comment and
+    # clears draft_comment with an UPDATE of this row, which the lock makes wait. So either
+    # this request holds the lock and the comment is still a draft for as long as it takes to
+    # remove the file, or the completion got there first and the lookup below finds nothing.
+    with transaction.atomic():
+        # A document with no comment at all belongs to no draft. Checked before the query,
+        # which would otherwise match this user's submissions that have no draft comment
+        # either, since both sides would be NULL.
+        submission = None
+        if document.comment_id is not None:
+            # include_related=False because the manager otherwise joins the nullable relations
+            # it usually needs for templates, and Postgres refuses FOR UPDATE on the nullable
+            # side of an outer join. Nothing here reads them, and the row to lock is this one.
+            submission = QuestSubmission.objects.get_queryset(
+                include_related=False
+            ).select_for_update().filter(
+                draft_comment_id=document.comment_id, user=request.user
+            ).first()
+        if submission is None:
+            raise Http404("No such file on one of your drafts.")
 
-    # The stored file goes first, and has to: Django has not deleted a FileField's storage on
-    # row delete since 1.3, so dropping the row alone would leave the upload on disk with
-    # nothing in the database naming it (#2574). save=False because the row is about to go.
-    document.docfile.delete(save=False)
-    document.delete()
-    return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
+        # The stored file goes first, and has to: Django has not deleted a FileField's storage
+        # on row delete since 1.3, so dropping the row alone would leave the upload on disk
+        # with nothing in the database naming it (#2574). save=False because the row is going.
+        document.docfile.delete(save=False)
+        document.delete()
+        return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
 
 
 @xml_http_request_required

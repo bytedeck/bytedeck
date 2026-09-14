@@ -7034,7 +7034,15 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         self.client.force_login(self.student)
 
     def draft_submission(self, user):
-        """Return a new in-progress submission of its own quest, with a draft comment."""
+        """Start a new in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Args:
+            user: the student the submission belongs to.
+
+        Returns:
+            QuestSubmission: the submission, with its draft comment already set.
+        """
         submission = baker.make(QuestSubmission, user=user, quest=baker.make(Quest, xp=5),
                                 semester=self.semester, is_completed=False)
         submission.draft_comment = Comment.objects.create_comment(
@@ -7043,13 +7051,29 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         return submission
 
     def attach(self, submission, name):
-        """Attach a file to a submission's draft comment and return the Document holding it."""
+        """Attach a file to a submission's draft comment, as a draft save or a failed submit
+        would.
+
+        Args:
+            submission: the submission whose draft comment holds the file.
+            name: the file name to store it under.
+
+        Returns:
+            Document: the row holding the stored file.
+        """
         document = Document(comment=submission.draft_comment)
         document.docfile.save(name, ContentFile(b"file_content"), save=True)
         return document
 
     def delete(self, document_id):
-        """POST the removal of one attachment, as the page's script does."""
+        """POST the removal of one attachment, as the page's script does.
+
+        Args:
+            document_id: pk of the Document to remove, valid or not.
+
+        Returns:
+            HttpResponse: what the view answered, for the caller to assert on.
+        """
         return self.client.post(
             reverse('quests:ajax_delete_draft_attachment', args=[document_id]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
@@ -7165,6 +7189,24 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'class="draft-attachment-delete"')
+
+    def test_submission__staff_can_remove_files_from_a_draft_of_their_own(self):
+        """Owning the draft is the whole boundary, so a teacher working through a quest of their
+        own removes their own attachments like any other student would. Staff see the marking
+        form rather than the submit button, but the draft below it is still theirs."""
+        teacher = baker.make(User, is_staff=True)
+        their_submission = self.draft_submission(teacher)
+        their_document = self.attach(their_submission, "my-own-draft.png")
+        self.client.force_login(teacher)
+
+        response = self.client.get(their_submission.get_absolute_url())
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[their_document.id])}"',
+        )
+
+        self.assertEqual(self.delete(their_document.id).status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=their_document.pk).exists())
 
     def test_ajax_save_draft__a_newly_attached_file_arrives_with_its_remove_button(self):
         """A file stored by a draft save comes back in the refreshed list, so it can be removed
