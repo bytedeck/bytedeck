@@ -1,0 +1,33 @@
+{% load comment_tags %}
+{% comment %}
+  The files already stored with this submission's draft comment, each with the control that
+  removes it. Only the student who owns the draft sees this: these are their own pending
+  attachments, not yet posted for anyone else to read.
+
+  The "Attach files" input always renders empty (browsers never repopulate a file input), so
+  without this list a student cannot tell which uploads are already saved, and would choose
+  them again (#2427). The remove button is what lets them drop one chosen by mistake, since
+  re-choosing in the input adds files rather than replacing what is stored.
+
+  Rendered from `draft_documents`, and re-rendered into the page by the draft-save and
+  attachment-delete endpoints, so the list has a single source of markup.
+{% endcomment %}
+{% if draft_documents %}
+  <div class="help-block">
+    <i class="fa fa-paperclip fa-fw"></i> Attached:
+    <ul class="draft-attachment-list">
+      {% for document in draft_documents %}
+        <li>
+          <a href="{{ document.docfile.url }}" target="_blank">{{ document.docfile|filename }}</a>
+          <button type="button" class="btn btn-link btn-xs draft-attachment-delete"
+                  data-delete-url="{% url 'quests:ajax_delete_draft_attachment' document.id %}"
+                  title="Remove this file from your submission">
+            <i class="fa fa-trash-o text-danger"></i>
+            <span class="sr-only">Remove {{ document.docfile|filename }}</span>
+          </button>
+        </li>
+      {% endfor %}
+    </ul>
+    <small>(already saved: only choose files above if you want to attach more)</small>
+  </div>
+{% endif %}

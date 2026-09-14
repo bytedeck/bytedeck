@@ -1364,3 +1364,26 @@ table[data-toggle="table"].bt-reveal {
     max-width: 100%;
     max-height: 40px;
 }
+
+
+/* The files already attached to a quest submission's draft, each beside the button that
+   removes it (quest_manager/snippets/draft_attachments.html). Laid out inline so a handful
+   of names read as one wrapping line after the "Attached:" label, as they did when they were
+   a comma-separated list, rather than a bulleted column. */
+.draft-attachment-list {
+    display: inline;
+    padding-left: 0;
+    list-style: none;
+}
+.draft-attachment-list > li {
+    display: inline-block;
+    margin-right: 10px;
+    white-space: nowrap;
+}
+/* Tight against the name it belongs to, and on the text's own baseline, so the pair reads as
+   one item. btn-link keeps it keyboard reachable and focusable, which a bare icon is not. */
+.draft-attachment-delete {
+    padding: 0 2px;
+    vertical-align: baseline;
+    border: none;
+}
