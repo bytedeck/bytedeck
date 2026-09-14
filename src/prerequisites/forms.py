@@ -67,6 +67,10 @@ class PrereqFormsetHelper(FormHelper):
     """
 
     def __init__(self, *args, **kwargs):
+        """Set up that layout: the crispy template the formset renders through, the form id the
+        add-row script selects on, and the controls rendered under the table. Takes and passes
+        on FormHelper's own arguments; a configured helper is the result.
+        """
         super().__init__(*args, **kwargs)
 
         # self.helper.form_class = 'form-inline'

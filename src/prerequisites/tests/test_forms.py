@@ -56,7 +56,9 @@ class AdvancedPrereqsFormAddRowTest(ByteDeckTenantTestCase):
         self.client.force_login(self.teacher)
 
     def prereq_form_urls(self):
-        """The quest and badge prereq pages, which share advanced_prereqs_form.html."""
+        """Return the prereq-update URLs of a new quest and a new badge. Both pages render
+        advanced_prereqs_form.html, so every assertion here has to hold for both.
+        """
         return (
             reverse('quests:quest_prereqs_update', args=[baker.make('quest_manager.Quest').pk]),
             reverse('badges:badge_prereqs_update', args=[baker.make('badges.Badge').pk]),
