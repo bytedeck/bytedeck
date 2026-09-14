@@ -164,6 +164,75 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
         CourseStudent.objects.filter(user=self.student).update(semester=new_semester)
         return new_semester
 
+    def complete_repeat(self, quest, semester):
+        """Complete one submission of a quest in a given semester, as a student working through it.
+
+        Args:
+            quest: the quest being handed in.
+            semester: the Semester the submission belongs to.
+
+        Returns:
+            QuestSubmission: the completed submission.
+        """
+        submission = baker.make(QuestSubmission, quest=quest, user=self.student, semester=semester)
+        submission.mark_completed()
+        return submission
+
+    def test_not_in_progress_completed_or_cooldown__per_semester_cap_ignores_earlier_semesters(self):
+        """A repeat-per-semester quest gives the student its full allowance again every semester,
+        so goes they used in an earlier one must not come off this semester's (#2714).
+
+        The count behind the cap was taken over the student's whole history while being compared
+        against a per-semester limit, so the more they had used the quest in past semesters the
+        sooner it vanished from Available in this one. Here two goes last semester plus one this
+        semester left a cap of three looking spent after a single go.
+        """
+        last_semester = SiteConfig.get().active_semester
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2,
+                           repeat_per_semester=True, hours_between_repeats=0)
+
+        for _ in range(2):
+            self.complete_repeat(quest, last_semester)
+        this_semester = self.start_new_semester()
+        self.complete_repeat(quest, this_semester)
+
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertIn(quest, qs, "last semester's goes were charged against this semester's cap")
+
+    def test_not_in_progress_completed_or_cooldown__per_semester_cap_still_applies_within_a_semester(self):
+        """The cap is still a cap. Once this semester's goes are used the quest goes away, which is
+        what keeps the fix above from simply disabling the limit."""
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2,
+                           repeat_per_semester=True, hours_between_repeats=0)
+        this_semester = SiteConfig.get().active_semester
+
+        for _ in range(3):
+            self.complete_repeat(quest, this_semester)
+
+        qs = Quest.objects.all().not_in_progress_completed_or_cooldown(self.student)
+        self.assertNotIn(quest, qs)
+
+    def test_get_available__agrees_with_is_repeat_available_after_a_rollover(self):
+        """The Available tab and the quest page have to answer this the same way.
+
+        They are separate implementations: the tab filters in SQL, while starting a quest from its
+        own URL goes through Quest.is_repeat_available(). When they disagree a student sees a quest
+        missing from their list that they can still start by typing the address, which is the shape
+        this bug took (#2714).
+        """
+        quest = baker.make(Quest, name='Twice a semester', max_repeats=2, blocking=False,
+                           repeat_per_semester=True, hours_between_repeats=0)
+        last_semester = SiteConfig.get().active_semester
+
+        for _ in range(3):
+            self.complete_repeat(quest, last_semester)
+        this_semester = self.start_new_semester()
+        self.complete_repeat(quest, this_semester)
+
+        listed = Quest.objects.get_available(self.student).filter(pk=quest.pk).exists()
+        self.assertTrue(quest.is_repeat_available(self.student))
+        self.assertTrue(listed, "the quest page would let them start it, but the list hides it")
+
     def test_not_in_progress_completed_or_cooldown__all_five_conditions(self):
         """ Test that all 5 conditions are met for this queryset method:
         it should remove quests that are:
@@ -283,9 +352,14 @@ class QuestQuerysetTest(ByteDeckTenantTestCase):
                 self.assertIn(quest_repeatable_twice_all_time, qs)
                 self.assertIn(quest_infinite_repeatables, qs)
 
-                # Complete the per semester quest again, should not be available again
-                sub2_3 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem, user=self.student, semester=new_semester)
-                sub2_3.mark_completed()
+                # Use up this semester's goes at the per-semester quest, so it is done for this
+                # semester too. max_repeats=1 is one repeat, so that takes two completions, the
+                # same as it took in the previous semester: goes used then do not come off this
+                # semester's allowance (#2714).
+                for _ in range(2):
+                    sub2_3 = baker.make(QuestSubmission, quest=quest_repeatable_once_per_sem,
+                                        user=self.student, semester=new_semester)
+                    sub2_3.mark_completed()
                 # Complete the max_repeats=2 quest, so all time repeats are complete and should not be available
                 sub3_3 = baker.make(QuestSubmission, quest=quest_repeatable_twice_all_time, user=self.student, semester=new_semester)
                 sub3_3.mark_completed()

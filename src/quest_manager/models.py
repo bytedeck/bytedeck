@@ -517,11 +517,21 @@ class QuestQuerySet(models.QuerySet):
         qs = qs.exclude(pk__in=cooldown_quests)
 
         # CONDITION 4: remove completed and repeatable and max repeats reached this semester
+        #
+        # Counting only what the student completed in the semester they are in now, which is what
+        # makes this a per-semester cap. A repeat_per_semester quest gives them max_repeats goes
+        # every semester, so the goes they used in an earlier one must not come off this
+        # semester's allowance: counting all of them hides the quest from a student who has
+        # barely started it this term (#2714).
+        from courses.models import semester_for  # locally, since courses imports this module
+
+        completed_this_semester = Q(
+            questsubmission__user_id=user.id,
+            questsubmission__is_completed=True,
+            questsubmission__semester=semester_for(user),
+        )
         max_repeats_this_sem = completed_quests_current.annotate(
-            submission_count=Count(
-                'questsubmission',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            submission_count=Count('questsubmission', filter=completed_this_semester)
         )
         # need to account for max_repeats=-1 (unlimited repeats), don't remove those
         max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
