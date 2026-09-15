@@ -61,12 +61,8 @@
 {{ form.media.js }}
 <script>
 
-  // Button to dynamically add additional forms to the formset
-  var $addFormBtn = $("<a>").attr("id", "add-form");
-  $addFormBtn.html('Add Another Prerequisite <i class="fa fa-plus-circle"></i>');
-  $addFormBtn.addClass("btn btn-primary");
-  $("div.form-actions").append($addFormBtn)
-
+  // Adds another blank row to the formset. The button itself is rendered server side, as one
+  // of PrereqFormsetHelper's inputs, so this only has to bind the click.
   $('#add-form').click(function() {
     var $totalFormsInput = $('#id_prerequisites-prereq-parent_content_type-parent_object_id-TOTAL_FORMS')
     var numForms = $totalFormsInput.val();
