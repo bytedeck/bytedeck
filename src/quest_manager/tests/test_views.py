@@ -1151,7 +1151,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
@@ -1165,7 +1165,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
@@ -1331,6 +1331,95 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(sub.draft_comment)
         response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
         self.assertEqual(response.status_code, 404)
+
+    def submitted_comment_text(self, sub, comment_text):
+        """Submit a quest with this comment text and return the comment as it was stored.
+
+        Args:
+            sub: the in-progress submission to complete, with its draft comment set.
+            comment_text: what the student typed into the comment box.
+
+        Returns:
+            str: the published comment's HTML, as a teacher would be served it.
+        """
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[sub.id]),
+                data={'complete': True, 'comment_text': comment_text},
+            )
+        sub.refresh_from_db()
+        return sub.get_comments().first().text
+
+    def test_complete__links_in_a_submitted_comment_open_in_a_new_tab(self):
+        """A link a student puts in their submission comment is stored with target="_blank", so
+        the teacher reading it keeps the submission page they are marking from (#2711).
+
+        Every other comment on the site gets this from Comment.objects.create_comment(), which
+        runs clean_html(); the submission path writes its draft comment directly and has to run
+        the same cleanup itself.
+        """
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>See <a href="https://example.com/docs">my docs</a></p>')
+
+        self.assertIn('<a href="https://example.com/docs" target="_blank">', text)
+
+    def test_complete__a_url_typed_into_a_submitted_comment_becomes_a_link(self):
+        """A student who types a URL out rather than using the editor's link button still gets a
+        link, and one that opens in a new tab. Left as plain text the teacher cannot click it at
+        all, which no amount of client-side patching can fix (#2711)."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>my work is at https://example.org/bare</p>')
+
+        self.assertIn('href="https://example.org/bare"', text)
+        self.assertIn('target="_blank"', text)
+
+    def test_complete__cleans_the_comment_the_same_way_with_and_without_a_draft(self):
+        """The view's two branches have to agree. Completing a quest writes the comment straight
+        onto the draft; commenting on an already-completed one has no draft left, so it goes
+        through create_comment() instead. The same typing must not survive differently (#2711).
+        """
+        typed = '<p>a link https://example.org/bare</p>'
+
+        with_draft = self.submitted_comment_text(self.draft_submission(), typed)
+
+        # the quick-reply case: completed, and mark_completed() has cleared the draft comment
+        commented_on = self.draft_submission()
+        commented_on.is_completed = True
+        commented_on.draft_comment = None
+        commented_on.save()
+        self.client.post(
+            reverse('quests:complete', args=[commented_on.id]),
+            data={'comment': True, 'comment_text': typed},
+        )
+        without_draft = commented_on.get_comments().first().text
+
+        self.assertIn('target="_blank"', without_draft)
+        self.assertEqual(with_draft, without_draft)
+
+    def test_complete__strips_script_from_a_submitted_comment(self):
+        """clean_html() also drops <script>, so restoring it closes the same gap for the marking
+        page, where the comment is rendered with |safe."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>hi</p><script>alert(1)</script>')
+
+        self.assertNotIn('<script>', text)
+
+    def draft_submission(self):
+        """Return a fresh in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Returns:
+            QuestSubmission: ready for the logged-in student to complete, with a draft comment.
+        """
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                         semester=self.semester, is_completed=False)
+        sub.draft_comment = Comment.objects.create_comment(
+            user=self.test_student, path=sub.get_absolute_url(), text="", target=None)
+        sub.save()
+        return sub
 
     def custom_xp_submission(self):
         """Return a fresh in-progress submission (with its draft comment) of a quest whose XP the
