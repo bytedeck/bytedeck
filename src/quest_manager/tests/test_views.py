@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
@@ -35,7 +36,7 @@ from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
-from comments.models import Comment
+from comments.models import Comment, Document
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
@@ -7015,3 +7016,263 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
         url = reverse('quests:unarchive', args=[nonexistent_id])
         self.assertEqual(self.client.post(url).status_code, 404)
+
+
+class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
+    """Removing a file a student attached to their own draft submission.
+
+    A file input cannot unchoose one file, and choosing again adds to what is stored rather
+    than replacing it, so without this a student who attaches the wrong file submits it.
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission holding one attached file."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = self.draft_submission(self.student)
+        self.document = self.attach(self.submission, "wrong-file.png")
+        self.client.force_login(self.student)
+
+    def draft_submission(self, user):
+        """Start a new in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Args:
+            user: the student the submission belongs to.
+
+        Returns:
+            QuestSubmission: the submission, with its draft comment already set.
+        """
+        submission = baker.make(QuestSubmission, user=user, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, is_completed=False)
+        submission.draft_comment = Comment.objects.create_comment(
+            user=user, path=submission.get_absolute_url(), text="", target=None)
+        submission.save()
+        return submission
+
+    def attach(self, submission, name):
+        """Attach a file to a submission's draft comment, as a draft save or a failed submit
+        would.
+
+        Args:
+            submission: the submission whose draft comment holds the file.
+            name: the file name to store it under.
+
+        Returns:
+            Document: the row holding the stored file.
+        """
+        document = Document(comment=submission.draft_comment)
+        document.docfile.save(name, ContentFile(b"file_content"), save=True)
+        return document
+
+    def delete(self, document_id):
+        """POST the removal of one attachment, as the page's script does.
+
+        Args:
+            document_id: pk of the Document to remove, valid or not.
+
+        Returns:
+            HttpResponse: what the view answered, for the caller to assert on.
+        """
+        return self.client.post(
+            reverse('quests:ajax_delete_draft_attachment', args=[document_id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_delete_draft_attachment__removes_the_file_from_the_draft(self):
+        """The student's own draft attachment goes, and the response carries the list as it now
+        stands so the page can render it without a reload."""
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 0)
+        self.assertNotIn("wrong-file", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__deletes_the_stored_file_too(self):
+        """The upload is deleted from storage, not just its row. Django has not deleted a
+        FileField's storage on row delete since 1.3, so dropping the row alone would leave the
+        file on disk with nothing in the database naming it (#2574).
+
+        The delete is registered with transaction.on_commit, so it runs only once the row is
+        really gone; captureOnCommitCallbacks runs it here, where the test's own transaction
+        would otherwise hold it forever.
+        """
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+        self.assertTrue(storage.exists(path))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.delete(self.document.id)
+
+        self.assertFalse(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__keeps_the_file_if_the_row_is_not_committed(self):
+        """A file is never destroyed while its row could still come back. The removal is
+        registered for after the commit, so a transaction that rolls back leaves the pair
+        consistent: the student keeps an attachment they can still open, rather than a row
+        pointing at a file that no longer exists and cannot be recovered."""
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+
+        # the callbacks are captured and deliberately not run, standing in for a transaction
+        # that never commits
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.delete(self.document.id)
+
+        self.assertEqual(len(callbacks), 1, "the storage delete was not deferred to the commit")
+        self.assertTrue(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__leaves_the_drafts_other_files_alone(self):
+        """Only the file named in the request goes; anything else attached to the same draft
+        stays, and comes back in the refreshed list."""
+        kept = self.attach(self.submission, "keep-this.png")
+
+        response = self.delete(self.document.id)
+
+        self.assertQuerySetEqual(self.submission.draft_comment.document_set.all(), [kept])
+        self.assertIn("keep-this", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__another_students_attachment_is_404(self):
+        """A student can only remove their own files: the document has to hang off a draft of
+        one of the requester's own submissions."""
+        someone_else = self.draft_submission(baker.make(User))
+        their_document = self.attach(someone_else, "not-yours.png")
+
+        response = self.delete(their_document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__published_attachment_is_404(self):
+        """Once the quest is submitted its files cannot be removed this way. Completing publishes
+        the draft comment and clears the field, so the document no longer hangs off any draft."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.submission.mark_completed()
+
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__attachment_on_no_comment_at_all_is_404(self):
+        """A Document with no comment belongs to no draft. Its NULL must not be matched against
+        the NULL draft_comment of the requester's own submissions, which would make every
+        commentless document theirs to delete."""
+        baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+                   semester=self.semester, draft_comment=None)
+        orphan = Document(comment=None)
+        orphan.docfile.save("orphan.png", ContentFile(b"file_content"), save=True)
+
+        response = self.delete(orphan.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=orphan.pk).exists())
+
+    def test_ajax_delete_draft_attachment__unknown_document_is_404(self):
+        """A document id that does not exist 404s rather than erroring."""
+        self.assertEqual(self.delete(0).status_code, 404)
+
+    def test_ajax_delete_draft_attachment__get_is_not_allowed(self):
+        """Removing a file is a POST. A plain GET must not delete anything, so a link followed by
+        a prefetch or a preview cannot destroy a student's upload (the mistake behind #2693)."""
+        response = self.client.get(
+            reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__non_ajax_post_is_refused(self):
+        """Only the page's own script reaches this view, matching the other draft endpoints."""
+        response = self.client.post(reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_submission__lists_each_draft_attachment_with_a_button_to_remove_it(self):
+        """The student's own submission page shows the attached files, each with the control that
+        removes it, which is what the script binds its click to."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, "wrong-file")
+        # the same bullet-list-of-links markup a posted comment's attachments use
+        self.assertContains(response, "Attached files:")
+        self.assertContains(response, 'class="file-link"')
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
+        )
+
+    def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
+        """The buttons belong to the student whose draft it is. Staff marking the submission post
+        to the approve view instead, where their own files are handled separately."""
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'class="draft-attachment-delete"')
+
+    def test_submission__staff_can_remove_files_from_a_draft_of_their_own(self):
+        """Owning the draft is the whole boundary, so a teacher working through a quest of their
+        own removes their own attachments like any other student would. Staff see the marking
+        form rather than the submit button, but the draft below it is still theirs."""
+        teacher = baker.make(User, is_staff=True)
+        their_submission = self.draft_submission(teacher)
+        their_document = self.attach(their_submission, "my-own-draft.png")
+        self.client.force_login(teacher)
+
+        response = self.client.get(their_submission.get_absolute_url())
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[their_document.id])}"',
+        )
+
+        self.assertEqual(self.delete(their_document.id).status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_save_draft__a_newly_attached_file_arrives_with_its_remove_button(self):
+        """A file stored by a draft save comes back in the refreshed list, so it can be removed
+        straight away rather than only after a reload: choosing the wrong file and saving the
+        draft is exactly when a student wants it gone."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'submission_id': self.submission.id,
+                'attachments': SimpleUploadedFile("second-file.png", b"file_content", content_type="image/png"),
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        added = self.submission.draft_comment.document_set.get(docfile__contains="second-file")
+        html = response.json()['draft_attachments_html']
+        self.assertIn("second-file", html)
+        self.assertIn(reverse('quests:ajax_delete_draft_attachment', args=[added.id]), html)
+
+    def test_ajax_save_draft__a_rejected_file_leaves_the_list_out(self):
+        """A file too big to store changes nothing about what is attached, so the response says
+        nothing about the list: replacing it with an unchanged copy would present the rejection
+        as though something had been saved."""
+        too_big = SimpleUploadedFile("huge.png", b"x" * (16777216 + 1), content_type="image/png")
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': too_big},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.json()['saved_attachments'], [])
+        self.assertIn('attachments', response.json()['file_errors'])
+        self.assertNotIn('draft_attachments_html', response.json())
+
+    def test_ajax_save_draft__a_draft_save_with_no_files_leaves_the_list_out(self):
+        """Nothing was attached, so nothing about the list changed and the response says nothing
+        about it: the page keeps what it is already showing."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'comment': "just typing"},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertNotIn('draft_attachments_html', response.json())
