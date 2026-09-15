@@ -5,7 +5,7 @@ from django.core import serializers
 from django.core.cache import cache
 from django.db import connection
 from django.shortcuts import reverse
-from django.test import RequestFactory
+from django.test import RequestFactory, override_settings
 
 from django_tenants.test.cases import TenantTestCase
 from django_tenants.test.client import TenantClient
@@ -15,6 +15,8 @@ from model_bakery import baker
 
 import json
 import re
+import shutil
+import tempfile
 
 from urllib.parse import urlencode
 
@@ -29,6 +31,32 @@ def login_url_with_next(next_url):
     the login url.
     """
     return f'{reverse(settings.LOGIN_URL)}?{urlencode({"next": next_url})}'
+
+
+class TempMediaRootMixin:
+    """Point MEDIA_ROOT at a throwaway directory for the life of the test class.
+
+    A test that uploads a file otherwise writes it into the project's real
+    ``_media_uploads`` and leaves it there. On the next run Django's storage dedupes the
+    repeated name (``clip.mp4`` becomes ``clip_XXXX.mp4``), so an assertion naming the
+    file, or reading a title derived from it, passes once and then fails on every rerun in
+    the same workspace.
+
+    List this ahead of the base test case (``class T(TempMediaRootMixin,
+    ByteDeckTenantTestCase)``) so MEDIA_ROOT is redirected before the base class does
+    anything with it.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        """Redirect MEDIA_ROOT to a temp directory, deleted along with the class."""
+        cls._temp_media = tempfile.mkdtemp(prefix='test-media-')
+        cls._media_override = override_settings(MEDIA_ROOT=cls._temp_media)
+        cls._media_override.enable()
+        # Registered before super(), so they run after the base class's own cleanups: LIFO.
+        cls.addClassCleanup(cls._media_override.disable)
+        cls.addClassCleanup(shutil.rmtree, cls._temp_media, ignore_errors=True)
+        super().setUpClass()
 
 
 class ViewTestUtilsMixin():

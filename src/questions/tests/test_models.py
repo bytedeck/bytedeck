@@ -286,6 +286,28 @@ class QuestionSubmissionModelTest(ByteDeckTenantTestCase):
         GenericForeignKey, so the target must always be passed explicitly)."""
         return baker.make(Comment, target_object=self.submission, **kwargs)
 
+    def test_is_valid_portfolio_type__only_image_and_video_answers(self):
+        """Only an image or video file answer is something a portfolio can show (#2573).
+
+        Mirrors comments.Document.is_valid_portfolio_type, which decides the same thing for a
+        file attached to a comment. A text answer, a file of another kind, and an answer with
+        nothing attached are all not artwork.
+        """
+        answer = baker.make(
+            QuestionSubmission, quest_submission=self.submission, question=None,
+            response_file=SimpleUploadedFile("art.png", b"png", content_type="image/png"),
+        )
+        self.assertTrue(answer.is_valid_portfolio_type)
+
+        answer.response_file = SimpleUploadedFile("clip.mp4", b"vid", content_type="video/mp4")
+        self.assertTrue(answer.is_valid_portfolio_type)
+
+        answer.response_file = SimpleUploadedFile("notes.txt", b"text", content_type="text/plain")
+        self.assertFalse(answer.is_valid_portfolio_type)
+
+        # a text answer has no file at all, which must read as False rather than raising
+        self.assertFalse(self.question_submission.is_valid_portfolio_type)
+
     def test_creation__values_retrievable(self):
         """A created answer is reachable from its quest submission and knows its question."""
         self.assertEqual(self.question_submission.question.instructions, "Test question")
