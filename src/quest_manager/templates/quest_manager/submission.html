@@ -492,7 +492,7 @@
         $(document).on('click', '.draft-attachment-delete', function() {
             var $button = $(this);
             var name = $.trim($button.siblings('a').first().text()) || 'this file';
-            if (!window.confirm('Remove ' + name + ' from your submission?')) return;
+            if (!window.confirm('Delete ' + name + ' from your submission?\n\nIt is removed for good, so attach it again if you still need it.')) return;
             // Against a double click while the request is away: the second delete would 404,
             // since the first one has already removed the file.
             $button.prop('disabled', true);

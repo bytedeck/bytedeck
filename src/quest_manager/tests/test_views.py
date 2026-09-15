@@ -7174,7 +7174,9 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, "wrong-file")
-        self.assertContains(response, 'class="draft-attachment-list"')
+        # the same bullet-list-of-links markup a posted comment's attachments use
+        self.assertContains(response, "Attached files:")
+        self.assertContains(response, 'class="file-link"')
         self.assertContains(
             response,
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
