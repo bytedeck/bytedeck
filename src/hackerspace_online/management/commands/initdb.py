@@ -174,8 +174,13 @@ def get_homepage_content():
     hardcoded CDN domain, so they resolve to the S3/CloudFront distribution in
     production (``USE_S3=1``) and to ``/static/`` in local development. This
     keeps the real production CDN out of committed source and seed content.
+
+    The TRY IT buttons take their href from ``reverse()`` for the same reason: a
+    literal path here goes stale the next time the deck-request flow moves, and
+    nothing about seed HTML fails loudly when it does (issue #2716).
     """
     img = f"{settings.STATIC_URL}public/images/"
+    request_a_deck = reverse("decks:request_new_deck")
     return f"""
 <!-- Heading Row-->
 
@@ -199,7 +204,7 @@ def get_homepage_content():
             <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="#teachers" role="button">TEACHERS</a>
           </div>
           <div class="col-md-4">
-            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="/decks/request/" role="button">TRY IT</a>
+            <a class="btn btn-block BD-btn BD-bg-LightBlue BD-btn-LightBlue-1" href="{request_a_deck}" role="button">TRY IT</a>
           </div>
         </div>
         <!-- /row -->
@@ -282,7 +287,7 @@ def get_homepage_content():
             open-ended, self-directed activities, where students can showcase their learning and creativity.</p>
             <div class="row">
               <div class="col-lg-4 BD-title-pixels">
-                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="/decks/request/" role="button">TRY IT!</a>
+                <a class="btn btn-block BD-btn BD-bg-DarkBlue" href="{request_a_deck}" role="button">TRY IT!</a>
                 <!-- <div>
                   <img class="students-pixels BD-img-pixels" src="{img}pixels%203.png">
                 </div> -->
@@ -326,7 +331,7 @@ def get_homepage_content():
             where they're at.</p>
             <div class="row">
               <div class="col-lg-4">
-                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="/decks/request/" role="button">TRY IT!!</a>
+                <a class="btn btn-block BD-btn BD-bg-LightBlue BD-bg-LightBlue BD-btn-LightBlue-2" href="{request_a_deck}" role="button">TRY IT!!</a>
               </div>
             </div>
           </div>
