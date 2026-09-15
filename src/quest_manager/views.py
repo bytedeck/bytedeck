@@ -2715,11 +2715,18 @@ def ajax_delete_draft_attachment(request, document_id):
         if submission is None:
             raise Http404("No such file on one of your drafts.")
 
-        # The stored file goes first, and has to: Django has not deleted a FileField's storage
-        # on row delete since 1.3, so dropping the row alone would leave the upload on disk
-        # with nothing in the database naming it (#2574). save=False because the row is going.
-        document.docfile.delete(save=False)
+        # The row goes inside the transaction, the stored file only once that commits.
+        # Storage is not transactional: deleting the file inline would destroy it before
+        # this block is done, so anything below rolling the transaction back (rendering the
+        # list still runs a query) would restore the row pointing at a file that is gone,
+        # which the student cannot recover. Deleting after the commit can at worst leave the
+        # file behind, which is the orphan in #2574 rather than a broken attachment.
+        #
+        # It has to be deleted explicitly either way: Django has not deleted a FileField's
+        # storage on row delete since 1.3.
+        storage, file_name = document.docfile.storage, document.docfile.name
         document.delete()
+        transaction.on_commit(lambda: storage.delete(file_name))
         return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
 
 

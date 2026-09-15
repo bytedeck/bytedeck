@@ -7092,13 +7092,34 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
     def test_ajax_delete_draft_attachment__deletes_the_stored_file_too(self):
         """The upload is deleted from storage, not just its row. Django has not deleted a
         FileField's storage on row delete since 1.3, so dropping the row alone would leave the
-        file on disk with nothing in the database naming it (#2574)."""
+        file on disk with nothing in the database naming it (#2574).
+
+        The delete is registered with transaction.on_commit, so it runs only once the row is
+        really gone; captureOnCommitCallbacks runs it here, where the test's own transaction
+        would otherwise hold it forever.
+        """
         storage, path = self.document.docfile.storage, self.document.docfile.name
         self.assertTrue(storage.exists(path))
 
-        self.delete(self.document.id)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.delete(self.document.id)
 
         self.assertFalse(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__keeps_the_file_if_the_row_is_not_committed(self):
+        """A file is never destroyed while its row could still come back. The removal is
+        registered for after the commit, so a transaction that rolls back leaves the pair
+        consistent: the student keeps an attachment they can still open, rather than a row
+        pointing at a file that no longer exists and cannot be recovered."""
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+
+        # the callbacks are captured and deliberately not run, standing in for a transaction
+        # that never commits
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.delete(self.document.id)
+
+        self.assertEqual(len(callbacks), 1, "the storage delete was not deferred to the commit")
+        self.assertTrue(storage.exists(path))
 
     def test_ajax_delete_draft_attachment__leaves_the_drafts_other_files_alone(self):
         """Only the file named in the request goes; anything else attached to the same draft
