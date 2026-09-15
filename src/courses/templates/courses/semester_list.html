@@ -1,7 +1,7 @@
 {% extends "courses/base.html" %}
 
 {% block head_title %}Semesters | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-calendar-o pull-right"></i>Semesters
@@ -43,17 +43,21 @@ Upcoming (being set up) -> Open (students earn XP in it) -> Archived (final mark
 terminal). Archived rows deliberately offer no actions at all, and the views refuse those URLs
 directly too.
 {% endcomment %}
-<table class="table table-striped">
+{% include 'snippets/table_loading.html' %}
+<table {% include 'snippets/list_table_attrs.html' %}>
   <thead>
     <tr>
-      <th>Name</th>
-      <th>First Day</th>
-      <th>Last Day</th>
-      <th>Total Days</th>
-      <th># Excluded Dates</th>
-      <th># Students</th>
-      <th>Status</th>
-      <th>Action</th>
+      <th data-field="name" data-sortable="true">Name</th>
+      {# Dates read "Sept. 12, 2026", so they sort on the hidden ISO-8601 fields beside them. #}
+      <th data-field="first_day" data-sortable="true" data-sort-name="first_day_sort">First Day</th>
+      <th data-field="first_day_sort" data-visible="false" data-switchable="false"></th>
+      <th data-field="last_day" data-sortable="true" data-sort-name="last_day_sort">Last Day</th>
+      <th data-field="last_day_sort" data-visible="false" data-switchable="false"></th>
+      <th data-field="total_days" data-sortable="true">Total Days</th>
+      <th data-field="excluded_dates" data-sortable="true"># Excluded Dates</th>
+      <th data-field="students" data-sortable="true"># Students</th>
+      <th data-field="status" data-sortable="true">Status</th>
+      <th data-field="action" data-searchable="false">Action</th>
     </tr>
   </thead>
   <tbody>
@@ -61,7 +65,9 @@ directly too.
     <tr {% if object.is_open %}class="success" title="This is the semester your students are in."{% endif %}>
       <td>{{ object }}</td>
       <td>{{ object.first_day }}</td>
+      <td>{{ object.first_day|date:"Y-m-d" }}</td>
       <td>{{ object.last_day }}</td>
+      <td>{{ object.last_day|date:"Y-m-d" }}</td>
       <td>{{ object.num_days }}</td>
       <td>{{ object.excludeddate_set.count }}</td>
       <td>{{ object.coursestudent_set.count }}</td>

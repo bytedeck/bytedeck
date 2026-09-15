@@ -17,10 +17,11 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.postgres.aggregates import StringAgg
 from django.core.paginator import EmptyPage, PageNotAnInteger, Paginator
 from django.db import transaction
 from django.db.models import (
-    Case, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, Q, Sum, Value, When,
+    Case, CharField, DateTimeField, F, ExpressionWrapper, fields, Count, IntegerField, OuterRef, Q, Subquery, Sum, Value, When,
 )
 from django.db.models.functions import Coalesce, Now
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
@@ -34,7 +35,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
-from comments.models import Comment, Document
+from comments.models import Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -930,7 +931,7 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     # sort by it. A quest tab leaves this empty: it has its own search and ordering below.
     submission_tab = SubmissionTab(
         page=None, sortable_columns={}, sort_column='', sort_descending=False,
-        search_term='', num_matching=0,
+        search_term='', num_matching=0, group_filter=None,
     )
 
     if view_type == QuestListViewTabTypes.IN_PROGRESS:
@@ -1710,17 +1711,49 @@ def submission_displayed_xp():
     )
 
 
+def submission_displayed_group_names():
+    """The {group} names the table shows, as something the database can order by.
+
+    That cell lists every group the student is in this semester, in name order and joined
+    with commas, which is what `Profile.blocks()` hands the template. Ordering by the whole
+    joined string sorts the column the way it reads, so "7A" comes before "7A, 8B", which
+    comes before "8B".
+
+    A student can be in several groups at once, so the names cannot be reached by a plain
+    join: that would give a submission one row per registration and multiply it through the
+    page. They are aggregated in a correlated subquery instead, which leaves one row per
+    submission carrying one value to order by.
+
+    Returns:
+        Subquery: the joined group names for each submission, NULL for a student who is in
+        no group this semester, which `apply_sort` puts last either way.
+    """
+    registrations = CourseStudent.objects.get_queryset().in_open_semesters().filter(user=OuterRef('user'))
+
+    # order_by() clears CourseStudent.Meta.ordering, which the aggregate would otherwise
+    # have to group by as well; values('user') is what groups a student's registrations
+    # into the single row the subquery is allowed to return.
+    joined_names = registrations.order_by().values('user').annotate(
+        names=StringAgg('block__name', delimiter=', ', order_by='block__name'),
+    ).values('names')
+
+    return Subquery(joined_names, output_field=CharField())
+
+
 def submission_sort_columns(*, campaign=False, user=False, status=True):
     """The columns a submission tab offers, mapped to what the database orders on.
 
-    Two columns are never offered, for the same reason the Library's quests tab does not
-    offer its tags (#2410): a submission's {group} blocks and its quest's tags are both
-    many-valued, so there is no one value to order a row by, and neither column can keep
-    the promise a sort control makes.
+    The quest's tags are not offered, for the same reason the Library's quests tab does not
+    offer them (#2410): a quest carries any number of them, so there is no one value to
+    order a row by. The {group} column is many-valued in the same way, and is offered
+    anyway, ordered by the joined string the cell actually shows (#2697).
+
+    The group column travels with the user column rather than having a flag of its own:
+    only the tabs that name whose submission it is show which groups that student is in.
 
     Args:
         campaign (bool): whether this tab shows the quest's campaign.
-        user (bool): whether this tab shows whose submission it is.
+        user (bool): whether this tab shows whose submission it is, and their groups.
         status (bool): whether the Status column carries a time. The in-progress tabs show
             no time there, so ordering by it would move nothing and still look like a sort.
 
@@ -1735,40 +1768,74 @@ def submission_sort_columns(*, campaign=False, user=False, status=True):
         columns['campaign'] = 'quest__campaign__title'
     if user:
         columns['user'] = 'user__username'
+        columns['group'] = submission_displayed_group_names()
     if status:
         columns['status'] = submission_status_time()
 
     return columns
 
 
+def resolve_group_filter(request):
+    """The {group} the `block` query parameter picks out, or None for no filter.
+
+    An unknown, non-numeric or not-currently-running group id falls back to no filter, so a
+    stale link or something somebody typed can only ever widen the tab back to every group
+    rather than error or reach a group that is not on offer. That matches how the student
+    list reads the same parameter.
+
+    Args:
+        request (HttpRequest): the current request.
+
+    Returns:
+        Block | None: the selected group, or None when none is selected.
+    """
+    block_pk = request.GET.get('block', '')
+    if not block_pk.isdigit():
+        return None
+
+    return Block.objects.in_open_semesters().filter(pk=int(block_pk)).first()
+
+
 #: What a submission tab needs to render itself once its page has been cut: the page, the
-#: columns it offers, the ordering applied, and the search it was narrowed by.
+#: columns it offers, the ordering applied, and the search and {group} it was narrowed by.
 SubmissionTab = namedtuple(
     'SubmissionTab',
-    'page sortable_columns sort_column sort_descending search_term num_matching',
+    'page sortable_columns sort_column sort_descending search_term num_matching group_filter',
 )
 
 
 def submission_tab_page(request, submissions, page, *, campaign=False, user=False, status=True):
     """Narrow, order and cut a page from one tab's submissions.
 
-    All three happen here, before the page is taken, because the browser only ever holds
-    one page: a search or a sort applied there answers a question about that page rather
-    than about the tab (#2582, #2597). `id` settles submissions that tie on the chosen
-    column, so paging through a sorted tab shows each of them exactly once.
+    All of it happens here, before the page is taken, because the browser only ever holds
+    one page: a search, filter or sort applied there answers a question about that page
+    rather than about the tab (#2582, #2597). `id` settles submissions that tie on the
+    chosen column, so paging through a sorted tab shows each of them exactly once.
+
+    The {group} filter is applied before the search so the count beside the search box
+    reports what matched within the chosen group, which is the list the reader is looking
+    at.
 
     Args:
-        request (HttpRequest): the current request, for the `q` and `sort` parameters.
+        request (HttpRequest): the current request, for the `q`, `block` and `sort`
+            parameters.
         submissions (QuerySet[QuestSubmission]): the tab's submissions.
         page: the requested page.
         campaign (bool): whether this tab shows the quest's campaign and tags.
-        user (bool): whether this tab shows whose submission it is.
+        user (bool): whether this tab shows whose submission it is, which is also what
+            decides whether the {group} filter is offered.
         status (bool): whether the Status column carries a time to order by.
 
     Returns:
         SubmissionTab: the page and everything the template reads beside it.
     """
     sortable_columns = submission_sort_columns(campaign=campaign, user=user, status=status)
+
+    # Only the tabs that name the student show which groups they are in, so only those
+    # offer the filter: elsewhere every submission on the page is the reader's own.
+    group_filter = resolve_group_filter(request) if user else None
+    if group_filter is not None:
+        submissions = submissions.filter(user_id__in=group_filter.current_student_ids())
 
     search_term = request.GET.get('q', '').strip()
     submissions = search_submissions(submissions, search_term, campaign=campaign, user=user)
@@ -1784,6 +1851,7 @@ def submission_tab_page(request, submissions, page, *, campaign=False, user=Fals
         sort_descending=descending,
         search_term=search_term,
         num_matching=num_matching,
+        group_filter=group_filter,
     )
 
 
@@ -1827,7 +1895,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     Args:
         request: the staff member's request. Its path picks the tab, and ``?page``, ``?sort``,
-            ``?order`` and ``?q`` page, order and search the submissions in it.
+            ``?q`` and ``?block`` page, order, search and filter the submissions in it.
         quest_id: when given, the queryset is filtered to submissions of that quest, and the
             page offers the current-semester / all-semesters toggle for its past approvals.
         template: the template to render.
@@ -1970,12 +2038,14 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
-        # Read by the tab's table and its search box
+        # Read by the tab's table and the search and filter controls above it
         "sortable_columns": submission_tab.sortable_columns,
         "sort_column": submission_tab.sort_column,
         "sort_descending": submission_tab.sort_descending,
         "submission_search_term": submission_tab.search_term,
         "num_matching_submissions": submission_tab.num_matching,
+        "group_filter_choices": Block.objects.in_open_semesters(),
+        "current_group": submission_tab.group_filter.pk if submission_tab.group_filter else '',
     }
     return render(request, template, context)
 
@@ -2283,7 +2353,13 @@ def complete(request, submission_id):
     draft_text = f"<p>{comment_text}</p>"
     if draft_comment:
         # update all comment fields
-        draft_comment.text = draft_text
+        #
+        # Through clean_html(), which is what Comment.objects.create_comment() runs on the text
+        # it is handed in the else branch below. A published comment has to be cleaned the same
+        # way whichever branch produced it: clean_html() is what turns a URL the student typed
+        # out into a link and gives every link in the comment target="_blank", so following one
+        # opens a new tab instead of navigating away from the page (#2711).
+        draft_comment.text = clean_html(draft_text)
         draft_comment.target_object_id = submission.id
         draft_comment.target_object = submission
         # reset timestamp needed otherwise it will use the draft comment's timestamp from when the submission was started
@@ -2575,6 +2651,91 @@ def skipped(request, quest_id):
     return skip(request, submission.id)
 
 
+def render_draft_attachments(submission):
+    """Render the list of files stored with a submission's draft comment.
+
+    The page shows this list, and the draft-save and delete endpoints hand it back so the
+    page can replace it without a reload. Rendering it in one place keeps the markup the
+    student sees after an attach or a removal identical to what a fresh page would render.
+
+    Args:
+        submission: the QuestSubmission whose draft attachments to list.
+
+    Returns:
+        str: the rendered HTML, empty when the draft holds no files.
+    """
+    draft_comment = submission.draft_comment
+    return render_to_string(
+        "quest_manager/snippets/draft_attachments.html",
+        {"draft_documents": draft_comment.document_set.all() if draft_comment else []},
+    )
+
+
+@xml_http_request_required
+@non_public_only_view
+@login_required
+@require_POST
+def ajax_delete_draft_attachment(request, document_id):
+    """Remove one file the requesting student attached to their own draft submission.
+
+    A file input cannot unchoose a single file, and choosing again adds to what is stored
+    rather than replacing it, so a wrong upload would otherwise stay on the submission with
+    no way to take it back.
+
+    Only a file on a draft reaches here. The lookup requires the document's comment to be the
+    `draft_comment` of one of the requesting user's submissions, which is true only while the
+    comment is unpublished: completing a submission posts its draft comment and clears the
+    field, so an attachment the teacher can already see is a 404, as is any other student's.
+
+    Args:
+        request: the POST, sent by the submission page as XHR.
+        document_id: pk of the Document to remove.
+
+    Returns:
+        JsonResponse: `draft_attachments_html`, the list as it now stands, for the page to
+        render in place of the old one.
+
+    Raises:
+        Http404: for a document that is not an attachment on one of this user's drafts.
+    """
+    document = get_object_or_404(Document, pk=document_id)
+    # The whole check and removal run under a lock on the submission row, because the student
+    # can submit the quest at the same moment: completing publishes the draft comment and
+    # clears draft_comment with an UPDATE of this row, which the lock makes wait. So either
+    # this request holds the lock and the comment is still a draft for as long as it takes to
+    # remove the file, or the completion got there first and the lookup below finds nothing.
+    with transaction.atomic():
+        # A document with no comment at all belongs to no draft. Checked before the query,
+        # which would otherwise match this user's submissions that have no draft comment
+        # either, since both sides would be NULL.
+        submission = None
+        if document.comment_id is not None:
+            # include_related=False because the manager otherwise joins the nullable relations
+            # it usually needs for templates, and Postgres refuses FOR UPDATE on the nullable
+            # side of an outer join. Nothing here reads them, and the row to lock is this one.
+            submission = QuestSubmission.objects.get_queryset(
+                include_related=False
+            ).select_for_update().filter(
+                draft_comment_id=document.comment_id, user=request.user
+            ).first()
+        if submission is None:
+            raise Http404("No such file on one of your drafts.")
+
+        # The row goes inside the transaction, the stored file only once that commits.
+        # Storage is not transactional: deleting the file inline would destroy it before
+        # this block is done, so anything below rolling the transaction back (rendering the
+        # list still runs a query) would restore the row pointing at a file that is gone,
+        # which the student cannot recover. Deleting after the commit can at worst leave the
+        # file behind, which is the orphan in #2574 rather than a broken attachment.
+        #
+        # It has to be deleted explicitly either way: Django has not deleted a FileField's
+        # storage on row delete since 1.3.
+        storage, file_name = document.docfile.storage, document.docfile.name
+        document.delete()
+        transaction.on_commit(lambda: storage.delete(file_name))
+        return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
+
+
 @xml_http_request_required
 @non_public_only_view
 @login_required
@@ -2756,6 +2917,11 @@ def ajax_save_draft(request):
             response_data["saved_answer_files"] = saved_answer_files
             response_data["saved_attachments"] = saved_attachments
             response_data["file_errors"] = file_errors
+            if saved_attachments:
+                # The stored list has grown, so hand back the whole of it: the page renders it
+                # in place of the old one, and the files just saved arrive with the control
+                # that removes them instead of waiting for a reload to become removable.
+                response_data["draft_attachments_html"] = render_draft_attachments(sub)
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 
