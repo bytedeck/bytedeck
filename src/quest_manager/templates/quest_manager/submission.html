@@ -169,7 +169,7 @@
               {% if draft_documents %}
                 <p class="help-block">
                   <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  {% for document in draft_documents %}<a href="{{ document.docfile.url }}"
+                  {% for document in draft_documents %}<a href="{{ document.get_download_url }}"
                      target="_blank">{{ document.docfile|filename }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
                   <small>(already saved: only choose files above if you want to attach more)</small>
                 </p>
