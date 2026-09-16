@@ -7365,3 +7365,109 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         )
 
         self.assertNotIn('draft_attachments_html', response.json())
+
+
+class BlockingQuestNoticeTests(ByteDeckTenantTestCase):
+    """The Available tab saying which quest is holding the others back.
+
+    While a blocking quest is open to a student the tab shows only blocking quests, so every
+    other quest they qualify for is missing from it while staying startable from the quest map.
+    Without a word on the page that reads as the tab losing their quests (#2729).
+    """
+
+    def setUp(self):
+        """A student registered this semester with one ordinary quest available to them."""
+        self.teacher = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.student,
+                   course=baker.make('courses.Course'), semester=SiteConfig.get().active_semester)
+        self.quest = baker.make(Quest, name="Ordinary quest", blocking=False)
+        self.client.force_login(self.student)
+
+    def available_tab(self):
+        """Load the Available tab as the signed-in user.
+
+        Returns:
+            HttpResponse: the rendered quest list.
+        """
+        return self.client.get(reverse('quests:quests'))
+
+    def test_quest_list__no_notice_when_nothing_is_blocking(self):
+        """The ordinary tab says nothing about holds, so the notice cannot become wallpaper."""
+        response = self.available_tab()
+
+        self.assertContains(response, "Ordinary quest")
+        self.assertNotContains(response, "Your other quests are on hold")
+
+    def test_quest_list__names_the_blocking_quest_that_is_available(self):
+        """A blocking quest available to the student takes every other quest out of the tab, so
+        the tab names it and links to it."""
+        blocker = baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertContains(response, blocker.get_absolute_url())
+        self.assertContains(response, "Read this first")
+        self.assertNotContains(response, "Ordinary quest")  # the quest the block is hiding
+
+    def test_quest_list__names_a_blocking_quest_the_student_has_in_progress(self):
+        """A blocking quest already started blocks the tab the same way, and is the harsher case:
+        it is not in the tab either, so without the notice the tab is simply empty."""
+        blocker = baker.make(Quest, name="Finish this first", blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertContains(response, "Finish this first")
+
+    def test_quest_list__names_every_blocking_quest(self):
+        """Two of them are both named, so finishing one does not leave the student wondering why
+        their quests are still missing."""
+        baker.make(Quest, name="Read this first", blocking=True)
+        baker.make(Quest, name="Then read this", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Read this first")
+        self.assertContains(response, "Then read this")
+        self.assertContains(response, "they are done")
+
+    def test_quest_list__reads_as_one_quest_when_only_one_blocks(self):
+        """One blocking quest is spoken of in the singular."""
+        baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "it is done")
+
+    def test_quest_list__the_generic_empty_message_gives_way_to_the_notice(self):
+        """A blocking quest in progress empties the tab, and the notice explains it, so the
+        generic "no new quests available" line is not shown alongside saying something else."""
+        QuestSubmission.objects.create_submission(self.student, baker.make(Quest, blocking=True))
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertNotContains(response, "You have no new quests available")
+
+    def test_quest_list__staff_see_no_notice(self):
+        """Staff see every published quest rather than an availability-filtered list, so nothing
+        is being held back from them and the notice would be untrue."""
+        baker.make(Quest, name="Read this first", blocking=True)
+        self.client.force_login(self.teacher)
+
+        response = self.available_tab()
+
+        self.assertNotContains(response, "Your other quests are on hold")
+
+    def test_quest_list__a_student_with_no_current_course_sees_no_notice(self):
+        """Without a course the tab is built by get_available_without_course(), which does not
+        block at all, so nothing is being held back."""
+        baker.make(Quest, name="Read this first", blocking=True, available_outside_course=True)
+        self.client.force_login(baker.make(User))
+
+        response = self.available_tab()
+
+        self.assertNotContains(response, "Your other quests are on hold")
