@@ -7365,3 +7365,96 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         )
 
         self.assertNotIn('draft_attachments_html', response.json())
+
+
+class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
+    """The same file reaching the server twice must not be stored, and shown to the teacher, twice.
+
+    The page clears a file input only when a draft save comes back successfully, so a save whose
+    response the browser never saw (a dropped connection part-way through a photo upload, where
+    the server stored the file all the same) leaves that file in the input and the next autosave
+    sends it again (#2720).
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission with a draft comment and nothing attached."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = baker.make(
+            QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+            semester=self.semester, is_completed=False,
+        )
+        self.submission.draft_comment = Comment.objects.create_comment(
+            user=self.student, path=self.submission.get_absolute_url(), text="", target=None)
+        self.submission.save()
+        self.client.force_login(self.student)
+
+    def save_draft(self, upload):
+        """Autosave the draft with one chosen file, as the page's script does.
+
+        Args:
+            upload: the file to send. A fresh object each time, since a browser re-reads the
+                file from disk on each attempt rather than replaying a consumed upload.
+
+        Returns:
+            HttpResponse: what the view answered.
+        """
+        return self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': upload},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_save_draft__the_same_file_sent_twice_is_stored_once(self):
+        """A retried draft save re-sends the file still sitting in the input; the draft ends up
+        holding it once, not twice (#2720)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
+    def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
+        """Only a file the draft already holds is skipped. A student replacing their work with a
+        corrected version of the same name still gets it attached, so nothing is dropped
+        silently."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"first version", content_type="image/png"))
+        self.save_draft(SimpleUploadedFile("my-work.png", b"a longer, corrected version", content_type="image/png"))
+
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
+
+    def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
+        """Choosing a file the draft already holds and then submitting publishes one copy of it,
+        not two: the submit path attaches through the same helper the draft save uses (#2720)."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
+        """A file chosen only at submit time still publishes with the comment: skipping applies to
+        what the draft already holds, not to everything."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("only-at-submit.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)

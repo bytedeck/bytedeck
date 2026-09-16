@@ -1,6 +1,6 @@
 import datetime
 import re
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -10,8 +10,10 @@ from model_bakery import baker
 from model_bakery.recipe import Recipe
 from comments.models import Comment
 
-from courses.models import Course, CourseStudent, Semester
+from courses.models import Course, CourseStudent, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from prerequisites.models import Prereq
+from prerequisites.tasks import update_quest_conditions_for_user
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission
 from siteconfig.models import SiteConfig
 
@@ -710,6 +712,129 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
+
+    def rank_gated_quest(self, rank_xp=60):
+        """Set up a quest a student reaches by rank, and the quest whose XP gets them there.
+
+        Args:
+            rank_xp (int): the XP the rank needs.
+
+        Returns:
+            tuple: the quest behind the rank, and an in-progress submission worth more XP than
+            the rank needs.
+        """
+        rank = baker.make(Rank, name="Digital Novice II", xp=rank_xp)
+        behind_the_rank = baker.make(Quest, name="Pixel Art 1. Introduction", max_repeats=0, blocking=False)
+        Prereq.objects.create(parent_object=behind_the_rank, prereq_object=rank)
+        earns_the_rank = baker.make(Quest, name="XP giver", xp=rank_xp * 2, blocking=False)
+        submission = baker.make(QuestSubmission, user=self.student, quest=earns_the_rank,
+                                semester=SiteConfig.get().active_semester)
+        return behind_the_rank, submission
+
+    def worker_running_dispatched_rebuilds(self):
+        """Stand in for the celery worker, running each available-quest rebuild as it is handed over.
+
+        Patched at the real dispatch, the one TransactionAwareTask hands to celery on commit, so
+        the deferral it is written for stays in place and the rebuild runs against the state the
+        operation committed. The per-user rebuild is the one dispatched as ``args=[user_id]``.
+
+        Returns:
+            unittest.mock._patch: the patch, to use as a context manager.
+        """
+        def dispatch(*args, **kwargs):
+            task_args = kwargs.get("args") or (args[0] if args else None)
+            if task_args:
+                update_quest_conditions_for_user(task_args[0])
+
+        return patch("tenant_schemas_celery.task.TenantTask.apply_async", side_effect=dispatch)
+
+    def test_mark_approved__the_quest_behind_the_rank_just_reached_becomes_available(self):
+        """The chain end to end: an approval grants XP, the XP reaches a rank, and the rebuild the
+        approval queues puts the quest behind that rank in the student's Available tab (#2722).
+
+        This is the behaviour the transaction tests below exist in service of. It cannot fail on
+        its own without the fix, because a TestCase always holds a transaction open and so supplies
+        in the test what the fix supplies in production; those tests are what pin the fix down.
+        """
+        self.register_student(SiteConfig.get().active_semester)
+        behind_the_rank, submission = self.rank_gated_quest()
+        Quest.objects.get_available(self.student)  # prime the cache, as loading the tab does
+        self.assertNotIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+        submission.mark_completed()
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_approved()
+
+        self.assertIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+    def test_mark_returned__the_quest_behind_the_rank_is_taken_back_out(self):
+        """Returning takes the XP back, so the rebuild it queues drops the quest behind the rank
+        the student no longer holds out of their Available tab again (#2722)."""
+        self.register_student(SiteConfig.get().active_semester)
+        behind_the_rank, submission = self.rank_gated_quest()
+        submission.mark_completed()
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_approved()
+        self.assertIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+        with self.worker_running_dispatched_rebuilds():
+            with self.captureOnCommitCallbacks(execute=True):
+                submission.mark_returned()
+
+        self.assertNotIn(behind_the_rank, Quest.objects.get_available(self.student))
+
+    def test_mark_returned__a_submission_that_was_never_approved_queues_no_rebuild(self):
+        """Returning a submission still awaiting approval takes no XP back, so nothing about what
+        is available to the student changed and no rebuild is asked for.
+
+        Closing a suspended deck returns every submission still awaiting approval, so a rebuild
+        each would be hundreds of full recalculations for nothing (#2722).
+        """
+        self.register_student(SiteConfig.get().active_semester)
+        submission = baker.make(QuestSubmission, user=self.student, quest__xp=100,
+                                is_completed=True, is_approved=False)
+
+        with patch('prerequisites.tasks.update_quest_conditions_for_user.apply_async') as rebuild:
+            submission.mark_returned()
+
+        rebuild.assert_not_called()
+
+    def test_mark_approved__the_approval_and_the_xp_it_grants_are_one_transaction(self):
+        """Approving is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Saving the submission is what asks the prerequisites app to rebuild this student's
+        cache of available quests, and TransactionAwareTask hands that job to celery on
+        commit. One transaction around the approval is therefore what holds the job back
+        until the XP the approval grants has been written: without one the save commits by
+        itself, the job goes out immediately, and the worker reads the XP from before the
+        approval, so a quest waiting on the rank the student just reached is worked out as
+        still locked and never reaches their Available tab.
+        """
+        submission = baker.make(QuestSubmission, user=self.student, quest__xp=100)
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_approved()
+
+        submission.refresh_from_db()
+        self.assertFalse(submission.is_approved, "the approval was left standing without its XP")
+
+    def test_mark_returned__the_return_and_the_xp_it_takes_back_are_one_transaction(self):
+        """Returning is all or nothing, for the reason mark_approved() is (#2722): the cache
+        rebuild it queues must not run against the XP the student had while it was approved."""
+        self.register_student(SiteConfig.get().active_semester)
+        submission = baker.make(
+            QuestSubmission, user=self.student, quest__xp=100, is_completed=True, is_approved=True,
+        )
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_returned()
+
+        submission.refresh_from_db()
+        self.assertTrue(submission.is_approved, "the return was left standing without its XP")
 
     def test_mark_returned__moves_submission_to_active_semester(self):
         """A submission returned in a later semester is re-attached to the current semester (issue #1231).

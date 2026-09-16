@@ -431,6 +431,26 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         )
         self.assertIsInstance(new_assertion, BadgeAssertion)
 
+    def test_create_assertion__the_grant_and_the_xp_it_is_worth_are_one_transaction(self):
+        """Granting is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Saving the assertion is what asks the prerequisites app to rebuild the student's cache
+        of available quests, and TransactionAwareTask hands that job to celery on commit. One
+        transaction around the grant is therefore what holds the job back until the XP the badge
+        is worth has been written, so the worker does not work the student's rank out from the
+        XP they had before it.
+        """
+        badge = baker.make(Badge)
+
+        with mock.patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                BadgeAssertion.objects.create_assertion(self.student, badge, self.teacher)
+
+        self.assertFalse(
+            BadgeAssertion.objects.filter(user=self.student, badge=badge).exists(),
+            "the badge was left granted without its XP",
+        )
+
     def test_create_assertion__uses_explicit_active_semester(self):
         """create_assertion() honours a passed active_semester instead of the SiteConfig default."""
         # A semester distinct from the SiteConfig default (self.sem) so this proves the passed
