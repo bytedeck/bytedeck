@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Max, Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -516,6 +516,23 @@ class BadgeAssertionManager(models.Manager):
         return self.num_assertions(user, badge) + 1
 
     def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None, course=None):
+        """Grant a badge to a student, and bring their XP up to date with it.
+
+        Args:
+            user (User): the student earning the badge.
+            badge (Badge): the badge to grant.
+            issued_by (User): the teacher granting it. Defaults to the deck's AI, which is who a
+                badge granted automatically comes from.
+            transfer (bool): True when the badge is not to be worth its XP, which is how content
+                transferred from an earlier semester is granted.
+            active_semester (int): the pk of the semester to count the badge toward. Defaults to
+                the student's own semester, and to none at all when they are registered in none.
+            course (Course): the course of theirs the badge counts toward, for a student taking
+                more than one (#2440).
+
+        Returns:
+            BadgeAssertion: the granted badge.
+        """
         ordinal = self.get_assertion_ordinal(user, badge)
         if issued_by is None:
             issued_by = get_object_or_404(User, pk=SiteConfig.get().deck_ai.pk)
@@ -539,9 +556,16 @@ class BadgeAssertionManager(models.Manager):
             semester_id=active_semester,
             course=course,
         )
-        new_assertion.full_clean()
-        new_assertion.save()
-        user.profile.xp_invalidate_cache()  # recalculate user's XP
+        # Granting and the XP it is worth go together, in one transaction: saving the
+        # assertion queues the rebuild of this student's cache of available quests, and
+        # prerequisites.tasks.TransactionAwareTask holds that task back until commit. So
+        # the transaction is what makes the worker read the XP this badge grants rather
+        # than the XP from before it, which would leave a quest waiting on the rank the
+        # badge just earned missing from the student's Available tab (#2722).
+        with transaction.atomic():
+            new_assertion.full_clean()
+            new_assertion.save()
+            user.profile.xp_invalidate_cache()  # recalculate user's XP
         return new_assertion
 
     def check_for_new_assertions(self, user, transfer=False):
