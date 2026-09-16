@@ -2397,12 +2397,12 @@ def complete(request, submission_id):
             target=submission,
         )
 
-    # Create Document objects and connect them to the comment for uploaded files
+    # Attach the POST's uploaded files to the comment being published. Through the same helper
+    # the draft save and the keep-on-failed-validation path use, so a file already stored with
+    # the draft is not stored a second time when the student chooses it again on the way out
+    # (#2720), and there is one place that decides what a comment's attachments are.
     if request.FILES:
-        for afile in request.FILES.getlist("attachments"):
-            newdoc = Document(docfile=afile, comment=draft_comment)
-            newdoc.full_clean()
-            newdoc.save()
+        save_draft_attachments(form, draft_comment)
 
     affected_users = []
 
