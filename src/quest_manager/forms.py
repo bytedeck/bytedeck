@@ -10,7 +10,7 @@ from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
 from comments.sanitize import sanitize_comment_html
-from utilities.fields import RestrictedMultiFileFormField
+from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from courses.forms import XPCourseChoiceMixin
@@ -335,9 +335,21 @@ class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     # is worded the same here as it is when a teacher grants a badge
     course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
+    # The comment's attachments take web files (SVG, HTML, XML, MHTML) as well as everything
+    # else. This is the general "hand in your work" box, which whole cohorts of existing quests
+    # ask for a page or a drawing through, and refusing those types here stopped students
+    # handing that work in at all. A file question is the place to ask for one type rather than
+    # any, and that is where the narrower rule lives: its "Also allow file types that can carry
+    # a script" box is off by default, so a question asking for an image still takes only images.
+    #
+    # The cost is that an attachment here is linked at its storage URL and opens in the page, so
+    # a student can hand in a file that runs their script in the session of whoever opens it,
+    # usually their teacher. Serving these as downloads instead, the way a question's file answer
+    # already is, is the graceful version of the restriction and is tracked separately (#2726).
     attachments = RestrictedMultiFileFormField(
         required=False,
         max_upload_size=16777216,
+        script_capable_types=ALL_SCRIPT_CAPABLE_TYPES,
         label="Attach files",
         help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
     )
