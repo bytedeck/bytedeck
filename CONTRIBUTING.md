@@ -196,6 +196,53 @@ production, say), put a `deploy-unsafe-ok` marker in the migration file with a c
 which of those it is. Do not add entries to `LEGACY_DEPLOY_UNSAFE_MIGRATIONS`: that list is
 the migrations that predate the check.
 
+### Troubleshooting: a quest is missing from a student's Available tab
+
+A quest that opens fine from the quest map or its own URL, and is nowhere in the student's
+Available tab, is the most common "the site is broken" report. It is not one bug: **"in the
+Available tab" and "can I start this?" are two different code paths**, and the tab applies three
+filters the other one never sees.
+
+Starting a quest (the map link, the quest's own URL) goes through `Quest.is_available()`: the
+quest is active, is not already in progress or repeat-capped, its prerequisites are worked out
+**live**, and `available_outside_course` covers a student with no current course.
+
+The tab goes through `Quest.objects.get_available()`, which uses the **cached** prerequisite
+answer and then applies, in order:
+
+1. `not_in_progress_completed_or_cooldown()` -- the repeat and cooldown rules, in SQL
+2. `block_if_needed()` -- if **any** quest with `blocking=True` is available to the student, or
+   they have one in progress, the tab returns *only* blocking quests. Every other quest they
+   qualify for disappears from the list, with nothing said, and stays startable from the map
+3. `exclude_hidden()` -- the student pressed Hide on the quest
+
+So a missing quest has four possible causes, and only one of them is the cache. Two things make
+a stale cache permanent rather than self-healing:
+
+* `QuestQuerySet.get_pk_met_list()` recomputes only when the student has **no cache row at
+  all**; an existing row is served as-is, however old
+* the `update_conditions` command only calls `apply_async`, so it does nothing while celery is
+  down or its queue is backed up
+
+`quest_availability` answers all of this for one student. It is a tenant app, so point it at a
+deck:
+
+```bash
+# every quest this student can start but cannot see, and the filter responsible for each
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username>
+
+# the full account of one quest: each filter in turn, every prerequisite with its own verdict,
+# and the cached prerequisite answer next to a live one
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username> --quest 42
+
+# recompute this student's cached prerequisite results here and now, without celery
+python src/manage.py tenant_command quest_availability --schema=hackerspace <username> --rebuild
+```
+
+The report opens with the student's XP, rank, registration and whether their cache still agrees
+with a live calculation, so "is celery keeping up?" is answered before anything else. A quest
+report ends with a verdict naming the filter that dropped it and what to do about it.
+
 ### Use a Consistent Coding Style
 We use [ruff](https://docs.astral.sh/ruff/) (lint only) with a few exclusions -- see `[tool.ruff]` in [pyproject.toml](pyproject.toml).  These will be enforced by the pre-commit hook.
 
