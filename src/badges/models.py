@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from django.conf import settings
 from django.contrib.auth.models import User
-from django.db import models
+from django.db import models, transaction
 from django.db.models import Max, Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
@@ -539,9 +539,16 @@ class BadgeAssertionManager(models.Manager):
             semester_id=active_semester,
             course=course,
         )
-        new_assertion.full_clean()
-        new_assertion.save()
-        user.profile.xp_invalidate_cache()  # recalculate user's XP
+        # Granting and the XP it is worth go together, in one transaction: saving the
+        # assertion queues the rebuild of this student's cache of available quests, and
+        # prerequisites.tasks.TransactionAwareTask holds that task back until commit. So
+        # the transaction is what makes the worker read the XP this badge grants rather
+        # than the XP from before it, which would leave a quest waiting on the rank the
+        # badge just earned missing from the student's Available tab (#2722).
+        with transaction.atomic():
+            new_assertion.full_clean()
+            new_assertion.save()
+            user.profile.xp_invalidate_cache()  # recalculate user's XP
         return new_assertion
 
     def check_for_new_assertions(self, user, transfer=False):

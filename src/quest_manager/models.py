@@ -1580,14 +1580,27 @@ class QuestSubmission(models.Model):
         self.save()
 
     def mark_approved(self, transfer=False):
-        self.is_completed = True  # might have been false if returned
-        self.is_approved = True
-        self.time_approved = timezone.now()
-        self.do_not_grant_xp = transfer
-        self.save()
-        # update badges
-        BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        """Approve this submission: grant its XP, and any badges it newly qualifies for.
+
+        All of it in one transaction, because saving the submission is what tells the
+        prerequisites app to rebuild this student's cache of available quests, and that
+        rebuild reads the XP this approval grants. The task is dispatched through
+        prerequisites.tasks.TransactionAwareTask, which hands it to celery on commit, so
+        one transaction around the whole thing is what holds it back until the new XP is
+        written. Saving outside one dispatches it immediately (Django runs an on_commit
+        callback right away when nothing is open), and the worker then reads the XP from
+        before the approval: a quest waiting on the rank the student just reached is
+        computed as still locked and stays missing from their Available tab (#2722).
+        """
+        with transaction.atomic():
+            self.is_completed = True  # might have been false if returned
+            self.is_approved = True
+            self.time_approved = timezone.now()
+            self.do_not_grant_xp = transfer
+            self.save()
+            # update badges
+            BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def mark_returned(self):
         self.is_completed = False
@@ -1601,10 +1614,14 @@ class QuestSubmission(models.Model):
         # happens "now", so the redo belongs to whatever semester the student is in at this point.
         from courses.models import semester_for  # locally, since courses imports this module
 
-        self.semester = semester_for(self.user)
-        self.full_clean()
-        self.save()
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        # One transaction for the same reason mark_approved() uses one: saving the submission
+        # queues the rebuild of this student's available-quest cache, which must not run until
+        # the XP this return takes back has been written (#2722).
+        with transaction.atomic():
+            self.semester = semester_for(self.user)
+            self.full_clean()
+            self.save()
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def is_awaiting_approval(self):
         return self.is_completed and not self.is_approved

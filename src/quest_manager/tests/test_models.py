@@ -1,6 +1,6 @@
 import datetime
 import re
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -710,6 +710,41 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         # the setup submission should not be completed yet, but make sure
         self.assertFalse(self.submission.is_completed, False)
         self.assertIsNone(self.submission.get_minutes_to_complete())
+
+    def test_mark_approved__the_approval_and_the_xp_it_grants_are_one_transaction(self):
+        """Approving is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Saving the submission is what asks the prerequisites app to rebuild this student's
+        cache of available quests, and TransactionAwareTask hands that job to celery on
+        commit. One transaction around the approval is therefore what holds the job back
+        until the XP the approval grants has been written: without one the save commits by
+        itself, the job goes out immediately, and the worker reads the XP from before the
+        approval, so a quest waiting on the rank the student just reached is worked out as
+        still locked and never reaches their Available tab.
+        """
+        submission = baker.make(QuestSubmission, user=self.student, quest__xp=100)
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_approved()
+
+        submission.refresh_from_db()
+        self.assertFalse(submission.is_approved, "the approval was left standing without its XP")
+
+    def test_mark_returned__the_return_and_the_xp_it_takes_back_are_one_transaction(self):
+        """Returning is all or nothing, for the reason mark_approved() is (#2722): the cache
+        rebuild it queues must not run against the XP the student had while it was approved."""
+        self.register_student(SiteConfig.get().active_semester)
+        submission = baker.make(
+            QuestSubmission, user=self.student, quest__xp=100, is_completed=True, is_approved=True,
+        )
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                submission.mark_returned()
+
+        submission.refresh_from_db()
+        self.assertTrue(submission.is_approved, "the return was left standing without its XP")
 
     def test_mark_returned__moves_submission_to_active_semester(self):
         """A submission returned in a later semester is re-attached to the current semester (issue #1231).

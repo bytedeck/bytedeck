@@ -231,6 +231,27 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
+    def test_assertion_delete__the_revoke_and_the_xp_it_takes_back_are_one_transaction(self):
+        """Revoking is all or nothing, which is what keeps the Available tab honest (#2722).
+
+        Deleting the assertion is what asks the prerequisites app to rebuild the student's
+        cache of available quests, and TransactionAwareTask hands that job to celery on commit.
+        One transaction around the revoke is therefore what holds the job back until the XP the
+        badge was worth has been taken off, so the worker does not leave a quest waiting on a
+        rank the student no longer holds sitting in their Available tab.
+        """
+        self.client.force_login(self.test_teacher)
+        assertion = BadgeAssertion.objects.create_assertion(self.test_student1, self.test_badge, self.test_teacher)
+
+        with patch('profile_manager.models.Profile.xp_invalidate_cache', side_effect=RuntimeError('no xp')):
+            with self.assertRaises(RuntimeError):
+                self.client.post(reverse('badges:revoke', args=[assertion.id]))
+
+        self.assertTrue(
+            BadgeAssertion.objects.filter(id=assertion.id).exists(),
+            "the badge was left revoked without its XP being taken back",
+        )
+
     def test_assertion_create__zero_ids_render_empty_initial_form(self):
         """Calling assertion_create with user_id=0 and badge_id=0 (no pre-selected user/badge)
         renders the grant form without pre-filling either, then a valid POST still grants."""
