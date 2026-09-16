@@ -998,6 +998,7 @@ SUMMERNOTE_CONFIG = {
         # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-classes.js'),
+        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
 
     # Codemirror as codeview
@@ -1030,6 +1031,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
         '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
+        os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
 
     'popover': {
