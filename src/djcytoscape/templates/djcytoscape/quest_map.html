@@ -56,6 +56,10 @@
   {% endif %}
   <div id="cy"></div>
 
+  {{ approved_quests|json_script:"approved-quest-ids" }}
+  {{ awaiting_approval_quests|json_script:"awaiting-approval-quest-ids" }}
+  {{ earned_badges|json_script:"earned-badge-ids" }}
+
 {% endblock %}
 {% block js %}
 <script>
@@ -84,11 +88,27 @@
       style: {{ class_styles|safe }},
     });
 
-    // completed quests
-    cy.ready( function(event) {
-        {% for id in completed_quests %}
-        cy.nodes('[Quest = {{id}}]').addClass('completed');
-        {% endfor %}
+    {% comment %}
+    Colour this student's own progress onto the map (#2678): green outline for a quest they
+    have had approved or a badge they hold, yellow for a quest handed in and still waiting on
+    a teacher. Badges share the green because a badge is granted or not, with nothing
+    corresponding to work sitting in an approval queue.
+
+    A node carries its object's id under a data key named for its type ("Quest" or "Badge"),
+    which is what the selector matches on. The ids come down as JSON rather than a line of
+    script per object, so a big map does not carry hundreds of statements; every list is
+    empty for staff, who see an uncoloured map.
+    {% endcomment %}
+    cy.ready(function (event) {
+        var markNodes = function (elementId, dataKey, className) {
+            var ids = JSON.parse(document.getElementById(elementId).textContent);
+            ids.forEach(function (id) {
+                cy.nodes('[' + dataKey + ' = ' + id + ']').addClass(className);
+            });
+        };
+        markNodes('approved-quest-ids', 'Quest', 'approved');
+        markNodes('awaiting-approval-quest-ids', 'Quest', 'awaiting-approval');
+        markNodes('earned-badge-ids', 'Badge', 'approved');
     });
 
 </script>
@@ -100,10 +120,10 @@
   name-wrap fix (#1289 / PR #1937) never reached users who had already cached the old maps.js.
   Bump this version whenever maps.js / maps-dark.js changes.
 {% endcomment %}
-<script src="{% static 'djcytoscape/js/maps.js' %}?v=1.2"></script>
+<script src="{% static 'djcytoscape/js/maps.js' %}?v=1.4"></script>
 
 {% if request.user.profile.dark_theme %}
- <script src="{% static 'djcytoscape/js/maps-dark.js' %}?v=1.2"></script>
+ <script src="{% static 'djcytoscape/js/maps-dark.js' %}?v=1.4"></script>
 {% endif %}
 
 

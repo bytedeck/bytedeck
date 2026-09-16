@@ -5,6 +5,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
 from django.utils.html import format_html
@@ -396,8 +397,15 @@ def assertion_delete(request, assertion_id):
         messages.success(request,
                          ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
                           ))
-        assertion.delete()
-        user.profile.xp_invalidate_cache()
+        # Revoking and the XP it takes back go together, in one transaction: deleting the
+        # assertion queues the rebuild of this student's cache of available quests, held
+        # back until commit by prerequisites.tasks.TransactionAwareTask. So the transaction
+        # is what makes the worker read the XP the student is left with rather than the XP
+        # they had while they still held the badge, which would leave a quest waiting on a
+        # rank they no longer hold sitting in their Available tab (#2722).
+        with transaction.atomic():
+            assertion.delete()
+            user.profile.xp_invalidate_cache()
         return redirect('profiles:profile_detail', pk=user.profile.id)
 
     template_name = 'badges/assertion_confirm_delete.html'

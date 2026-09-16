@@ -101,6 +101,14 @@
          the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
         <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
+        {% if next %}
+          {% comment %}
+          Set when this page is reached by correcting a form that did not validate, so the
+          corrected submission still returns to the approvals tab the first attempt came from
+          (#2689). ApproveView has already checked it stays on this host.
+          {% endcomment %}
+          <input type="hidden" name="next" value="{{ next }}">
+        {% endif %}
       {% else %}
         <form id="submission-main-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:complete' submission.id%}" data-warn-unsaved>
       {% endif %}
@@ -159,22 +167,17 @@
         {% endif %}
         <div id="main-comment-form">
           {{ submission_form | crispy }}
-          {% comment %} Files kept from an earlier submit that failed validation: the "Attach files"
-             input above always renders empty (browsers never repopulate it), so without this the
-             student has no way to tell their uploads survived, and would choose them again (#2427).
-             Only the student sees it: these are their pending attachments, and staff post this form
-             to the approve view, where their own files are handled separately. {% endcomment %}
+          {% comment %} The files already stored with this submission's draft, listed so the student
+             can see what is attached and remove anything chosen by mistake. Only the student sees
+             it: these are their pending attachments, and staff post this form to the approve view,
+             where their own files are handled separately. The container is what the draft-save and
+             delete endpoints re-render into, so the list stays current without a reload. {% endcomment %}
           {% if request.user == submission.user %}
-            {% with submission.draft_comment.document_set.all as draft_documents %}
-              {% if draft_documents %}
-                <p class="help-block">
-                  <i class="fa fa-paperclip fa-fw"></i> Attached:
-                  {% for document in draft_documents %}<a href="{{ document.get_download_url }}"
-                     target="_blank">{{ document.docfile|filename }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
-                  <small>(already saved: only choose files above if you want to attach more)</small>
-                </p>
-              {% endif %}
-            {% endwith %}
+            <div id="draft-attachments">
+              {% with submission.draft_comment.document_set.all as draft_documents %}
+                {% include "quest_manager/snippets/draft_attachments.html" %}
+              {% endwith %}
+            </div>
           {% endif %}
         </div>
         <div class='form-group form-group-summernote'>
@@ -447,11 +450,13 @@
                     '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + $('<i>').text(file_name).html() +
                     ' <small>(saved with your draft)</small>', sentFiles);
             });
-            if ((json.saved_attachments || []).length) {
-                var names = json.saved_attachments.map(function(name) { return $('<i>').text(name).html(); });
-                file_note($('#submission-main-form input[name="attachments"]'),
-                    '<i class="fa fa-paperclip fa-fw"></i> Attached: ' + names.join(', ') +
-                    ' <small>(saved with your draft)</small>', sentFiles);
+            if (typeof json.draft_attachments_html === 'string') {
+                // The comment's attachments have a list of their own below the box, which the
+                // server re-renders to include the files just saved, each with the button that
+                // removes it. So this input only needs clearing: naming those files in a note
+                // here as well would say twice what the list already says.
+                file_note($('#submission-main-form input[name="attachments"]'), '', sentFiles);
+                $('#draft-attachments').html(json.draft_attachments_html);
             }
             $.each(json.file_errors || {}, function(field_name, error_text) {
                 file_note($('[name="' + field_name + '"]'),
@@ -469,12 +474,42 @@
             if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
             var note = input.closest('.form-group').find('.draft-file-note');
+            if (!html) {
+                // Nothing left to say about this input: drop any note from an earlier save,
+                // rather than leaving a stale one (or an empty paragraph) under it.
+                note.remove();
+                return;
+            }
             if (!note.length) {
                 note = $('<p class="help-block draft-file-note"></p>');
                 input.closest('.form-group').append(note);
             }
             note.html(html);
         }
+
+        // Removing a file attached by mistake. Delegated from the page, because the list this
+        // button sits in is replaced wholesale every time the server re-renders it.
+        $(document).on('click', '.draft-attachment-delete', function() {
+            var $button = $(this);
+            var name = $.trim($button.siblings('a').first().text()) || 'this file';
+            if (!window.confirm('Delete ' + name + ' from your submission?\n\nIt is removed for good, so attach it again if you still need it.')) return;
+            // Against a double click while the request is away: the second delete would 404,
+            // since the first one has already removed the file.
+            $button.prop('disabled', true);
+            $.ajax({
+                url : $button.data('delete-url'),
+                type : "POST",
+                data : { csrfmiddlewaretoken: '{{ csrf_token }}' },
+                success : function(json) {
+                    $('#draft-attachments').html(json.draft_attachments_html);
+                },
+                error : function(xhr, errmsg, err) {
+                    $button.prop('disabled', false);
+                    console.log(xhr.status + ": " + xhr.responseText);
+                    alert("ERROR!\n\nSorry, the file wasn't removed.\n\nReload the page and try again.");
+                }
+            });
+        });
 
         function hide_check_show_text() {
           // after success, animate a check mark, then put text back

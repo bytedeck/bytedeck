@@ -18,6 +18,7 @@ on:
       - 'docker-compose*.yml'
       - 'nginx/**'
       - 'production/tests/**'
+      - 'production/wait-for-healthy.sh'
       - '.env.example*'
       - '.github/workflows/production_config.yml'
   push:
@@ -27,6 +28,7 @@ on:
       - 'docker-compose*.yml'
       - 'nginx/**'
       - 'production/tests/**'
+      - 'production/wait-for-healthy.sh'
       - '.env.example*'
       - '.github/workflows/production_config.yml'
 
@@ -56,6 +58,18 @@ jobs:
         run: pip install pyyaml
       - name: Assert the production compose contract
         run: python production/tests/check_prod_compose.py
+
+  deploy-health-gate:
+    name: Deploy health gate
+    runs-on: ubuntu-22.04
+    # Deliberately no `needs`: this stubs `docker` rather than using it, so it
+    # depends on nothing the other jobs establish and finishes in seconds.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Assert the deploy fails when the app does not come back
+        run: bash production/tests/check_deploy_health_gate.sh
 
   image:
     name: Application image

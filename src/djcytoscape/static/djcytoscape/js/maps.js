@@ -111,6 +111,22 @@ cy.style()
         "text-halign": "center",
         "text-margin-x": 0,
       })
+    // A student's own progress on their map (#2678). Bootstrap's brand-success and
+    // brand-warning, the same green and yellow the submission lists already use for
+    // approved and awaiting-approval work, so the map reads the same way as the rest of
+    // the site. Declared last so the status outline wins over .link's blue border: a quest
+    // that leads to another map keeps its blue LABEL, which is what marks it as a link, and
+    // the outline is free to report whether the student has done it.
+    .selector('node.approved')
+      .style({
+        "border-color": "#5cb85c",
+        "border-width": 3,
+      })
+    .selector('node.awaiting-approval')
+      .style({
+        "border-color": "#f0ad4e",
+        "border-width": 3,
+      })
     .update()
 ;
 
@@ -176,107 +192,6 @@ layout.run()
 // Remove the layout-only helper edges now that every node has its position.
 addedCampaignLayoutEdges.remove();
 
-/***************************************
- * #1977: order the campaign columns left-to-right by Category.map_order.
- *
- * dagre decides the order of same-rank nodes with a crossing-minimization heuristic and ignores the
- * order the elements were fed in, so campaign order has to be imposed on the finished layout.
- *
- * Rather than repack every column left-to-right (which spreads the map out whenever campaign-less
- * "bridge" nodes: a shared badge, or the intro quest, sit between campaigns, and which merged two
- * campaigns into one un-orderable column when one branches off the other), we PERMUTE the campaigns
- * among the x-slots dagre already gave them: sort the campaigns by (map_order, smallest quest id)
- * and drop the i-th into the i-th slot from the left. The set of x positions is unchanged, so the
- * map stays exactly as compact as dagre made it and campaign-less nodes don't move.
- *
- * Campaigns only trade places with the campaigns they stand BESIDE, though: those whose quests share
- * vertical space (#2627). An x-slot is only wide enough for the campaign dagre put in it, and dagre
- * sizes a slot from what competes for that x at the same ranks. A campaign that sits above the
- * others gets its x for free, with room on either side, so handing that slot to one of a row of
- * side-by-side campaigns squeezes it against its neighbour and the two are drawn on top of each
- * other. Grouping by shared vertical space keeps every swap inside one row of slots, which dagre
- * did space to fit them.
- *
- * Each campaign's quests shift together as a rigid block, so their internal shape and every node's
- * vertical position (the #1787 vertical stacking) are untouched. Because both the sorted slots and
- * the desired order are deterministic, the result no longer toggles between generations even though
- * dagre's raw order does (the original #1977 complaint).
- ***************************************/
-(function orderCampaignColumns() {
-    // Only campaigns (compound parents) are reordered; campaign-less quests stay where dagre put them.
-    var campaigns = cy.nodes().filter(function (n) { return n.isParent(); });
-    if (campaigns.length < 2) { return; }
-
-    var info = campaigns.map(function (camp) {
-        var kids = camp.children();
-        var order = camp.data('campaignOrder');
-        if (order === undefined || order === null) { order = 0; }
-        var minId = Infinity;
-        kids.forEach(function (k) {
-            var idNum = parseInt(k.id(), 10);
-            if (!isNaN(idNum) && idNum < minId) { minId = idNum; }
-        });
-        // The quests' own extent, not the campaign box's: the box adds padding that makes campaigns
-        // in different bands appear to touch, which would merge two rows of slots into one.
-        var bb = kids.boundingBox();
-        // A campaign's column x is its compound node's centre (which follows its children).
-        return { kids: kids, x: camp.position('x'), order: order, minId: minId, y1: bb.y1, y2: bb.y2 };
-    });
-
-    // Rows of campaigns that stand side by side: sweep by vertical extent and start a new row
-    // wherever a campaign begins below everything before it. Only campaigns within one row compete
-    // for the same x positions, so only they may trade slots.
-    var rows = [];
-    var current = null;
-    var reach = -Infinity;
-    info.slice().sort(function (a, b) { return a.y1 - b.y1; }).forEach(function (item) {
-        if (current === null || item.y1 >= reach) {
-            current = [];
-            rows.push(current);
-            reach = item.y2;
-        } else if (item.y2 > reach) {
-            reach = item.y2;
-        }
-        current.push(item);
-    });
-
-    var moved = false;
-    rows.forEach(function (row) {
-        if (row.length < 2) { return; }
-
-        // The x-slots this row's campaigns currently occupy, left to right.
-        var slots = row.map(function (i) { return i.x; }).sort(function (a, b) { return a - b; });
-
-        // Desired left-to-right order: campaign map_order, then smallest quest id (the deterministic
-        // #2012 order) so ties, and every campaign at the default map_order 0, stay stable.
-        var desired = row.slice().sort(function (a, b) { return (a.order - b.order) || (a.minId - b.minId); });
-
-        // Drop the i-th campaign (desired order) into the i-th slot, shifting its quests horizontally
-        // as a rigid block. Positions were all read before any shift, so swaps don't interfere.
-        desired.forEach(function (item, idx) {
-            var dx = slots[idx] - item.x;
-            if (dx !== 0) { item.kids.shift({ x: dx, y: 0 }); moved = true; }
-        });
-    });
-
-    // Reordering a campaign can strand a campaign-less "connector" node: the intro quest that leads
-    // into a campaign, a shared badge, and so on, over the campaign's OLD position (e.g. an intro
-    // quest left sitting above where a campaign used to be instead of above the one it points to).
-    // Re-centre each campaign-less node over the mean x of its neighbours so it follows the
-    // campaign(s) it connects to. Skip this entirely when nothing moved so those maps stay
-    // byte-for-byte unchanged; read all neighbour positions before moving anything.
-    if (!moved) { return; }
-    var recentre = [];
-    cy.nodes().forEach(function (node) {
-        if (node.isParent() || node.isChild()) { return; }  // campaigns and their quests already placed
-        var neighbours = node.neighborhood('node');
-        if (neighbours.empty()) { return; }
-        var sum = 0;
-        neighbours.forEach(function (m) { sum += m.position('x'); });
-        recentre.push({ node: node, x: sum / neighbours.length });
-    });
-    recentre.forEach(function (r) { r.node.position('x', r.x); });
-})();
 
 /***************************************
  *

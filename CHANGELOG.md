@@ -4,6 +4,14 @@ This file chronologically records all notable changes to this website, including
 
 [Changelogs](http://keepachangelog.com/en/0.3.0/) | [Versioning](http://semver.org/) | [Branch model](https://nvie.com/posts/a-successful-git-branching-model/)
 
+### [1.34.1] 2026-08-28
+* Devops:
+  - **An update now interrupts the site for seconds rather than minutes.** Updating used to stop the site first and only then run the database migrations and re-upload every static file, so the "ByteDeck is updating" page stayed up for as long as all of that took: longer the more decks there are, and the update allowed itself ten minutes for it. That work now happens while the previous version is still serving, and only the app itself is swapped at the end. Two things that went wrong quietly on every single update are fixed with it: for part of the window the site refused connections outright instead of showing the updating page, and any background job still queued (a notification digest, say) was thrown away [#2631](https://github.com/bytedeck/bytedeck/issues/2631)
+  - **An update that leaves the site down now reports a failure.** Nothing checked that the site had come back, so a release that never actually started, because of a bad setting or an error in the new code, was recorded as a success while every deck sat on the "ByteDeck is updating" page indefinitely. The update now waits for the app to answer, and fails with the reason in its log if it never does [#2633](https://github.com/bytedeck/bytedeck/issues/2633)
+* Codebase:
+  - Migrations are now applied while the previous version is still serving, so one that drops or renames a column would break the running site for those seconds. A new migration doing that now fails the build, and CONTRIBUTING.md documents the two-release recipe for removing a column without that window [#2632](https://github.com/bytedeck/bytedeck/issues/2632)
+
+
 ### [1.34.0] 2026-08-27 Claude VI
 * New Features:
   - **You are warned before leaving a submission with unsaved text.** A student's draft saves on a timer, about once a minute, so clicking a navbar link, pressing back, or closing the tab in between silently threw away everything typed since the last save. The submission page now asks first, the same prompt a quest or announcement form already gives, and it stops asking once a draft save has gone through, so the ordinary autosave does not leave you arguing with a dialog. The staff question editor gets the same protection [#2572](https://github.com/bytedeck/bytedeck/issues/2572)

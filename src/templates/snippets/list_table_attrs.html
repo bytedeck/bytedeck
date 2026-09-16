@@ -1,0 +1,26 @@
+{% comment %}
+  The bootstrap-table attributes a staff list table carries, in one place so every such list
+  behaves the same: striped rows and a search box over the whole list.
+
+  Rendered inside the opening tag, which is why the file holds nothing but attributes:
+
+      {% include 'snippets/table_loading.html' %}
+      <table {% include 'snippets/list_table_attrs.html' %}>
+
+  Sorting is per column, not here: bootstrap-table's table-level `sortable` only lets a table
+  turn sorting off everywhere, so a column becomes sortable by carrying data-sortable="true"
+  on its own heading. A column of action buttons or an icon has nothing to sort or match, so
+  it carries neither that nor a searchable value:
+
+      <th data-field="name" data-sortable="true">Name</th>
+      <th data-field="action" data-searchable="false">Action</th>
+
+  Sorting and searching are the browser's here, which is correct only because the whole list
+  is sent to it. A list the server paginates has to sort and search in the database instead,
+  or both answer a question about the page rather than about the list (#2410, #2582, #2597):
+  those use snippets/sortable_column_heading.html and .list-search-form.
+{% endcomment %}data-toggle="table"
+       data-classes="table table-striped"
+       data-search="true"
+       data-icons="icons"
+       data-icons-prefix="fa"

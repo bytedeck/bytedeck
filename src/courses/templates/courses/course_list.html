@@ -1,7 +1,7 @@
 {% extends "courses/base.html" %}
 
 {% block head_title %}Courses | {% endblock %}
-{% block head %}{% endblock %}
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
 
 {% block content_first %}{% endblock %}
 {% block heading %}<i class="fa fa-book pull-right"></i>{% block heading_inner %}Courses
@@ -12,14 +12,15 @@
 
 {% block content %}
 <p>This page is visible to staff only.</p>
-<table class="table table-striped">
+{% include 'snippets/table_loading.html' %}
+<table {% include 'snippets/list_table_attrs.html' %}>
   <thead>
     <tr>
-      <th>Title</th>
-      <th>XP for 100%</th>
-      <th>Marks</th>
-      <th>Active</th>
-      <th>Action</th>
+      <th data-field="title" data-sortable="true">Title</th>
+      <th data-field="xp" data-sortable="true">XP for 100%</th>
+      <th data-field="marks" data-sortable="true">Marks</th>
+      <th data-field="active" data-sortable="true">Active</th>
+      <th data-field="action" data-searchable="false">Action</th>
     </tr>
   </thead>
   <tbody>

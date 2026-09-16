@@ -584,3 +584,123 @@ class AnnouncementCreateUpdateViewTests(ByteDeckTenantTestCase):
         page = response.context['object_list']
         self.assertGreater(page.paginator.num_pages, 1)
         self.assertEqual(page.number, page.paginator.num_pages)
+
+
+class AnnouncementSearchViewTests(ByteDeckTenantTestCase):
+    """The current and archived lists can be searched from a box above them (#2667)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """Create a teacher, a student, and announcements with distinguishable titles and content."""
+        cls.teacher = User.objects.create_user('search_teacher', is_staff=True)
+        cls.student = User.objects.create_user('search_student')
+
+        cls.field_trip = baker.make(
+            Announcement, draft=False, title="Field trip on Friday", content="<p>Bring a bagged lunch.</p>")
+        cls.cafeteria = baker.make(
+            Announcement, draft=False, title="Cafeteria menu", content="<p>Lunch is pizza this week.</p>")
+
+    def test_list__search_shows_only_the_matching_announcements(self):
+        """Searching the current list keeps the announcements that match and drops the rest."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'field'})
+
+        self.assertContains(response, self.field_trip.title)
+        self.assertNotContains(response, self.cafeteria.title)
+
+    def test_list__search_matches_the_content_not_just_the_title(self):
+        """A word only in an announcement's body still finds it, since the body is most of what it says."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'pizza'})
+
+        self.assertContains(response, self.cafeteria.title)
+        self.assertNotContains(response, self.field_trip.title)
+
+    def test_list__search_covers_the_whole_list_not_only_the_page_in_view(self):
+        """A match sitting on page 2 is found, because the search runs in the database before paginating."""
+        # The list paginates at 20, ordered newest first, so the oldest announcement is on page 2.
+        baker.make(Announcement, draft=False, datetime_released=timezone.now(), _quantity=25)
+        buried = baker.make(
+            Announcement, draft=False, title="Yearbook photos",
+            datetime_released=timezone.now() - timedelta(days=365))
+        self.client.force_login(self.teacher)
+
+        # It really is off the first page before searching
+        self.assertNotContains(self.client.get(reverse('announcements:list')), buried.title)
+
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'yearbook'}), buried.title)
+
+    def test_list__pagination_links_keep_the_search(self):
+        """Page links carry the search, so page 2 of a search is not page 2 of everything."""
+        baker.make(Announcement, draft=False, title="Reminder to hand in forms", _quantity=25)
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'forms'})
+
+        self.assertGreater(response.context['object_list'].paginator.num_pages, 1)
+        self.assertContains(response, "/announcements/?page=2&amp;q=forms")
+
+    def test_list__search_reports_how_many_matched(self):
+        """The list says how many announcements matched, so an empty page reads as a result rather than a fault."""
+        self.client.force_login(self.teacher)
+
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'field'}), '1 announcement matches')
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'lunch'}), '2 announcements match')
+        self.assertContains(self.client.get(reverse('announcements:list'), {'q': 'kayaking'}), '0 announcements match')
+
+    def test_list__unsearched_list_has_a_search_box_and_no_count(self):
+        """Without a search the box is there to be used, and nothing claims a number of matches."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'))
+
+        self.assertContains(response, 'id="announcement-search"')
+        self.assertNotContains(response, 'announcement matches')
+        self.assertNotContains(response, 'announcements match')
+        self.assertContains(response, self.field_trip.title)
+        self.assertContains(response, self.cafeteria.title)
+
+    def test_list__a_blank_search_is_not_a_search(self):
+        """A box submitted with only spaces shows the whole list rather than filtering on nothing."""
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:list'), {'q': '   '})
+
+        self.assertEqual(response.context['search_term'], '')
+        self.assertContains(response, self.field_trip.title)
+        self.assertContains(response, self.cafeteria.title)
+
+    def test_archived__search_shows_only_the_matching_archived_announcements(self):
+        """The archived page is searched the same way, which is half of what the issue asked for."""
+        archived_match = baker.make(Announcement, draft=False, archived=True, title="Field trip to the museum")
+        archived_other = baker.make(Announcement, draft=False, archived=True, title="Old cafeteria menu")
+        self.client.force_login(self.teacher)
+
+        response = self.client.get(reverse('announcements:archived'), {'q': 'field'})
+
+        self.assertContains(response, archived_match.title)
+        self.assertNotContains(response, archived_other.title)
+        # the current list's match is not dragged onto the archived page by the search
+        self.assertNotContains(response, self.field_trip.title)
+
+    def test_list__a_students_search_reaches_only_what_they_may_see(self):
+        """A student gets the search box, and it narrows their own list rather than reaching past it."""
+        draft = baker.make(Announcement, draft=True, title="Field trip draft, not published yet")
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('announcements:list'), {'q': 'field'})
+
+        self.assertContains(response, 'id="announcement-search"')
+        self.assertContains(response, self.field_trip.title)
+        self.assertNotContains(response, draft.title)
+
+    def test_list__a_search_offers_a_way_to_clear_it(self):
+        """A search shows a clear button back to the unfiltered list; an unsearched list has nothing to clear."""
+        self.client.force_login(self.teacher)
+
+        searched = self.client.get(reverse('announcements:list'), {'q': 'field'})
+        self.assertContains(searched, 'title="Clear this search"')
+
+        self.assertNotContains(self.client.get(reverse('announcements:list')), 'title="Clear this search"')

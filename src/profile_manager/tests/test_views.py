@@ -564,10 +564,12 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].LIST)
 
-        qs = response.context['object_list']  # should not have usernames: 1 and 2 in the qs
-        self.assertEqual(qs.count(), 2)  # these are the test students
-        filtered_qs = qs.filter(user__is_active=False) | qs.filter(user__is_staff=True)
-        self.assertFalse(filtered_qs.exists())
+        # object_list is a paginated page, so assert the total via the paginator
+        # and check the page's profiles directly (usernames 1 and 2 excluded).
+        self.assertEqual(response.context['paginator'].count, 2)  # these are the test students
+        for profile in response.context['object_list']:
+            self.assertTrue(profile.user.is_active)
+            self.assertFalse(profile.user.is_staff)
 
     def test_profile_list_current__view_type(self):
         """
@@ -604,8 +606,7 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse("profiles:profile_list_staff"))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
 
-        qs = response.context['object_list']
-        self.assertEqual(qs.count(), 3)  # self.test_teacher, deck_owner, admin
+        self.assertEqual(response.context['paginator'].count, 3)  # self.test_teacher, deck_owner, admin
 
     def test_profile_list_block__get_queryset(self):
         """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
@@ -620,8 +621,7 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # get object queryset from profile list of the new block and assert empty
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 0)
+        self.assertEqual(response.context['paginator'].count, 0)
 
         # populate block with active coursestudent objects
         baker.make(CourseStudent, user=baker.make(User), block=testblock, semester=self.active_sem)
@@ -629,13 +629,16 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # get response and assert two active students in queryset + queryset is correct
         response = self.client.get(reverse('profiles:profile_list_block', args=[testblock.pk]))
-        testblock_queryset = response.context['object_list']
-        self.assertEqual(testblock_queryset.count(), 2)
+        # object_list is a page, so the total comes from the paginator; compare the page's
+        # profiles by pk rather than with assertQuerySetEqual, which needs a queryset.
+        self.assertEqual(response.context['paginator'].count, 2)
         # queryset specifications: profile objects that are: in an open semester, and a part of a coursestudent object that's in the desired block
-        self.assertQuerySetEqual(
-            testblock_queryset,
-            Profile.objects.filter(user__in=[cs.user for cs in CourseStudent.objects.filter(block=testblock, semester=self.active_sem)]),
-            ordered=False,
+        expected = Profile.objects.filter(
+            user__in=[cs.user for cs in CourseStudent.objects.filter(block=testblock, semester=self.active_sem)]
+        )
+        self.assertEqual(
+            {profile.pk for profile in response.context['object_list']},
+            set(expected.values_list('pk', flat=True)),
         )
 
     def test_profile_list_block__block_and_semester_match_the_same_registration(self):
@@ -667,6 +670,403 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         self.assertIn(here_now.user.profile, response.context['object_list'])
         self.assertIn(other_cohort.user.profile, response.context['object_list'])
+
+    def test_profile_list__is_paginated(self):
+        """ProfileList paginates server-side: only paginate_by profiles load per request, so a
+        deck with more students than paginate_by spills onto additional pages."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # setUpTestData already made 2 students; add enough to need a second page.
+        baker.make(User, _quantity=per_page)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertTrue(response.context['is_paginated'])
+        self.assertEqual(response.context['paginator'].count, per_page + 2)
+        self.assertEqual(response.context['paginator'].num_pages, 2)
+        # a single page only renders paginate_by profiles, not the whole deck
+        self.assertEqual(len(response.context['object_list']), per_page)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'page': 2})
+        self.assertEqual(len(response.context['object_list']), 2)
+
+    def test_profile_list__search_filters_across_all_students(self):
+        """The ?q= search runs server-side across every SEARCH_FIELDS column (case-insensitive,
+        partial) and before pagination, so a uniquely-matching student is found even when it would
+        otherwise fall beyond the first page; a non-match returns nothing."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # Fill a whole page with students whose first name sorts ahead of the first-name target
+        # below, so that target is pushed onto a later page under the default (first-name) ordering.
+        baker.make(User, first_name='AAAA', _quantity=per_page)
+
+        # One target per searchable column, each carrying a value that collides with nothing else.
+        first_target = User.objects.create_user('zzz_first', first_name='Zebediah')
+        last_target = User.objects.create_user('zzz_last', last_name='Qwlastname')
+        pref_target = User.objects.create_user('zzz_pref')
+        pref_target.profile.preferred_name = 'Qwpreferred'
+        pref_target.profile.save()
+        alias_target = User.objects.create_user('zzz_alias')
+        alias_target.profile.alias = 'Qwaliasname'
+        alias_target.profile.save()
+        cpf_target = User.objects.create_user('zzz_cpf')
+        cpf_target.profile.custom_profile_field = 'Qwcustomfield'
+        cpf_target.profile.save()
+
+        self.client.force_login(self.test_teacher)
+
+        # The first-name target sorts last, so an unfiltered page one does not contain it...
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertNotIn(first_target.profile.pk, {p.pk for p in response.context['object_list']})
+        # ...yet a search still finds it, proving the filter runs across the whole set before paginating.
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'zebed'})
+        self.assertEqual(response.context['search_query'], 'zebed')
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, first_target.profile.pk)
+
+        # Every configured search column matches (partial, case-insensitive): last/preferred/alias/
+        # custom-profile-field, plus username.
+        for term, target in [
+            ('qwlastn', last_target),      # last name
+            ('qwprefer', pref_target),     # preferred name
+            ('qwaliasn', alias_target),    # alias
+            ('qwcustomf', cpf_target),     # custom profile field
+            ('zzz_last', last_target),     # username
+        ]:
+            response = self.client.get(reverse("profiles:profile_list"), {'q': term})
+            self.assertEqual(response.context['paginator'].count, 1, msg=f'q={term!r}')
+            self.assertEqual(list(response.context['object_list'])[0].pk, target.profile.pk, msg=f'q={term!r}')
+
+        # a non-match returns nothing
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'no-such-student'})
+        self.assertEqual(response.context['paginator'].count, 0)
+
+    def test_profile_list__sort_orders_across_all_students(self):
+        """The ?sort=/?order= params reorder the whole queryset server-side and before pagination,
+        so the sort extreme lands on the correct page (not merely reordering the current one); an
+        unknown sort or order falls back to the defaults."""
+        from profile_manager.views import ProfileList
+        per_page = ProfileList.paginate_by
+        User = get_user_model()
+
+        # A full page of mid-XP students, so a single XP extreme must cross the page boundary.
+        for filler in baker.make(User, _quantity=per_page):
+            filler.profile.xp_cached = 50
+            filler.profile.save()
+        p1 = self.test_student1.profile
+        p1.xp_cached = 5
+        p1.save()
+        p2 = self.test_student2.profile
+        p2.xp_cached = 99
+        p2.save()
+        # The unique maximum: it must appear on page one when sorting XP descending and be pushed to
+        # the last page when ascending -- only possible if sorting happens before pagination.
+        top = User.objects.create_user('mmm_top').profile
+        top.xp_cached = 1000
+        top.save()
+
+        self.client.force_login(self.test_teacher)
+
+        # Descending: the maximum leads page one, and the page itself is ordered high-to-low.
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'desc'})
+        self.assertEqual(response.context['current_sort'], 'xp')
+        self.assertEqual(response.context['current_order'], 'desc')
+        page_one = list(response.context['object_list'])
+        self.assertEqual(page_one[0].pk, top.pk)
+        xps = [profile.xp_cached for profile in page_one]
+        self.assertEqual(xps, sorted(xps, reverse=True))
+        num_pages = response.context['paginator'].num_pages
+
+        # Ascending: the maximum is no longer on page one -- it has moved to the last page.
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc'})
+        self.assertNotIn(top.pk, {profile.pk for profile in response.context['object_list']})
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'xp', 'order': 'asc', 'page': num_pages})
+        self.assertIn(top.pk, {profile.pk for profile in response.context['object_list']})
+
+        # an invalid sort/order silently falls back to the defaults
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'not-a-field', 'order': 'sideways'})
+        self.assertEqual(response.context['current_sort'], 'first')
+        self.assertEqual(response.context['current_order'], 'asc')
+
+    def test_profile_list__sort_puts_null_values_last(self):
+        """Sorting a nullable column (e.g. Mark) keeps students who have a value at the top in
+        both directions; unset (NULL) students sort last rather than dominating a descending sort."""
+        User = get_user_model()
+        high = User.objects.create_user('aaa_high').profile  # username sorts first, so only the sort matters
+        high.mark_cached = 80
+        high.save()
+        low = User.objects.create_user('aaa_low').profile
+        low.mark_cached = 20
+        low.save()
+        # test_student1 / test_student2 keep mark_cached = None
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'desc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [80, 20, None, None])
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'mark', 'order': 'asc'})
+        marks = [profile.mark_cached for profile in response.context['object_list']]
+        self.assertEqual(marks, [20, 80, None, None])
+
+    def test_profile_list__sort_by_preferred_name_falls_back_to_first_name(self):
+        """Sorting by the Preferred Name column orders by preferred_name, falling back to
+        first_name when it's blank -- matching what get_preferred_name() displays."""
+        s1 = self.test_student1
+        s1.first_name = 'Bob'
+        s1.save()
+        s1.profile.preferred_name = ''  # blank -> falls back to 'Bob'
+        s1.profile.save()
+        s2 = self.test_student2
+        s2.first_name = 'Alice'
+        s2.save()
+        s2.profile.preferred_name = 'Zara'  # shown instead of 'Alice'
+        s2.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"), {'sort': 'preferred', 'order': 'asc'})
+        names = [profile.get_preferred_name() for profile in response.context['object_list']]
+        self.assertEqual(names, ['Bob', 'Zara'])
+
+    def test_profile_list__non_staff_cannot_sort_by_staff_only_columns(self):
+        """ProfileListCurrent is open to any authenticated user, so a student may only sort by the
+        always-visible name columns. Requesting a staff-only (last_login/last_sub/username) or
+        privacy-gated (xp/mark) column silently falls back to the default sort, so its ordering
+        can't leak to students; staff keep full sorting."""
+        self.client.force_login(self.test_student1)
+        for forbidden in ('last_login', 'last_sub', 'username', 'xp', 'mark'):
+            response = self.client.get(reverse("profiles:profile_list_current"), {'sort': forbidden, 'order': 'asc'})
+            self.assertEqual(response.context['current_sort'], 'first', msg=f"student must not sort by {forbidden}")
+
+        # an allowed name column still works for the student
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last')
+
+        # staff can sort by the staff-only columns
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_login', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last_login')
+
+    def test_profile_list__last_login_never_fallback(self):
+        """The staff Last Login cell shows 'Never' for a student who has never logged in, mirroring
+        the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
+        from django.utils import timezone
+        now = timezone.now()
+        # give both students a last submission (Last Quest shows a date, not "Never")
+        # while leaving last_login unset, so the only "Never" comes from Last Login
+        for student in (self.test_student1, self.test_student2):
+            self.assertIsNone(student.last_login)
+            student.profile.time_of_last_submission = now
+            student.profile.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse("profiles:profile_list"))
+        self.assertContains(response, "Never", count=2)  # one per student, from Last Login only
+
+    def test_profile_list__block_filter_narrows_to_that_group(self):
+        """The ?block= filter shows only the students registered in that group, and runs
+        before pagination so a match beyond page one is still found."""
+        from profile_manager.views import ProfileList
+        User = get_user_model()
+        target_block = baker.make(Block)
+        other_block = baker.make(Block)
+
+        # A full page of students in the other group, so the target cannot be on page one
+        # by accident.
+        for _ in range(ProfileList.paginate_by):
+            baker.make(CourseStudent, user=baker.make(User), block=other_block, semester=self.active_sem)
+        in_group = baker.make(CourseStudent, user=baker.make(User), block=target_block, semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'), {'block': target_block.pk})
+
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, in_group.user.profile.pk)
+
+    def test_profile_list__block_filter_counts_a_twice_registered_student_once(self):
+        """A student registered in the group for two courses is listed once, so the filter
+        cannot inflate the page counts by joining through their registrations."""
+        User = get_user_model()
+        block = baker.make(Block)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=block, semester=self.active_sem, _quantity=1)
+        # a second registration in the same group, in another open semester
+        baker.make(
+            CourseStudent, user=student, block=block,
+            semester=baker.make(Semester, status=Semester.Status.OPEN),
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'), {'block': block.pk})
+
+        self.assertEqual(response.context['paginator'].count, 1)
+
+    def test_profile_list__block_filter_combines_with_search_and_sort(self):
+        """Filtering, searching and sorting all apply together, so narrowing to a group and
+        then searching does not search outside it."""
+        User = get_user_model()
+        block = baker.make(Block)
+        wanted = User.objects.create_user('bf_in_group', first_name='Findme')
+        baker.make(CourseStudent, user=wanted, block=block, semester=self.active_sem)
+        decoy = User.objects.create_user('bf_elsewhere', first_name='Findme')
+        baker.make(CourseStudent, user=decoy, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        # the search alone finds both...
+        response = self.client.get(reverse('profiles:profile_list'), {'q': 'findme'})
+        self.assertEqual(response.context['paginator'].count, 2)
+
+        # ...and with the group filter on, only the one in that group
+        response = self.client.get(
+            reverse('profiles:profile_list'),
+            {'q': 'findme', 'block': block.pk, 'sort': 'last', 'order': 'desc'},
+        )
+        self.assertEqual(response.context['paginator'].count, 1)
+        self.assertEqual(list(response.context['object_list'])[0].pk, wanted.profile.pk)
+        # the sort links and the clear-search link carry the group forward
+        self.assertContains(response, f'block={block.pk}')
+
+    def test_profile_list__block_filter_offers_only_currently_running_groups(self):
+        """The dropdown lists the groups running in an open semester, which are exactly the
+        ones the filter can return students for."""
+        User = get_user_model()
+        running = baker.make(Block)
+        baker.make(CourseStudent, user=baker.make(User), block=running, semester=self.active_sem)
+        finished = baker.make(Block)
+        baker.make(
+            CourseStudent, user=baker.make(User), block=finished,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        empty = baker.make(Block)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list'))
+
+        offered = {block.pk for block in response.context['block_filter_choices']}
+        self.assertIn(running.pk, offered)
+        self.assertNotIn(finished.pk, offered)
+        self.assertNotIn(empty.pk, offered)
+
+    def test_profile_list__invalid_block_filter_falls_back_to_everybody(self):
+        """An unknown, non-numeric or not-running block id widens the list back out rather
+        than erroring or filtering to nobody."""
+        finished = baker.make(Block)
+        baker.make(
+            CourseStudent, user=baker.make(get_user_model()), block=finished,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+        self.client.force_login(self.test_teacher)
+        unfiltered = self.client.get(reverse('profiles:profile_list')).context['paginator'].count
+
+        for bad in ('999999', 'not-a-number', '', str(finished.pk)):
+            with self.subTest(block=bad):
+                response = self.client.get(reverse('profiles:profile_list'), {'block': bad})
+                self.assertEqual(response.context['paginator'].count, unfiltered)
+
+    def test_profile_list__block_filter_is_staff_only(self):
+        """A student never gets the group filter, and cannot apply one by hand.
+
+        ProfileListCurrent is open to any authenticated user, but the group column is
+        rendered only to staff, so offering the filter would let a student partition their
+        classmates by something they cannot see.
+        """
+        User = get_user_model()
+        block = baker.make(Block)
+        classmate = baker.make(User)
+        baker.make(CourseStudent, user=classmate, block=block, semester=self.active_sem)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(student)
+
+        response = self.client.get(reverse('profiles:profile_list_current'))
+        self.assertNotIn('block_filter_choices', response.context)
+        self.assertNotContains(response, 'id="block-filter"')
+
+        # applying one by hand is ignored rather than honoured
+        unfiltered = response.context['paginator'].count
+        filtered = self.client.get(reverse('profiles:profile_list_current'), {'block': block.pk})
+        self.assertEqual(filtered.context['paginator'].count, unfiltered)
+
+    def test_profile_list__block_filter_absent_from_the_lists_that_cannot_use_it(self):
+        """The block, staff and inactive lists offer no group filter: the first is already
+        one group, and the other two render no group column."""
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=baker.make(get_user_model()), block=block, semester=self.active_sem)
+        self.client.force_login(self.test_teacher)
+
+        for name, args in (
+            ('profiles:profile_list_block', [block.pk]),
+            ('profiles:profile_list_staff', []),
+            ('profiles:profile_list_inactive', []),
+        ):
+            with self.subTest(view=name):
+                response = self.client.get(reverse(name, args=args))
+                self.assertNotIn('block_filter_choices', response.context, msg=name)
+
+    def test_profile_list__filters_sit_in_the_table_toolbar(self):
+        """The group filter and search box share the table's toolbar row, at the right of it.
+
+        bootstrap-table relocates whatever element data-toolbar names into the table's own
+        toolbar, and .bt-toolbar-filter right-aligns that row, which is what puts the search
+        where every other table in the app puts its search. The attribute and the form's id
+        are the only thing connecting the two, so a rename on either side silently undoes the
+        layout, and dropping the class silently moves the search back to the left.
+        """
+        self.client.force_login(self.test_teacher)
+        html = self.client.get(reverse('profiles:profile_list')).content.decode()
+
+        toolbar = re.search(r"""data-toolbar=['"]([^'"]+)['"]""", html)
+        self.assertIsNotNone(toolbar, 'the student table declares no data-toolbar')
+        self.assertEqual(toolbar.group(1), '#profile-list-filters')
+
+        form = re.search(r"""<form[^>]*id="profile-list-filters"[^>]*>""", html)
+        self.assertIsNotNone(form, 'the filter form is not on the page')
+        # As a class token, not a substring of the whole tag: the latter would also be
+        # satisfied by a longer class that merely starts the same way, or by the name
+        # turning up in some other attribute.
+        classes = re.search(r"""\sclass=["']([^"']*)["']""", form.group(0))
+        self.assertIsNotNone(classes, 'the filter form carries no class attribute')
+        self.assertIn('bt-toolbar-filter', classes.group(1).split())
+
+    def test_profile_list__non_staff_cannot_search_by_username(self):
+        """A student may not search the username column, which is rendered only to staff.
+
+        Without this the list is a lookup that confirms a classmate's username from a
+        guess, the same leak the staff-only sorting already closes for ordering.
+        """
+        User = get_user_model()
+        target = User.objects.create_user('secret_username_abc', first_name='Publicname')
+        baker.make(CourseStudent, user=target, block=baker.make(Block), semester=self.active_sem)
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, block=baker.make(Block), semester=self.active_sem)
+        self.client.force_login(student)
+
+        # the name a student can actually read still searches
+        by_name = self.client.get(reverse('profiles:profile_list_current'), {'q': 'publicname'})
+        self.assertEqual(by_name.context['paginator'].count, 1)
+
+        # the username does not
+        by_username = self.client.get(reverse('profiles:profile_list_current'), {'q': 'secret_username_abc'})
+        self.assertEqual(by_username.context['paginator'].count, 0)
+
+        # ...and staff keep it
+        self.client.force_login(self.test_teacher)
+        as_staff = self.client.get(reverse('profiles:profile_list_current'), {'q': 'secret_username_abc'})
+        self.assertEqual(as_staff.context['paginator'].count, 1)
+
+    def test_profile_list__pagination_querystring_preserves_search_and_sort(self):
+        """The querystring used to build pagination links keeps the active search/sort but drops page."""
+        self.client.force_login(self.test_teacher)
+        response = self.client.get(reverse("profiles:profile_list"), {'q': 'foo', 'sort': 'xp', 'order': 'desc', 'page': 1})
+        querystring = response.context['querystring']
+        self.assertIn('q=foo', querystring)
+        self.assertIn('sort=xp', querystring)
+        self.assertIn('order=desc', querystring)
+        self.assertNotIn('page=', querystring)
 
     def test_profile_update__email_confirmation_flow(self):
         """

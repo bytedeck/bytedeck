@@ -14,13 +14,13 @@
     <p>Common Quest Infos are snippets of formatted text that can be used to display information
         that might be common to multiple quests. When a Common Quest Info has been assigned to
         a quest it will appear on that quest's page to the left, under the menu buttons.</p>
-
-    <table class="table table-striped">
+    {% include 'snippets/table_loading.html' %}
+    <table {% include 'snippets/list_table_attrs.html' %}>
         <thead>
             <tr>
-                <th>Title</th>
-                <th>Active</th>
-                <th>Action</th>
+                <th data-field="title" data-sortable="true">Title</th>
+                <th data-field="active" data-sortable="true">Active</th>
+                <th data-field="action" data-searchable="false">Action</th>
             </tr>
         </thead>
 

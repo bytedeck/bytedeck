@@ -9,11 +9,28 @@
 {% load crispy_forms_tags %}
 {% load utility_tags %}
 
+{% comment %} Bound once: {% group_name %} is a tag, so it takes no filter and cannot be passed to an include's `with`. {% endcomment %}
+{% group_name as group_label %}
+
 {% comment %}
-  Searching is done by the server so it covers the whole tab, not just the submissions on
-  this page. Submitting drops any ?page=, so a new search starts at its own first page.
+  Searching and filtering are done by the server so they cover the whole tab, not just the
+  submissions on this page. Submitting drops any ?page=, so a new search starts at its own
+  first page, and the hidden sort keeps the ordering the reader chose, which a plain GET
+  form would otherwise drop.
 {% endcomment %}
 <form class="form-inline list-search-form" method="get" action="">
+  {% if group_filter_choices %}
+    <div class="form-group">
+      <label for="approvals-group-{{ tab.name|slugify }}">{{ group_label }}:</label>
+      <select name="block" id="approvals-group-{{ tab.name|slugify }}" class="form-control"
+              title="Show only submissions from one {{ group_label|lower }}">
+        <option value="">All {{ group_label }}s</option>
+        {% for block in group_filter_choices %}
+          <option value="{{ block.pk }}" {% if block.pk == current_group %}selected{% endif %}>{{ block.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  {% endif %}
   <div class="form-group">
     <label class="sr-only" for="approvals-search-{{ tab.name|slugify }}">Search submissions</label>
     <div class="input-group">
@@ -24,6 +41,10 @@
           <i class="fa fa-fw fa-search"></i>
         </button>
         {% if submission_search_term %}
+          {% comment %}
+            Clearing the search keeps the {group} filter and the sort: only the typed term
+            goes, so a teacher who has narrowed to one group stays there.
+          {% endcomment %}
           <a class="btn btn-default" href="{% querystring q=None page=None %}" role="button" title="Clear this search">
             <i class="fa fa-fw fa-times"></i>
           </a>
@@ -31,11 +52,12 @@
       </span>
     </div>
   </div>
+  <input type="hidden" name="sort" value="{% if sort_descending %}-{% endif %}{{ sort_column }}">
 </form>
 
 {% if submission_search_term %}
   <p class="text-muted">
-    {{ num_matching_submissions }} submission{{ num_matching_submissions|pluralize }} match{{ num_matching_submissions|pluralize:"es," }} "{{ submission_search_term }}".
+    {{ num_matching_submissions }} submission{{ num_matching_submissions|pluralize }} match{{ num_matching_submissions|pluralize:"es," }} "{{ submission_search_term }}"{% if current_group %} in this {{ group_label|lower }}{% endif %}.
   </p>
 {% endif %}
 
@@ -52,8 +74,8 @@
         {% comment %}
           The headings link back to the view, so the ordering is applied to every submission
           in the tab before the page is cut from it (#2582). A column only becomes a link
-          when this tab offers it: the {group} blocks and the quest's tags are many-valued,
-          and the in-progress tabs show no time under Status.
+          when this tab offers it: the in-progress tabs show no time under Status, and the
+          student's tabs carry no {group} column at all.
         {% endcomment %}
         <th class="col-sm-4 col-xs-5" data-field="name">
           {% if "name" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="name" label="Quest" %}{% else %}Quest{% endif %}
@@ -61,7 +83,9 @@
         <th class="col-sm-1 col-xs-2" data-field="xp">
           {% if "xp" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="xp" label="XP" %}{% else %}XP{% endif %}
         </th>
-        <th class="col-sm-1 hidden-xs" data-field="group_name">{% group_name %}</th>
+        <th class="col-sm-1 hidden-xs" data-field="group_name">
+          {% if "group" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="group" label=group_label %}{% else %}{{ group_label }}{% endif %}
+        </th>
         <th class="col-sm-2 col-xs-3 hidden-xs" data-field="user">
           {% if "user" in sortable_columns %}{% include "snippets/sortable_column_heading.html" with column="user" label="User" %}{% else %}User{% endif %}
         </th>
@@ -133,7 +157,13 @@
         <li class="list-group-item">
           <form id="quick_reply{{s.id}}" method="POST" enctype="multipart/form-data"
                 action="{% url 'quests:approve' s.id %}">{% csrf_token %}
-            {{ quick_reply_form | crispy }}
+            {{ s.quick_reply_form | crispy }}
+            {% comment %}
+            Acting on a submission sends the teacher back to the tab they were working through,
+            rather than to the default approvals page (#2689). ApproveView only follows this if
+            it stays on this host.
+            {% endcomment %}
+            <input type="hidden" name="next" value="{{ request.get_full_path }}">
             <div>
               {% include "quest_manager/submission_buttons_form.html" %}
               {% include "quest_manager/submission_buttons_other.html" %}

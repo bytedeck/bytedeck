@@ -11,6 +11,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from prerequisites.models import Prereq
 from quest_manager.models import Quest, QuestSubmission
 from djcytoscape.models import CytoScape
+from djcytoscape.tests.utils import simulate_regeneration_starting
 from siteconfig.models import SiteConfig
 
 User = get_user_model()
@@ -231,6 +232,7 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
         # should regenerate map on delete
+        simulate_regeneration_starting(scape.id)
         prereq.delete()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
@@ -240,6 +242,9 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         sc.map_auto_update = False
         sc.save()
 
+        # clear the marker first, so the flag is the only thing that can be keeping
+        # this save off the queue
+        simulate_regeneration_starting(scape.id)
         prereq.save()
         self.assertEqual(task.call_count, 2)
 

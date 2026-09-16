@@ -727,6 +727,21 @@ class Semester(models.Model):
 
 class BlockManager(models.Manager):
 
+    def in_open_semesters(self):
+        """The groups with at least one registration in a semester that is open now.
+
+        What a deck-wide list of groups to choose between should offer: a group nobody is
+        registered in this semester matches nothing on any list scoped to the semester, so
+        offering it would only ever return an empty page.
+
+        Returns:
+            QuerySet[Block]: those groups, ordered by name (Block.Meta), empty between
+            semesters.
+        """
+        return self.filter(
+            pk__in=CourseStudent.objects.get_queryset().in_open_semesters().values_list('block_id', flat=True)
+        )
+
     def grouped_teachers_blocks(self):
         blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'name')
         grouped = {}
@@ -757,6 +772,20 @@ class Block(IsAPrereqMixin, models.Model):
     def __str__(self):
         return self.name
 
+    def current_student_ids(self):
+        """The ids of the users registered in this group in a semester that is open now.
+
+        Returned as ids for an ``__in`` lookup rather than as a join, so a student
+        registered in the group more than once still narrows a list to one row of theirs
+        and cannot inflate its page counts.
+
+        Returns:
+            QuerySet: the user ids, empty when nobody is registered in it this semester.
+        """
+        return CourseStudent.objects.get_queryset().in_open_semesters().filter(
+            block=self,
+        ).values_list('user_id', flat=True)
+
     def condition_met_as_prerequisite(self, user, num_required=1):
         """ Returns True if the user has a current course in this block/group.  `num_required` is not used.
         """
@@ -765,12 +794,57 @@ class Block(IsAPrereqMixin, models.Model):
 
 
 class ExcludedDate(models.Model):
+    """A day within a semester that does not count as a class day, such as a holiday.
+
+    Each row belongs to one semester, and a semester's mark calculations read only its own
+    (`Semester.excluded_days`), so the same calendar date is a separate row in each semester
+    that skips it. Two semesters running at once therefore both get to exclude the same
+    holiday, which is what the uniqueness constraint below allows and a deck-wide unique date
+    would not (#2647).
+    """
     semester = models.ForeignKey(Semester, on_delete=models.CASCADE)
-    date = models.DateField(unique=True)
+    date = models.DateField()
     label = models.CharField(max_length=100, blank=True, null=True, help_text="An optional label for this date.")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['semester', 'date'], name='unique_excluded_date_per_semester'),
+        ]
 
     def __str__(self):
         return self.date.strftime("%d-%b-%Y")
+
+    @classmethod
+    def from_other_semesters(cls, semester):
+        """The excluded dates every other semester holds, one entry per calendar date.
+
+        What the semester form offers to copy in, so a deck running two semesters at once does
+        not type the same holidays twice (#2648). Each semester holds its own row for a day it
+        skips, and the teacher wants that day offered once, so rows are collapsed by date: a
+        labelled row wins over an unlabelled one, since the label is the part worth carrying
+        over, and between two labelled rows the lower semester id wins, which is arbitrary but
+        stable from one page load to the next.
+
+        Args:
+            semester (Semester): the semester being edited. Its own dates are left out, since
+                it already lists them. An unsaved one (the create form) has none to leave out.
+
+        Returns:
+            list[dict]: ``{'date': 'YYYY-MM-DD', 'label': str}`` entries ordered by date. The
+            date is a string because this is read by the page's JavaScript, which compares
+            those directly: ISO dates sort as text exactly as they do as dates.
+        """
+        rows = cls.objects.order_by('date', 'semester_id')
+        if semester.pk is not None:
+            rows = rows.exclude(semester_id=semester.pk)
+
+        label_for_date = {}
+        for row in rows:
+            label = row.label or ''
+            if row.date not in label_for_date or (label and not label_for_date[row.date]):
+                label_for_date[row.date] = label
+
+        return [{'date': date.isoformat(), 'label': label} for date, label in label_for_date.items()]
 
 
 class Course(IsAPrereqMixin, models.Model):

@@ -5,7 +5,7 @@ from django.utils.datastructures import MultiValueDict
 from model_bakery import baker
 
 from comments.models import Comment
-from comments.utils import save_draft_attachments
+from comments.utils import chosen_name, save_draft_attachments
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.forms import SubmissionForm, SubmissionQuickReplyFormStudent
 
@@ -89,3 +89,75 @@ class SaveDraftAttachmentsTest(ByteDeckTenantTestCase):
 
         self.assertEqual(save_draft_attachments(form, self.draft_comment), 0)
         self.assertEqual(self.draft_comment.document_set.count(), 0)
+
+    def test_save_draft_attachments__does_not_store_a_file_the_draft_already_holds(self):
+        """The same upload arriving twice leaves the draft holding it once (#2720).
+
+        A draft save whose response the browser never saw leaves the file in the input, so the
+        next autosave sends it again; the student's work must not reach their teacher twice.
+        The return value still counts it, because their upload did survive.
+        """
+        save_draft_attachments(
+            self.bound_form([SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")]),
+            self.draft_comment,
+        )
+
+        again = self.bound_form([SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")])
+
+        self.assertEqual(save_draft_attachments(again, self.draft_comment), 1)
+        self.assertEqual(self.draft_comment.document_set.count(), 1)
+
+    def test_save_draft_attachments__stores_a_different_file_of_the_same_name(self):
+        """Only a copy of what the draft already holds is skipped. A student attaching a corrected
+        version under the same name still gets it stored, so nothing is dropped silently."""
+        save_draft_attachments(
+            self.bound_form([SimpleUploadedFile("notes.txt", b"first version", content_type="text/plain")]),
+            self.draft_comment,
+        )
+
+        corrected = self.bound_form(
+            [SimpleUploadedFile("notes.txt", b"a longer, corrected version", content_type="text/plain")])
+
+        self.assertEqual(save_draft_attachments(corrected, self.draft_comment), 1)
+        self.assertEqual(self.draft_comment.document_set.count(), 2)
+
+    def test_save_draft_attachments__the_same_upload_is_stored_once_per_draft(self):
+        """Skipping is scoped to the one draft. Another student attaching an identical file to
+        their own submission stores it, rather than being denied a file because someone else
+        already has one like it."""
+        save_draft_attachments(
+            self.bound_form([SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")]),
+            self.draft_comment,
+        )
+        someone_elses_draft = Comment.objects.create_comment(
+            user=baker.make(User), path="/another/path/", text="", target=None)
+
+        form = self.bound_form([SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")])
+
+        self.assertEqual(save_draft_attachments(form, someone_elses_draft), 1)
+        self.assertEqual(someone_elses_draft.document_set.count(), 1)
+
+
+class ChosenNameTest(ByteDeckTenantTestCase):
+    """Tests for comments.utils.chosen_name(), which recovers the name an upload was chosen
+    under from the name it ended up stored as."""
+
+    def test_chosen_name__strips_the_path(self):
+        """A stored FileField value is a whole media path; only the file name identifies it."""
+        self.assertEqual(chosen_name("documents/2026/09/15/notes.txt"), "notes.txt")
+
+    def test_chosen_name__strips_storages_collision_suffix(self):
+        """Storage appends an underscore and seven random characters to a name it already holds,
+        which every deck hits because a day's uploads share one folder."""
+        self.assertEqual(chosen_name("documents/2026/09/15/notes_Ab3dEf7.txt"), "notes.txt")
+
+    def test_chosen_name__leaves_an_ordinary_underscore_alone(self):
+        """Only a suffix of exactly seven characters is storage's. An underscore in the student's
+        own file name is part of the name they chose."""
+        self.assertEqual(chosen_name("documents/2026/09/15/my_notes.txt"), "my_notes.txt")
+        self.assertEqual(chosen_name("documents/2026/09/15/notes_v2.txt"), "notes_v2.txt")
+
+    def test_chosen_name__copes_with_a_name_that_has_no_extension(self):
+        """A file chosen without an extension still has a name, suffixed or not."""
+        self.assertEqual(chosen_name("documents/2026/09/15/README"), "README")
+        self.assertEqual(chosen_name("documents/2026/09/15/README_Ab3dEf7"), "README")

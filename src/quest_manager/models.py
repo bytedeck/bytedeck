@@ -136,12 +136,14 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
         " Only change this value if you want to disconnect your campaign from the Library."
     )
 
+    # Nothing reads this. Quest maps are laid out entirely by dagre, which places campaigns
+    # where its own crossing-minimization puts them, and the campaign forms no longer offer
+    # the field (#2675). It is kept rather than dropped because removing a column takes two
+    # releases (CONTRIBUTING.md, "Migrations and the deploy window") and because it still
+    # holds whatever ordering decks set, should map ordering be attempted again.
     map_order = models.PositiveIntegerField(
         default=0,
-        help_text="Controls where this campaign sits, left to right, on quest maps: campaigns with a lower "
-        "number are placed further to the left. Campaigns sharing a number (including the default 0) keep "
-        "their creation order. Exact placement is still up to the map's layout engine, so this is a "
-        "preference rather than a guarantee when campaigns are tangled together by prerequisites."
+        help_text="Not currently used. Quest map layout is decided by the map's layout engine."
     )
 
     objects = CategoryManager()
@@ -470,6 +472,18 @@ class QuestQuerySet(models.QuerySet):
 
           These need to be grouped together, so that we can start with a queryset that removes all inprogress submissions first
           and don't have to worry about them when considering repeats, which are more complicated.
+
+        Condition 4 is a per-semester cap, so it counts only what the student completed in the
+        semester they are in now (``semester_for(user)``); condition 5 is an all-time cap and
+        counts every submission. Quest.is_repeat_available() answers the same question one quest
+        at a time, for the quest page, so the two have to agree.
+
+        Args:
+            user: the student whose submissions decide what is left, and whose semester the
+                per-semester cap is measured in.
+
+        Returns:
+            QuestQuerySet: the quests still open to them, with the five cases above removed.
         """
 
         # Condition 1: remove inprogress submissions
@@ -515,11 +529,21 @@ class QuestQuerySet(models.QuerySet):
         qs = qs.exclude(pk__in=cooldown_quests)
 
         # CONDITION 4: remove completed and repeatable and max repeats reached this semester
+        #
+        # Counting only what the student completed in the semester they are in now, which is what
+        # makes this a per-semester cap. A repeat_per_semester quest gives them max_repeats goes
+        # every semester, so the goes they used in an earlier one must not come off this
+        # semester's allowance: counting all of them hides the quest from a student who has
+        # barely started it this term (#2714).
+        from courses.models import semester_for
+
+        completed_this_semester = Q(
+            questsubmission__user_id=user.id,
+            questsubmission__is_completed=True,
+            questsubmission__semester=semester_for(user),
+        )
         max_repeats_this_sem = completed_quests_current.annotate(
-            submission_count=Count(
-                'questsubmission',
-                filter=Q(questsubmission__user_id=user.id)
-            )
+            submission_count=Count('questsubmission', filter=completed_this_semester)
         )
         # need to account for max_repeats=-1 (unlimited repeats), don't remove those
         max_repeats_this_sem = max_repeats_this_sem.filter(~Q(max_repeats=-1) & Q(submission_count__gt=F('max_repeats')))
@@ -1556,16 +1580,48 @@ class QuestSubmission(models.Model):
         self.save()
 
     def mark_approved(self, transfer=False):
-        self.is_completed = True  # might have been false if returned
-        self.is_approved = True
-        self.time_approved = timezone.now()
-        self.do_not_grant_xp = transfer
-        self.save()
-        # update badges
-        BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        """Approve this submission: grant its XP, and any badges it newly qualifies for.
+
+        All of it in one transaction, because saving the submission is what tells the
+        prerequisites app to rebuild this student's cache of available quests, and that
+        rebuild reads the XP this approval grants. The task is dispatched through
+        prerequisites.tasks.TransactionAwareTask, which hands it to celery on commit, so
+        one transaction around the whole thing is what holds it back until the new XP is
+        written. Saving outside one dispatches it immediately (Django runs an on_commit
+        callback right away when nothing is open), and the worker then reads the XP from
+        before the approval: a quest waiting on the rank the student just reached is
+        computed as still locked and stays missing from their Available tab (#2722).
+
+        Args:
+            transfer (bool): True when the XP is not being granted, which is how a skipped quest
+                and a transferred one are approved: the submission is marked done without the
+                student earning anything for it.
+
+        Returns:
+            None: the submission is updated in place.
+        """
+        with transaction.atomic():
+            self.is_completed = True  # might have been false if returned
+            self.is_approved = True
+            self.time_approved = timezone.now()
+            self.do_not_grant_xp = transfer
+            self.save()
+            # update badges
+            BadgeAssertion.objects.check_for_new_assertions(self.user, transfer=transfer)
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def mark_returned(self):
+        """Send this submission back to the student for another go, and take its XP back.
+
+        The submission leaves the approved state, its XP stops counting toward the student's
+        total, and it is re-attached to the semester the student is in now.
+
+        Returns:
+            None: the submission is updated in place.
+        """
+        # Whether this return takes any XP back: only an approved submission was worth any, and
+        # that is what decides whether the available-quest cache needs rebuilding below.
+        was_approved = self.is_approved
         self.is_completed = False
         self.is_approved = False
         self.do_not_grant_xp = False
@@ -1577,10 +1633,24 @@ class QuestSubmission(models.Model):
         # happens "now", so the redo belongs to whatever semester the student is in at this point.
         from courses.models import semester_for  # locally, since courses imports this module
 
-        self.semester = semester_for(self.user)
-        self.full_clean()
-        self.save()
-        self.user.profile.xp_invalidate_cache()  # recalculate XP
+        # The rebuild is queued here rather than left to the post_save signal, which skips a
+        # submission that is not both completed and approved: a returned one is neither, so nothing
+        # else asks for it. Without it the XP comes off while the cache keeps saying the student
+        # qualifies, so a quest behind a rank they no longer hold stays in their Available tab.
+        # Only for a return that takes XP back: closing a suspended deck returns every submission
+        # still awaiting approval (tenant.notices), none of which was ever worth any XP, and a full
+        # recalculation each would be hundreds of them for nothing. One transaction for the same
+        # reason mark_approved() uses one, so the rebuild is handed over only once the XP this
+        # return takes back has been written (#2722).
+        from prerequisites.tasks import update_quest_conditions_for_user  # locally: it imports this module
+
+        with transaction.atomic():
+            self.semester = semester_for(self.user)
+            self.full_clean()
+            self.save()
+            self.user.profile.xp_invalidate_cache()  # recalculate XP
+            if was_approved:
+                update_quest_conditions_for_user.apply_async(args=[self.user_id], queue='default')
 
     def is_awaiting_approval(self):
         return self.is_completed and not self.is_approved

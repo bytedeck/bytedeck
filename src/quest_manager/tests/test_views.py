@@ -16,11 +16,12 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.http import JsonResponse
 from django.utils import timezone
 
@@ -28,14 +29,14 @@ from django.utils import timezone
 from unittest.mock import patch
 from model_bakery import baker, recipe
 
-from badges.models import BadgeAssertion
+from badges.models import Badge, BadgeAssertion
 from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
-from comments.models import Comment
+from comments.models import Comment, Document
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
@@ -1150,7 +1151,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
@@ -1164,7 +1165,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
@@ -1330,6 +1331,95 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(sub.draft_comment)
         response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
         self.assertEqual(response.status_code, 404)
+
+    def submitted_comment_text(self, sub, comment_text):
+        """Submit a quest with this comment text and return the comment as it was stored.
+
+        Args:
+            sub: the in-progress submission to complete, with its draft comment set.
+            comment_text: what the student typed into the comment box.
+
+        Returns:
+            str: the published comment's HTML, as a teacher would be served it.
+        """
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[sub.id]),
+                data={'complete': True, 'comment_text': comment_text},
+            )
+        sub.refresh_from_db()
+        return sub.get_comments().first().text
+
+    def test_complete__links_in_a_submitted_comment_open_in_a_new_tab(self):
+        """A link a student puts in their submission comment is stored with target="_blank", so
+        the teacher reading it keeps the submission page they are marking from (#2711).
+
+        Every other comment on the site gets this from Comment.objects.create_comment(), which
+        runs clean_html(); the submission path writes its draft comment directly and has to run
+        the same cleanup itself.
+        """
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>See <a href="https://example.com/docs">my docs</a></p>')
+
+        self.assertIn('<a href="https://example.com/docs" target="_blank">', text)
+
+    def test_complete__a_url_typed_into_a_submitted_comment_becomes_a_link(self):
+        """A student who types a URL out rather than using the editor's link button still gets a
+        link, and one that opens in a new tab. Left as plain text the teacher cannot click it at
+        all, which no amount of client-side patching can fix (#2711)."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>my work is at https://example.org/bare</p>')
+
+        self.assertIn('href="https://example.org/bare"', text)
+        self.assertIn('target="_blank"', text)
+
+    def test_complete__cleans_the_comment_the_same_way_with_and_without_a_draft(self):
+        """The view's two branches have to agree. Completing a quest writes the comment straight
+        onto the draft; commenting on an already-completed one has no draft left, so it goes
+        through create_comment() instead. The same typing must not survive differently (#2711).
+        """
+        typed = '<p>a link https://example.org/bare</p>'
+
+        with_draft = self.submitted_comment_text(self.draft_submission(), typed)
+
+        # the quick-reply case: completed, and mark_completed() has cleared the draft comment
+        commented_on = self.draft_submission()
+        commented_on.is_completed = True
+        commented_on.draft_comment = None
+        commented_on.save()
+        self.client.post(
+            reverse('quests:complete', args=[commented_on.id]),
+            data={'comment': True, 'comment_text': typed},
+        )
+        without_draft = commented_on.get_comments().first().text
+
+        self.assertIn('target="_blank"', without_draft)
+        self.assertEqual(with_draft, without_draft)
+
+    def test_complete__strips_script_from_a_submitted_comment(self):
+        """clean_html() also drops <script>, so restoring it closes the same gap for the marking
+        page, where the comment is rendered with |safe."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>hi</p><script>alert(1)</script>')
+
+        self.assertNotIn('<script>', text)
+
+    def draft_submission(self):
+        """Return a fresh in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Returns:
+            QuestSubmission: ready for the logged-in student to complete, with a draft comment.
+        """
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                         semester=self.semester, is_completed=False)
+        sub.draft_comment = Comment.objects.create_comment(
+            user=self.test_student, path=sub.get_absolute_url(), text="", target=None)
+        sub.save()
+        return sub
 
     def custom_xp_submission(self):
         """Return a fresh in-progress submission (with its draft comment) of a quest whose XP the
@@ -3997,15 +4087,12 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         data = {
             'title': 'New category',
             'published': True,
-            'map_order': 5,
         }
         response = self.client.post(reverse('quests:category_create'), data=data)
         self.assertRedirects(response, reverse('quests:categories'))
 
         course = Category.objects.get(title=data['title'])
         self.assertEqual(course.title, data['title'])
-        # map_order is a writable create field (issue #1977), so the posted value persists
-        self.assertEqual(course.map_order, data['map_order'])
 
     def test_CategoryUpdate_view__staff_can_update(self):
         """ Admin should be able to update a course. Saving returns to the campaign's
@@ -4015,7 +4102,6 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         data = {
             'title': 'My Updated Title',
             'published': False,
-            'map_order': 0,
         }
         response = self.client.post(reverse('quests:category_update', args=[1]), data=data)
         self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
@@ -4023,16 +4109,29 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         self.assertEqual(course.title, data['title'])
         self.assertEqual(course.published, data['published'])
 
-    def test_CategoryUpdate_view__sets_map_order(self):
-        """The campaign update form exposes map_order (the quest-map left-to-right ordering,
-        issue #1977) and saves it."""
+    def test_CategoryUpdate_view__offers_no_map_order_field(self):
+        """The campaign form no longer offers map_order (#2675).
+
+        Quest maps are laid out by dagre alone now, so a teacher setting a map order would be
+        adjusting something nothing reads. Posting one is ignored rather than saved.
+        """
         self.client.force_login(self.test_teacher)
         response = self.client.get(reverse('quests:category_update', args=[1]))
-        self.assertContains(response, 'name="map_order"')
+        self.assertNotContains(response, 'name="map_order"')
 
-        data = {'title': 'Ordered Campaign', 'published': True, 'map_order': 5}
-        self.client.post(reverse('quests:category_update', args=[1]), data=data)
-        self.assertEqual(Category.objects.get(id=1).map_order, 5)
+        # Start from a non-zero order, so "unchanged" is a real claim rather than the field's
+        # default reading back.
+        Category.objects.filter(id=1).update(map_order=7)
+        response = self.client.post(
+            reverse('quests:category_update', args=[1]),
+            data={'title': 'Ordered Campaign', 'published': True, 'map_order': 5},
+        )
+        # Check the save actually went through before reading anything off it: a rejected form
+        # would leave map_order alone too, and pass this test for the wrong reason.
+        self.assertRedirects(response, reverse('quests:category_detail', args=[1]))
+        category = Category.objects.get(id=1)
+        self.assertEqual(category.title, 'Ordered Campaign')
+        self.assertEqual(category.map_order, 7)
 
     def test_CategoryUpdate_view__cancel_button_returns_to_detail(self):
         """The cancel button on the campaign update form must link back to the
@@ -5126,16 +5225,6 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_approved)  # the invalid submission did nothing
 
-    def test_approve__invalid_form_ajax_returns_400(self):
-        """An ajax POST with an invalid awards value returns a 400 JsonResponse (form_invalid)."""
-        response = self.client.post(
-            reverse('quests:approve', args=[self.sub.id]),
-            data={'awards': [999999], 'approve_button': True},
-            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
-        )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {'error': 'Bad Request'})
-
     def test_approve__with_comment_quick_reply_form(self):
         """Approving via the quick reply form approves the submission, adds the comment, and notifies the student."""
         comment_text = "Lorum Ipsum"
@@ -5461,43 +5550,119 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
-    def test_approve__ajax_all_button_types(self):
-        """ Checks functionality of approve using ajax for all valid button types using ajax
-        """
-        post_request = {
-            'path': reverse('quests:approve', args=[self.sub.pk]),
-            'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'
-        }
+    def test_approve__every_button_type_acts_and_returns_to_the_approvals_page(self):
+        """Each of the four buttons does its job and sends the teacher back to the queue (#2689).
 
-        # 'approve_button' self.sub.is_approved is True
-        response = self.client.post(**post_request, data={'approve_button': ''})
-        self.assertEqual(response.status_code, 200)
+        The approvals page is where all four are pressed from, so each one ends in a redirect
+        back to it, and the page it lands on is rebuilt from the database.
+        """
+        path = reverse('quests:approve', args=[self.sub.pk])
+        approvals = reverse('quests:approvals')
+
+        response = self.client.post(path, data={'approve_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_approved)
 
-        # 'return_button' self.sub.is_approved is False
-        response = self.client.post(**post_request, data={'return_button': ''})
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'return_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_approved)
 
-        # 'skip_button' self.sub.is_approved is True
-        response = self.client.post(**post_request, data={'skip_button': ''})
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'skip_button': ''})
+        self.assertRedirects(response, approvals)
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.is_approved)
 
-        # 'comment_button' new comment should exist
-        response = self.client.post(**post_request, data={
-            'comment_button': '',
-            'comment_text': 'COMMENT TEXT',
-        })
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(path, data={'comment_button': '', 'comment_text': 'COMMENT TEXT'})
+        self.assertRedirects(response, approvals)
         self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
 
         # no button returns 404
-        response = self.client.post(**post_request)
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.client.post(path).status_code, 404)
+
+    def test_approve__returns_to_the_tab_the_decision_was_made_from(self):
+        """A teacher working through one tab is put back on it, not on the default one (#2689).
+
+        The approvals page has four tabs and a my-groups/all toggle, so the page a decision was
+        made from is rarely the one `quests:approvals` resolves to.
+        """
+        tab = reverse('quests:submitted_all')
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.pk]),
+            data={'approve_button': '', 'next': tab},
+        )
+        self.assertRedirects(response, tab)
+
+    def test_approve__a_corrected_resubmission_still_returns_to_that_tab(self):
+        """Where to go back to survives a form that does not validate (#2689).
+
+        A form that fails validation sends the teacher to the submission page to fix it, and
+        the corrected post is a fresh one: it carries only what that page puts in it.
+        """
+        tab = reverse('quests:submitted_all')
+
+        # An 'awards' value routes to SubmissionFormStaff, and an id that is not a
+        # manually-granted badge fails its validation.
+        invalid = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': tab},
+        )
+        self.assertTemplateUsed(invalid, 'quest_manager/submission.html')
+        self.assertContains(invalid, f'name="next" value="{tab}"')
+
+        corrected = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'approve_button': '', 'next': tab},
+        )
+        self.assertRedirects(corrected, tab)
+
+    def test_approve__an_off_host_next_is_not_carried_into_the_correction(self):
+        """A `next` that is not followed is not written into the page either (#2689).
+
+        The submission page renders it as a hidden field, so only a value that has already
+        been checked belongs there.
+        """
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'awards': [999999], 'approve_button': True, 'next': 'https://evil.example.com/'},
+        )
+        self.assertTemplateUsed(response, 'quest_manager/submission.html')
+        self.assertNotContains(response, 'evil.example.com')
+
+    def test_approve__will_not_be_redirected_off_this_host(self):
+        """A `next` pointing somewhere else is ignored rather than followed (#2689).
+
+        The field is posted by the page, so a crafted one is the only way it carries an
+        off-site url, and following it would make this view an open redirect.
+        """
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.pk]),
+            data={'approve_button': '', 'next': 'https://evil.example.com/'},
+        )
+        self.assertRedirects(response, reverse('quests:approvals'))
+
+    def test_approve__each_decision_shows_its_own_message_only(self):
+        """The message about one approval is gone by the time the next one is made (#2687).
+
+        Django clears a message once it has been displayed, and displaying it is something
+        loading the page does. A decision that does not send the teacher back to a freshly
+        loaded page therefore leaves its message in the session, to stack up at the top of the
+        queue behind the next one.
+        """
+        # A second quest, since a student may only have one in-progress submission per quest.
+        second = baker.make(QuestSubmission, quest=baker.make(Quest), user=self.test_student)
+
+        self.client.post(reverse('quests:approve', args=[self.sub.pk]), data={'approve_button': ''})
+        first_page = self.client.get(reverse('quests:approvals'))
+        first_messages = [str(m) for m in first_page.context['messages']]
+        self.assertEqual(len(first_messages), 1, first_messages)
+
+        self.client.post(reverse('quests:approve', args=[second.pk]), data={'approve_button': ''})
+        second_page = self.client.get(reverse('quests:approvals'))
+        second_messages = [str(m) for m in second_page.context['messages']]
+        self.assertEqual(len(second_messages), 1, second_messages)
+        self.assertNotEqual(second_messages, first_messages)
 
 
 class QuestTabListingTests(ByteDeckTenantTestCase):
@@ -5756,15 +5921,12 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
         self.assertNotIn('status', response.context['sortable_columns'])
         self.assertNotContains(response, 'sort=status')
 
-    def test_approvals__the_many_valued_columns_are_not_sort_links(self):
-        """A submission's blocks have no single value to order by, so that column is plain.
-
-        The same reasoning the Library's quests tab applied to its tags (#2410).
-        """
+    def test_approvals__the_group_column_is_a_sort_link(self):
+        """The {group} column sorts the whole tab from the server, like every other column (#2697)."""
         response = self.client.get(reverse('quests:submitted_all'))
 
-        self.assertNotIn('group_name', response.context['sortable_columns'])
-        self.assertNotContains(response, 'sort=group_name')
+        self.assertIn('group', response.context['sortable_columns'])
+        self.assertContains(response, 'sort=group')
         # bootstrap-table's own sort would reorder the page underneath the links
         self.assertNotContains(response, 'data-sortable="true"')
 
@@ -5772,7 +5934,7 @@ class SubmissionTabSortTests(ByteDeckTenantTestCase):
         """A stale or hand-made `?sort=` falls back to the tab's own order, not an error."""
         default_order = self._names('quests:submitted_all')
 
-        for unknown in ('group_name', 'nonsense', 'name; drop table', '-'):
+        for unknown in ('tags', 'nonsense', 'name; drop table', '-'):
             with self.subTest(sort=unknown):
                 response = self.client.get(reverse('quests:submitted_all'), {'sort': unknown})
 
@@ -6021,6 +6183,190 @@ class SubmissionTabSearchTests(ByteDeckTenantTestCase):
             self.assertTrue(name.startswith('Zfiller quest'), f'{name} is not one of the searched-for quests')
 
 
+class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
+    """Sorting and filtering the approvals tabs by {group} (#2697).
+
+    A student can be in several groups at once, so the column shows their names joined with
+    commas. Both controls work from that: the sort orders by the whole joined string, and
+    the filter keeps the submissions of anyone registered in the chosen group.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        """Three students whose group cells differ, each with a submission awaiting approval.
+
+        `zoe` is in no group at all, which is the empty cell the sort has to put somewhere,
+        and `bo` is in two, which is the case a plain join would duplicate.
+        """
+        cls.teacher = User.objects.create_user('group_teacher', is_staff=True)
+        semester = SiteConfig.get().active_semester
+
+        cls.block_a = baker.make(Block, name='7A')
+        cls.block_b = baker.make(Block, name='8B')
+
+        cls.al = User.objects.create_user('al')          # cell reads "8B"
+        cls.bo = User.objects.create_user('bo')          # cell reads "7A, 8B"
+        cls.zoe = User.objects.create_user('zoe')        # cell is empty
+
+        baker.make('courses.CourseStudent', user=cls.al, semester=semester, block=cls.block_b)
+        baker.make('courses.CourseStudent', user=cls.bo, semester=semester, block=cls.block_a)
+        baker.make('courses.CourseStudent', user=cls.bo, semester=semester, block=cls.block_b)
+
+        cls.submissions = {}
+        for student in (cls.al, cls.bo, cls.zoe):
+            quest = baker.make(Quest, name=f'Quest for {student.username}')
+            cls.submissions[student.username] = baker.make(
+                QuestSubmission, quest=quest, user=student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=timezone.now(),
+            )
+
+    def setUp(self):
+        """Sign the teacher in, since the approvals tabs are staff only."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def _usernames(self, **params):
+        """The students on the submitted tab's current page, in the order rendered.
+
+        Args:
+            **params: query parameters for the request.
+
+        Returns:
+            list[str]: the usernames, in order.
+        """
+        response = self.client.get(reverse('quests:submitted_all'), params)
+        tab = next(t for t in response.context['tab_list'] if t['active'])
+        return [submission.user.username for submission in tab['submissions']]
+
+    def test_approvals__sorting_by_group_orders_by_the_names_the_column_shows(self):
+        """"7A, 8B" sorts between "7A" and "8B", because that is the string in the cell.
+
+        Ordering by any one of a student's groups would put `bo` before or after `al` by a
+        name the reader cannot tell was chosen; ordering by the joined string is the column
+        read the way it is displayed.
+        """
+        self.assertEqual(self._usernames(sort='group'), ['bo', 'al', 'zoe'])
+
+    def test_approvals__sorting_by_group_reverses_and_still_leaves_the_empty_cell_last(self):
+        """Reversing flips the groups; a student in none has nothing to sort by either way."""
+        self.assertEqual(self._usernames(sort='-group'), ['al', 'bo', 'zoe'])
+
+    def test_approvals__sorting_by_group_lists_a_student_in_two_groups_once(self):
+        """`bo` holds two registrations, and a join on them would put two rows on the page."""
+        self.assertEqual(self._usernames(sort='group').count('bo'), 1)
+
+    def test_approvals__the_sort_key_joins_the_names_with_the_separator_on_screen(self):
+        """The joined sort key uses ", ", the separator the cell is rendered with.
+
+        Group names chosen so the separator decides the answer: a student in "A" and "AB"
+        shows "A, AB", which sorts before "AV". Joined with anything that sorts after "V",
+        or with no separator at all, the two swap.
+        """
+        semester = SiteConfig.get().active_semester
+        a, ab, av = (baker.make(Block, name=name) for name in ('A', 'AB', 'AV'))
+
+        multi = User.objects.create_user('multi')          # cell reads "A, AB"
+        single = User.objects.create_user('single')        # cell reads "AV"
+        for student, blocks in ((multi, (a, ab)), (single, (av,))):
+            for block in blocks:
+                baker.make('courses.CourseStudent', user=student, semester=semester, block=block)
+            baker.make(
+                QuestSubmission, quest=baker.make(Quest), user=student, semester=semester,
+                is_completed=True, is_approved=False, time_completed=timezone.now(),
+            )
+
+        ordered = self._usernames(sort='group')
+
+        self.assertLess(ordered.index('multi'), ordered.index('single'))
+
+    def test_approvals__filtering_by_group_keeps_only_that_groups_submissions(self):
+        """Choosing a group narrows the tab to the students registered in it."""
+        self.assertEqual(sorted(self._usernames(block=self.block_a.pk)), ['bo'])
+        self.assertEqual(sorted(self._usernames(block=self.block_b.pk)), ['al', 'bo'])
+
+    def test_approvals__the_group_filter_offers_the_groups_running_this_semester(self):
+        """The dropdown is rendered with the groups a submission could actually be in."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertEqual(
+            sorted(block.name for block in response.context['group_filter_choices']),
+            ['7A', '8B'],
+        )
+        self.assertContains(response, 'name="block"')
+
+    def test_approvals__an_unknown_group_is_ignored_rather_than_refused(self):
+        """A stale or hand-made `?block=` widens the tab back to everyone instead of erroring."""
+        for unknown in ('999999', 'nonsense', '', '-1'):
+            with self.subTest(block=unknown):
+                response = self.client.get(reverse('quests:submitted_all'), {'block': unknown})
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['current_group'], '')
+                self.assertEqual(sorted(self._usernames(block=unknown)), ['al', 'bo', 'zoe'])
+
+    def test_approvals__a_group_with_no_open_registration_is_not_offered(self):
+        """A group nobody is in this semester would only ever return an empty page."""
+        past_only = baker.make(Block, name='Last year')
+        baker.make(
+            'courses.CourseStudent', user=self.al, block=past_only,
+            semester=baker.make(Semester, status=Semester.Status.ARCHIVED),
+        )
+
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotIn(past_only, list(response.context['group_filter_choices']))
+        # and selecting it anyway leaves the tab alone rather than emptying it
+        self.assertEqual(sorted(self._usernames(block=past_only.pk)), ['al', 'bo', 'zoe'])
+
+    def test_approvals__the_group_filter_and_the_search_apply_together(self):
+        """Searching within a group narrows that group, and the count reports what it found."""
+        response = self.client.get(
+            reverse('quests:submitted_all'), {'block': self.block_b.pk, 'q': 'al'})
+
+        self.assertEqual(response.context['num_matching_submissions'], 1)
+        self.assertContains(response, '1 submission matches "al" in this group.')
+        self.assertEqual(self._usernames(block=self.block_b.pk, q='al'), ['al'])
+
+    def test_approvals__the_group_filter_and_a_sort_apply_together(self):
+        """Ordering a filtered tab reorders its results rather than dropping the filter."""
+        self.assertEqual(self._usernames(block=self.block_b.pk, sort='group'), ['bo', 'al'])
+
+    def test_approvals__the_page_and_sort_links_keep_the_chosen_group(self):
+        """Every link on the page carries ?block=, so reordering does not widen the tab."""
+        response = self.client.get(reverse('quests:submitted_all'), {'block': self.block_a.pk})
+
+        self.assertContains(response, f'block={self.block_a.pk}')
+        self.assertEqual(response.context['current_group'], self.block_a.pk)
+
+    def test_quest_list__a_students_own_tabs_ignore_the_group_filter(self):
+        """A student's tabs hold only their own submissions, so there is no group to pick between.
+
+        The parameter is ignored rather than honoured, so a link copied from an approvals
+        page cannot quietly empty a student's list of their own work. `al` is in 8B, so a
+        filter on 7A would empty the tab if it were read here.
+        """
+        in_progress = baker.make(
+            QuestSubmission, quest=baker.make(Quest, name='Still going'), user=self.al,
+            semester=SiteConfig.get().active_semester, is_completed=False, is_approved=False,
+        )
+        self.client.force_login(self.al)
+        mine = reverse('quests:inprogress')
+
+        unfiltered = self.client.get(mine)
+        filtered = self.client.get(mine, {'block': self.block_a.pk})
+
+        # the tab really does hold their submission, so the comparison below is not empty
+        self.assertEqual([s.pk for s in unfiltered.context['in_progress_submissions']], [in_progress.pk])
+        self.assertEqual([s.pk for s in filtered.context['in_progress_submissions']], [in_progress.pk])
+        self.assertNotContains(filtered, 'name="block"')
+
+    def test_approvals__the_search_form_carries_the_sort_so_searching_keeps_it(self):
+        """The filter and search are one GET form, which would otherwise drop an active sort."""
+        response = self.client.get(reverse('quests:submitted_all'), {'sort': '-group'})
+
+        self.assertContains(response, '<input type="hidden" name="sort" value="-group">')
+
+
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
 
@@ -6101,6 +6447,37 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
     def setUp(self):
         """Set up a tenant-aware test client and log in the teacher."""
         self.client.force_login(self.current_teacher)
+
+    def test_approvals__approve_buttons_post_their_form_normally(self):
+        """Nothing on the approvals page intercepts the approve and return buttons (#2687, #2689).
+
+        A script that posts them in the background and patches the page in place never reloads
+        it, so Django never gets to display and clear its messages, and they pile up at the top
+        of the queue, one per decision, for as long as the teacher stays on the page.
+        """
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id=self.sub.id),
+        ):
+            response = self.client.get(reverse('quests:submitted'))
+
+        self.assertContains(response, 'name=\'approve_button\'')
+        # The two things only a background post needs: the url it posts to, and the key it
+        # reads the rendered messages back out of.
+        self.assertNotContains(response, 'ajax_submission_approve')
+        self.assertNotContains(response, 'messages_html')
+        # Reloading the page is what clears the messages, so the form says which page to
+        # come back to (see test_approve__returns_to_the_tab_the_decision_was_made_from).
+        self.assertContains(response, f'name="next" value="{reverse("quests:submitted")}"')
+
+    def test_approvals__there_is_no_ajax_only_approve_route(self):
+        """Approving goes through one url, the one the form's action names (#2689).
+
+        A second route onto the same view is a url nothing on the site links to, which is a
+        url nobody maintains and nobody notices going wrong.
+        """
+        with self.assertRaises(NoReverseMatch):
+            reverse('quests:ajax_approve', args=[self.sub.id])
 
     def test_approvals__submitted_tab(self):
         """ Completed quests awaiting approval for current teacher (teachers are connected by Block)
@@ -6295,6 +6672,97 @@ class ApprovalsViewTest(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:flagged'))
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].FLAGGED)
         self.assertContains(response, 'class="active"')
+
+    def test_approvals__each_quick_reply_box_carries_its_own_ids(self):
+        """Every submission's reply box carries DOM ids of its own (#2685).
+
+        Without that, the boxes are indistinguishable to a browser refilling the page after a
+        reload, and a reply typed for one quest can be put back into another quest's box once
+        the list has changed underneath.
+        """
+        submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(3)]
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id__in=[s.id for s in submissions]),
+        ):
+            html = self.client.get(reverse('quests:submitted')).content.decode()
+
+        self.assertNotIn('id="id_comment_text"', html)
+        self.assertNotIn('id="id_award"', html)
+        for submission in submissions:
+            self.assertIn(f'id="id_quick_reply_{submission.id}_comment_text"', html)
+            self.assertIn(f'id="id_quick_reply_{submission.id}_award"', html)
+
+        # The field NAMES stay shared: that is what ApproveView reads the reply back from.
+        self.assertEqual(html.count('name="comment_text"'), len(submissions))
+
+    def test_approvals__a_posted_reply_is_not_echoed_into_every_box(self):
+        """A reply posted to this page is not rendered back into any of the boxes (#2685).
+
+        The same form renders once per row, so a form bound to request.POST puts whatever was
+        posted into every submission's box at once.
+        """
+        submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(3)]
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id__in=[s.id for s in submissions]),
+        ):
+            response = self.client.post(reverse('quests:submitted'), data={'comment_text': 'ECHOED-REPLY'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'ECHOED-REPLY')
+
+    def test_approvals__quick_reply_boxes_do_not_autocomplete(self):
+        """The reply boxes ask the browser not to remember what was typed in them (#2685).
+
+        A reply is about one specific submission and is sent as soon as the teacher presses a
+        button, so a browser refilling the box on a later load is never wanted here.
+        """
+        with patch(
+            'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+            return_value=QuestSubmission.objects.filter(id=self.sub.id),
+        ):
+            html = self.client.get(reverse('quests:submitted')).content.decode()
+
+        textareas = re.findall(r'<textarea[^>]*name="comment_text"[^>]*>', html)
+        self.assertTrue(textareas, 'the page rendered no quick reply box')
+        for textarea in textareas:
+            self.assertIn('autocomplete="off"', textarea)
+
+    def test_approvals__award_list_is_fetched_once_for_the_whole_page(self):
+        """The page's queries do not grow with the number of submissions on it (#2685).
+
+        Each row has its own form and every one of them offers the same award list. Building
+        that list costs a prerequisite count per badge, so it is fetched once for the page and
+        shared; a form left to fetch its own multiplies the page's queries by the number of
+        rows (750 instead of 25, on a page of 30, when measured).
+        """
+        baker.make(Badge, _quantity=3)
+
+        def queries_for(count):
+            submissions = [baker.make(QuestSubmission, quest=self.quest) for _ in range(count)]
+            ids = [s.id for s in submissions]
+            with patch(
+                'quest_manager.views.QuestSubmission.objects.all_awaiting_approval',
+                return_value=QuestSubmission.objects.filter(id__in=ids),
+            ):
+                self.client.get(reverse('quests:submitted'))  # warm anything cached per process
+                with CaptureQueriesContext(connection) as queries:
+                    response = self.client.get(reverse('quests:submitted'))
+            self.assertEqual(response.content.decode().count('name="comment_text"'), count)
+            return len(queries)
+
+        one_row = queries_for(1)
+        many_rows = queries_for(8)
+        # Some growth is expected: more rows mean more submissions, users and quests to render.
+        # What must not happen is the award list being rebuilt per row, which is several
+        # queries each and would put the difference far above this.
+        self.assertLess(
+            many_rows - one_row, one_row,
+            f'queries grew from {one_row} to {many_rows} over 7 extra rows, which suggests the '
+            'award list is being rebuilt for each one',
+        )
+
 
 
 class Is_staff_or_TA_test(ByteDeckTenantTestCase):
@@ -6637,3 +7105,356 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
         url = reverse('quests:unarchive', args=[nonexistent_id])
         self.assertEqual(self.client.post(url).status_code, 404)
+
+
+class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
+    """Removing a file a student attached to their own draft submission.
+
+    A file input cannot unchoose one file, and choosing again adds to what is stored rather
+    than replacing it, so without this a student who attaches the wrong file submits it.
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission holding one attached file."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = self.draft_submission(self.student)
+        self.document = self.attach(self.submission, "wrong-file.png")
+        self.client.force_login(self.student)
+
+    def draft_submission(self, user):
+        """Start a new in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Args:
+            user: the student the submission belongs to.
+
+        Returns:
+            QuestSubmission: the submission, with its draft comment already set.
+        """
+        submission = baker.make(QuestSubmission, user=user, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, is_completed=False)
+        submission.draft_comment = Comment.objects.create_comment(
+            user=user, path=submission.get_absolute_url(), text="", target=None)
+        submission.save()
+        return submission
+
+    def attach(self, submission, name):
+        """Attach a file to a submission's draft comment, as a draft save or a failed submit
+        would.
+
+        Args:
+            submission: the submission whose draft comment holds the file.
+            name: the file name to store it under.
+
+        Returns:
+            Document: the row holding the stored file.
+        """
+        document = Document(comment=submission.draft_comment)
+        document.docfile.save(name, ContentFile(b"file_content"), save=True)
+        return document
+
+    def delete(self, document_id):
+        """POST the removal of one attachment, as the page's script does.
+
+        Args:
+            document_id: pk of the Document to remove, valid or not.
+
+        Returns:
+            HttpResponse: what the view answered, for the caller to assert on.
+        """
+        return self.client.post(
+            reverse('quests:ajax_delete_draft_attachment', args=[document_id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_delete_draft_attachment__removes_the_file_from_the_draft(self):
+        """The student's own draft attachment goes, and the response carries the list as it now
+        stands so the page can render it without a reload."""
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 0)
+        self.assertNotIn("wrong-file", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__deletes_the_stored_file_too(self):
+        """The upload is deleted from storage, not just its row. Django has not deleted a
+        FileField's storage on row delete since 1.3, so dropping the row alone would leave the
+        file on disk with nothing in the database naming it (#2574).
+
+        The delete is registered with transaction.on_commit, so it runs only once the row is
+        really gone; captureOnCommitCallbacks runs it here, where the test's own transaction
+        would otherwise hold it forever.
+        """
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+        self.assertTrue(storage.exists(path))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.delete(self.document.id)
+
+        self.assertFalse(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__keeps_the_file_if_the_row_is_not_committed(self):
+        """A file is never destroyed while its row could still come back. The removal is
+        registered for after the commit, so a transaction that rolls back leaves the pair
+        consistent: the student keeps an attachment they can still open, rather than a row
+        pointing at a file that no longer exists and cannot be recovered."""
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+
+        # the callbacks are captured and deliberately not run, standing in for a transaction
+        # that never commits
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.delete(self.document.id)
+
+        self.assertEqual(len(callbacks), 1, "the storage delete was not deferred to the commit")
+        self.assertTrue(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__leaves_the_drafts_other_files_alone(self):
+        """Only the file named in the request goes; anything else attached to the same draft
+        stays, and comes back in the refreshed list."""
+        kept = self.attach(self.submission, "keep-this.png")
+
+        response = self.delete(self.document.id)
+
+        self.assertQuerySetEqual(self.submission.draft_comment.document_set.all(), [kept])
+        self.assertIn("keep-this", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__another_students_attachment_is_404(self):
+        """A student can only remove their own files: the document has to hang off a draft of
+        one of the requester's own submissions."""
+        someone_else = self.draft_submission(baker.make(User))
+        their_document = self.attach(someone_else, "not-yours.png")
+
+        response = self.delete(their_document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__published_attachment_is_404(self):
+        """Once the quest is submitted its files cannot be removed this way. Completing publishes
+        the draft comment and clears the field, so the document no longer hangs off any draft."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.submission.mark_completed()
+
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__attachment_on_no_comment_at_all_is_404(self):
+        """A Document with no comment belongs to no draft. Its NULL must not be matched against
+        the NULL draft_comment of the requester's own submissions, which would make every
+        commentless document theirs to delete."""
+        baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+                   semester=self.semester, draft_comment=None)
+        orphan = Document(comment=None)
+        orphan.docfile.save("orphan.png", ContentFile(b"file_content"), save=True)
+
+        response = self.delete(orphan.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=orphan.pk).exists())
+
+    def test_ajax_delete_draft_attachment__unknown_document_is_404(self):
+        """A document id that does not exist 404s rather than erroring."""
+        self.assertEqual(self.delete(0).status_code, 404)
+
+    def test_ajax_delete_draft_attachment__get_is_not_allowed(self):
+        """Removing a file is a POST. A plain GET must not delete anything, so a link followed by
+        a prefetch or a preview cannot destroy a student's upload (the mistake behind #2693)."""
+        response = self.client.get(
+            reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__non_ajax_post_is_refused(self):
+        """Only the page's own script reaches this view, matching the other draft endpoints."""
+        response = self.client.post(reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_submission__lists_each_draft_attachment_with_a_button_to_remove_it(self):
+        """The student's own submission page shows the attached files, each with the control that
+        removes it, which is what the script binds its click to."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, "wrong-file")
+        # the same bullet-list-of-links markup a posted comment's attachments use
+        self.assertContains(response, "Attached files:")
+        self.assertContains(response, 'class="file-link"')
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
+        )
+
+    def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
+        """The buttons belong to the student whose draft it is. Staff marking the submission post
+        to the approve view instead, where their own files are handled separately."""
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'class="draft-attachment-delete"')
+
+    def test_submission__staff_can_remove_files_from_a_draft_of_their_own(self):
+        """Owning the draft is the whole boundary, so a teacher working through a quest of their
+        own removes their own attachments like any other student would. Staff see the marking
+        form rather than the submit button, but the draft below it is still theirs."""
+        teacher = baker.make(User, is_staff=True)
+        their_submission = self.draft_submission(teacher)
+        their_document = self.attach(their_submission, "my-own-draft.png")
+        self.client.force_login(teacher)
+
+        response = self.client.get(their_submission.get_absolute_url())
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[their_document.id])}"',
+        )
+
+        self.assertEqual(self.delete(their_document.id).status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_save_draft__a_newly_attached_file_arrives_with_its_remove_button(self):
+        """A file stored by a draft save comes back in the refreshed list, so it can be removed
+        straight away rather than only after a reload: choosing the wrong file and saving the
+        draft is exactly when a student wants it gone."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'submission_id': self.submission.id,
+                'attachments': SimpleUploadedFile("second-file.png", b"file_content", content_type="image/png"),
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        added = self.submission.draft_comment.document_set.get(docfile__contains="second-file")
+        html = response.json()['draft_attachments_html']
+        self.assertIn("second-file", html)
+        self.assertIn(reverse('quests:ajax_delete_draft_attachment', args=[added.id]), html)
+
+    def test_ajax_save_draft__a_rejected_file_leaves_the_list_out(self):
+        """A file too big to store changes nothing about what is attached, so the response says
+        nothing about the list: replacing it with an unchanged copy would present the rejection
+        as though something had been saved."""
+        too_big = SimpleUploadedFile("huge.png", b"x" * (16777216 + 1), content_type="image/png")
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': too_big},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.json()['saved_attachments'], [])
+        self.assertIn('attachments', response.json()['file_errors'])
+        self.assertNotIn('draft_attachments_html', response.json())
+
+    def test_ajax_save_draft__a_draft_save_with_no_files_leaves_the_list_out(self):
+        """Nothing was attached, so nothing about the list changed and the response says nothing
+        about it: the page keeps what it is already showing."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'comment': "just typing"},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertNotIn('draft_attachments_html', response.json())
+
+
+class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
+    """The same file reaching the server twice must not be stored, and shown to the teacher, twice.
+
+    The page clears a file input only when a draft save comes back successfully, so a save whose
+    response the browser never saw (a dropped connection part-way through a photo upload, where
+    the server stored the file all the same) leaves that file in the input and the next autosave
+    sends it again (#2720).
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission with a draft comment and nothing attached."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = baker.make(
+            QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+            semester=self.semester, is_completed=False,
+        )
+        self.submission.draft_comment = Comment.objects.create_comment(
+            user=self.student, path=self.submission.get_absolute_url(), text="", target=None)
+        self.submission.save()
+        self.client.force_login(self.student)
+
+    def save_draft(self, upload):
+        """Autosave the draft with one chosen file, as the page's script does.
+
+        Args:
+            upload: the file to send. A fresh object each time, since a browser re-reads the
+                file from disk on each attempt rather than replaying a consumed upload.
+
+        Returns:
+            HttpResponse: what the view answered.
+        """
+        return self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': upload},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_save_draft__the_same_file_sent_twice_is_stored_once(self):
+        """A retried draft save re-sends the file still sitting in the input; the draft ends up
+        holding it once, not twice (#2720)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
+    def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
+        """Only a file the draft already holds is skipped. A student replacing their work with a
+        corrected version of the same name still gets it attached, so nothing is dropped
+        silently."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"first version", content_type="image/png"))
+        self.save_draft(SimpleUploadedFile("my-work.png", b"a longer, corrected version", content_type="image/png"))
+
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
+
+    def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
+        """Choosing a file the draft already holds and then submitting publishes one copy of it,
+        not two: the submit path attaches through the same helper the draft save uses (#2720)."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
+        """A file chosen only at submit time still publishes with the comment: skipping applies to
+        what the draft already holds, not to everything."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("only-at-submit.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)

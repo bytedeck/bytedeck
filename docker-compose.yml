@@ -46,8 +46,9 @@ services:
       - frontend-network
     # Liveness: something is listening on :8000 (uwsgi in prod, runserver in
     # dev; TCP connect covers both). The long start_period covers the
-    # migrate_schemas (+ collectstatic in prod) run before the server binds --
-    # failures during start_period don't count against the container. Shown as
+    # migrate_schemas run before the server binds, which on a cold start with
+    # migrations to apply walks every tenant schema -- failures during
+    # start_period don't count against the container. Shown as
     # (healthy)/(unhealthy) in `docker compose ps`.
     healthcheck:
       test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), timeout=5).close()"]

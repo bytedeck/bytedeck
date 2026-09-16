@@ -27,7 +27,7 @@ from taggit.models import Tag
 from library.exporter import export_campaign_and_copy_quests, export_quest_to_library
 from library.importer import import_campaign_to, import_quest_to
 from library.models import IsLibraryContentMixin
-from library.transfer import LibraryTransferError, describe_validation_error
+from library.transfer import LibraryTransferError, describe_validation_error, snapshot_quest, write_quests
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from library.tests.test_views import LibraryTenantTestCaseMixin
 from library.utils import library_schema_context
@@ -1080,6 +1080,73 @@ class LibraryTransferCollisionContractTests(LibraryTenantTestCaseMixin):
         imported = Quest.objects.all_including_archived().get(import_id=import_ids[0])
         self.assertEqual(imported.name, "Repeatable Quest")
         self.assertEqual(result.renamed_quests, [])
+
+
+class LibraryCampaignTitleDirectionTests(LibraryTenantTestCaseMixin):
+    """A campaign title already taken is renamed on the way in and refused on the way out.
+
+    `Category.title` is unique per schema, so the same collision arises in both
+    directions and gets opposite answers on purpose (#2532). Importing renames the
+    arriving copy, because the clashing title belongs to the receiving teacher and their
+    campaign should not be touched. Pushing does not, because the title is the sharer's
+    own and publishing it to every deck under a name they did not choose is not a fix;
+    the sharing view refuses instead (#2531, #2534).
+    """
+
+    def _snapshot_of_a_library_campaign(self, title):
+        """Snapshot a campaign as `write_quests` would receive it.
+
+        Args:
+            title (str): the campaign title to snapshot.
+
+        Returns:
+            dict: a `(snapshot, published, overrides)` triple's snapshot, holding one quest
+            in a campaign of that title.
+        """
+        with library_schema_context():
+            campaign = baker.make(Category, title=title, published=True)
+            quest = baker.make(Quest, name="Arriving Quest", campaign=campaign, published=True)
+            return snapshot_quest(Quest.objects.get(pk=quest.pk))
+
+    def test_write_quests__renames_a_clashing_campaign_title_when_asked_to(self):
+        """The import direction writes a second campaign under a title of its own."""
+        baker.make(Category, title="Studio Habits")
+        snapshot = self._snapshot_of_a_library_campaign("Studio Habits")
+
+        result = write_quests([(snapshot, False, None)], with_campaign=True, rename_campaign_on_clash=True)
+
+        wanted, given = result.renamed_campaign
+        self.assertEqual(wanted, "Studio Habits")
+        self.assertTrue(given.startswith("Studio Habits (Imported on "))
+        self.assertEqual(result.quests[0].campaign.title, given)
+        self.assertEqual(Category.objects.filter(title="Studio Habits").count(), 1)
+
+    def test_write_quests__refuses_a_clashing_campaign_title_by_default(self):
+        """The push direction lets the write fail, which the sharing view turns into a refusal.
+
+        Asserted through the default rather than by passing the flag, since defaulting to
+        "do not rename" is what keeps a sharer's chosen title from being changed for them.
+
+        A campaign is written before the quest row's own error handling, so this surfaces
+        as `ValidationError` rather than `LibraryTransferError`. The sharing views catch
+        both, which is why either is a refusal with a message rather than a 500 (#2534).
+        """
+        baker.make(Category, title="Studio Habits")
+        snapshot = self._snapshot_of_a_library_campaign("Studio Habits")
+
+        with self.assertRaises(ValidationError):
+            write_quests([(snapshot, False, None)], with_campaign=True)
+
+        self.assertEqual(Category.objects.filter(title="Studio Habits").count(), 1)
+
+    def test_write_quests__reports_no_rename_when_the_title_is_free(self):
+        """A campaign whose title nothing holds keeps it, and nothing is reported."""
+        snapshot = self._snapshot_of_a_library_campaign("Bench Discipline")
+
+        result = write_quests([(snapshot, False, None)], with_campaign=True, rename_campaign_on_clash=True)
+
+        self.assertIsNone(result.renamed_campaign)
+        self.assertEqual(result.quests[0].campaign.title, "Bench Discipline")
 
 
 class LibraryContentRegistrationTests(ByteDeckTenantTestCase):

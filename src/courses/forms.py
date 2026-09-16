@@ -1,4 +1,5 @@
 from django import forms
+from django.forms.formsets import DELETION_FIELD_NAME
 
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
@@ -341,7 +342,68 @@ class BaseFormSet(forms.BaseModelFormSet):
         form.fields['DELETE'].widget = forms.HiddenInput()
 
 
-ExcludedDateFormset = forms.modelformset_factory(model=ExcludedDate, form=ExcludedDateForm, formset=BaseFormSet, can_delete=True, extra=1)
+class BaseExcludedDateFormSet(BaseFormSet):
+    """Refuses a semester two excluded dates on the same day.
+
+    A date is unique per semester rather than deck-wide (#2647), and `semester` is not one of
+    these forms' fields: `ExcludedDateForm.save` attaches it. Django's own formset uniqueness
+    check only covers a constraint whose every field is on the form, so it does not see this
+    one, and two rows naming the same day would reach the database as an IntegrityError.
+
+    Comparing the rows against each other is the whole check: the view hands the formset the
+    semester's entire `excludeddate_set`, so every date it already has is a form here.
+    """
+
+    def clean(self):
+        """Fault every row naming a date an earlier row in the formset already claimed."""
+        super().clean()
+
+        claimed = set()
+        for form in self.forms:
+            # A form with no cleaned_data failed its own validation, and a blank extra row or
+            # an unparseable date leaves `date` out of it: nothing to compare either way. A row
+            # marked for deletion is on its way out, so the day it holds is free to reuse.
+            date = getattr(form, 'cleaned_data', {}).get('date')
+            if date is None or form.cleaned_data.get(DELETION_FIELD_NAME):
+                continue
+
+            if date in claimed:
+                form.add_error('date', 'This semester already excludes this date.')
+            claimed.add(date)
+
+    def save_existing_objects(self, commit=True):
+        """Save the rows the teacher removed before the rows they changed.
+
+        Django walks the rows it already had in form order, deleting or writing each as it
+        comes, and the view hands them over sorted by date. So a row edited to take a date
+        that a row further down is giving up gets written while that row still holds it, and
+        the date is unique within its semester (#2647): the write fails, and the teacher who
+        moved a mistyped holiday onto the right day and deleted the leftover row gets a 500.
+
+        Deletions first frees the day before anything moves onto it. The order is put back
+        afterwards, because it is the order the rows were validated and would be rendered in.
+
+        Args:
+            commit (bool): whether to write to the database, passed straight through.
+
+        Returns:
+            list: the saved instances, from Django's own implementation.
+        """
+        original_order = list(self.forms)
+        initial_count = self.initial_form_count()
+        # Stable, so the rows that stay keep their order and only the doomed ones move up.
+        self.forms[:initial_count] = sorted(
+            self.forms[:initial_count], key=lambda form: not self._should_delete_form(form),
+        )
+        try:
+            return super().save_existing_objects(commit=commit)
+        finally:
+            self.forms[:] = original_order
+
+
+ExcludedDateFormset = forms.modelformset_factory(
+    model=ExcludedDate, form=ExcludedDateForm, formset=BaseExcludedDateFormSet, can_delete=True, extra=1,
+)
 
 
 class BlockForm(forms.ModelForm):

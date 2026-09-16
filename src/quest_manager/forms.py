@@ -10,7 +10,7 @@ from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
 from comments.sanitize import sanitize_comment_html
-from utilities.fields import RestrictedMultiFileFormField
+from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, RestrictedMultiFileFormField
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from courses.forms import XPCourseChoiceMixin
@@ -335,9 +335,21 @@ class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
     # is worded the same here as it is when a teacher grants a badge
     course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
 
+    # The comment's attachments take web files (SVG, HTML, XML, MHTML) as well as everything
+    # else. This is the general "hand in your work" box, which whole cohorts of existing quests
+    # ask for a page or a drawing through, and refusing those types here stopped students
+    # handing that work in at all. A file question is the place to ask for one type rather than
+    # any, and that is where the narrower rule lives: its "Also allow file types that can carry
+    # a script" box is off by default, so a question asking for an image still takes only images.
+    #
+    # The cost is that an attachment here is linked at its storage URL and opens in the page, so
+    # a student can hand in a file that runs their script in the session of whoever opens it,
+    # usually their teacher. Serving these as downloads instead, the way a question's file answer
+    # already is, is the graceful version of the restriction and is tracked separately (#2726).
     attachments = RestrictedMultiFileFormField(
         required=False,
         max_upload_size=16777216,
+        script_capable_types=ALL_SCRIPT_CAPABLE_TYPES,
         label="Attach files",
         help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
     )
@@ -383,13 +395,50 @@ class BadgeModelChoiceField(BadgeLabel, forms.ModelChoiceField):
 
 
 class SubmissionQuickReplyForm(SanitizeCommentTextMixin, forms.Form):
-    comment_text = forms.CharField(label='', required=False, widget=forms.Textarea(attrs={'rows': 2}))
+    """A teacher's reply to one quest submission, rendered once per row on the approvals page."""
+
+    comment_text = forms.CharField(
+        label='', required=False,
+        # autocomplete="off" asks the browser not to remember what was typed here. Replies are
+        # written about one specific submission, so a browser refilling the box on a reload is
+        # never what a teacher wants, and the approvals list is rebuilt on every load (#2685).
+        widget=forms.Textarea(attrs={'rows': 2, 'autocomplete': 'off'}),
+    )
     # Queryset needs to be set on creation in __init__(), otherwise bad stuff happens upon initial migration
     award = BadgeModelChoiceField(queryset=None, label='Grant an Award', required=False)
 
-    def __init__(self, *args, **kwds):
+    def __init__(self, *args, award_choices=None, **kwds):
+        """Build the form, optionally reusing an award list that has already been fetched.
+
+        Args:
+            *args: positional arguments passed through to ``forms.Form``.
+            **kwds: keyword arguments passed through to ``forms.Form``.
+            award_choices: the `(value, label)` pairs to offer in the award select, from
+                `build_award_choices()`. `Badge.objects.all_manually_granted()` costs a
+                prerequisite count per badge, so a page rendering one of these per row fetches
+                the list once and hands the same pairs to every row. This sets the select's
+                options only, which is all a form being rendered needs; a form that has to
+                clean a submitted award leaves it out and gets the queryset that validates it.
+
+        Returns:
+            None.
+        """
         super().__init__(*args, **kwds)
-        self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        if award_choices is None:
+            self.fields['award'].queryset = Badge.objects.all_manually_granted()
+        else:
+            # Assigning .queryset instead would re-run the query for every row: ModelChoiceField
+            # copies what it is given, and the copy carries no result cache.
+            self.fields['award'].choices = award_choices
+
+    @classmethod
+    def build_award_choices(cls):
+        """Fetch the award select's options once, for a page that renders many of these forms.
+
+        Returns:
+            list[tuple]: `(value, label)` pairs to pass back in as `award_choices`.
+        """
+        return list(cls().fields['award'].choices)
 
 
 class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):

@@ -1231,7 +1231,22 @@ table[data-toggle="table"].bt-reveal {
     align-items: center;
     gap: 15px;
 }
-.bt-toolbar-filter label {
+/* bootstrap-table's stylesheet gives .fixed-table-toolbar a clearfix ::after. A flex container
+   counts that pseudo-element as an item, so the gap above puts 15px of empty space after the
+   last control and the row stops short of the table's right edge. Flex needs no clearfix, so
+   drop it and the controls end flush right, level with the search box on every other table.
+   Scoped under .bootstrap-table to match the specificity of the rule it overrides
+   (`.bootstrap-table .fixed-table-toolbar::after`), since that stylesheet is loaded per page
+   and so comes after this one. */
+.bootstrap-table .fixed-table-toolbar:has(.bt-toolbar-filter)::after {
+    display: none;
+}
+/* The filter's label, on either kind of toolbar: the student list drops its filter into a
+   bootstrap-table toolbar, the quest approvals put theirs in a .list-search-form, and it is
+   the same control naming the same thing, so it reads the same on both. Normal weight
+   because it labels the control beside it rather than a field being filled in. */
+.bt-toolbar-filter label,
+.list-search-form label {
     margin-right: 4px;
     font-weight: normal;
 }
@@ -1311,6 +1326,11 @@ table[data-toggle="table"].bt-reveal {
 .list-search-form {
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    /* 15px between controls, the same space .bt-toolbar-filter puts between the student
+       list's group filter and its search, so a page carrying both reads as one row rather
+       than two controls stuck together. A form holding only a search has nothing to space. */
+    gap: 15px;
     margin-bottom: 10px;
 }
 /* wide enough for the placeholder naming what the box searches, which is the only
