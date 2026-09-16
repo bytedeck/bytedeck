@@ -1591,6 +1591,14 @@ class QuestSubmission(models.Model):
         callback right away when nothing is open), and the worker then reads the XP from
         before the approval: a quest waiting on the rank the student just reached is
         computed as still locked and stays missing from their Available tab (#2722).
+
+        Args:
+            transfer (bool): True when the XP is not being granted, which is how a skipped quest
+                and a transferred one are approved: the submission is marked done without the
+                student earning anything for it.
+
+        Returns:
+            None: the submission is updated in place.
         """
         with transaction.atomic():
             self.is_completed = True  # might have been false if returned
@@ -1603,6 +1611,17 @@ class QuestSubmission(models.Model):
             self.user.profile.xp_invalidate_cache()  # recalculate XP
 
     def mark_returned(self):
+        """Send this submission back to the student for another go, and take its XP back.
+
+        The submission leaves the approved state, its XP stops counting toward the student's
+        total, and it is re-attached to the semester the student is in now.
+
+        Returns:
+            None: the submission is updated in place.
+        """
+        # Whether this return takes any XP back: only an approved submission was worth any, and
+        # that is what decides whether the available-quest cache needs rebuilding below.
+        was_approved = self.is_approved
         self.is_completed = False
         self.is_approved = False
         self.do_not_grant_xp = False
@@ -1614,14 +1633,24 @@ class QuestSubmission(models.Model):
         # happens "now", so the redo belongs to whatever semester the student is in at this point.
         from courses.models import semester_for  # locally, since courses imports this module
 
-        # One transaction for the same reason mark_approved() uses one: saving the submission
-        # queues the rebuild of this student's available-quest cache, which must not run until
-        # the XP this return takes back has been written (#2722).
+        # The rebuild is queued here rather than left to the post_save signal, which skips a
+        # submission that is not both completed and approved: a returned one is neither, so nothing
+        # else asks for it. Without it the XP comes off while the cache keeps saying the student
+        # qualifies, so a quest behind a rank they no longer hold stays in their Available tab.
+        # Only for a return that takes XP back: closing a suspended deck returns every submission
+        # still awaiting approval (tenant.notices), none of which was ever worth any XP, and a full
+        # recalculation each would be hundreds of them for nothing. One transaction for the same
+        # reason mark_approved() uses one, so the rebuild is handed over only once the XP this
+        # return takes back has been written (#2722).
+        from prerequisites.tasks import update_quest_conditions_for_user  # locally: it imports this module
+
         with transaction.atomic():
             self.semester = semester_for(self.user)
             self.full_clean()
             self.save()
             self.user.profile.xp_invalidate_cache()  # recalculate XP
+            if was_approved:
+                update_quest_conditions_for_user.apply_async(args=[self.user_id], queue='default')
 
     def is_awaiting_approval(self):
         return self.is_completed and not self.is_approved
