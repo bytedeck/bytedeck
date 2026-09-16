@@ -7452,6 +7452,26 @@ class BlockingQuestNoticeTests(ByteDeckTenantTestCase):
         self.assertContains(response, "Your other quests are on hold until you finish")
         self.assertNotContains(response, "You have no new quests available")
 
+    def test_quest_list__a_blocking_quest_carries_the_hand_icon_in_its_row(self):
+        """The row's status icons say what the quest is, and a blocking one is marked with a
+        raised hand, the same symbol the notice above the list uses, rather than a warning
+        triangle that reads as any other caution."""
+        baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        # the row's own icon markup, which the notice above the list does not use, so this
+        # cannot be satisfied by the notice's copy of the same symbol
+        self.assertContains(response, "icon-spacing fa fa-fw fa-hand-paper-o")
+        self.assertContains(response, "Blocking: all other quests are on hold until this one is finished.")
+
+    def test_quest_list__an_ordinary_quest_carries_no_hand_icon(self):
+        """Only a blocking quest is marked, so the icon means something when it is there."""
+        response = self.available_tab()
+
+        self.assertContains(response, "Ordinary quest")
+        self.assertNotContains(response, "fa-hand-paper-o")
+
     def test_quest_list__staff_see_no_notice(self):
         """Staff see every published quest rather than an availability-filtered list, so nothing
         is being held back from them and the notice would be untrue."""
