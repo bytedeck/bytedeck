@@ -407,19 +407,6 @@ class Profile(models.Model):
         self.save()
         return xp
 
-    def xp_per_course(self):
-        """This student's XP as their first course sees it.
-
-        Kept for the places that want a single representative number for a student. Each
-        registration answers for itself through CourseStudent.xp(), which is where the
-        assigned-versus-shared split lives (issue #2440).
-
-        Returns:
-            float: the first current registration's XP, or 0 when they have no course.
-        """
-        registration = self.current_courses().first()
-        return registration.xp() if registration else 0
-
     def xp_to_date(self, date):
         # TODO: Combine this with other methods?
         xp = QuestSubmission.objects.calculate_xp_to_date(self.user, date)

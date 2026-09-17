@@ -97,15 +97,17 @@
             </div>
 
             {% if courses %}
-              {% for course in courses %}
-                <div class="pull-right"> {{xp_per_course|floatformat:0}} / {{course.course.xp_for_100_percent}} XP </div>
+              {# each course's own XP, which differ when work is assigned to one of them (#2440) #}
+              {% for registration, xp in course_xp %}
+                <div class="pull-right"> {{xp|floatformat:0}} / {{registration.course.xp_for_100_percent}} XP </div>
                 <div>
-                    {{course.course}}
+                    {{registration.course}}
                 </div>
-                <div class="progress progress-xp"><!--&nbsp; {% widthratio xp_per_course 1000 100 %}&#37;-->
-                  <div class="progress-bar" role="progressbar" aria-valuenow="{{xp_per_course}}" aria-valuemin="0" aria-valuemax="1000"
-                      style="width: {% widthratio xp_per_course course.course.xp_for_100_percent 100 %}%;">
-                    <span class="sr-only">{% widthratio xp_per_course course.course.xp_for_100_percent 100 %}% Complete</span>
+                <div class="progress progress-xp">
+                  <div class="progress-bar" role="progressbar" aria-valuenow="{{xp}}" aria-valuemin="0"
+                      aria-valuemax="{{registration.course.xp_for_100_percent}}"
+                      style="width: {% widthratio xp registration.course.xp_for_100_percent 100 %}%;">
+                    <span class="sr-only">{% widthratio xp registration.course.xp_for_100_percent 100 %}% Complete</span>
                   </div>
                 </div>
               {% endfor %}

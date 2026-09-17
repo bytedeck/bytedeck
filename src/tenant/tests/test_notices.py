@@ -958,20 +958,22 @@ class SuspensionSemesterCloseTest(ByteDeckTenantTestCase):
     def test_close_semester_on_new_suspension__clamps_negative_xp_to_zero(self):
         """A student with a negative XP balance doesn't block the auto-close: the
         final XP is recorded as zero (maintainer decision, 2026-07-30)."""
-        from unittest.mock import patch
-
         from django.contrib.auth import get_user_model
         from model_bakery import baker
         from courses.models import CourseStudent
+        from courses.tests.utils import patch_registration_xp
         from siteconfig.models import SiteConfig
 
         User = get_user_model()
         baker.make(User, is_staff=True)
         student = baker.make(User)
-        registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
 
         self.set_deck(trial_end_date=TODAY - timedelta(days=GRACE_PERIOD_DAYS + 1), paid_until=None)
-        with patch('profile_manager.models.Profile.xp_per_course', return_value=-50):
+        # the archive asks for every registration's XP at once, so that is the seam to control;
+        # the patch has to be in place before the registration is saved, since saving one asks
+        # for its XP to refresh the student's mark
+        with patch_registration_xp(-50):
+            registration = baker.make(CourseStudent, user=student, semester=SiteConfig.get().active_semester)
             summary = self.close()
         self.assertIn('closed semester', summary)
         registration.refresh_from_db()
