@@ -1,3 +1,4 @@
+import math
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -2196,6 +2197,72 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         # only the viewer's own bar, which is always added into this histogram
         self.assertEqual(sum(json.loads(response.content)['data']['students']), 1)
 
+    def chart_user_bin(self, student, course=None):
+        """Ask the chart for this student and give back the bin its user marker landed in.
+
+        Args:
+            student: the student being charted.
+            course (Course): the course to chart them in, or None to ask for no course at all.
+
+        Returns:
+            int: the index of the histogram bin holding their own bar, in tens of a percent.
+        """
+        url = reverse('courses:mark_distribution_chart', args=[student.id])
+        data = {'course': course.id} if course else {}
+        response = self.client.get(url, data, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        self.assertEqual(response.status_code, 200)
+        return json.loads(response.content)['data']['user_id']
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__mark_out_the_course_the_chart_is_asked_for(self, fraction_complete):
+        """A student in two courses has a mark in each (issue #2440), and reads the chart inside
+        that course's tab (issue #2743), so the bar drawn as theirs follows the course asked
+        for rather than being their first course's mark in both."""
+        student = baker.make(User)
+        maths = baker.make(Course, xp_for_100_percent=100)
+        art = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=maths,
+            block=self.block, xp_adjustment=60,
+        )
+        baker.make(CourseStudent, user=student, semester=self.semester, course=art, block=baker.make(Block))
+
+        self.client.force_login(student)
+
+        # the adjustment belongs to the maths registration, so all 60 of their XP counts
+        # toward it: 60% of the 100 XP that course is out of, and nothing toward art
+        self.assertEqual(self.chart_user_bin(student, maths), 6)
+        self.assertEqual(self.chart_user_bin(student, art), 0)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__no_course_asked_for_stands_at_the_cached_mark(self, fraction_complete):
+        """The chart can be asked for without naming a course, which is what a page showing a
+        student who is in none does. They stand at their cached mark, the deck's one number
+        for them."""
+        stranger = baker.make(User)
+        stranger.profile.mark_cached = 45
+        stranger.profile.save()
+
+        self.client.force_login(stranger)
+
+        self.assertEqual(self.chart_user_bin(stranger), 4)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__a_course_run_on_xp_alone_has_no_mark_to_stand_at(self, fraction_complete):
+        """A course can be run on XP alone (issue #403), and has no mark at all rather than a
+        mark of zero, so there is nothing to mark out on a distribution of marks."""
+        student = baker.make(User)
+        for_joy = baker.make(Course, xp_for_100_percent=100, uses_marks=False)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=for_joy,
+            block=self.block, xp_adjustment=60,
+        )
+
+        self.client.force_login(student)
+
+        self.assertEqual(self.chart_user_bin(student, for_joy), 0)
+
     def test_histogram_values__exclude_test_users(self):
         """ test users should not show up in histogram values """
         # create test users students
@@ -2766,7 +2833,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
     def test_mark_calculations__explains_a_graded_course_when_another_is_run_on_xp_alone(self):
         """A student can hold one of each. The explanation is arithmetic ending in a percentage,
-        so it has to be about the course that has one rather than whichever comes first."""
+        so the tab for a course run on XP alone says so instead of calculating one."""
         for_joy = baker.make(Course, title='For Joy', uses_marks=False)
         baker.make(
             CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
@@ -2778,15 +2845,18 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Here is an explanation of how I calculated your mark')
-        self.assertEqual(response.context['obj'].course, self.course)
+        # the graded course is explained, the other one says why it is not
+        panes = {pane['course']: pane['uses_marks'] for pane in response.context['course_panes']}
+        self.assertTrue(panes[self.course])
+        self.assertFalse(panes[for_joy])
+        self.assertContains(response, 'runs on XP alone, so there is no percentage')
         # and the course with no mark still gets its row, saying what it is worth in XP
         self.assertContains(response, 'no percentage')
 
     def test_mark_calculations__does_not_claim_the_other_courses_are_run_on_xp_alone(self):
-        """The page names the course it is about when that is not the one listed first, which
-        happens as soon as an ungraded course sorts ahead of a graded one. It must not say
-        anything about the rest: with two graded courses and one ungraded, "your other courses
-        run on XP alone" would be wrong about one of them (issue #403)."""
+        """Each course is explained in its own tab, so nothing on the page speaks for the rest:
+        with two graded courses and one ungraded, "your other courses run on XP alone" would be
+        wrong about one of them (issue #403)."""
         # ordered by block name, so the XP-only course sorts first and the page is about another
         for_joy = baker.make(Course, title='For Joy', uses_marks=False)
         baker.make(
@@ -2805,8 +2875,11 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         # "since your other course(s) run on XP alone" was the claim; assert on its lead-in,
         # since the phrase itself also appears in a javascript comment in the chart template
         self.assertNotContains(response, 'since your other')
-        self.assertContains(response, 'one of your courses that has a mark')
-        self.assertTrue(response.context['obj'].course.uses_marks)
+        # one tab per course, each graded one carrying its own explanation
+        panes = response.context['course_panes']
+        self.assertEqual(len(panes), 3)
+        self.assertEqual(response.content.decode().count('Here is an explanation of how I calculated your mark'), 2)
+        self.assertEqual(response.content.decode().count('runs on XP alone, so there is no percentage'), 1)
 
     def test_mark_calculations__drops_the_mark_distribution_chart_with_no_marks_to_distribute(self):
         """The distribution compares a student's mark against their classmates'. A student with
@@ -2833,11 +2906,11 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         self.assertTrue(json.loads(graded.content)['uses_marks'])
         self.assertFalse(json.loads(for_joy.content)['uses_marks'])
 
-    def test_mark_calculations__reports_the_shown_courses_own_xp(self):
-        """A student in two courses is told which course the page is about and how much of their
-        XP counts toward it. Before #2440 the two courses always held the same even share, so
-        the page could talk about "per course" without naming one; now they differ, and the
-        number shown has to be the named course's own."""
+    def test_mark_calculations__reports_each_courses_own_xp(self):
+        """Every course gets a tab reporting how much of the student's XP counts toward it.
+        Before #2440 the two courses always held the same even share, so the page could talk
+        about "per course" without naming one; now they differ, and each tab has to show its
+        own course's number (#2743)."""
         art = baker.make(Course, title='Art', xp_for_100_percent=1000)
         art_registration = baker.make(
             CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
@@ -2853,14 +2926,15 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:my_marks'))
 
-        shown = response.context['obj']
         self.assertContains(response, 'registered in 2 courses')
-        self.assertContains(response, str(shown.course))
-        self.assertEqual(response.context['xp_per_course'], shown.xp())
-        # the whole point: the two courses no longer hold the same number
+        panes = {pane['course']: pane['xp'] for pane in response.context['course_panes']}
+        # the whole point: the two courses no longer hold the same number, and the page shows
+        # each of them its own rather than one of them twice
         self.assertNotEqual(self.stu_course.xp(), art_registration.xp())
-        self.assertEqual(self.stu_course.xp(), 50)
-        self.assertEqual(art_registration.xp(), 0)
+        self.assertEqual(panes[self.course], 50)
+        self.assertEqual(panes[art], 0)
+        self.assertContains(response, str(self.course))
+        self.assertContains(response, str(art))
 
     @patch('courses.models.Semester.fraction_complete', return_value=0.5)
     def test_mark_calculations__table_lists_each_course_its_own_mark(self, fraction_complete):
@@ -2888,7 +2962,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
     def test_mark_calculations__offers_a_chart_per_course_to_a_multicourse_student(self):
         """Each course holds its own XP, so each gets its own progress chart, chosen with a
-        button per course (issue #2453)."""
+        tab per course (issue #2453, #2743)."""
         art = baker.make(Course, title='Art', xp_for_100_percent=1000)
         baker.make(
             CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
@@ -2898,7 +2972,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertTrue(response.context['chart_per_course'])
+        self.assertEqual(len(response.context['course_panes']), 2)
         self.assertContains(response, f'data-course="{self.course.id}"')
         self.assertContains(response, f'data-course="{art.id}"')
 
@@ -2926,7 +3000,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertTrue(response.context['chart_per_course'])
+        self.assertEqual(len(response.context['course_panes']), 2)
         self.assertContains(response, f'data-course="{self.course.id}"')
         self.assertContains(response, f'data-course="{art.id}"')
         # the courses really do still differ, which is why one chart would not do
@@ -2934,15 +3008,90 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         self.assertEqual(art_registration.xp(), 0)
 
     def test_mark_calculations__offers_one_chart_to_a_student_in_one_course(self):
-        """One course means one chart, with no button bar to choose between."""
+        """One course means one chart and one set of calculations, with no tabs to choose
+        between: there is nothing to choose."""
         self.client.force_login(self.student)
 
         response = self.client.get(reverse('courses:my_marks'))
 
-        self.assertFalse(response.context['chart_per_course'])
-        # the chart's JS names the selector on every page, so the buttons' own attribute is
-        # what says whether any were rendered
-        self.assertNotContains(response, 'data-course=')
+        self.assertEqual(len(response.context['course_panes']), 1)
+        # the one course still gets its pane, which is what the charts are drawn from; what a
+        # single course does not get is a strip of tabs over it
+        self.assertContains(response, f'data-course="{self.course.id}"', count=1)
+        self.assertNotContains(response, 'nav-tabs course-tabs')
+
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__works_the_mark_ranges_out_per_course(self, fraction_complete):
+        """The XP a grade calls for is a fraction of that course's own total, so a student in two
+        courses out of different amounts has a different number to reach in each (#2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        # the deck ships with mark ranges of its own; this is about which course's total each
+        # one is worked out against, so there is one to follow
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Pass', minimum_mark=50, active=True)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        ranges = {pane['course']: pane['markranges'] for pane in response.context['course_panes']}
+        # half of the course's total, halfway through the semester
+        self.assertEqual([markrange.xp_needed for markrange in ranges[art]], [250])
+        self.assertEqual(
+            [markrange.xp_needed for markrange in ranges[self.course]],
+            [math.floor(self.course.xp_for_100_percent * 0.5 * 0.5)],
+        )
+
+    def test_mark_calculations__a_courses_own_mark_range_stays_in_its_own_tab(self):
+        """A mark range can be assigned to particular courses. With each course explained in its
+        own tab, a range belonging to one of them has no business in another's (#2743)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        MarkRange.objects.all().delete()
+        everywhere = baker.make(MarkRange, name='Pass', minimum_mark=50, active=True)
+        art_only = baker.make(MarkRange, name='Art Only', minimum_mark=80, active=True)
+        art_only.courses.add(art)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        names = {
+            pane['course']: [markrange.name for markrange in pane['markranges']]
+            for pane in response.context['course_panes']
+        }
+        self.assertEqual(names[art], [everywhere.name, art_only.name])
+        self.assertEqual(names[self.course], [everywhere.name])
+
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    @patch('courses.models.Semester.fraction_complete', return_value=0.5)
+    def test_mark_calculations__averages_each_courses_own_xp_per_day(self, fraction_complete, days_so_far):
+        """The page shows the average beside the XP counting toward that course, and says it
+        divided one by the days so far. A deck-wide average would not be that sum (#2440)."""
+        art = baker.make(Course, title='Art', xp_for_100_percent=1000)
+        baker.make(
+            CourseStudent, user=self.student, semester=SiteConfig.get().active_semester,
+            block=baker.make(Block), course=art,
+        )
+        quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
+        baker.make(
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+        self.student.profile.xp_invalidate_cache()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        averages = {pane['course']: pane['xp_per_day_ave'] for pane in response.context['course_panes']}
+        # all 50 XP counts toward one course, so the other one has averaged nothing
+        self.assertEqual(averages[self.course], 5)
+        self.assertEqual(averages[art], 0)
 
     def _restore_course_choice(self):
         """Put the shared deck's per-course XP setting back on, for the test that turns it off."""

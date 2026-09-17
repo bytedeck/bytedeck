@@ -5,6 +5,11 @@
   var userLabel = "{{user.username}}'s mark range";
   {% endif %}
 
+  // the chart being drawn, kept so it can be thrown away when the reader switches course:
+  // chart.js leaves the old chart listening on the canvas otherwise, and its tooltips come
+  // up over the new one
+  var MarkChart = null;
+
   function InstantiateGraph(binLabels, studentData, userIndex) {
     var COLORS = {
       students: {bg: 'rgba(128, 128, 128, 0.3)', border: 'rgba(0, 0, 0, 0.2)'},
@@ -29,7 +34,10 @@
 
     // generate chart
     var MCtx = document.getElementById("chart-mark-distribution").getContext('2d');
-    var MarkChart = new Chart(MCtx, {
+    if (MarkChart) {
+      MarkChart.destroy();
+    }
+    MarkChart = new Chart(MCtx, {
         type: 'bar',
         data: {
           labels: binLabels,
@@ -105,10 +113,13 @@
 
   }
 
-  window.addEventListener("load", function() {
+  function update_mark_distribution(course_id) {
     $.ajax({
       url: "{% url 'courses:mark_distribution_chart' user.id %}",
       type: "GET",
+      // which course the reader is being shown as standing in: they have a mark in each of
+      // their courses, so which bar is theirs depends on the one they are reading (#2743)
+      data: course_id ? {course: course_id} : {},
       dataType:"json",
       success: function(json) {
 
@@ -120,7 +131,7 @@
 
       }
     });
-  }, false);
+  }
 
 
 </script>

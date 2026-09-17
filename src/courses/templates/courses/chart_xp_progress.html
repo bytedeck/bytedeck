@@ -2,7 +2,7 @@
 
   /*jshint esversion: 6 */
 
-  var max_xp = {{ courses.first.course.xp_for_100_percent }};
+  var max_xp = {{ course_panes.0.course.xp_for_100_percent }};
 
   var ctx = document.getElementById("myChart");
 
@@ -83,25 +83,27 @@
   // };
 
 
-  var markranges = []
-  {% for mr in markranges %}
-  var border;
-  {% if request.user.profile.dark_theme %}
-  border = "{{ mr.color_dark }}";
-  {% else %}
-  border = "{{ mr.color_light }}";
-  {% endif %}
-
-  markranges.push({
-    type: 'line',
-    label: '{{ mr.name }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
-    mark: {{ mr.minimum_mark }},
-    pointRadius: 0,
-    backgroundColor: "rgb(0,0,0,0)",
-    borderColor: border,
-    data: [{x: 0, y: 0}],
-  });
+  // A mark range can be assigned to particular courses, so which grade boundaries to draw is a
+  // question about the course being charted, not about the student (#2743). Each course's own
+  // lines are held here and swapped in when the course tab changes.
+  var markranges_by_course = {};
+  {% for pane in course_panes %}
+  markranges_by_course["{{ pane.course.id }}"] = [
+    {% for mr in pane.markranges %}
+    {
+      type: 'line',
+      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
+      mark: {{ mr.minimum_mark }},
+      pointRadius: 0,
+      backgroundColor: "rgb(0,0,0,0)",
+      borderColor: "{% if request.user.profile.dark_theme %}{{ mr.color_dark }}{% else %}{{ mr.color_light }}{% endif %}",
+      data: [{x: 0, y: 0}],
+    },
+    {% endfor %}
+  ];
   {% endfor %}
+
+  var markranges = markranges_by_course["{{ course_panes.0.course.id }}"] || [];
 
   var xp_datasets = [
       XPData,
@@ -287,6 +289,9 @@
       success: function(data){
         XPData.data = data.xp_data;
 
+        // the lines this course is heading for, since a mark range can belong to one course
+        markranges = markranges_by_course[course_id] || markranges;
+
         // courses can be out of different amounts, so the axis and the mark lines are
         // rescaled to whichever course is being shown
         if (data.xp_for_100_percent) {
@@ -333,20 +338,5 @@
   }, function() {
     forceWindowScrollY = -1;
   });
-
-  $(document).ready(function() {
-    var $courseButtons = $('.xp-chart-courses button');
-
-    // no buttons means a single course (or a deck that shares XP evenly), and the one chart
-    // is the student's whole progress
-    ajax_update_plot($courseButtons.filter('.active').data('course'));
-
-    $courseButtons.on('click', function() {
-      $courseButtons.removeClass('active');
-      $(this).addClass('active');
-      ajax_update_plot($(this).data('course'));
-    });
-  });
-
 
 </script>
