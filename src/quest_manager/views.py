@@ -984,20 +984,14 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
     # to the student, or they have one in progress, the tab shows only blocking quests, so every
     # other quest they qualify for is missing from it (QuestQuerySet.block_if_needed). Naming the
     # quest responsible turns that into an instruction, instead of a tab that looks like it has
-    # lost their quests: those quests stay startable from the quest map meanwhile (#2729).
+    # lost their quests (#2729).
     #
-    # available_quests is already past block_if_needed, which returns only blocking quests when
-    # one is in play, so a blocking quest still in it is one that is holding the others back.
     # Staff see every published quest, unfiltered, and a student with no current course goes
-    # through get_available_without_course(), which does not block either.
+    # through get_available_without_course(), which does not block, so nothing is being held back
+    # in either case and the notice would be untrue.
     blocking_quests = []
     if not request.user.is_staff and request.user.profile.has_current_course:
-        blocking_quests = list(available_quests.filter(blocking=True))
-        blocking_quests += [
-            submission.quest for submission in
-            QuestSubmission.objects.all_not_completed(request.user)
-            .filter(quest__blocking=True).select_related('quest')
-        ]
+        blocking_quests = list(Quest.objects.get_blocking_quests(request.user))
 
     context = {
         "heading": "Quests",
@@ -1188,8 +1182,15 @@ def detail(request, quest_id):
 
     q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
 
+    blocking_quests = []
     if q.is_available(request.user) or q.is_editable(request.user):
         available = True
+    elif q.is_available(request.user, blocking=False):
+        # The only thing standing between this student and this quest is a blocking quest, which
+        # is also why it is missing from their Available tab. Naming it beats both the
+        # prerequisites line, which would be untrue here, and their own older submission (#2729).
+        available = False
+        blocking_quests = list(q.blocked_by(request.user))
     else:
         # Display submission if quest is not available
         submissions = QuestSubmission.objects.all_for_user_quest(
@@ -1206,6 +1207,7 @@ def detail(request, quest_id):
         "heading": q.name,
         "q": q,
         "available": available,
+        "blocking_quests": blocking_quests,
         "maps": CytoScape.objects.get_related_maps(q),
     }
 
@@ -2524,6 +2526,22 @@ def start(request, quest_id):
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
+        if quest.is_available(request.user, blocking=False):
+            # They qualify for this quest, and a blocking quest is the only thing holding it
+            # back, which is the same reason it is not in their Available tab. Say which quest is
+            # in the way and put them on its page, rather than answering as though this quest did
+            # not exist (#2729).
+            blocking_quests = quest.blocked_by(request.user)
+            messages.info(
+                request,
+                format_html(
+                    "<strong>{}</strong> is on hold until you finish {}.",
+                    quest.name,
+                    ", ".join(blocker.name for blocker in blocking_quests),
+                ),
+            )
+            return redirect(quest)
+
         # check if it's not available because they already have a submission in progress
         sub = (
             QuestSubmission.objects.all_not_completed(request.user)

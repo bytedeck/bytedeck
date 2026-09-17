@@ -15,8 +15,11 @@ class Command(BaseCommand):
 
     * starting goes through ``Quest.is_available()``, which works the prerequisites out live
     * the tab goes through ``Quest.objects.get_available()``, which reads the *cached*
-      prerequisite result and then applies three more filters the other path never sees:
-      repeats and cooldown, blocking quests, and the quests the student has hidden
+      prerequisite result and then applies two more filters the other path never sees:
+      repeats and cooldown, and the quests the student has hidden
+
+    Blocking quests are read from one place by both (``QuestManager.get_blocking_quests``), so a
+    quest a blocking quest holds out of the tab cannot be started either.
 
     So this walks the tab's filters in order, says which one dropped the quest, and compares
     the cached prerequisite answer against a live one so a stale cache is named as such
@@ -309,20 +312,20 @@ class Command(BaseCommand):
                 "  --rebuild, and check that celery is running, since nothing else repairs it."
             )
         if stage == "not crowded out by a blocking quest":
-            blocking = (
-                Quest.objects.get_active().get_conditions_met(user)
-                .not_in_progress_completed_or_cooldown(user).filter(blocking=True)
+            in_progress_ids = set(
+                QuestSubmission.objects.all_not_completed(user=user)
+                .filter(quest__blocking=True).values_list('quest_id', flat=True)
             )
-            in_progress = QuestSubmission.objects.all_not_completed(user=user).filter(quest__blocking=True)
-            open_to_them = (
-                [f'"{quest.name}" (id {quest.id})' for quest in blocking]
-                + [f'"{sub.quest.name}" (id {sub.quest_id}, in progress)' for sub in in_progress]
-            )
+            open_to_them = [
+                f'"{quest.name}" (id {quest.id}{", in progress" if quest.id in in_progress_ids else ""})'
+                for quest in Quest.objects.get_blocking_quests(user)
+            ]
             names = ", ".join(open_to_them) or "one of them"
             return (
                 f"  A blocking quest is open to this student: {names}. While one is, the tab\n"
                 "  shows only blocking quests and hides every other quest the student could\n"
-                "  otherwise do, which is why they can still start this one from the map."
+                "  otherwise do. Starting one is refused for the same reason, so this quest is\n"
+                "  out of their reach until the blocking quest is finished."
             )
         if stage == "not hidden by the student":
             return (
