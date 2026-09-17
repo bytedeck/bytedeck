@@ -980,10 +980,30 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         user=request.user, is_approved=False, is_completed=True
     ).exists()
 
+    # The quests holding every other quest out of this tab. While a blocking quest is available
+    # to the student, or they have one in progress, the tab shows only blocking quests, so every
+    # other quest they qualify for is missing from it (QuestQuerySet.block_if_needed). Naming the
+    # quest responsible turns that into an instruction, instead of a tab that looks like it has
+    # lost their quests: those quests stay startable from the quest map meanwhile (#2729).
+    #
+    # available_quests is already past block_if_needed, which returns only blocking quests when
+    # one is in play, so a blocking quest still in it is one that is holding the others back.
+    # Staff see every published quest, unfiltered, and a student with no current course goes
+    # through get_available_without_course(), which does not block either.
+    blocking_quests = []
+    if not request.user.is_staff and request.user.profile.has_current_course:
+        blocking_quests = list(available_quests.filter(blocking=True))
+        blocking_quests += [
+            submission.quest for submission in
+            QuestSubmission.objects.all_not_completed(request.user)
+            .filter(quest__blocking=True).select_related('quest')
+        ]
+
     context = {
         "heading": "Quests",
         "quests": quests,
         "awaiting_approval": awaiting_approval,
+        "blocking_quests": blocking_quests,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
         "num_available": available_quests_count,

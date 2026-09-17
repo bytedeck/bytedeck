@@ -98,7 +98,7 @@ back to its original look.
         {% else %}
           <p><a href="{% url 'courses:create' %}" class="btn btn-info" role="button">Join a Course</a></p>
         {% endif %}
-      {% elif not available_quests.exists %}
+      {% elif not available_quests.exists and not blocking_quests %}
         {% if in_progress_submissions.exists %}
           <p>You have no new quests available, but you can find some quests you have already started in your 'In Progress' tab above.</p>
         {% elif request.user.profile.num_hidden_quests > 0 %}
@@ -108,6 +108,19 @@ back to its original look.
         {% else %}
           <p>There are currently no new quest available to you!</p>
         {% endif %}
+      {% endif %}
+
+      {% comment %} While a blocking quest is available to this student, or they have one in
+         progress, this tab shows only blocking quests, so every other quest they qualify for is
+         missing from it. Saying so turns that into an instruction instead of a tab that looks
+         like it has lost their quests (#2729). {% endcomment %}
+      {% if blocking_quests %}
+        <div class="alert alert-info">
+          <i class="fa fa-fw fa-hand-paper-o"></i>
+          Your other quests are on hold until you finish
+          {% for q in blocking_quests %}<a href="{{ q.get_absolute_url }}">{{ q.name }}</a>{% if not forloop.last %}{% if forloop.revcounter == 2 %} and {% else %}, {% endif %}{% endif %}{% endfor %}.
+          They come back to this tab as soon as {{ blocking_quests|pluralize:"it is,they are" }} done.
+        </div>
       {% endif %}
 
       {% comment %} Repeatable quests you've completed that are waiting out their cooldown (#57).
