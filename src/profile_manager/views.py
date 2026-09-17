@@ -432,6 +432,20 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         return redirect('quests:quests')
 
     def get_context_data(self, **kwargs):
+        """Everything the profile page is written from, for the profile named in the URL.
+
+        Granting any badges the student has newly earned is part of building it: the page is
+        where a student looks to see what they have, so it is checked as the page is drawn.
+
+        Args:
+            **kwargs: passed through to DetailView, which puts the profile itself in as
+                `object`.
+
+        Returns:
+            dict: the template context, adding their current and past registrations, the XP
+            counting toward each current one, their submissions (in progress, completed, and
+            completed in a past semester), their badges and their tags.
+        """
         # Call the base implementation first to get a context
         profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super().get_context_data(**kwargs)
@@ -439,7 +453,7 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         # in_progress_submissions = QuestSubmission.objects.all_not_completed(request.user)
         # completed_submissions = QuestSubmission.objects.all_completed(request.user)
 
-        context['courses'] = CourseStudent.objects.all_for_user_active(profile.user, True)
+        context['courses'] = list(CourseStudent.objects.all_for_user_active(profile.user, True))
         context['courses_old'] = CourseStudent.objects.all_for_user_active(profile.user, False)
         context['in_progress_submissions'] = QuestSubmission.objects.all_not_completed(profile.user, blocking=True)
         context['completed_submissions'] = QuestSubmission.objects.all_completed(profile.user)
@@ -448,7 +462,11 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         # template. Call that side effect directly and skip building the list.
         BadgeAssertion.objects.check_for_new_assertions(profile.user)
         context['completed_past_submissions'] = QuestSubmission.objects.all_completed_past(profile.user)
-        context['xp_per_course'] = profile.xp_per_course()
+        # a progress bar per course, each with the XP that counts toward that one: a student in
+        # several courses has a different amount in each, since work can be assigned to one of
+        # them (issue #2440). Divided once for all of their registrations rather than once per
+        # bar, because the division is a single question about the student (issue #2459).
+        context['course_xp'] = CourseStudent.objects.xp_across(profile.user, context['courses'], profile=profile)
         context['badge_assertions_dict_items'] = BadgeAssertion.objects.badge_assertions_dict_items(profile.user)
 
         tags_xp = get_user_tags_and_xp(profile.user)

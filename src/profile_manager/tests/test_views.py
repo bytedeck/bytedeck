@@ -11,7 +11,7 @@ from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
-from courses.models import Block, CourseStudent, Semester
+from courses.models import Block, Course, CourseStudent, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications.models import Notification
 from siteconfig.models import SiteConfig
@@ -48,6 +48,31 @@ class ProfileViewTests(ByteDeckTenantTestCase):
     def tearDown(self):
         """Clear the cache after each test."""
         cache.clear()
+
+    def test_profile_detail__each_course_shows_its_own_xp(self):
+        """A student in several courses has a different amount of XP counting toward each, since
+        work can be assigned to one of them (issue #2440), so each course's progress bar is drawn
+        from that course's own XP rather than one number repeated down the page."""
+        maths = baker.make(Course, xp_for_100_percent=100)
+        art = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=self.test_student1, semester=self.active_sem, course=maths,
+            block=baker.make(Block), xp_adjustment=60,
+        )
+        baker.make(
+            CourseStudent, user=self.test_student1, semester=self.active_sem, course=art,
+            block=baker.make(Block),
+        )
+        self.client.force_login(self.test_student1)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+
+        # the adjustment belongs to the maths registration, so all 60 of their XP counts toward it
+        xp_by_course = {registration.course: xp for registration, xp in response.context['course_xp']}
+        self.assertEqual(xp_by_course[maths], 60)
+        self.assertEqual(xp_by_course[art], 0)
+        self.assertContains(response, '> 60 / 100 XP <')
+        self.assertContains(response, '> 0 / 100 XP <')
 
     def test_profile_pages__redirect_anonymous_to_login(self):
         """ If not logged in then all views should redirect to home page  """
