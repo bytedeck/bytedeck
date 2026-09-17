@@ -1346,9 +1346,9 @@ class BlockingQuestRuleTests(ByteDeckTenantTestCase):
     """One rule for what a blocking quest holds back, read by the Available tab and by starting one.
 
     A quest marked ``blocking`` takes every other quest out of a student's Available tab while it
-    is open to them. Starting a quest is a different code path, and it used to ignore blocking
-    altogether, so a quest missing from the tab still opened from the quest map and started
-    normally. Both read ``QuestManager.get_blocking_quests()`` now, so they agree (#2729).
+    is open to them, and starting a quest, which is a different code path, has to answer the same
+    way. Both read ``QuestManager.get_blocking_quests()``, so a quest missing from the tab does
+    not open from the quest map either (#2729).
     """
 
     def setUp(self):

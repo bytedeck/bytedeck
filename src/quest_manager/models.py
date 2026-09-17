@@ -708,6 +708,11 @@ class QuestManager(models.Manager):
         the way, so a student who hides a blocking quest still has to finish it, and still needs
         to be told which quest that is.
 
+        An archived or unpublished quest is out of the way even to a student still holding it in
+        progress, because ``all_not_completed`` drops its submission. ``block_if_needed`` reads
+        that same call for the tab, so counting one here would put a quest back in the tab that
+        its own page then refused.
+
         Args:
             user (User): the student to answer for.
 
@@ -716,7 +721,7 @@ class QuestManager(models.Manager):
         """
         available = self.get_available(user, remove_hidden=False, blocking=False).filter(blocking=True)
         in_progress = QuestSubmission.objects.all_not_completed(user).filter(quest__blocking=True)
-        return self.all_including_archived().filter(
+        return self.get_queryset().filter(
             Q(pk__in=available.values_list('pk', flat=True))
             | Q(pk__in=in_progress.values_list('quest_id', flat=True))
         )

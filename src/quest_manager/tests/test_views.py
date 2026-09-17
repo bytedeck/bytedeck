@@ -7371,7 +7371,7 @@ class BlockingQuestNoticeTests(ByteDeckTenantTestCase):
     """The Available tab saying which quest is holding the others back.
 
     While a blocking quest is open to a student the tab shows only blocking quests, so every
-    other quest they qualify for is missing from it. Without a word on the page that reads as the
+    other quest they qualify for is missing from it. Without a word on the page, that reads as the
     tab losing their quests (#2729).
     """
 
@@ -7496,9 +7496,10 @@ class BlockingQuestNoticeTests(ByteDeckTenantTestCase):
 class BlockingQuestStartTests(ByteDeckTenantTestCase):
     """A quest a blocking quest is holding back cannot be started, and its page says why.
 
-    The Available tab and the quest's own page used to disagree: a quest the tab left out was
-    still handed over by the quest map and started normally, which is what a stale prerequisite
-    cache looks like from the outside. Both refuse it now, and name the quest in the way (#2729).
+    The Available tab and the quest's own page answer from one rule, so a quest the tab leaves out
+    is not handed over by the quest map either. A list that looks empty next to quests that still
+    open is what a stale prerequisite cache looks like from the outside, so both refuse it, and
+    both name the quest in the way (#2729).
     """
 
     def setUp(self):
