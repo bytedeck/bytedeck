@@ -1172,12 +1172,22 @@ def ajax_submission_info(request, submission_id=None):
 @non_public_only_view
 @login_required
 def detail(request, quest_id):
-    """
-    Display the quest if it is available to the user or if user is staff, otherwise check for a completed submission
-    and display that.  If no submission, and not available, then display a restricted version.
-    :param request:
-    :param quest_id:
-    :return:
+    """Display one quest, in whichever of its four shapes the student has earned.
+
+    Available to them, or theirs to edit, and they get the quest with its buttons. Held back by a
+    blocking quest, and they get it with the On Hold panel naming the quest in the way, since they
+    do qualify for this one (#2729). Otherwise, their own latest submission if they have one, and
+    failing that a preview of the quest saying they do not meet its prerequisites yet.
+
+    Args:
+        request (HttpRequest): the request, whose user decides which shape they get.
+        quest_id (int): the quest to show, archived ones included so an old link still resolves.
+
+    Returns:
+        HttpResponse: the rendered quest, or a redirect to the student's own submission of it.
+
+    Raises:
+        Http404: no quest carries this id.
     """
 
     q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
@@ -2523,6 +2533,25 @@ def complete(request, submission_id):
 @non_public_only_view
 @login_required
 def start(request, quest_id):
+    """Start this quest for the signed-in student, or say why they cannot.
+
+    Three things stand in the way, and each one answers differently. A blocking quest holding this
+    one back sends them to the quest's page with the quest responsible named, since they qualify
+    for this one and only have to wait (#2729). A submission of it already in progress sends them
+    to that submission. Anything else means they have no business starting it at all, which is
+    what a hand-edited quest id in the url looks like.
+
+    Args:
+        request (HttpRequest): the request, whose user the quest is started for.
+        quest_id (int): the quest to start.
+
+    Returns:
+        HttpResponseRedirect: to the new submission, or to whichever of the two explanations
+        above applies.
+
+    Raises:
+        Http404: no quest carries this id, or it is not this student's to start.
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):
