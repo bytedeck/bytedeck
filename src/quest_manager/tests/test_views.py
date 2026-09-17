@@ -7655,3 +7655,120 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
 
         published = Comment.objects.all_with_target_object(self.submission)
         self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+
+class SubmissionXPCourseTests(ByteDeckTenantTestCase):
+    """Where a submission's XP counts, said wherever that submission is shown.
+
+    A student in several courses is asked which of them a quest should count toward when they
+    hand it in (issue #2440). The answer was not shown anywhere afterwards, so neither they nor
+    the teacher approving it could see where the XP was going (#2742).
+    """
+
+    def setUp(self):
+        """A student in two courses, with one quest handed in and waiting for a teacher."""
+        self.teacher = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.semester = SiteConfig.get().active_semester
+        self.pottery = baker.make('courses.Course', title='Pottery')
+        self.welding = baker.make('courses.Course', title='Welding')
+        for course in (self.pottery, self.welding):
+            baker.make('courses.CourseStudent', user=self.student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        self.submission = baker.make(
+            QuestSubmission, user=self.student, quest=baker.make(Quest),
+            semester=self.semester, is_completed=True,
+        )
+
+    def submission_page(self):
+        """Load the submission's own page, which is both the student's view and the teacher's.
+
+        Returns:
+            HttpResponse: the rendered submission page.
+        """
+        return self.client.get(reverse('quests:submission', args=[self.submission.id]))
+
+    def approvals_row(self):
+        """Load the content the approvals page drops into a submission's row when it is opened.
+
+        Returns:
+            HttpResponse: the JSON carrying that row's rendered html.
+        """
+        return self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_submission__names_the_course_the_xp_counts_toward(self):
+        """The student who chose it can see what they chose, on the submission they chose it for."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.student)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_submission__names_the_course_for_the_teacher_approving_it(self):
+        """The teacher deciding whether to approve it sees which course the XP lands in, which
+        is the thing they cannot otherwise find out (#2742)."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.teacher)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_submission__says_when_the_xp_is_split_evenly(self):
+        """Nobody answering the question is itself an answer: the XP is shared between their
+        courses, which is worth saying rather than leaving to be guessed at."""
+        self.client.force_login(self.student)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP split evenly between all 2 courses')
+
+    def test_submission__says_nothing_to_a_student_in_one_course(self):
+        """All of a single-course student's XP counts toward it, so there is nothing to say and
+        the line would be noise on every deck that has no multicourse students at all."""
+        only_pottery = baker.make(User)
+        baker.make('courses.CourseStudent', user=only_pottery, course=self.pottery,
+                   block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=only_pottery, quest=baker.make(Quest),
+                                semester=self.semester, is_completed=True)
+        self.client.force_login(only_pottery)
+
+        response = self.client.get(reverse('quests:submission', args=[submission.id]))
+
+        self.assertNotContains(response, 'XP counts toward')
+        self.assertNotContains(response, 'XP split evenly')
+
+    def test_ajax_approval_info__names_the_course_the_xp_counts_toward(self):
+        """The approvals page is where a teacher works through submissions, so the row they open
+        to read the work says where its XP is going too."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.teacher)
+
+        response = self.approvals_row()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_ajax_submission_info__names_the_course_the_xp_counts_toward(self):
+        """The student's own list of submissions says it as well, so they can check what they
+        chose without opening each quest."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
