@@ -177,8 +177,8 @@ class QuestAvailabilityCommandTest(ByteDeckTenantTestCase):
         self.assertIn("Quest.is_available(): True", output)
 
     def test_quest_availability__names_the_blocking_quest_that_hides_everything_else(self):
-        """One blocking quest empties the tab of every other quest the student could do, while
-        leaving them all startable from the map, so the command names the quest responsible."""
+        """One blocking quest empties the tab of every other quest the student could do, so the
+        command names the quest responsible."""
         blocker = baker.make(Quest, name="Read this first", blocking=True)
 
         output = self.run_command("test.student", "--quest", str(self.quest.id))
@@ -268,11 +268,22 @@ class QuestAvailabilityCommandTest(ByteDeckTenantTestCase):
 
     def test_quest_availability__with_no_quest_lists_what_is_startable_but_unlisted(self):
         """The question a teacher arrives with: which quests can this student open from the map
-        and not see in their list, and why each one."""
-        baker.make(Quest, name="Read this first", blocking=True)
+        and not see in their list, and why each one. Hiding a quest is one of the ways: it leaves
+        the tab and stays startable by URL."""
+        self.student.profile.hidden_quests = str(self.quest.id)
+        self.student.profile.save()
 
         output = self.run_command("test.student")
 
         self.assertIn("Startable but MISSING from the tab", output)
         self.assertIn(self.quest.name, output)
-        self.assertIn("not crowded out by a blocking quest", output)
+        self.assertIn("not hidden by the student", output)
+
+    def test_quest_availability__a_blocking_quest_leaves_nothing_startable_but_unlisted(self):
+        """A quest a blocking quest keeps out of the tab cannot be started either, so it is not
+        one of the quests that open from the map while missing from the list (#2729)."""
+        baker.make(Quest, name="Read this first", blocking=True)
+
+        output = self.run_command("test.student")
+
+        self.assertIn("Nothing is startable but missing from the tab", output)

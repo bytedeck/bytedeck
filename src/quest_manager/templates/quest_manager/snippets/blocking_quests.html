@@ -1,0 +1,11 @@
+{% comment %}
+  The blocking quests holding a student's other quests back, as a linked list that closes a
+  sentence: "Quest A.", "Quest A and Quest B.", "Quest A, Quest B and Quest C."
+
+  The full stop belongs to the list so that it can sit at the end of a sentence without the line
+  break after this template putting a space in front of it.
+
+  Rendered from `blocking_quests`, by the Available tab and by the page of a quest being held
+  back, so that both name the quests responsible the same way (#2729).
+{% endcomment %}
+{% for quest in blocking_quests %}<a href="{{ quest.get_absolute_url }}">{{ quest.name }}</a>{% if forloop.last %}.{% elif forloop.revcounter == 2 %} and {% else %}, {% endif %}{% endfor %}
