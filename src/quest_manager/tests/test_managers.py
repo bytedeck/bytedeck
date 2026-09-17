@@ -1340,3 +1340,134 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         # now delete the custom_xp quest (submission is still there though!) Shouldn't break!
         quest_5xp_custom.delete()
         self.assertEqual(QuestSubmission.objects.calculate_xp(self.student), 10)
+
+
+class BlockingQuestRuleTests(ByteDeckTenantTestCase):
+    """One rule for what a blocking quest holds back, read by the Available tab and by starting one.
+
+    A quest marked ``blocking`` takes every other quest out of a student's Available tab while it
+    is open to them, and starting a quest, which is a different code path, has to answer the same
+    way. Both read ``QuestManager.get_blocking_quests()``, so a quest missing from the tab does
+    not open from the quest map either (#2729).
+    """
+
+    def setUp(self):
+        """A student registered this semester, with one ordinary quest available to them."""
+        self.student = baker.make(User)
+        self.teacher = baker.make(User, is_staff=True)
+        baker.make(CourseStudent, user=self.student, course=baker.make(Course),
+                   semester=SiteConfig.get().active_semester)
+        self.quest = baker.make(Quest, name='Ordinary quest')
+
+    def test_get_blocking_quests__names_an_available_blocking_quest(self):
+        """A blocking quest the student qualifies for is what is holding their other quests back."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__names_one_the_student_has_in_progress(self):
+        """A blocking quest already started holds the others back too, and is the harsher case:
+        it is not in the tab either, so nothing else names it."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__includes_a_blocking_quest_the_student_hid(self):
+        """Hiding a blocking quest takes it out of the tab but not out of the way, so it is still
+        named: otherwise the student is told nothing while every quest stays on hold."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        self.student.profile.hidden_quests = str(blocker.id)
+        self.student.profile.save()
+
+        self.assertListEqual(list(Quest.objects.get_blocking_quests(self.student)), [blocker])
+
+    def test_get_blocking_quests__empty_when_nothing_is_blocking(self):
+        """The ordinary case, where the student's quests are their own to pick from."""
+        self.assertFalse(Quest.objects.get_blocking_quests(self.student).exists())
+
+    def test_get_available__blocking_false_keeps_the_crowded_out_quests(self):
+        """The parameter answers as if nothing were blocking, which is how the blocking quests
+        themselves are found without the rule hiding its own inputs."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        unblocked = set(Quest.objects.get_available(self.student, blocking=False).values_list('name', flat=True))
+        self.assertIn('Ordinary quest', unblocked)
+        self.assertIn('Read this first', unblocked)
+
+        # the default crowds out everything the blocking quest is holding back, deck's own
+        # starter quest included
+        blocked = set(Quest.objects.get_available(self.student).values_list('name', flat=True))
+        self.assertSetEqual(blocked, {'Read this first'})
+
+    def test_is_available__false_while_a_blocking_quest_is_open_to_them(self):
+        """The quest is out of the tab, so it must be out of reach from the quest map as well."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.is_available(self.student))
+
+    def test_is_available__false_while_a_blocking_quest_is_in_progress(self):
+        """Starting the blocking quest does not release the others: it holds them until it is done."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        self.assertFalse(self.quest.is_available(self.student))
+
+    def test_is_available__true_for_the_blocking_quest_itself(self):
+        """Blocking quests do not hold each other back, which is what leaves the student something
+        to do: the tab shows them for the same reason."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        another = baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertTrue(blocker.is_available(self.student))
+        self.assertTrue(another.is_available(self.student))
+
+    def test_is_available__blocking_false_answers_as_if_nothing_blocked(self):
+        """What tells a quest held back by another one apart from a quest whose own prerequisites
+        are not met, which is how the quest's page knows which of the two to say."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.is_available(self.student))
+        self.assertTrue(self.quest.is_available(self.student, blocking=False))
+
+    def test_is_available__true_again_once_the_blocking_quest_is_done(self):
+        """The hold is temporary, and lifts on its own the moment the blocking quest is finished."""
+        blocker = baker.make(Quest, name='Finish this first', blocking=True)
+        submission = QuestSubmission.objects.create_submission(self.student, blocker)
+        self.assertFalse(self.quest.is_available(self.student))
+
+        submission.mark_completed()
+        submission.mark_approved()
+
+        self.assertTrue(self.quest.is_available(self.student))
+
+    def test_is_available__a_student_with_no_current_course_is_not_blocked(self):
+        """Without a course the tab is built by get_available_without_course(), which does not
+        block, so nothing should be held back from them here either."""
+        no_course_student = baker.make(User)
+        quest = baker.make(Quest, name='Open to anyone', available_outside_course=True)
+        baker.make(Quest, name='Read this first', blocking=True, available_outside_course=True)
+
+        self.assertTrue(quest.is_available(no_course_student))
+
+    def test_blocked_by__names_the_quests_in_the_way(self):
+        """Having the quests, rather than a yes or no, is what lets the tab and the quest's own
+        page say which quest the student has to finish."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        another = baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertSetEqual(set(self.quest.blocked_by(self.student)), {blocker, another})
+
+    def test_blocked_by__empty_for_a_blocking_quest(self):
+        """A blocking quest is not held back by the rule it is the cause of."""
+        blocker = baker.make(Quest, name='Read this first', blocking=True)
+        baker.make(Quest, name='Then read this', blocking=True)
+
+        self.assertFalse(blocker.blocked_by(self.student).exists())
+
+    def test_blocked_by__empty_for_staff(self):
+        """Staff see every published quest in their tab whatever is blocking, so holding one back
+        from them would disagree with the list they are looking at."""
+        baker.make(Quest, name='Read this first', blocking=True)
+
+        self.assertFalse(self.quest.blocked_by(self.teacher).exists())

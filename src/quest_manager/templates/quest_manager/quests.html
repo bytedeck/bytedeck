@@ -118,7 +118,7 @@ back to its original look.
         <div class="alert alert-info">
           <i class="fa fa-fw fa-hand-paper-o"></i>
           Your other quests are on hold until you finish
-          {% for q in blocking_quests %}<a href="{{ q.get_absolute_url }}">{{ q.name }}</a>{% if not forloop.last %}{% if forloop.revcounter == 2 %} and {% else %}, {% endif %}{% endif %}{% endfor %}.
+          {% include "quest_manager/snippets/blocking_quests.html" %}
           They come back to this tab as soon as {{ blocking_quests|pluralize:"it is,they are" }} done.
         </div>
       {% endif %}
