@@ -2235,18 +2235,44 @@ class TestAjax_MarkDistributionChart(ByteDeckTenantTestCase):
         self.assertEqual(self.chart_user_bin(student, maths), 6)
         self.assertEqual(self.chart_user_bin(student, art), 0)
 
+    def registered_with_a_stale_cached_mark(self):
+        """A student whose cached mark says something other than the live mark of their course.
+
+        Returns:
+            tuple: the student and their course. They are 60% in it on the numbers, while the
+            mark cached on their profile, which is what their classmates' bars are drawn from,
+            says 30%.
+        """
+        student = baker.make(User)
+        course = baker.make(Course, xp_for_100_percent=100)
+        baker.make(
+            CourseStudent, user=student, semester=self.semester, course=course,
+            block=self.block, xp_adjustment=60,
+        )
+        student.profile.mark_cached = 30
+        student.profile.save()
+        return student, course
+
     @patch('courses.models.Semester.fraction_complete', return_value=1)
     def test_histogram_values__no_course_asked_for_stands_at_the_cached_mark(self, fraction_complete):
-        """The chart can be asked for without naming a course, which is what a page showing a
-        student who is in none does. They stand at their cached mark, the deck's one number
-        for them."""
-        stranger = baker.make(User)
-        stranger.profile.mark_cached = 45
-        stranger.profile.save()
+        """A request naming no course is answered with the deck's one number for the student,
+        the mark cached on their profile, rather than with whichever of their courses comes
+        first: it is what every other bar on the chart is drawn from."""
+        student, course = self.registered_with_a_stale_cached_mark()
+        self.client.force_login(student)
 
-        self.client.force_login(stranger)
+        self.assertEqual(self.chart_user_bin(student), 3)
+        # their course's own mark is only read when the request asks for that course
+        self.assertEqual(self.chart_user_bin(student, course), 6)
 
-        self.assertEqual(self.chart_user_bin(stranger), 4)
+    @patch('courses.models.Semester.fraction_complete', return_value=1)
+    def test_histogram_values__a_course_the_student_is_not_in_stands_at_the_cached_mark(self, fraction_complete):
+        """A course the student is not registered in has no mark of theirs to read, so they
+        stand at their cached mark rather than at a course they were not asked about."""
+        student, _ = self.registered_with_a_stale_cached_mark()
+        self.client.force_login(student)
+
+        self.assertEqual(self.chart_user_bin(student, baker.make(Course, xp_for_100_percent=100)), 3)
 
     @patch('courses.models.Semester.fraction_complete', return_value=1)
     def test_histogram_values__a_course_run_on_xp_alone_has_no_mark_to_stand_at(self, fraction_complete):

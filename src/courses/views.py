@@ -1321,11 +1321,20 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, Vie
 
         Returns:
             float: the named course's mark, or this student's cached mark when the request
-            names no course they are registered in. 0 when there is no mark either way: a
-            course run on XP alone has none (issue #403), and neither has a student whose
-            mark has never been calculated.
+            names no course they are registered in, which is the number their classmates are
+            drawn from too. 0 when there is no mark either way: a course run on XP alone has
+            none (issue #403), and neither has a student whose mark has never been calculated.
         """
-        registrations, charted = _registrations_to_chart(self.user, self.request.GET.get('course'))
+        named = self.request.GET.get('course')
+        registrations = list(CourseStudent.objects.current_courses(self.user))
+        # the registration the request named, and only that one: a request naming nothing, or
+        # a course this student is not in, is answered with the deck's own number for them
+        # rather than with whichever course happens to come first
+        charted = next(
+            (index for index, registration in enumerate(registrations)
+             if registration.course_id and str(registration.course_id) == named),
+            None,
+        )
         if charted is None:
             return self.user.profile.mark_cached or 0
 

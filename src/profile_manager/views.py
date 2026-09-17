@@ -432,6 +432,20 @@ class ProfileDetail(NonPublicOnlyViewMixin, DetailView):
         return redirect('quests:quests')
 
     def get_context_data(self, **kwargs):
+        """Everything the profile page is written from, for the profile named in the URL.
+
+        Granting any badges the student has newly earned is part of building it: the page is
+        where a student looks to see what they have, so it is checked as the page is drawn.
+
+        Args:
+            **kwargs: passed through to DetailView, which puts the profile itself in as
+                `object`.
+
+        Returns:
+            dict: the template context, adding their current and past registrations, the XP
+            counting toward each current one, their submissions (in progress, completed, and
+            completed in a past semester), their badges and their tags.
+        """
         # Call the base implementation first to get a context
         profile = get_object_or_404(Profile, pk=self.kwargs.get('pk'))
         context = super().get_context_data(**kwargs)

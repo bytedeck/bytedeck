@@ -272,10 +272,17 @@
       options: options,
   });
 
+  // the course the chart is currently being asked about. A reader switching tabs quickly
+  // has more than one request in the air, and they can come back in any order, so each
+  // answer is checked against this before it is drawn.
+  var plotting_course;
+
   function ajax_update_plot(course_id) {
 
     // user in this view is the request.user, if a student,
     // or the user matching the id in the url
+
+    plotting_course = course_id;
 
     $.ajax({
       type: "POST",
@@ -287,6 +294,10 @@
         course: course_id,
       },
       success: function(data){
+        if (course_id !== plotting_course) {
+          return;  // a later course was asked for while this one was on its way back
+        }
+
         XPData.data = data.xp_data;
 
         // the lines this course is heading for, since a mark range can belong to one course

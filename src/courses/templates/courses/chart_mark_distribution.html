@@ -113,7 +113,12 @@
 
   }
 
+  // as in the XP progress chart: the course being asked about, so an answer that arrives
+  // after the reader has moved to another tab is dropped rather than drawn
+  var distributed_course;
+
   function update_mark_distribution(course_id) {
+    distributed_course = course_id;
     $.ajax({
       url: "{% url 'courses:mark_distribution_chart' user.id %}",
       type: "GET",
@@ -122,6 +127,9 @@
       data: course_id ? {course: course_id} : {},
       dataType:"json",
       success: function(json) {
+        if (course_id !== distributed_course) {
+          return;  // a later course was asked for while this one was on its way back
+        }
 
         InstantiateGraph(
           json.labels,
