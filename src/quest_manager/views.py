@@ -35,7 +35,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
-from comments.models import Comment, Document
+from comments.models import Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -980,10 +980,30 @@ def quest_list(request, quest_id=None, template="quest_manager/quests.html"):
         user=request.user, is_approved=False, is_completed=True
     ).exists()
 
+    # The quests holding every other quest out of this tab. While a blocking quest is available
+    # to the student, or they have one in progress, the tab shows only blocking quests, so every
+    # other quest they qualify for is missing from it (QuestQuerySet.block_if_needed). Naming the
+    # quest responsible turns that into an instruction, instead of a tab that looks like it has
+    # lost their quests: those quests stay startable from the quest map meanwhile (#2729).
+    #
+    # available_quests is already past block_if_needed, which returns only blocking quests when
+    # one is in play, so a blocking quest still in it is one that is holding the others back.
+    # Staff see every published quest, unfiltered, and a student with no current course goes
+    # through get_available_without_course(), which does not block either.
+    blocking_quests = []
+    if not request.user.is_staff and request.user.profile.has_current_course:
+        blocking_quests = list(available_quests.filter(blocking=True))
+        blocking_quests += [
+            submission.quest for submission in
+            QuestSubmission.objects.all_not_completed(request.user)
+            .filter(quest__blocking=True).select_related('quest')
+        ]
+
     context = {
         "heading": "Quests",
         "quests": quests,
         "awaiting_approval": awaiting_approval,
+        "blocking_quests": blocking_quests,
         "available_quests": available_quests,
         "remove_hidden": remove_hidden,
         "num_available": available_quests_count,
@@ -2353,7 +2373,13 @@ def complete(request, submission_id):
     draft_text = f"<p>{comment_text}</p>"
     if draft_comment:
         # update all comment fields
-        draft_comment.text = draft_text
+        #
+        # Through clean_html(), which is what Comment.objects.create_comment() runs on the text
+        # it is handed in the else branch below. A published comment has to be cleaned the same
+        # way whichever branch produced it: clean_html() is what turns a URL the student typed
+        # out into a link and gives every link in the comment target="_blank", so following one
+        # opens a new tab instead of navigating away from the page (#2711).
+        draft_comment.text = clean_html(draft_text)
         draft_comment.target_object_id = submission.id
         draft_comment.target_object = submission
         # reset timestamp needed otherwise it will use the draft comment's timestamp from when the submission was started
@@ -2371,12 +2397,12 @@ def complete(request, submission_id):
             target=submission,
         )
 
-    # Create Document objects and connect them to the comment for uploaded files
+    # Attach the POST's uploaded files to the comment being published. Through the same helper
+    # the draft save and the keep-on-failed-validation path use, so a file already stored with
+    # the draft is not stored a second time when the student chooses it again on the way out
+    # (#2720), and there is one place that decides what a comment's attachments are.
     if request.FILES:
-        for afile in request.FILES.getlist("attachments"):
-            newdoc = Document(docfile=afile, comment=draft_comment)
-            newdoc.full_clean()
-            newdoc.save()
+        save_draft_attachments(form, draft_comment)
 
     affected_users = []
 
@@ -2645,6 +2671,91 @@ def skipped(request, quest_id):
     return skip(request, submission.id)
 
 
+def render_draft_attachments(submission):
+    """Render the list of files stored with a submission's draft comment.
+
+    The page shows this list, and the draft-save and delete endpoints hand it back so the
+    page can replace it without a reload. Rendering it in one place keeps the markup the
+    student sees after an attach or a removal identical to what a fresh page would render.
+
+    Args:
+        submission: the QuestSubmission whose draft attachments to list.
+
+    Returns:
+        str: the rendered HTML, empty when the draft holds no files.
+    """
+    draft_comment = submission.draft_comment
+    return render_to_string(
+        "quest_manager/snippets/draft_attachments.html",
+        {"draft_documents": draft_comment.document_set.all() if draft_comment else []},
+    )
+
+
+@xml_http_request_required
+@non_public_only_view
+@login_required
+@require_POST
+def ajax_delete_draft_attachment(request, document_id):
+    """Remove one file the requesting student attached to their own draft submission.
+
+    A file input cannot unchoose a single file, and choosing again adds to what is stored
+    rather than replacing it, so a wrong upload would otherwise stay on the submission with
+    no way to take it back.
+
+    Only a file on a draft reaches here. The lookup requires the document's comment to be the
+    `draft_comment` of one of the requesting user's submissions, which is true only while the
+    comment is unpublished: completing a submission posts its draft comment and clears the
+    field, so an attachment the teacher can already see is a 404, as is any other student's.
+
+    Args:
+        request: the POST, sent by the submission page as XHR.
+        document_id: pk of the Document to remove.
+
+    Returns:
+        JsonResponse: `draft_attachments_html`, the list as it now stands, for the page to
+        render in place of the old one.
+
+    Raises:
+        Http404: for a document that is not an attachment on one of this user's drafts.
+    """
+    document = get_object_or_404(Document, pk=document_id)
+    # The whole check and removal run under a lock on the submission row, because the student
+    # can submit the quest at the same moment: completing publishes the draft comment and
+    # clears draft_comment with an UPDATE of this row, which the lock makes wait. So either
+    # this request holds the lock and the comment is still a draft for as long as it takes to
+    # remove the file, or the completion got there first and the lookup below finds nothing.
+    with transaction.atomic():
+        # A document with no comment at all belongs to no draft. Checked before the query,
+        # which would otherwise match this user's submissions that have no draft comment
+        # either, since both sides would be NULL.
+        submission = None
+        if document.comment_id is not None:
+            # include_related=False because the manager otherwise joins the nullable relations
+            # it usually needs for templates, and Postgres refuses FOR UPDATE on the nullable
+            # side of an outer join. Nothing here reads them, and the row to lock is this one.
+            submission = QuestSubmission.objects.get_queryset(
+                include_related=False
+            ).select_for_update().filter(
+                draft_comment_id=document.comment_id, user=request.user
+            ).first()
+        if submission is None:
+            raise Http404("No such file on one of your drafts.")
+
+        # The row goes inside the transaction, the stored file only once that commits.
+        # Storage is not transactional: deleting the file inline would destroy it before
+        # this block is done, so anything below rolling the transaction back (rendering the
+        # list still runs a query) would restore the row pointing at a file that is gone,
+        # which the student cannot recover. Deleting after the commit can at worst leave the
+        # file behind, which is the orphan in #2574 rather than a broken attachment.
+        #
+        # It has to be deleted explicitly either way: Django has not deleted a FileField's
+        # storage on row delete since 1.3.
+        storage, file_name = document.docfile.storage, document.docfile.name
+        document.delete()
+        transaction.on_commit(lambda: storage.delete(file_name))
+        return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
+
+
 @xml_http_request_required
 @non_public_only_view
 @login_required
@@ -2826,6 +2937,11 @@ def ajax_save_draft(request):
             response_data["saved_answer_files"] = saved_answer_files
             response_data["saved_attachments"] = saved_attachments
             response_data["file_errors"] = file_errors
+            if saved_attachments:
+                # The stored list has grown, so hand back the whole of it: the page renders it
+                # in place of the old one, and the files just saved arrive with the control
+                # that removes them instead of waiting for a reload to become removable.
+                response_data["draft_attachments_html"] = render_draft_attachments(sub)
 
         return HttpResponse(json.dumps(response_data), content_type="application/json")
 

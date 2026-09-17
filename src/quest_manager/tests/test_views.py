@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
 from django.test import SimpleTestCase
@@ -35,7 +36,7 @@ from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
-from comments.models import Comment
+from comments.models import Comment, Document
 from profile_manager.models import Profile
 from djcytoscape.models import CytoScape
 from library.utils import library_schema_context
@@ -1150,7 +1151,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(baker.make(Quest, xp=5), {'attachments': upload})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__strips_an_event_handler_when_the_student_enters_the_xp(self):
@@ -1164,7 +1165,7 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         stored, page = self.submit_with_payload(quest, {'xp_requested': 5})
 
         self.assertNotIn('onerror', stored)
-        self.assertIn('<img src="x">', stored)
+        self.assertIn('<img src="x"', stored)
         self.assertNotIn('onerror="alert(1)"', page)
 
     def test_complete__keeps_the_formatting_a_comment_is_allowed(self):
@@ -1330,6 +1331,95 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(sub.draft_comment)
         response = self.client.post(reverse('quests:complete', args=[sub.id]), data={'complete': True})
         self.assertEqual(response.status_code, 404)
+
+    def submitted_comment_text(self, sub, comment_text):
+        """Submit a quest with this comment text and return the comment as it was stored.
+
+        Args:
+            sub: the in-progress submission to complete, with its draft comment set.
+            comment_text: what the student typed into the comment box.
+
+        Returns:
+            str: the published comment's HTML, as a teacher would be served it.
+        """
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[sub.id]),
+                data={'complete': True, 'comment_text': comment_text},
+            )
+        sub.refresh_from_db()
+        return sub.get_comments().first().text
+
+    def test_complete__links_in_a_submitted_comment_open_in_a_new_tab(self):
+        """A link a student puts in their submission comment is stored with target="_blank", so
+        the teacher reading it keeps the submission page they are marking from (#2711).
+
+        Every other comment on the site gets this from Comment.objects.create_comment(), which
+        runs clean_html(); the submission path writes its draft comment directly and has to run
+        the same cleanup itself.
+        """
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>See <a href="https://example.com/docs">my docs</a></p>')
+
+        self.assertIn('<a href="https://example.com/docs" target="_blank">', text)
+
+    def test_complete__a_url_typed_into_a_submitted_comment_becomes_a_link(self):
+        """A student who types a URL out rather than using the editor's link button still gets a
+        link, and one that opens in a new tab. Left as plain text the teacher cannot click it at
+        all, which no amount of client-side patching can fix (#2711)."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>my work is at https://example.org/bare</p>')
+
+        self.assertIn('href="https://example.org/bare"', text)
+        self.assertIn('target="_blank"', text)
+
+    def test_complete__cleans_the_comment_the_same_way_with_and_without_a_draft(self):
+        """The view's two branches have to agree. Completing a quest writes the comment straight
+        onto the draft; commenting on an already-completed one has no draft left, so it goes
+        through create_comment() instead. The same typing must not survive differently (#2711).
+        """
+        typed = '<p>a link https://example.org/bare</p>'
+
+        with_draft = self.submitted_comment_text(self.draft_submission(), typed)
+
+        # the quick-reply case: completed, and mark_completed() has cleared the draft comment
+        commented_on = self.draft_submission()
+        commented_on.is_completed = True
+        commented_on.draft_comment = None
+        commented_on.save()
+        self.client.post(
+            reverse('quests:complete', args=[commented_on.id]),
+            data={'comment': True, 'comment_text': typed},
+        )
+        without_draft = commented_on.get_comments().first().text
+
+        self.assertIn('target="_blank"', without_draft)
+        self.assertEqual(with_draft, without_draft)
+
+    def test_complete__strips_script_from_a_submitted_comment(self):
+        """clean_html() also drops <script>, so restoring it closes the same gap for the marking
+        page, where the comment is rendered with |safe."""
+        sub = self.draft_submission()
+
+        text = self.submitted_comment_text(sub, '<p>hi</p><script>alert(1)</script>')
+
+        self.assertNotIn('<script>', text)
+
+    def draft_submission(self):
+        """Return a fresh in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Returns:
+            QuestSubmission: ready for the logged-in student to complete, with a draft comment.
+        """
+        sub = baker.make(QuestSubmission, user=self.test_student, quest=baker.make(Quest, xp=5),
+                         semester=self.semester, is_completed=False)
+        sub.draft_comment = Comment.objects.create_comment(
+            user=self.test_student, path=sub.get_absolute_url(), text="", target=None)
+        sub.save()
+        return sub
 
     def custom_xp_submission(self):
         """Return a fresh in-progress submission (with its draft comment) of a quest whose XP the
@@ -7015,3 +7105,482 @@ class QuestArchiveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Quest.objects.all_including_archived().filter(id=nonexistent_id).exists())
         url = reverse('quests:unarchive', args=[nonexistent_id])
         self.assertEqual(self.client.post(url).status_code, 404)
+
+
+class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
+    """Removing a file a student attached to their own draft submission.
+
+    A file input cannot unchoose one file, and choosing again adds to what is stored rather
+    than replacing it, so without this a student who attaches the wrong file submits it.
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission holding one attached file."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = self.draft_submission(self.student)
+        self.document = self.attach(self.submission, "wrong-file.png")
+        self.client.force_login(self.student)
+
+    def draft_submission(self, user):
+        """Start a new in-progress submission, on a quest of its own so two of them never
+        collide on the one-in-progress-per-quest-per-semester constraint (#1345).
+
+        Args:
+            user: the student the submission belongs to.
+
+        Returns:
+            QuestSubmission: the submission, with its draft comment already set.
+        """
+        submission = baker.make(QuestSubmission, user=user, quest=baker.make(Quest, xp=5),
+                                semester=self.semester, is_completed=False)
+        submission.draft_comment = Comment.objects.create_comment(
+            user=user, path=submission.get_absolute_url(), text="", target=None)
+        submission.save()
+        return submission
+
+    def attach(self, submission, name):
+        """Attach a file to a submission's draft comment, as a draft save or a failed submit
+        would.
+
+        Args:
+            submission: the submission whose draft comment holds the file.
+            name: the file name to store it under.
+
+        Returns:
+            Document: the row holding the stored file.
+        """
+        document = Document(comment=submission.draft_comment)
+        document.docfile.save(name, ContentFile(b"file_content"), save=True)
+        return document
+
+    def delete(self, document_id):
+        """POST the removal of one attachment, as the page's script does.
+
+        Args:
+            document_id: pk of the Document to remove, valid or not.
+
+        Returns:
+            HttpResponse: what the view answered, for the caller to assert on.
+        """
+        return self.client.post(
+            reverse('quests:ajax_delete_draft_attachment', args=[document_id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_delete_draft_attachment__removes_the_file_from_the_draft(self):
+        """The student's own draft attachment goes, and the response carries the list as it now
+        stands so the page can render it without a reload."""
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=self.document.pk).exists())
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 0)
+        self.assertNotIn("wrong-file", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__deletes_the_stored_file_too(self):
+        """The upload is deleted from storage, not just its row. Django has not deleted a
+        FileField's storage on row delete since 1.3, so dropping the row alone would leave the
+        file on disk with nothing in the database naming it (#2574).
+
+        The delete is registered with transaction.on_commit, so it runs only once the row is
+        really gone; captureOnCommitCallbacks runs it here, where the test's own transaction
+        would otherwise hold it forever.
+        """
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+        self.assertTrue(storage.exists(path))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.delete(self.document.id)
+
+        self.assertFalse(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__keeps_the_file_if_the_row_is_not_committed(self):
+        """A file is never destroyed while its row could still come back. The removal is
+        registered for after the commit, so a transaction that rolls back leaves the pair
+        consistent: the student keeps an attachment they can still open, rather than a row
+        pointing at a file that no longer exists and cannot be recovered."""
+        storage, path = self.document.docfile.storage, self.document.docfile.name
+
+        # the callbacks are captured and deliberately not run, standing in for a transaction
+        # that never commits
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.delete(self.document.id)
+
+        self.assertEqual(len(callbacks), 1, "the storage delete was not deferred to the commit")
+        self.assertTrue(storage.exists(path))
+
+    def test_ajax_delete_draft_attachment__leaves_the_drafts_other_files_alone(self):
+        """Only the file named in the request goes; anything else attached to the same draft
+        stays, and comes back in the refreshed list."""
+        kept = self.attach(self.submission, "keep-this.png")
+
+        response = self.delete(self.document.id)
+
+        self.assertQuerySetEqual(self.submission.draft_comment.document_set.all(), [kept])
+        self.assertIn("keep-this", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__another_students_attachment_is_404(self):
+        """A student can only remove their own files: the document has to hang off a draft of
+        one of the requester's own submissions."""
+        someone_else = self.draft_submission(baker.make(User))
+        their_document = self.attach(someone_else, "not-yours.png")
+
+        response = self.delete(their_document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__published_attachment_is_404(self):
+        """Once the quest is submitted its files cannot be removed this way. Completing publishes
+        the draft comment and clears the field, so the document no longer hangs off any draft."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.submission.mark_completed()
+
+        response = self.delete(self.document.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__attachment_on_no_comment_at_all_is_404(self):
+        """A Document with no comment belongs to no draft. Its NULL must not be matched against
+        the NULL draft_comment of the requester's own submissions, which would make every
+        commentless document theirs to delete."""
+        baker.make(QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+                   semester=self.semester, draft_comment=None)
+        orphan = Document(comment=None)
+        orphan.docfile.save("orphan.png", ContentFile(b"file_content"), save=True)
+
+        response = self.delete(orphan.id)
+
+        self.assertEqual(response.status_code, 404)
+        self.assertTrue(Document.objects.filter(pk=orphan.pk).exists())
+
+    def test_ajax_delete_draft_attachment__unknown_document_is_404(self):
+        """A document id that does not exist 404s rather than erroring."""
+        self.assertEqual(self.delete(0).status_code, 404)
+
+    def test_ajax_delete_draft_attachment__get_is_not_allowed(self):
+        """Removing a file is a POST. A plain GET must not delete anything, so a link followed by
+        a prefetch or a preview cannot destroy a student's upload (the mistake behind #2693)."""
+        response = self.client.get(
+            reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_ajax_delete_draft_attachment__non_ajax_post_is_refused(self):
+        """Only the page's own script reaches this view, matching the other draft endpoints."""
+        response = self.client.post(reverse('quests:ajax_delete_draft_attachment', args=[self.document.id]))
+
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(Document.objects.filter(pk=self.document.pk).exists())
+
+    def test_submission__lists_each_draft_attachment_with_a_button_to_remove_it(self):
+        """The student's own submission page shows the attached files, each with the control that
+        removes it, which is what the script binds its click to."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, "wrong-file")
+        # the same bullet-list-of-links markup a posted comment's attachments use
+        self.assertContains(response, "Attached files:")
+        self.assertContains(response, 'class="file-link"')
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
+        )
+
+    def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
+        """The buttons belong to the student whose draft it is. Staff marking the submission post
+        to the approve view instead, where their own files are handled separately."""
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'class="draft-attachment-delete"')
+
+    def test_submission__staff_can_remove_files_from_a_draft_of_their_own(self):
+        """Owning the draft is the whole boundary, so a teacher working through a quest of their
+        own removes their own attachments like any other student would. Staff see the marking
+        form rather than the submit button, but the draft below it is still theirs."""
+        teacher = baker.make(User, is_staff=True)
+        their_submission = self.draft_submission(teacher)
+        their_document = self.attach(their_submission, "my-own-draft.png")
+        self.client.force_login(teacher)
+
+        response = self.client.get(their_submission.get_absolute_url())
+        self.assertContains(
+            response,
+            f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[their_document.id])}"',
+        )
+
+        self.assertEqual(self.delete(their_document.id).status_code, 200)
+        self.assertFalse(Document.objects.filter(pk=their_document.pk).exists())
+
+    def test_ajax_save_draft__a_newly_attached_file_arrives_with_its_remove_button(self):
+        """A file stored by a draft save comes back in the refreshed list, so it can be removed
+        straight away rather than only after a reload: choosing the wrong file and saving the
+        draft is exactly when a student wants it gone."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={
+                'submission_id': self.submission.id,
+                'attachments': SimpleUploadedFile("second-file.png", b"file_content", content_type="image/png"),
+            },
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        added = self.submission.draft_comment.document_set.get(docfile__contains="second-file")
+        html = response.json()['draft_attachments_html']
+        self.assertIn("second-file", html)
+        self.assertIn(reverse('quests:ajax_delete_draft_attachment', args=[added.id]), html)
+
+    def test_ajax_save_draft__a_rejected_file_leaves_the_list_out(self):
+        """A file too big to store changes nothing about what is attached, so the response says
+        nothing about the list: replacing it with an unchanged copy would present the rejection
+        as though something had been saved."""
+        too_big = SimpleUploadedFile("huge.png", b"x" * (16777216 + 1), content_type="image/png")
+
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': too_big},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.json()['saved_attachments'], [])
+        self.assertIn('attachments', response.json()['file_errors'])
+        self.assertNotIn('draft_attachments_html', response.json())
+
+    def test_ajax_save_draft__a_draft_save_with_no_files_leaves_the_list_out(self):
+        """Nothing was attached, so nothing about the list changed and the response says nothing
+        about it: the page keeps what it is already showing."""
+        response = self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'comment': "just typing"},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertNotIn('draft_attachments_html', response.json())
+
+
+class BlockingQuestNoticeTests(ByteDeckTenantTestCase):
+    """The Available tab saying which quest is holding the others back.
+
+    While a blocking quest is open to a student the tab shows only blocking quests, so every
+    other quest they qualify for is missing from it while staying startable from the quest map.
+    Without a word on the page that reads as the tab losing their quests (#2729).
+    """
+
+    def setUp(self):
+        """A student registered this semester with one ordinary quest available to them."""
+        self.teacher = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        baker.make('courses.CourseStudent', user=self.student,
+                   course=baker.make('courses.Course'), semester=SiteConfig.get().active_semester)
+        self.quest = baker.make(Quest, name="Ordinary quest", blocking=False)
+        self.client.force_login(self.student)
+
+    def available_tab(self):
+        """Load the Available tab as the signed-in user.
+
+        Returns:
+            HttpResponse: the rendered quest list.
+        """
+        return self.client.get(reverse('quests:quests'))
+
+    def test_quest_list__no_notice_when_nothing_is_blocking(self):
+        """The ordinary tab says nothing about holds, so the notice cannot become wallpaper."""
+        response = self.available_tab()
+
+        self.assertContains(response, "Ordinary quest")
+        self.assertNotContains(response, "Your other quests are on hold")
+
+    def test_quest_list__names_the_blocking_quest_that_is_available(self):
+        """A blocking quest available to the student takes every other quest out of the tab, so
+        the tab names it and links to it."""
+        blocker = baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertContains(response, blocker.get_absolute_url())
+        self.assertContains(response, "Read this first")
+        self.assertNotContains(response, "Ordinary quest")  # the quest the block is hiding
+
+    def test_quest_list__names_a_blocking_quest_the_student_has_in_progress(self):
+        """A blocking quest already started blocks the tab the same way, and is the harsher case:
+        it is not in the tab either, so without the notice the tab is simply empty."""
+        blocker = baker.make(Quest, name="Finish this first", blocking=True)
+        QuestSubmission.objects.create_submission(self.student, blocker)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertContains(response, "Finish this first")
+
+    def test_quest_list__names_every_blocking_quest(self):
+        """Two of them are both named, so finishing one does not leave the student wondering why
+        their quests are still missing."""
+        baker.make(Quest, name="Read this first", blocking=True)
+        baker.make(Quest, name="Then read this", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Read this first")
+        self.assertContains(response, "Then read this")
+        self.assertContains(response, "they are done")
+
+    def test_quest_list__reads_as_one_quest_when_only_one_blocks(self):
+        """One blocking quest is spoken of in the singular."""
+        baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        self.assertContains(response, "it is done")
+
+    def test_quest_list__the_generic_empty_message_gives_way_to_the_notice(self):
+        """A blocking quest in progress empties the tab, and the notice explains it, so the
+        generic "no new quests available" line is not shown alongside saying something else."""
+        QuestSubmission.objects.create_submission(self.student, baker.make(Quest, blocking=True))
+
+        response = self.available_tab()
+
+        self.assertContains(response, "Your other quests are on hold until you finish")
+        self.assertNotContains(response, "You have no new quests available")
+
+    def test_quest_list__a_blocking_quest_carries_the_hand_icon_in_its_row(self):
+        """The row's status icons say what the quest is, and a blocking one is marked with a
+        raised hand, the same symbol the notice above the list uses, rather than a warning
+        triangle that reads as any other caution."""
+        baker.make(Quest, name="Read this first", blocking=True)
+
+        response = self.available_tab()
+
+        # the row's own icon markup, which the notice above the list does not use, so this
+        # cannot be satisfied by the notice's copy of the same symbol
+        self.assertContains(response, "icon-spacing fa fa-fw fa-hand-paper-o")
+        self.assertContains(response, "Blocking: all other quests are on hold until this one is finished.")
+
+    def test_quest_list__an_ordinary_quest_carries_no_hand_icon(self):
+        """Only a blocking quest is marked, so the icon means something when it is there."""
+        response = self.available_tab()
+
+        self.assertContains(response, "Ordinary quest")
+        self.assertNotContains(response, "fa-hand-paper-o")
+
+    def test_quest_list__staff_see_no_notice(self):
+        """Staff see every published quest rather than an availability-filtered list, so nothing
+        is being held back from them and the notice would be untrue."""
+        baker.make(Quest, name="Read this first", blocking=True)
+        self.client.force_login(self.teacher)
+
+        response = self.available_tab()
+
+        self.assertNotContains(response, "Your other quests are on hold")
+
+    def test_quest_list__a_student_with_no_current_course_sees_no_notice(self):
+        """Without a course the tab is built by get_available_without_course(), which does not
+        block at all, so nothing is being held back."""
+        baker.make(Quest, name="Read this first", blocking=True, available_outside_course=True)
+        self.client.force_login(baker.make(User))
+
+        response = self.available_tab()
+
+        self.assertNotContains(response, "Your other quests are on hold")
+
+
+class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
+    """The same file reaching the server twice must not be stored, and shown to the teacher, twice.
+
+    The page clears a file input only when a draft save comes back successfully, so a save whose
+    response the browser never saw (a dropped connection part-way through a photo upload, where
+    the server stored the file all the same) leaves that file in the input and the next autosave
+    sends it again (#2720).
+    """
+
+    def setUp(self):
+        """Give a student an in-progress submission with a draft comment and nothing attached."""
+        self.student = baker.make(User)
+        self.semester = baker.make(Semester)
+        self.submission = baker.make(
+            QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+            semester=self.semester, is_completed=False,
+        )
+        self.submission.draft_comment = Comment.objects.create_comment(
+            user=self.student, path=self.submission.get_absolute_url(), text="", target=None)
+        self.submission.save()
+        self.client.force_login(self.student)
+
+    def save_draft(self, upload):
+        """Autosave the draft with one chosen file, as the page's script does.
+
+        Args:
+            upload: the file to send. A fresh object each time, since a browser re-reads the
+                file from disk on each attempt rather than replaying a consumed upload.
+
+        Returns:
+            HttpResponse: what the view answered.
+        """
+        return self.client.post(
+            reverse('quests:ajax_save_draft'),
+            data={'submission_id': self.submission.id, 'attachments': upload},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_ajax_save_draft__the_same_file_sent_twice_is_stored_once(self):
+        """A retried draft save re-sends the file still sitting in the input; the draft ends up
+        holding it once, not twice (#2720)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
+    def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
+        """Only a file the draft already holds is skipped. A student replacing their work with a
+        corrected version of the same name still gets it attached, so nothing is dropped
+        silently."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"first version", content_type="image/png"))
+        self.save_draft(SimpleUploadedFile("my-work.png", b"a longer, corrected version", content_type="image/png"))
+
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
+
+    def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
+        """Choosing a file the draft already holds and then submitting publishes one copy of it,
+        not two: the submit path attaches through the same helper the draft save uses (#2720)."""
+        self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
+        """A file chosen only at submit time still publishes with the comment: skipping applies to
+        what the draft already holds, not to everything."""
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile("only-at-submit.png", b"file_content", content_type="image/png"),
+                },
+            )
+
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(sum(comment.document_set.count() for comment in published), 1)

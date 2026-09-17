@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
+from django.utils.datastructures import MultiValueDict
 
 from crispy_forms.utils import render_crispy_form
 
@@ -333,3 +335,69 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
         form = SubmissionFormCustomXP(student=self.student)
 
         self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+
+
+class SubmissionAttachmentTypesTest(ByteDeckTenantTestCase):
+    """What the submission comment's "Attach files" box takes.
+
+    It is the general "hand in your work" box, so whole cohorts of existing quests ask for a
+    page or a drawing through it and it has to take web files. A question that asks for one
+    type rather than any is where the narrower rule belongs (#2559).
+    """
+
+    def bound_form(self, upload, form_class=SubmissionForm):
+        """Bind a submission form to one chosen file, the way the submit view binds it.
+
+        Args:
+            upload: the file to attach.
+            form_class: the submission form to bind, for the variants that share the field.
+
+        Returns:
+            Form: the bound form, already validated.
+        """
+        form = form_class(
+            data={"comment_text": "here is my work"},
+            files=MultiValueDict({"attachments": [upload]}),
+        )
+        form.is_valid()
+        return form
+
+    def test_attachments__accepts_an_svg(self):
+        """A drawing handed in as an SVG is accepted: a vector graphic is the work on plenty of
+        quests, and refusing it leaves the student with nothing to hand in."""
+        upload = SimpleUploadedFile("drawing.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>",
+                                    content_type="image/svg+xml")
+
+        form = self.bound_form(upload)
+
+        self.assertNotIn("attachments", form.errors)
+        self.assertEqual([f.name for f in form.cleaned_data["attachments"]], ["drawing.svg"])
+
+    def test_attachments__accepts_a_web_page(self):
+        """A web design quest asks for the page itself, so HTML is accepted here."""
+        upload = SimpleUploadedFile("index.html", b"<!doctype html><title>my page</title>",
+                                    content_type="text/html")
+
+        form = self.bound_form(upload)
+
+        self.assertNotIn("attachments", form.errors)
+        self.assertEqual([f.name for f in form.cleaned_data["attachments"]], ["index.html"])
+
+    def test_attachments__still_enforces_the_size_limit(self):
+        """Taking web files widens which types are accepted, nothing else: the 16MB per-file
+        limit applies to them like any other upload."""
+        too_big = SimpleUploadedFile("huge.svg", b"x" * (16777216 + 1), content_type="image/svg+xml")
+
+        form = self.bound_form(too_big)
+
+        self.assertIn("attachments", form.errors)
+
+    def test_attachments__the_staff_form_takes_the_same_types(self):
+        """A teacher attaching an example page to their comment is doing the same thing the
+        student did, through the same field."""
+        upload = SimpleUploadedFile("example.html", b"<!doctype html><title>example</title>",
+                                    content_type="text/html")
+
+        form = self.bound_form(upload, form_class=SubmissionFormStaff)
+
+        self.assertNotIn("attachments", form.errors)
