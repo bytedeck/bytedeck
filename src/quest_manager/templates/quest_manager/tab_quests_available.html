@@ -137,7 +137,7 @@
           <td id="status-icon-{{q.id}}" class="col-sm-1 hidden-xs text-muted">
             {% if q.max_repeats != 0 %}<i title='Repeat: this quest is repeatable' class='icon-spacing fa fa-fw fa-undo'></i>
             {% else %}<i class='icon-spacing fa fa-fw'></i>{% endif %}
-            {% if q.blocking %}<i title='Blocking: all other quests are unavailable until you complete this one.' class='icon-spacing fa fa-fw fa-exclamation-triangle'></i>
+            {% if q.blocking %}<i title='Blocking: all other quests are on hold until this one is finished.' class='icon-spacing fa fa-fw fa-hand-paper-o'></i>
             {% else %}<i class='icon-spacing fa fa-fw'></i>{% endif %}
           </td>
         </tr>
