@@ -346,9 +346,21 @@ class XPItem(models.Model):
         # If survived all the conditions, then it's active
         return True
 
-    def is_available(self, user):
+    def is_available(self, user, blocking=True):
         """This quest should be in the user's available tab.  Doesn't check exactly, but same criteria.
-        Should probably put criteria in one spot and share.  See QuestManager.get_available()"""
+        Should probably put criteria in one spot and share.  See QuestManager.get_available()
+
+        Args:
+            user (User): the student to answer for.
+            blocking (bool): whether a blocking quest holding this student's quests back counts
+                against this one, matching the parameter of the same name on
+                ``QuestManager.get_available``. False answers as if nothing were blocking, which
+                is what tells a quest held back by another one apart from a quest whose own
+                prerequisites are not met.
+
+        Returns:
+            bool: whether the student can start this quest now.
+        """
 
         available = (
             self.active
@@ -359,7 +371,32 @@ class XPItem(models.Model):
         if available and not user.profile.has_current_course:
             return self.available_outside_course
 
+        if available and blocking:
+            return not self.blocked_by(user).exists()
+
         return available
+
+    def blocked_by(self, user):
+        """The blocking quests holding this quest back for this student, if any.
+
+        A quest marked ``blocking`` holds every other quest back while it is available to the
+        student or while they have it in progress, which ``QuestQuerySet.block_if_needed`` applies
+        by reducing the Available tab to blocking quests. Starting a quest is a different code
+        path, and this is what makes it answer the same way, so that a quest kept out of the tab
+        is not still handed out by the quest map or its own url (#2729).
+
+        Blocking quests do not hold each other back, and staff see every published quest in their
+        tab whatever is blocking, so neither is held back here.
+
+        Args:
+            user (User): the student to answer for.
+
+        Returns:
+            QuestQuerySet: the blocking quests responsible, empty when nothing holds this back.
+        """
+        if self.blocking or user.is_staff:
+            return Quest.objects.none()
+        return Quest.objects.get_blocking_quests(user)
 
     def is_repeatable(self):
         return self.max_repeats != 0
@@ -636,15 +673,58 @@ class QuestManager(models.Manager):
         6. Quests whose maximum repeats have been completed (including repeat_per_semester)
         7. Quests whose repeat time has not passed since last completion
         8. Check for blocking quests (available and in-progress), if present, remove all others
+
+        Args:
+            user (User): the student to answer for.
+            remove_hidden (bool): whether to drop the quests the student has hidden.
+            blocking (bool): whether to apply 8. False keeps the quests a blocking quest would
+                otherwise crowd out, which is how ``get_blocking_quests`` reads the quests that
+                are doing the blocking without the rule hiding its own inputs.
+
+        Returns:
+            QuestQuerySet: the quests for the student's Available tab.
         """
         qs = self.get_active().select_related('campaign')  # exclusions 1, 2 & 3
         qs = qs.get_conditions_met(user)  # 4
         available_quests = qs.not_in_progress_completed_or_cooldown(user)  # 5, 6 & 7
 
-        available_quests = available_quests.block_if_needed(user=user)  # 8
+        if blocking:
+            available_quests = available_quests.block_if_needed(user=user)  # 8
         if remove_hidden:
             available_quests = available_quests.exclude_hidden(user)
         return available_quests
+
+    def get_blocking_quests(self, user):
+        """The blocking quests holding this student's other quests back, if there are any.
+
+        A quest marked ``blocking`` stops every other quest while it is available to the student
+        or while they have it in progress. Both places that decide what a student can do read it
+        from here, so that they agree: ``QuestQuerySet.block_if_needed`` reduces the Available tab
+        to blocking quests, and ``XPItem.is_available`` refuses to start the rest (#2729). Having
+        the quests themselves, rather than a yes or no, is what lets both say which quest is
+        responsible.
+
+        Quests the student has hidden count. Hiding a quest takes it out of the tab but not out of
+        the way, so a student who hides a blocking quest still has to finish it, and still needs
+        to be told which quest that is.
+
+        An archived or unpublished quest is out of the way even to a student still holding it in
+        progress, because ``all_not_completed`` drops its submission. ``block_if_needed`` reads
+        that same call for the tab, so counting one here would put a quest back in the tab that
+        its own page then refused.
+
+        Args:
+            user (User): the student to answer for.
+
+        Returns:
+            QuestQuerySet: the blocking quests in play, empty when nothing is being held back.
+        """
+        available = self.get_available(user, remove_hidden=False, blocking=False).filter(blocking=True)
+        in_progress = QuestSubmission.objects.all_not_completed(user).filter(quest__blocking=True)
+        return self.get_queryset().filter(
+            Q(pk__in=available.values_list('pk', flat=True))
+            | Q(pk__in=in_progress.values_list('quest_id', flat=True))
+        )
 
     def get_available_without_course(self, user):
         qs = self.get_active().get_conditions_met(user).available_without_course()
