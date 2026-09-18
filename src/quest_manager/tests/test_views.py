@@ -7292,6 +7292,27 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
         )
 
+    def test_submission__removing_an_attachment_asks_no_confirmation(self):
+        """Removing one of your own draft's files takes the one click (#2749). The file was
+        just attached by the student themselves and re-attaching it is a couple of clicks, so
+        a dialog on every removal costs more than the mistake it guards against. The button's
+        tooltip is what says the file goes for good."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, 'class="btn btn-default btn-xs pull-right draft-attachment-delete"')
+        self.assertNotContains(response, 'window.confirm(')
+
+    def test_submission__choosing_a_file_saves_the_draft_at_once(self):
+        """Choosing a file starts the draft save itself. A file is in the attached-files list
+        only once it is stored, and only a stored file has a button to remove it, so a student
+        left waiting on the next autosave can neither see what they chose nor drop it again
+        for up to a minute (#2749)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
+        # a handler that saves nothing would satisfy the line above on its own
+        self.assertContains(response, "if (save_draft(true)) return;")
+
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
         to the approve view instead, where their own files are handled separately."""
