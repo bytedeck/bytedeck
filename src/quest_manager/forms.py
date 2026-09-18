@@ -351,7 +351,12 @@ class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
         max_upload_size=16777216,
         script_capable_types=ALL_SCRIPT_CAPABLE_TYPES,
         label="Attach files",
-        help_text="Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file"
+        # Says what the list above the button does not: the limits, and that a file is stored
+        # the moment it is chosen rather than when the quest is handed in (#2749).
+        help_text=(
+            "Hold <kbd>Ctrl</kbd> to select multiple files, 16MB limit per file. "
+            "They are saved with your draft as soon as you choose them."
+        ),
     )
 
 

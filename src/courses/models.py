@@ -1332,7 +1332,7 @@ class CourseStudent(models.Model):
                 return xp
         return profile.xp_cached
 
-    def mark(self, profile=None):
+    def mark(self, profile=None, xp=None):
         """This registration's mark, worked out from its own XP.
 
         A student in two courses has a different amount of XP in each (issue #2440), so each
@@ -1342,6 +1342,10 @@ class CourseStudent(models.Model):
         Args:
             profile (Profile): passed through to xp(), for a caller holding a profile whose
                 xp_cached is newer than the database.
+            xp (float): this registration's XP, for a caller that has already divided the
+                student's XP between all of their registrations at once (issue #2459). The
+                division is one question about the student rather than one per course, so a
+                page showing several marks should not ask for it again per mark.
 
         Returns:
             float or None: the percentage for this course, capped at 100 when the deck asks for
@@ -1351,7 +1355,7 @@ class CourseStudent(models.Model):
         if self.course and not self.course.uses_marks:
             return None
 
-        mark = self.calc_mark(self.xp(profile))
+        mark = self.calc_mark(self.xp(profile) if xp is None else xp)
         if SiteConfig.get().cap_marks_at_100_percent:
             return min(mark, 100)
         return mark
@@ -1366,12 +1370,25 @@ class CourseStudent(models.Model):
         else:
             return 0
 
-    def xp_per_day_ave(self):
+    def xp_per_day_ave(self, xp=None):
+        """How much XP a class day has been worth to this registration, on average.
+
+        This registration's own XP over the days behind it, not the student's deck-wide total:
+        a student in two courses has a different amount in each (issue #2440), and the mark
+        page reads this beside that course's share, so a total covering both courses would make
+        the arithmetic it shows fail to add up.
+
+        Args:
+            xp (float): this registration's XP, for a caller that has already divided the
+                student's XP between all of their registrations at once (issue #2459).
+
+        Returns:
+            float: XP per class day so far, 0 before the first day of class.
+        """
         days = self.semester.days_so_far()
-        if days > 0:
-            return self.user.profile.xp_cached / days
-        else:
+        if days <= 0:
             return 0
+        return (self.xp() if xp is None else xp) / days
 
 
 @receiver(post_save, sender=CourseStudent)

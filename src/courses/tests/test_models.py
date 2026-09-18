@@ -1103,7 +1103,10 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
 
     @patch('courses.models.Semester.days_so_far')
     def test_xp_per_day_ave__divides_xp_by_days(self, days_so_far):
-        """xp_per_day_ave() is the student's cached XP divided by days so far, or 0 when no days."""
+        """xp_per_day_ave() is this registration's XP divided by days so far, or 0 when no days.
+
+        Their only course, so its share is the student's whole total.
+        """
         self.student.profile.xp_cached = 120
         self.student.profile.save()
         days_so_far.return_value = 10
@@ -1113,6 +1116,26 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         days_so_far.return_value = 0
         xp_per_day = self.course_student.xp_per_day_ave()
         self.assertEqual(xp_per_day, 0)
+
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    def test_xp_per_day_ave__divides_this_registrations_own_xp(self, days_so_far):
+        """A student in two courses has a different amount of XP in each (issue #2440), so each
+        registration averages its own share. Their deck-wide total would give both courses the
+        same number, and make the mark page's arithmetic, which shows the share right above it,
+        fail to add up."""
+        other = self._register(self.student, baker.make(Course))
+        self._approved(self.student, 120, course=self.course)
+        self.student.profile.xp_invalidate_cache()
+
+        # every point was put against the first course, so the other one averages none of it
+        self.assertEqual(self.course_student.xp_per_day_ave(), 12)
+        self.assertEqual(other.xp_per_day_ave(), 0)
+
+    @patch('courses.models.Semester.days_so_far', return_value=10)
+    def test_xp_per_day_ave__takes_an_already_divided_share(self, days_so_far):
+        """A caller that has divided the student's XP between every registration at once hands
+        the share over rather than having it worked out again (issue #2459)."""
+        self.assertEqual(self.course_student.xp_per_day_ave(xp=50), 5)
 
     def _approved(self, student, xp, course=None, max_xp=-1):
         """Give a student an approved, XP-granting submission, optionally assigned to a course."""

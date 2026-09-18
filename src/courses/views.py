@@ -85,57 +85,81 @@ def mark_calculations(request, user_id=None):
     else:
         user = request.user
 
-    courses = CourseStudent.objects.current_courses(user)
-    num_courses = courses.count()
-    # the explanation below is about one course, and it is arithmetic ending in a percentage,
-    # so it has to be about a course that has one: a course run on XP alone has no mark
-    # (issue #403). None when every course they are in is like that, which the page explains
-    # instead of calculating.
-    course_student = next(
-        (registration for registration in courses if registration.course and registration.course.uses_marks),
-        None,
-    )
-    # each registration answers for its own XP, so a student who assigned work to one course
-    # sees that course's real total rather than an even share of everything (issue #2440)
-    xp_per_course = course_student.xp() if course_student else None
+    registrations = list(CourseStudent.objects.current_courses(user))
+    num_courses = len(registrations)
+    # a student belongs to one semester (#1781), so their registrations all share it, and the
+    # page's dates and day counts are the same whichever course is being read
+    semester = registrations[0].semester if registrations else None
+    fraction_complete = semester.fraction_complete() if semester else 0
 
-    # only show mark ranges where student is enrolled in and is also active
-    user_courses = user.profile.current_courses().values_list('course', flat=True)
-    assigned_ranges = MarkRange.objects.filter(active=True, courses__in=user_courses)
-    all_ranges = MarkRange.objects.filter(active=True, courses=None)
-
-    # combine assigned_ranges and all_ranges, then order by min mark and only include markranges with unique minimum marks in context queryset
-    markranges = (assigned_ranges | all_ranges).order_by('minimum_mark').distinct('minimum_mark')
-
-    # in some tests course_student == None
-    # So, if getting this page ("courses:mark_all"/"courses:my_mark")
-    # it will crash
-    if course_student:
-        # inject the xp needed for passing the mark range
-        # cant do it with template tags as you can only multiply/divide once
-        days_percentage = course_student.semester.fraction_complete()
-        total_xp = course_student.course.xp_for_100_percent
-        for markrange in markranges:
-            mark_percentage = markrange.minimum_mark / 100
-            markrange.xp_needed = math.floor(total_xp * mark_percentage * days_percentage)
+    # the whole page below the marks table is about one course at a time, so each course is
+    # worked out in full: its own XP, its own mark and the XP its own mark ranges call for
+    # (#2743). The division between courses is one question about the student rather than one
+    # per course, so it is asked once here for all of them (issue #2459).
+    course_panes = [
+        _course_pane(registration, xp, fraction_complete)
+        for registration, xp in CourseStudent.objects.xp_across(user, registrations)
+    ]
 
     context = {
         'user': user,
-        'obj': course_student,
-        'courses': courses,
-        'xp_per_course': xp_per_course,
+        'courses': registrations,
+        'course_panes': course_panes,
         'num_courses': num_courses,
-        'markranges': markranges,
+        'semester': semester,
         # every course they are in is run on XP alone, so there is no mark to explain (#403)
-        'no_course_uses_marks': num_courses > 0 and course_student is None,
-        # One progress chart per course, for anyone holding more than one (issue #2453). Not
-        # gated on students_choose_xp_course: that setting decides whether students are asked
-        # where new XP goes, while XP already assigned keeps counting where it was put. A deck
-        # that turns it off still has courses holding different amounts, which is what the marks
-        # table above shows too, and a single unlabelled chart could only be one of them.
-        'chart_per_course': num_courses > 1,
+        'no_course_uses_marks': num_courses > 0 and not any(pane['uses_marks'] for pane in course_panes),
     }
     return render(request, template_name, context)
+
+
+def _course_pane(registration, xp, fraction_complete):
+    """Everything the mark page's tab for one course is written from.
+
+    A student in several courses has a different amount of XP in each (issue #2440), so the
+    explanation is a different sum per course rather than one sum that leaves the others out.
+    Its mark ranges differ too: a range can be assigned to particular courses, and the XP any
+    of them calls for is a fraction of that course's own total (#2743).
+
+    Args:
+        registration (CourseStudent): the course to answer for.
+        xp (float): the XP counting toward it, already divided out for every one of the
+            student's registrations at once.
+        fraction_complete (float): how far through the semester it is, for working out the XP
+            each mark range calls for by today.
+
+    Returns:
+        dict: the registration, its course, that course's XP, mark and average per class day,
+        whether it has a mark at all, and its mark ranges each carrying an `xp_needed`.
+    """
+    course = registration.course
+    # a course run on XP alone has no percentage, so no mark and no ranges to head for (#403)
+    uses_marks = bool(course and course.uses_marks)
+
+    markranges = []
+    if uses_marks:
+        # this course's own ranges plus the ones assigned to no course, which apply to every
+        # course. One row per grade boundary, lowest first.
+        markranges = list(
+            MarkRange.objects.filter(active=True)
+            .filter(Q(courses=course) | Q(courses=None))
+            .order_by('minimum_mark').distinct('minimum_mark')
+        )
+        for markrange in markranges:
+            # two multiplications, which a template tag cannot do in one go
+            markrange.xp_needed = math.floor(
+                course.xp_for_100_percent * markrange.minimum_mark / 100 * fraction_complete
+            )
+
+    return {
+        'registration': registration,
+        'course': course,
+        'xp': xp,
+        'mark': registration.mark(xp=xp),
+        'xp_per_day_ave': registration.xp_per_day_ave(xp=xp),
+        'uses_marks': uses_marks,
+        'markranges': markranges,
+    }
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -1287,29 +1311,65 @@ class Ajax_MarkDistributionChart(NonPublicOnlyViewMixin, LoginRequiredMixin, Vie
         pk = self.kwargs['user_id']
         return get_object_or_404(User, pk=pk)
 
+    def get_user_mark(self):
+        """The mark to draw as this student's own.
+
+        Each of a student's courses has its own mark, since work can be assigned to one of
+        them (issue #2440), and the chart is read inside that course's tab on the mark page
+        (issue #2743), so the course the request names decides which mark is marked out. It
+        is the live mark, the same number the page prints above the chart.
+
+        Returns:
+            float: the named course's mark, or this student's cached mark when the request
+            names no course they are registered in, which is the number their classmates are
+            drawn from too. 0 when there is no mark either way: a course run on XP alone has
+            none (issue #403), and neither has a student whose mark has never been calculated.
+        """
+        named = self.request.GET.get('course')
+        registrations = list(CourseStudent.objects.current_courses(self.user))
+        # the registration the request named, and only that one: a request naming nothing, or
+        # a course this student is not in, is answered with the deck's own number for them
+        # rather than with whichever course happens to come first
+        charted = next(
+            (index for index, registration in enumerate(registrations)
+             if registration.course_id and str(registration.course_id) == named),
+            None,
+        )
+        if charted is None:
+            return self.user.profile.mark_cached or 0
+
+        # divided once for all of the student's registrations, which is one question about
+        # the student rather than one per course (issue #2459)
+        xp = CourseStudent.objects.xp_across(self.user, registrations)[charted][1]
+        return registrations[charted].mark(xp=xp) or 0
+
     def get_datasets(self):
         """query datasets for both histograms ( marks over 100% will be capped at 100% )
 
         The comparison group is this student's own semester, so a deck running two cohorts
         on different calendars shows each of them their own classmates' marks rather than
-        both cohorts mixed together.
+        both cohorts mixed together. Every classmate stands at their cached mark, the one
+        number the deck keeps per student.
 
         Returns:
             tuple[int, list[ints]]: queried user's mark, and the marks of the other students
             in their semester (empty when they are in none).
         """
         # grab dataset
-        user_mark = self.user.profile.mark_cached or 0  # can be nonetype
+        user_mark = self.get_user_mark()
         semester = semester_for(self.user)
         student_marks = semester.get_student_mark_list(students_only=True) if semester else []
         # a student whose mark has never been calculated has mark_cached None, which has no
         # place on a distribution and which numpy can't clip against a number
         student_marks = [mark for mark in student_marks if mark is not None]
         # the user's own mark is drawn in the other histogram, so take it out of this one.
-        # Only when it is there: theirs may be one of the Nones just dropped, and remove()
-        # raises on a value the list doesn't hold.
-        if user_mark in student_marks:
-            student_marks.remove(user_mark)
+        # The list holds their cached mark, which is the deck's one number for them however
+        # many courses they are in, so that is what comes out rather than the mark being
+        # drawn. Only when it is there: theirs may be one of the Nones just dropped, and
+        # remove() raises on a value the list doesn't hold.
+        cached_mark = self.user.profile.mark_cached
+        if cached_mark in student_marks:
+            student_marks.remove(cached_mark)
 
         # limit marks, so marks > 100 can show on histogram
         user_mark = min(user_mark, 100)

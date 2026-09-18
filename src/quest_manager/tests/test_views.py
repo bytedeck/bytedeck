@@ -745,7 +745,10 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(self.sub1.get_absolute_url())
 
-        self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
+        # the form the view built, by its own context name: the page renders it field by
+        # field, so there is no crispy-rendered whole form pushing a context of its own
+        self.assertEqual(
+            response.context['submission_form']['xp_requested'].value(), self.sub1.xp_requested)
 
     def test_ajax_save_draft__ajax_get_returns_404(self):
         """An ajax GET (with no POST data) to this view returns 404."""
@@ -6294,6 +6297,14 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         )
         self.assertContains(response, 'name="block"')
 
+    def test_approvals__the_group_filter_applies_itself_when_it_is_chosen(self):
+        """Choosing a group filters the tab there and then. The filter is a plain field in the
+        tab's search form, so without the script that submits it on change it reads as inert:
+        it only takes effect if the reader presses the search button afterwards (#2721)."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertContains(response, 'js/list-filter-submit.js')
+
     def test_approvals__an_unknown_group_is_ignored_rather_than_refused(self):
         """A stale or hand-made `?block=` widens the tab back to everyone instead of erroring."""
         for unknown in ('999999', 'nonsense', '', '-1'):
@@ -7284,13 +7295,44 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, "wrong-file")
-        # the same bullet-list-of-links markup a posted comment's attachments use
-        self.assertContains(response, "Attached files:")
-        self.assertContains(response, 'class="file-link"')
+        # a row of the attachments control, above the button that adds more (#2749)
+        self.assertContains(response, 'class="list-group bt-attachments-list"')
         self.assertContains(
             response,
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
         )
+
+    def test_submission__attaching_is_one_control_holding_the_files_and_the_button(self):
+        """The files and the way to add one are a single box, and the file input is reached
+        through a button: a bare one stands beside the browser's "No file chosen", which says
+        nothing once a chosen file is stored and listed straight away (#2749)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, 'class="form-group bt-attachments"')
+        self.assertContains(response, 'Choose files')
+        # the input is still on the form, for the picker the button opens and for the POST
+        self.assertContains(response, 'name="attachments"')
+
+    def test_submission__removing_an_attachment_asks_no_confirmation(self):
+        """Removing one of your own draft's files takes the one click (#2749). The file was
+        just attached by the student themselves and re-attaching it is a couple of clicks, so
+        a dialog on every removal costs more than the mistake it guards against. The button's
+        tooltip is what says the file goes for good."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, 'class="btn btn-default btn-xs pull-right draft-attachment-delete"')
+        self.assertNotContains(response, 'window.confirm(')
+
+    def test_submission__choosing_a_file_saves_the_draft_at_once(self):
+        """Choosing a file starts the draft save itself. A file is in the attached-files list
+        only once it is stored, and only a stored file has a button to remove it, so a student
+        left waiting on the next autosave can neither see what they chose nor drop it again
+        for up to a minute (#2749)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
+        # a handler that saves nothing would satisfy the line above on its own
+        self.assertContains(response, "if (save_draft(true)) return;")
 
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
@@ -7655,3 +7697,120 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
 
         published = Comment.objects.all_with_target_object(self.submission)
         self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+
+class SubmissionXPCourseTests(ByteDeckTenantTestCase):
+    """Where a submission's XP counts, said wherever that submission is shown.
+
+    A student in several courses is asked which of them a quest should count toward when they
+    hand it in (issue #2440). The answer was not shown anywhere afterwards, so neither they nor
+    the teacher approving it could see where the XP was going (#2742).
+    """
+
+    def setUp(self):
+        """A student in two courses, with one quest handed in and waiting for a teacher."""
+        self.teacher = baker.make(User, is_staff=True)
+        self.student = baker.make(User)
+        self.semester = SiteConfig.get().active_semester
+        self.pottery = baker.make('courses.Course', title='Pottery')
+        self.welding = baker.make('courses.Course', title='Welding')
+        for course in (self.pottery, self.welding):
+            baker.make('courses.CourseStudent', user=self.student, course=course,
+                       block=baker.make('courses.Block'), semester=self.semester)
+        self.submission = baker.make(
+            QuestSubmission, user=self.student, quest=baker.make(Quest),
+            semester=self.semester, is_completed=True,
+        )
+
+    def submission_page(self):
+        """Load the submission's own page, which is both the student's view and the teacher's.
+
+        Returns:
+            HttpResponse: the rendered submission page.
+        """
+        return self.client.get(reverse('quests:submission', args=[self.submission.id]))
+
+    def approvals_row(self):
+        """Load the content the approvals page drops into a submission's row when it is opened.
+
+        Returns:
+            HttpResponse: the JSON carrying that row's rendered html.
+        """
+        return self.client.post(
+            reverse('quests:ajax_approval_info', args=[self.submission.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    def test_submission__names_the_course_the_xp_counts_toward(self):
+        """The student who chose it can see what they chose, on the submission they chose it for."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.student)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_submission__names_the_course_for_the_teacher_approving_it(self):
+        """The teacher deciding whether to approve it sees which course the XP lands in, which
+        is the thing they cannot otherwise find out (#2742)."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.teacher)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_submission__says_when_the_xp_is_split_evenly(self):
+        """Nobody answering the question is itself an answer: the XP is shared between their
+        courses, which is worth saying rather than leaving to be guessed at."""
+        self.client.force_login(self.student)
+
+        response = self.submission_page()
+
+        self.assertContains(response, 'XP split evenly between all 2 courses')
+
+    def test_submission__says_nothing_to_a_student_in_one_course(self):
+        """All of a single-course student's XP counts toward it, so there is nothing to say and
+        the line would be noise on every deck that has no multicourse students at all."""
+        only_pottery = baker.make(User)
+        baker.make('courses.CourseStudent', user=only_pottery, course=self.pottery,
+                   block=baker.make('courses.Block'), semester=self.semester)
+        submission = baker.make(QuestSubmission, user=only_pottery, quest=baker.make(Quest),
+                                semester=self.semester, is_completed=True)
+        self.client.force_login(only_pottery)
+
+        response = self.client.get(reverse('quests:submission', args=[submission.id]))
+
+        self.assertNotContains(response, 'XP counts toward')
+        self.assertNotContains(response, 'XP split evenly')
+
+    def test_ajax_approval_info__names_the_course_the_xp_counts_toward(self):
+        """The approvals page is where a teacher works through submissions, so the row they open
+        to read the work says where its XP is going too."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.teacher)
+
+        response = self.approvals_row()
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
+
+    def test_ajax_submission_info__names_the_course_the_xp_counts_toward(self):
+        """The student's own list of submissions says it as well, so they can check what they
+        chose without opening each quest."""
+        self.submission.course = self.welding
+        self.submission.save()
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertContains(response, 'XP counts toward')
+        self.assertContains(response, 'Welding')
