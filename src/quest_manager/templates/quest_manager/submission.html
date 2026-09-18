@@ -417,10 +417,15 @@
                         $('#draft-check').hide();
                         $('#draft-text').show();
                         $('#draft-error').show();
-                        // Nothing was stored, so the notes saying a file is on its way up
-                        // would be claiming something that did not happen (#2749). The files
-                        // are still chosen in their inputs, and the next save sends them.
-                        $('#submission-main-form .draft-file-note-pending').remove();
+                        // Nothing was stored, so a note saying a file is on its way up is
+                        // claiming something that did not happen (#2749). Only the files this
+                        // request carried, though: an input holding something else was chosen
+                        // while this save was away, and that file is still on its way, since
+                        // the save waiting behind this one takes it.
+                        $('#submission-main-form input[type="file"]').each(function() {
+                            if (!same_files(chosen_files(this), sentFiles[this.name])) return;
+                            $(this).closest('.form-group').find('.draft-file-note-pending').remove();
+                        });
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
                         if (pressed) {
                             // The student asked for this save, so tell them it did not happen.

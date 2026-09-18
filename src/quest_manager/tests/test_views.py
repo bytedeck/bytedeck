@@ -7303,13 +7303,15 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         self.assertNotContains(response, 'window.confirm(')
 
     def test_submission__choosing_a_file_saves_the_draft_at_once(self):
-        """A file is only in the attached-files list once it is stored, and only a stored file
-        has a button to remove it, so leaving the upload to the next autosave left the student
-        unable to see what they had chosen or to drop it again for up to a minute (#2749).
-        Choosing a file starts the save itself."""
+        """Choosing a file starts the draft save itself. A file is in the attached-files list
+        only once it is stored, and only a stored file has a button to remove it, so a student
+        left waiting on the next autosave can neither see what they chose nor drop it again
+        for up to a minute (#2749)."""
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
+        # a handler that saves nothing would satisfy the line above on its own
+        self.assertContains(response, "if (save_draft(true)) return;")
 
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
