@@ -745,7 +745,10 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(self.sub1.get_absolute_url())
 
-        self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
+        # the form the view built, by its own context name: the page renders it field by
+        # field, so there is no crispy-rendered whole form pushing a context of its own
+        self.assertEqual(
+            response.context['submission_form']['xp_requested'].value(), self.sub1.xp_requested)
 
     def test_ajax_save_draft__ajax_get_returns_404(self):
         """An ajax GET (with no POST data) to this view returns 404."""
@@ -7292,13 +7295,23 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, "wrong-file")
-        # the same bullet-list-of-links markup a posted comment's attachments use
-        self.assertContains(response, "Attached files:")
-        self.assertContains(response, 'class="file-link"')
+        # a row of the attachments control, above the button that adds more (#2749)
+        self.assertContains(response, 'class="list-group bt-attachments-list"')
         self.assertContains(
             response,
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
         )
+
+    def test_submission__attaching_is_one_control_holding_the_files_and_the_button(self):
+        """The files and the way to add one are a single box, and the file input is reached
+        through a button: a bare one stands beside the browser's "No file chosen", which says
+        nothing once a chosen file is stored and listed straight away (#2749)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, 'class="form-group bt-attachments"')
+        self.assertContains(response, 'Choose files')
+        # the input is still on the form, for the picker the button opens and for the POST
+        self.assertContains(response, 'name="attachments"')
 
     def test_submission__removing_an_attachment_asks_no_confirmation(self):
         """Removing one of your own draft's files takes the one click (#2749). The file was
