@@ -184,8 +184,14 @@ def _may_download(user, comment):
     # to open, including one their teacher attached
     if getattr(target, "user_id", None) == user.id:
         return True
-    # an announcement's thread is the whole deck's, so its attachments are everyone's
-    return isinstance(target, Announcement)
+    # An announcement's thread is the whole deck's, so its attachments are everyone's, as long
+    # as the announcement is one they can actually see. A draft, an unreleased, an archived or
+    # an expired one is not on their announcements page, and this url carries a guessable id,
+    # so it must not be the way to reach what that page withholds.
+    return (
+        isinstance(target, Announcement)
+        and Announcement.objects.get_for_students().filter(pk=target.pk).exists()
+    )
 
 
 @non_public_only_view
@@ -202,7 +208,8 @@ def document_download(request, id):
 
     Who may follow it is everyone who can see the thread it hangs off: staff, whoever wrote the
     comment, the student whose submission it is (so a teacher's attached example is still theirs
-    to open), and anyone at all when the thread is an announcement's, which is the whole deck's.
+    to open), and anyone at all when the thread is that of an announcement they can see, which
+    is the whole deck's.
     A url carrying a row id is guessable in a way a storage path is not, so this is checked
     rather than left open, even though the stored file itself is reachable by anyone holding
     its storage url.

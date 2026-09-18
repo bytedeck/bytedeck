@@ -1,6 +1,9 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
 from django.urls import reverse
+from django.utils import timezone
 
 from unittest.mock import patch
 from model_bakery import baker
@@ -285,16 +288,52 @@ class DocumentDownloadViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(self.download(document.id).status_code, 200)
 
-    def test_document_download__an_announcement_attachment_is_the_whole_decks(self):
-        """An announcement thread is visible to everyone on the deck, so its attachments are
-        too: the check must not lock students out of one."""
-        announcement = baker.make('announcements.Announcement', author=baker.make(User, is_staff=True))
+    def announcement_attachment(self, **fields):
+        """Attach a file to an announcement's thread.
+
+        Args:
+            **fields: what the announcement is, passed to the maker (draft, archived, and so
+                on). It is published and visible unless a field says otherwise.
+
+        Returns:
+            Document: the attachment on that announcement's comment.
+        """
+        visible = {
+            'author': baker.make(User, is_staff=True),
+            'draft': False,
+            'archived': False,
+            'datetime_released': timezone.now() - timedelta(days=1),
+            'datetime_expires': None,
+        }
+        announcement = baker.make('announcements.Announcement', **{**visible, **fields})
         thread_comment = Comment.objects.create_comment(
             user=announcement.author, path="/some/path/", text="see attached", target=announcement)
         document = Document(comment=thread_comment)
         document.docfile.save("notice.svg", ContentFile(b"<svg/>"), save=True)
+        return document
+
+    def test_document_download__an_announcement_attachment_is_the_whole_decks(self):
+        """An announcement thread is visible to everyone on the deck, so its attachments are
+        too: the check must not lock students out of one."""
+        document = self.announcement_attachment()
 
         self.assertEqual(self.download(document.id).status_code, 200)
+
+    def test_document_download__an_announcement_a_student_cannot_see_is_not_theirs_to_fetch(self):
+        """An announcement is the whole deck's only once the deck can read it. A draft, one
+        held back for later, an archived one and an expired one are all off the announcements
+        page, and this url carries a guessable id, so it must not be the way around that."""
+        withheld = {
+            'a draft': {'draft': True},
+            'not yet released': {'datetime_released': timezone.now() + timedelta(days=1)},
+            'archived': {'archived': True},
+            'expired': {'datetime_expires': timezone.now() - timedelta(minutes=1)},
+        }
+        for description, fields in withheld.items():
+            with self.subTest(announcement=description):
+                document = self.announcement_attachment(**fields)
+
+                self.assertEqual(self.download(document.id).status_code, 404)
 
     def test_document_download__an_attachment_on_no_comment_belongs_to_nobody(self):
         """A Document with no comment is part of no thread, so there is nobody it is visible to
