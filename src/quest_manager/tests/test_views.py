@@ -6294,6 +6294,14 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         )
         self.assertContains(response, 'name="block"')
 
+    def test_approvals__the_group_filter_applies_itself_when_it_is_chosen(self):
+        """Choosing a group filters the tab there and then. The filter is a plain field in the
+        tab's search form, so without the script that submits it on change it reads as inert:
+        it only takes effect if the reader presses the search button afterwards (#2721)."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertContains(response, 'js/list-filter-submit.js')
+
     def test_approvals__an_unknown_group_is_ignored_rather_than_refused(self):
         """A stale or hand-made `?block=` widens the tab back to everyone instead of erroring."""
         for unknown in ('999999', 'nonsense', '', '-1'):
