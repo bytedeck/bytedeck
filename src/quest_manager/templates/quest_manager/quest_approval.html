@@ -61,6 +61,13 @@
 
 {{ block.super }}
 
+{% comment %}
+Submits the {group} filter beside each tab's search box as soon as one is chosen. Without it
+the filter looks inert: it only takes effect when the search button is pressed afterwards
+(#2721). The form still filters with the script absent.
+{% endcomment %}
+<script src="{% static 'js/list-filter-submit.js' %}?v=1.0"></script>
+
 <script>
 $( document ).ready(function() {
     // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'

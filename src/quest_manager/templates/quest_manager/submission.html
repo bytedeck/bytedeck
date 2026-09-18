@@ -74,6 +74,8 @@
 
       {% include "quest_manager/snippets/previous_submission.html" %}
 
+      {% include "quest_manager/snippets/submission_xp_course.html" %}
+
       <li class="list-group-item list-group-item-info">Submission Comments
         {% with submission as s %}
           {% include "quest_manager/snippets/time_to_complete_submission.html" %}
@@ -166,19 +168,23 @@
           <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
         {% endif %}
         <div id="main-comment-form">
-          {{ submission_form | crispy }}
-          {% comment %} The files already stored with this submission's draft, listed so the student
-             can see what is attached and remove anything chosen by mistake. Only the student sees
-             it: these are their pending attachments, and staff post this form to the approve view,
-             where their own files are handled separately. The container is what the draft-save and
-             delete endpoints re-render into, so the list stays current without a reload. {% endcomment %}
-          {% if request.user == submission.user %}
-            <div id="draft-attachments">
+          {{ submission_form.non_field_errors }}
+          {% comment %} Field by field, because the attachments field is drawn as one control
+             holding both the files already saved with the draft and the button that adds more
+             (#2749). Everything else is the ordinary crispy rendering. Staff post this form to
+             the approve view and have no attachments field on it, so the branch below is the
+             student's own draft either way. {% endcomment %}
+          {% for field in submission_form %}
+            {% if field.is_hidden %}
+              {{ field }}
+            {% elif field.name == 'attachments' %}
               {% with submission.draft_comment.document_set.all as draft_documents %}
-                {% include "quest_manager/snippets/draft_attachments.html" %}
+                {% include "quest_manager/snippets/attachments_field.html" %}
               {% endwith %}
-            </div>
-          {% endif %}
+            {% else %}
+              {{ field|as_crispy_field }}
+            {% endif %}
+          {% endfor %}
         </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
@@ -293,6 +299,40 @@
                 save_draft(true);  // pressed, so a failure is worth interrupting for
             });
 
+            // Choosing a file saves the draft straight away rather than leaving it to the next
+            // autosave up to a minute later (#2749). Until the file is stored it is not in the
+            // attached-files list, so a student cannot see that it took, and cannot remove one
+            // they chose by mistake: the Delete button belongs to a stored file. A note under
+            // the input says the file is on its way, since a large one takes a while and the
+            // list cannot show it yet. A save is a save, so a failure interrupts: the student
+            // asked for this one by choosing the file.
+            $('#submission-main-form input[type="file"]').on('change', function() {
+                var files = chosen_files(this);
+                // Nothing chosen, or nothing to save it into: the picker can be opened and
+                // closed again, and a page without the Save Draft control has no draft save
+                // to make. Staff marking a student's submission are the usual case of the
+                // second, and the endpoint takes the submission's owner only: their files go
+                // up with the form they post instead.
+                if (!files.length || !$('#save-draft-btn').length) return;
+
+                var names = files.map(function(file) { return file.name; }).join(', ');
+                file_note_element($(this))
+                    .addClass('draft-file-note-pending')
+                    .html('<i class="fa fa-spinner fa-spin fa-fw"></i> Attaching ' +
+                          $('<i>').text(names).html() + '...');
+
+                // Whatever is in flight was sent before this file was chosen, so it is the
+                // save after it that carries the file: wait for the one in flight to land.
+                // Only for so long, since a save that never comes back would leave this
+                // asking forever; the autosave a minute later carries the file either way.
+                var waited = 0;
+                (function save_when_free() {
+                    if (save_draft(true)) return;
+                    waited += 500;
+                    if (waited <= 30000) window.setTimeout(save_when_free, 500);
+                })();
+            });
+
             // autosave every 60 seconds, unattended: a failure here reports itself in the
             // page instead of in a modal the student did not ask for
             setInterval(function() { save_draft(); }, 60000);
@@ -381,6 +421,15 @@
                         $('#draft-check').hide();
                         $('#draft-text').show();
                         $('#draft-error').show();
+                        // Nothing was stored, so a note saying a file is on its way up is
+                        // claiming something that did not happen (#2749). Only the files this
+                        // request carried, though: an input holding something else was chosen
+                        // while this save was away, and that file is still on its way, since
+                        // the save waiting behind this one takes it.
+                        $('#submission-main-form input[type="file"]').each(function() {
+                            if (!same_files(chosen_files(this), sentFiles[this.name])) return;
+                            file_note_holder($(this)).find('.draft-file-note-pending').remove();
+                        });
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
                         if (pressed) {
                             // The student asked for this save, so tell them it did not happen.
@@ -390,8 +439,12 @@
                         }
                     }
                 });
+                return true;
             }
 
+            // A save is already on its way: the button holds its spinner until that response
+            // lands, and this call has done nothing.
+            return false;
         }
 
         function unsaved_guard() {
@@ -464,6 +517,26 @@
             });
         }
 
+        function file_note_holder(input) {
+            // Where a file input's note belongs: inside the attachments control, under the
+            // button that chose the file, and for a question's file answer in its own form
+            // group. closest() takes the nearer of the two.
+            return input.closest('.bt-attachments-add, .form-group');
+        }
+
+        function file_note_element(input) {
+            // The note under a file input, made on first use. One place makes it, since both
+            // the note about a file on its way up and the note about where it ended up are
+            // written into the same paragraph.
+            var holder = file_note_holder(input);
+            var note = holder.find('.draft-file-note');
+            if (!note.length) {
+                note = $('<p class="help-block draft-file-note"></p>');
+                holder.append(note);
+            }
+            return note;
+        }
+
         function file_note(input, html, sentFiles) {
             if (!input.length) return;
             // The response describes the file this input sent. If the input now holds a
@@ -473,26 +546,24 @@
             // the next save reports the new file in the ordinary way (#2563).
             if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
-            var note = input.closest('.form-group').find('.draft-file-note');
+            var note = file_note_holder(input).find('.draft-file-note');
             if (!html) {
                 // Nothing left to say about this input: drop any note from an earlier save,
                 // rather than leaving a stale one (or an empty paragraph) under it.
                 note.remove();
                 return;
             }
-            if (!note.length) {
-                note = $('<p class="help-block draft-file-note"></p>');
-                input.closest('.form-group').append(note);
-            }
-            note.html(html);
+            file_note_element(input).html(html).removeClass('draft-file-note-pending');
         }
 
         // Removing a file attached by mistake. Delegated from the page, because the list this
         // button sits in is replaced wholesale every time the server re-renders it.
         $(document).on('click', '.draft-attachment-delete', function() {
             var $button = $(this);
-            var name = $.trim($button.siblings('a').first().text()) || 'this file';
-            if (!window.confirm('Delete ' + name + ' from your submission?\n\nIt is removed for good, so attach it again if you still need it.')) return;
+            // No confirmation: the file is one the student just attached to their own draft,
+            // and re-attaching it is a couple of clicks, so a dialog on every removal costs
+            // more than the mistake it guards against (#2749). The button's tooltip says the
+            // file is removed for good.
             // Against a double click while the request is away: the second delete would 404,
             // since the first one has already removed the file.
             $button.prop('disabled', true);

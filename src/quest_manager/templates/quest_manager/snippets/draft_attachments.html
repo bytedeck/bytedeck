@@ -4,31 +4,27 @@
   removes it. Only the student who owns the draft sees this: these are their own pending
   attachments, not yet posted for anyone else to read.
 
-  Laid out as the same bullet list of links that comments/comments.html shows under a posted
-  comment, with the button that removes a file where that list puts Add to Portfolio, so a
-  student reads their attachments the same way before and after they hand the quest in.
-
-  The "Attach files" input always renders empty (browsers never repopulate a file input), so
-  without this list a student cannot tell which uploads are already saved, and would choose
-  them again (#2427). The remove button is what lets them drop one chosen by mistake, since
-  re-choosing in the input adds files rather than replacing what is stored.
+  Rows of the attachments control (snippets/attachments_field.html), sitting above the button
+  that adds more, so the files and the way to add or remove one read as a single thing (#2749).
+  A file input always renders empty, since browsers never repopulate one, so this list is the
+  only record of what is attached (#2427), and the button on each row is what drops a file
+  chosen by mistake: choosing again in the input adds to what is stored rather than replacing
+  it.
 
   Rendered from `draft_documents`, and re-rendered into the page by the draft-save and
   attachment-delete endpoints, so the list has a single source of markup.
 {% endcomment %}
 {% if draft_documents %}
-  <p>Attached files:
-    <small class="text-muted">(saved with your draft: only choose files above to attach more)</small>
-  </p>
-  <ul>
+  <ul class="list-group bt-attachments-list">
     {% for document in draft_documents %}
-      <li class="file-link">
-        <a href="{{ document.docfile.url }}" target="_blank">{{ document.docfile|filename }}</a>
+      <li class="list-group-item">
         <button type="button" class="btn btn-default btn-xs pull-right draft-attachment-delete"
                 data-delete-url="{% url 'quests:ajax_delete_draft_attachment' document.id %}"
                 title="Delete {{ document.docfile|filename|striptags }} from your submission. It is removed for good, so attach it again if you still need it.">
           <i class="fa fa-trash-o text-danger"></i> Delete
         </button>
+        <a href="{{ document.docfile.url }}" target="_blank">
+          <i class="fa fa-fw fa-paperclip"></i>{{ document.docfile|filename }}</a>
       </li>
     {% endfor %}
   </ul>
