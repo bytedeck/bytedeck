@@ -208,8 +208,10 @@ def document_download(request, id):
 
     Who may follow it is everyone who can see the thread it hangs off: staff, whoever wrote the
     comment, the student whose submission it is (so a teacher's attached example is still theirs
-    to open), and anyone at all when the thread is that of an announcement they can see, which
-    is the whole deck's.
+    to open), and any signed-in member of the deck when the thread is that of an announcement
+    they can see, since an announcement is the whole deck's. Nobody reaches it signed out: the
+    view is behind login_required, which sends an anonymous visitor to the login page.
+
     A url carrying a row id is guessable in a way a storage path is not, so this is checked
     rather than left open, even though the stored file itself is reachable by anyone holding
     its storage url.
