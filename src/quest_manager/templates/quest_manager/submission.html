@@ -168,19 +168,23 @@
           <p class="submission-comments-heading"><strong>Additional Submission Comments</strong></p>
         {% endif %}
         <div id="main-comment-form">
-          {{ submission_form | crispy }}
-          {% comment %} The files already stored with this submission's draft, listed so the student
-             can see what is attached and remove anything chosen by mistake. Only the student sees
-             it: these are their pending attachments, and staff post this form to the approve view,
-             where their own files are handled separately. The container is what the draft-save and
-             delete endpoints re-render into, so the list stays current without a reload. {% endcomment %}
-          {% if request.user == submission.user %}
-            <div id="draft-attachments">
+          {{ submission_form.non_field_errors }}
+          {% comment %} Field by field, because the attachments field is drawn as one control
+             holding both the files already saved with the draft and the button that adds more
+             (#2749). Everything else is the ordinary crispy rendering. Staff post this form to
+             the approve view and have no attachments field on it, so the branch below is the
+             student's own draft either way. {% endcomment %}
+          {% for field in submission_form %}
+            {% if field.is_hidden %}
+              {{ field }}
+            {% elif field.name == 'attachments' %}
               {% with submission.draft_comment.document_set.all as draft_documents %}
-                {% include "quest_manager/snippets/draft_attachments.html" %}
+                {% include "quest_manager/snippets/attachments_field.html" %}
               {% endwith %}
-            </div>
-          {% endif %}
+            {% else %}
+              {{ field|as_crispy_field }}
+            {% endif %}
+          {% endfor %}
         </div>
         <div class='form-group form-group-summernote'>
         {% if request.user.is_staff %}
@@ -424,7 +428,7 @@
                         // the save waiting behind this one takes it.
                         $('#submission-main-form input[type="file"]').each(function() {
                             if (!same_files(chosen_files(this), sentFiles[this.name])) return;
-                            $(this).closest('.form-group').find('.draft-file-note-pending').remove();
+                            file_note_holder($(this)).find('.draft-file-note-pending').remove();
                         });
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
                         if (pressed) {
@@ -513,15 +517,22 @@
             });
         }
 
+        function file_note_holder(input) {
+            // Where a file input's note belongs: inside the attachments control, under the
+            // button that chose the file, and for a question's file answer in its own form
+            // group. closest() takes the nearer of the two.
+            return input.closest('.bt-attachments-add, .form-group');
+        }
+
         function file_note_element(input) {
             // The note under a file input, made on first use. One place makes it, since both
             // the note about a file on its way up and the note about where it ended up are
             // written into the same paragraph.
-            var group = input.closest('.form-group');
-            var note = group.find('.draft-file-note');
+            var holder = file_note_holder(input);
+            var note = holder.find('.draft-file-note');
             if (!note.length) {
                 note = $('<p class="help-block draft-file-note"></p>');
-                group.append(note);
+                holder.append(note);
             }
             return note;
         }
@@ -535,7 +546,7 @@
             // the next save reports the new file in the ordinary way (#2563).
             if (!same_files(chosen_files(input[0]), (sentFiles || {})[input.attr('name')])) return;
             input.val('');
-            var note = input.closest('.form-group').find('.draft-file-note');
+            var note = file_note_holder(input).find('.draft-file-note');
             if (!html) {
                 // Nothing left to say about this input: drop any note from an earlier save,
                 // rather than leaving a stale one (or an empty paragraph) under it.

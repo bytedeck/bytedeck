@@ -1,0 +1,32 @@
+{% comment %}
+  The submission's attachments as one control: the files already saved with the draft, and
+  the button that adds more, in a single box (#2749).
+
+  The file input itself is reachable only through that button. A bare file input sits beside
+  the browser's own "No file chosen", which says nothing here: a chosen file is saved as soon
+  as it is picked, so the list above the button is the record of what is attached. The input
+  is clipped rather than hidden outright so it can still take keyboard focus, and the button
+  it opens carries the focus ring.
+
+  Rendered from `field` (the form's attachments field) and `draft_documents`.
+{% endcomment %}
+<div class="form-group bt-attachments">
+  <label class="control-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+  <div class="panel panel-default">
+    {% comment %} What the draft-save and attachment-delete endpoints re-render into, so the
+       list stays current without a reload. {% endcomment %}
+    <div id="draft-attachments">
+      {% include "quest_manager/snippets/draft_attachments.html" %}
+    </div>
+    <div class="panel-footer bt-attachments-add">
+      {{ field }}
+      <label class="btn btn-default btn-sm" for="{{ field.id_for_label }}">
+        <i class="fa fa-fw fa-paperclip"></i> Choose files
+      </label>
+      <span class="help-block">{{ field.help_text|safe }}</span>
+      {% for error in field.errors %}
+        <span class="help-block text-danger">{{ error }}</span>
+      {% endfor %}
+    </div>
+  </div>
+</div>

@@ -745,7 +745,10 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(self.sub1.get_absolute_url())
 
-        self.assertEqual(response.context['form']['xp_requested'].value(), self.sub1.xp_requested)
+        # the form the view built, by its own context name: the page renders it field by
+        # field, so there is no crispy-rendered whole form pushing a context of its own
+        self.assertEqual(
+            response.context['submission_form']['xp_requested'].value(), self.sub1.xp_requested)
 
     def test_ajax_save_draft__ajax_get_returns_404(self):
         """An ajax GET (with no POST data) to this view returns 404."""
@@ -6294,6 +6297,14 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         )
         self.assertContains(response, 'name="block"')
 
+    def test_approvals__the_group_filter_applies_itself_when_it_is_chosen(self):
+        """Choosing a group filters the tab there and then. The filter is a plain field in the
+        tab's search form, so without the script that submits it on change it reads as inert:
+        it only takes effect if the reader presses the search button afterwards (#2721)."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertContains(response, 'js/list-filter-submit.js')
+
     def test_approvals__an_unknown_group_is_ignored_rather_than_refused(self):
         """A stale or hand-made `?block=` widens the tab back to everyone instead of erroring."""
         for unknown in ('999999', 'nonsense', '', '-1'):
@@ -7284,13 +7295,23 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, "wrong-file")
-        # the same bullet-list-of-links markup a posted comment's attachments use
-        self.assertContains(response, "Attached files:")
-        self.assertContains(response, 'class="file-link"')
+        # a row of the attachments control, above the button that adds more (#2749)
+        self.assertContains(response, 'class="list-group bt-attachments-list"')
         self.assertContains(
             response,
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
         )
+
+    def test_submission__attaching_is_one_control_holding_the_files_and_the_button(self):
+        """The files and the way to add one are a single box, and the file input is reached
+        through a button: a bare one stands beside the browser's "No file chosen", which says
+        nothing once a chosen file is stored and listed straight away (#2749)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(response, 'class="form-group bt-attachments"')
+        self.assertContains(response, 'Choose files')
+        # the input is still on the form, for the picker the button opens and for the POST
+        self.assertContains(response, 'name="attachments"')
 
     def test_submission__removing_an_attachment_asks_no_confirmation(self):
         """Removing one of your own draft's files takes the one click (#2749). The file was
