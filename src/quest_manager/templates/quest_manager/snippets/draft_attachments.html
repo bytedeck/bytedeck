@@ -23,7 +23,9 @@
                 title="Delete {{ document.docfile|filename|striptags }} from your submission. It is removed for good, so attach it again if you still need it.">
           <i class="fa fa-trash-o text-danger"></i> Delete
         </button>
-        <a href="{{ document.docfile.url }}" target="_blank">
+        {% comment %} get_download_url, not the storage url: a file that can carry a script is
+           handed over as a download rather than opened in the page (#2726). {% endcomment %}
+        <a href="{{ document.get_download_url }}" target="_blank">
           <i class="fa fa-fw fa-paperclip"></i>{{ document.docfile|filename }}</a>
       </li>
     {% endfor %}
