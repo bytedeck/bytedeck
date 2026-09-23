@@ -268,11 +268,10 @@ class Command(BaseCommand):
         """
         warnings = []
 
-        colliding = self.colliding_registrations(source, target)
-        for registration in colliding:
+        for registration in self.colliding_registrations(source, target):
             warnings.append(
                 f"Course registration '{registration}' duplicates one {target.username} already has; "
-                "it will be dropped rather than moved."
+                f"it will be dropped rather than moved.{self.what_a_registration_carries(registration)}"
             )
 
         semesters = self.open_semesters_after_merge(source, target)
@@ -320,12 +319,42 @@ class Command(BaseCommand):
             object_id_field: user.pk,
         })
 
+    def what_a_registration_carries(self, registration):
+        """Name the numbers on a registration that go when it is dropped.
+
+        A registration is not only a place in a group: it can hold a one-time XP adjustment a
+        teacher gave the student, and the final XP and grade recorded when its semester was
+        archived. Those are the student's, not the slot's, so an operator deciding whether to
+        go ahead needs to see them rather than read them off the string form, which shows the
+        username, semester, group and course and nothing else.
+
+        Args:
+            registration (CourseStudent): the registration about to be dropped.
+
+        Returns:
+            str: a sentence naming what it carries, or '' when it carries none of it.
+        """
+        carried = []
+        if registration.xp_adjustment:
+            carried.append(f"an XP adjustment of {registration.xp_adjustment}")
+        if registration.final_xp is not None or registration.final_grade is not None:
+            carried.append(f"final marks ({registration.final_xp} XP, {registration.final_grade}%)")
+
+        if not carried:
+            return ''
+        return f" It carries {' and '.join(carried)}, which goes with it."
+
     def colliding_registrations(self, source, target):
         """Find the source's course registrations the target already has.
 
         CourseStudent is unique on (semester, block, user) and on (user, course, grade_fk), so
-        a registration matching either of those on the target cannot be moved. Both describe
-        the same student in the same place, so nothing is lost by dropping the source's copy.
+        a registration matching either of those on the target cannot be moved.
+
+        Matching on one of those pairs does not make the two rows identical: a row matching on
+        (semester, block) can name a different course, and one matching on (course, grade_fk)
+        can belong to a different semester, an archived one carrying final marks. Either can
+        hold its own xp_adjustment. What the dropped row takes with it is named in the report
+        (see what_a_registration_carries) so it is a decision rather than a surprise.
 
         Args:
             source (User): the account being merged away.
@@ -480,6 +509,10 @@ class Command(BaseCommand):
         Args:
             source (User): the account being merged away.
             target (User): the account being kept.
+
+        Raises:
+            ValidationError: when a stored address does not validate, which stops the merge
+                with nothing applied rather than carrying a bad row onto the kept account.
         """
         SocialAccount.objects.filter(user=source).update(user=target)
 
@@ -492,6 +525,7 @@ class Command(BaseCommand):
                 continue
             email.user = target
             email.primary = False
+            email.full_clean()
             email.save()
 
     def renumber_ordinals(self, target):

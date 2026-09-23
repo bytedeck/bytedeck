@@ -11,6 +11,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.utils import OperationalError
@@ -575,6 +576,36 @@ class MergeUsersTest(ByteDeckTenantTestCase, CommandMixin):
         self.assertEqual(CourseStudent.objects.filter(user=self.current, block=block).count(), 1)
         self.assertIn('duplicates one', output)
 
+    def test_merge_users__says_what_a_dropped_registration_takes_with_it(self):
+        """A dropped registration's XP adjustment and final marks are named before it goes.
+
+        Matching on (semester, block) does not make two registrations the same row: the one
+        being dropped can hold its own adjustment and the marks recorded when its semester was
+        archived, and that is the operator's decision to make rather than a surprise.
+        """
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=block)
+        baker.make(
+            CourseStudent, user=self.past, semester=self.semester, block=block,
+            xp_adjustment=50, final_xp=800, final_grade=91,
+        )
+
+        output = self.merge('--dry-run')
+
+        self.assertIn('an XP adjustment of 50', output)
+        self.assertIn('final marks (800 XP, 91%)', output)
+
+    def test_merge_users__says_nothing_extra_for_a_plain_dropped_registration(self):
+        """A dropped registration carrying no adjustment or marks is reported without a tail."""
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=block)
+        baker.make(CourseStudent, user=self.past, semester=self.semester, block=block)
+
+        output = self.merge('--dry-run')
+
+        self.assertIn('it will be dropped rather than moved.', output)
+        self.assertNotIn('It carries', output)
+
     def test_merge_users__keeps_registrations_that_name_no_group(self):
         """Two registrations with no group set are not duplicates, so both are kept.
 
@@ -623,6 +654,22 @@ class MergeUsersTest(ByteDeckTenantTestCase, CommandMixin):
         self.assertEqual(moved.user, self.current)
         self.assertFalse(moved.primary)
         self.assertTrue(EmailAddress.objects.get(email='kept@example.com').primary)
+
+    def test_merge_users__refuses_to_carry_over_an_invalid_email(self):
+        """A stored address that does not validate stops the merge with nothing applied.
+
+        The merge is one transaction, so the accounts are left as they were and the operator
+        can deal with the bad address first.
+        """
+        baker.make(EmailAddress, user=self.past, email='not-an-email', primary=True)
+        submission = baker.make(QuestSubmission, user=self.past, quest=self.quest, semester=self.semester)
+
+        with self.assertRaises(ValidationError):
+            self.merge()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.user, self.past)
+        self.assertTrue(User.objects.filter(pk=self.past.pk).exists())
 
     def test_merge_users__drops_an_email_the_target_already_has(self):
         """The same address on both accounts is kept once, on the account being kept."""
