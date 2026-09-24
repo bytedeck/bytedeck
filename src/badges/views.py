@@ -44,14 +44,12 @@ class AchievementRedirectView(NonPublicOnlyViewMixin, LoginRequiredMixin, Redire
 @non_public_only_view
 @login_required
 def badge_list(request):
-    # prefetch each type's badges with their tags and assertion counts, so the
+    # prefetch each type's badges with their tags and how many students hold each, so the
     # per-badge popovers don't trigger several queries per badge
     badge_types = BadgeType.objects.prefetch_related(
         Prefetch(
             'badge_set',
-            queryset=Badge.objects.annotate(
-                num_assertions_annotated=Count('badgeassertion')
-            ).prefetch_related('tags')
+            queryset=Badge.objects.all().with_num_students_granted().prefetch_related('tags')
         )
     )
     unpublished_badges = Badge.objects.all().filter(published=False)

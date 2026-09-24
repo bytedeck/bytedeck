@@ -20,7 +20,7 @@ ALLOWED_TAGS += [
     "dl",
     "dt",
     "dd",
-    "th"
+    "th",
     "caption",
     # Bootstrap Blockquotes
     "footer",
@@ -66,6 +66,18 @@ ALLOWED_TAGS += [
     "semantics",
     "annotation",
     "annotation-xml",
+    # The inline SVG KaTeX draws with, for the parts of an expression that stretch to fit
+    # what they contain: the square-root radical, extensible arrows, over- and underbraces,
+    # and the tall delimiters around a matrix. Without these the maths still has its MathML
+    # and its spans, so it lays out but comes up missing those strokes (#2763).
+    #
+    # Only the three elements KaTeX emits, rather than SVG at large: the ones left out are
+    # how SVG carries script (script, foreignObject, animate and the rest of the animation
+    # elements, and use with an xlink:href), and no allow-list that leaves them out has to
+    # reason about them.
+    "svg",
+    "path",
+    "line",
 ]
 
 # Extend a list of allowed CSS properties (mandatory for ByteDeck project),
@@ -82,4 +94,25 @@ STYLES += [
     "text-indent",
     "width",
     "scope",
+    # What KaTeX lays an expression out with (#2763). It sets these per element, worked out
+    # from the maths, so they cannot come from the stylesheet: the row heights and baseline
+    # shifts that stack a fraction or an exponent, the offsets positioning a radical over
+    # its contents, and the rule widths that draw a fraction bar or an \overline. Dropping
+    # them leaves every part of the expression at the same baseline, which is the pile of
+    # overlapping symbols the bug reports.
+    #
+    # "position" is restricted to the values KaTeX asks for by CSSSanitizer, since it is
+    # what lets an element leave the flow and cover the page.
+    "border-bottom-width",
+    "border-right-width",
+    "border-style",
+    "border-top-width",
+    "border-width",
+    "bottom",
+    "left",
+    "min-width",
+    "padding-left",
+    "position",
+    "top",
+    "vertical-align",
 ]

@@ -1,24 +1,38 @@
+from datetime import timedelta
 from io import StringIO
 from contextlib import redirect_stdout
 from unittest.mock import MagicMock, patch
+
+from allauth.account.models import EmailAddress
+from allauth.socialaccount.models import SocialAccount
 
 from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.flatpages.models import FlatPage
 from django.contrib.sites.models import Site
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db.utils import OperationalError
 from django.test import TestCase, SimpleTestCase, override_settings
+from django.utils import timezone
 from django_tenants.utils import tenant_context, get_public_schema_name, schema_context
 
+from badges.models import Badge, BadgeAssertion
+from comments.models import Comment
+from courses.models import Block, CourseStudent, Semester
 from hackerspace_online.management.commands.initdb import get_homepage_content
+from hackerspace_online.management.commands.merge_users import SIMPLE_REASSIGNMENTS
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from notifications.models import Notification, UserNotificationOptionSet
+from portfolios.models import Artwork, Portfolio
+from prerequisites.models import PrereqAllConditionsMet
+from siteconfig.models import SiteConfig
 
 from model_bakery import baker
 
-from quest_manager.models import Quest, Category
+from quest_manager.models import Quest, Category, QuestSubmission
 from tenant.models import Tenant
 
 User = get_user_model()
@@ -356,3 +370,473 @@ class FullCleanTest(TestCase, CommandMixin):
         #     #  ie. `{'semester': ['this field cannot be blank.']}`
         #     self.assertTrue('QuestSubmission' in log)
         #     self.assertFalse('Announcement' in log)
+
+
+class MergeUsersTest(ByteDeckTenantTestCase, CommandMixin):
+    """The merge_users command folds one account's work into another and deletes the duplicate."""
+
+    name = "merge_users"
+
+    def setUp(self):
+        """Two students, one kept and one merged away, and a quest and badge to earn."""
+        self.past = User.objects.create_user('past.student', password='password')
+        self.current = User.objects.create_user('current.student', password='password')
+        self.teacher = User.objects.create_user('teacher', password='password', is_staff=True)
+        self.quest = baker.make(Quest, name='Write a haiku')
+        self.badge = baker.make(Badge, name='Poet', xp=10)
+        self.semester = SiteConfig.get().active_semester
+
+    def merge(self, *args, **kwargs):
+        """Run the command on the two students without the confirmation prompt."""
+        return self.call_command(
+            kwargs.pop('source', self.past.username),
+            kwargs.pop('target', self.current.username),
+            '--noinput',
+            *args,
+            **kwargs,
+        )
+
+    def test_merge_users__moves_quest_submissions_to_the_kept_account(self):
+        """Work handed in on the duplicate account belongs to the kept account afterwards."""
+        submission = baker.make(QuestSubmission, user=self.past, quest=self.quest, semester=self.semester)
+
+        self.merge()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.user, self.current)
+
+    def test_merge_users__moves_badges_to_the_kept_account(self):
+        """Badges earned on the duplicate account are held by the kept account afterwards."""
+        assertion = baker.make(BadgeAssertion, user=self.past, badge=self.badge, semester=self.semester)
+
+        self.merge()
+
+        assertion.refresh_from_db()
+        self.assertEqual(assertion.user, self.current)
+
+    def test_merge_users__moves_badges_the_source_issued(self):
+        """A badge the duplicate account granted to someone else is re-credited, not orphaned."""
+        assertion = baker.make(BadgeAssertion, user=self.teacher, badge=self.badge, issued_by=self.past)
+
+        self.merge()
+
+        assertion.refresh_from_db()
+        self.assertEqual(assertion.issued_by, self.current)
+
+    def test_merge_users__moves_course_registrations(self):
+        """The duplicate's course registrations become the kept account's."""
+        registration = baker.make(CourseStudent, user=self.past, semester=self.semester)
+
+        self.merge()
+
+        registration.refresh_from_db()
+        self.assertEqual(registration.user, self.current)
+
+    def test_merge_users__moves_comments(self):
+        """Comments written on the duplicate account keep their text under the kept account."""
+        comment = baker.make(Comment, user=self.past, text='my work', target_object=self.quest)
+
+        self.merge()
+
+        comment.refresh_from_db()
+        self.assertEqual(comment.user, self.current)
+
+    def test_merge_users__moves_notifications(self):
+        """Notifications addressed to the duplicate are readable on the kept account."""
+        notification = baker.make(
+            Notification, recipient=self.past, sender_object=self.teacher, target_object=self.quest,
+        )
+
+        self.merge()
+
+        notification.refresh_from_db()
+        self.assertEqual(notification.recipient, self.current)
+
+    def test_merge_users__remaps_a_notification_naming_the_source_as_sender(self):
+        """A notification whose sender is the duplicate names the kept account instead.
+
+        The sender is a generic foreign key rather than a real one, so nothing in the database
+        would have rewritten it: it would have gone on pointing at a deleted row.
+        """
+        notification = baker.make(
+            Notification, recipient=self.teacher, sender_object=self.past, target_object=self.quest,
+        )
+
+        self.merge()
+
+        notification.refresh_from_db()
+        self.assertEqual(notification.sender_object, self.current)
+
+    def test_merge_users__deletes_the_duplicate_account(self):
+        """The merged-away account is gone, so nobody can sign in to it again."""
+        past_id = self.past.pk
+
+        self.merge()
+
+        self.assertFalse(User.objects.filter(pk=past_id).exists())
+        self.assertTrue(User.objects.filter(pk=self.current.pk).exists())
+
+    def test_merge_users__recaches_the_kept_accounts_xp(self):
+        """The kept account's cached XP counts the work that came over with the merge.
+
+        The merge moves rows with updates, which do not fire the signals that normally keep
+        xp_cached up to date, so the command works it out again itself.
+        """
+        self.quest.xp = 15
+        self.quest.save()
+        baker.make(CourseStudent, user=self.past, semester=self.semester, block=baker.make(Block))
+        baker.make(
+            QuestSubmission, user=self.past, quest=self.quest, semester=self.semester,
+            is_completed=True, is_approved=True, do_not_grant_xp=False,
+            first_time_completed=timezone.now(), time_approved=timezone.now(),
+        )
+        self.current.profile.refresh_from_db()
+        self.assertEqual(self.current.profile.xp_cached, 0)
+
+        self.merge()
+
+        self.current.profile.refresh_from_db()
+        self.assertEqual(self.current.profile.xp_cached, 15)
+
+    def test_merge_users__renumbers_repeated_submissions(self):
+        """Both accounts numbered their submissions from one, so the merged set is renumbered.
+
+        The count of how many times a quest was done reads the highest ordinal, which would
+        come out as one attempt instead of two while both rows were numbered 1.
+        """
+        baker.make(
+            QuestSubmission, user=self.past, quest=self.quest, semester=self.semester, ordinal=1,
+            is_completed=True, first_time_completed=timezone.now() - timedelta(days=2),
+        )
+        baker.make(
+            QuestSubmission, user=self.current, quest=self.quest, semester=self.semester, ordinal=1,
+            is_completed=True, first_time_completed=timezone.now(),
+        )
+
+        self.merge()
+
+        ordinals = list(
+            QuestSubmission.objects.filter(user=self.current, quest=self.quest)
+            .order_by('ordinal').values_list('ordinal', flat=True)
+        )
+        self.assertEqual(ordinals, [1, 2])
+
+    def test_merge_users__renumbers_repeated_badges(self):
+        """Two badge assertions that were each the first of their account become the first and second."""
+        baker.make(BadgeAssertion, user=self.past, badge=self.badge, ordinal=1, semester=self.semester)
+        baker.make(BadgeAssertion, user=self.current, badge=self.badge, ordinal=1, semester=self.semester)
+
+        self.merge()
+
+        ordinals = list(
+            BadgeAssertion.objects.filter(user=self.current, badge=self.badge)
+            .order_by('ordinal').values_list('ordinal', flat=True)
+        )
+        self.assertEqual(ordinals, [1, 2])
+        self.assertEqual(BadgeAssertion.objects.num_assertions(self.current, self.badge), 2)
+
+    def test_merge_users__moves_portfolio_artwork(self):
+        """Artwork from the duplicate's portfolio ends up in the kept account's portfolio.
+
+        A portfolio's primary key is its user id, so it cannot be reassigned: the artwork
+        moves and the emptied portfolio goes.
+        """
+        past_portfolio = baker.make(Portfolio, user=self.past)
+        artwork = baker.make(Artwork, portfolio=past_portfolio, title='Sunset')
+
+        self.merge()
+
+        artwork.refresh_from_db()
+        self.assertEqual(artwork.portfolio.user, self.current)
+        self.assertEqual(Portfolio.objects.filter(user=self.current).count(), 1)
+
+    def test_merge_users__moves_artwork_into_an_existing_portfolio(self):
+        """A kept account that already has a portfolio gains the duplicate's artwork in it."""
+        current_portfolio = baker.make(Portfolio, user=self.current)
+        past_portfolio = baker.make(Portfolio, user=self.past)
+        baker.make(Artwork, portfolio=current_portfolio, title='Mine')
+        baker.make(Artwork, portfolio=past_portfolio, title='Theirs')
+
+        self.merge()
+
+        titles = set(Artwork.objects.filter(portfolio=current_portfolio).values_list('title', flat=True))
+        self.assertEqual(titles, {'Mine', 'Theirs'})
+
+    def test_merge_users__drops_a_course_registration_the_target_already_has(self):
+        """Two registrations for the same semester and group are the same fact, so one is dropped.
+
+        Moving it would break CourseStudent's uniqueness on (semester, block, user).
+        """
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=block)
+        baker.make(CourseStudent, user=self.past, semester=self.semester, block=block)
+
+        output = self.merge()
+
+        self.assertEqual(CourseStudent.objects.filter(user=self.current, block=block).count(), 1)
+        self.assertIn('duplicates one', output)
+
+    def test_merge_users__says_what_a_dropped_registration_takes_with_it(self):
+        """A dropped registration's XP adjustment and final marks are named before it goes.
+
+        Matching on (semester, block) does not make two registrations the same row: the one
+        being dropped can hold its own adjustment and the marks recorded when its semester was
+        archived, and that is the operator's decision to make rather than a surprise.
+        """
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=block)
+        baker.make(
+            CourseStudent, user=self.past, semester=self.semester, block=block,
+            xp_adjustment=50, final_xp=800, final_grade=91,
+        )
+
+        output = self.merge('--dry-run')
+
+        self.assertIn('an XP adjustment of 50', output)
+        self.assertIn('final marks (800 XP, 91%)', output)
+
+    def test_merge_users__says_nothing_extra_for_a_plain_dropped_registration(self):
+        """A dropped registration carrying no adjustment or marks is reported without a tail."""
+        block = baker.make(Block)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=block)
+        baker.make(CourseStudent, user=self.past, semester=self.semester, block=block)
+
+        output = self.merge('--dry-run')
+
+        self.assertIn('it will be dropped rather than moved.', output)
+        self.assertNotIn('It carries', output)
+
+    def test_merge_users__keeps_registrations_that_name_no_group(self):
+        """Two registrations with no group set are not duplicates, so both are kept.
+
+        The uniqueness CourseStudent enforces counts nulls as distinct, so neither row is in
+        the other's way.
+        """
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=None)
+        baker.make(CourseStudent, user=self.past, semester=self.semester, block=None)
+
+        self.merge()
+
+        self.assertEqual(CourseStudent.objects.filter(user=self.current).count(), 2)
+
+    def test_merge_users__drops_an_in_progress_submission_the_target_already_has(self):
+        """Two never-completed attempts at one quest cannot both move, so the duplicate's goes.
+
+        QuestSubmission refuses a second never-yet-completed submission of a quest per semester.
+        """
+        baker.make(QuestSubmission, user=self.current, quest=self.quest, semester=self.semester)
+        baker.make(QuestSubmission, user=self.past, quest=self.quest, semester=self.semester)
+
+        output = self.merge()
+
+        self.assertEqual(
+            QuestSubmission.objects.filter(user=self.current, quest=self.quest).count(), 1
+        )
+        self.assertIn('In-progress submission', output)
+
+    def test_merge_users__moves_a_social_account(self):
+        """Signing in with the Google account that reached the duplicate now reaches the kept one."""
+        social = baker.make(SocialAccount, user=self.past, provider='google', uid='12345')
+
+        self.merge()
+
+        social.refresh_from_db()
+        self.assertEqual(social.user, self.current)
+
+    def test_merge_users__moves_an_email_address_as_non_primary(self):
+        """The duplicate's email is carried over, but the kept account's own stays primary."""
+        baker.make(EmailAddress, user=self.current, email='kept@example.com', primary=True, verified=True)
+        baker.make(EmailAddress, user=self.past, email='old@example.com', primary=True, verified=True)
+
+        self.merge()
+
+        moved = EmailAddress.objects.get(email='old@example.com')
+        self.assertEqual(moved.user, self.current)
+        self.assertFalse(moved.primary)
+        self.assertTrue(EmailAddress.objects.get(email='kept@example.com').primary)
+
+    def test_merge_users__refuses_to_carry_over_an_invalid_email(self):
+        """A stored address that does not validate stops the merge with nothing applied.
+
+        The merge is one transaction, so the accounts are left as they were and the operator
+        can deal with the bad address first.
+        """
+        baker.make(EmailAddress, user=self.past, email='not-an-email', primary=True)
+        submission = baker.make(QuestSubmission, user=self.past, quest=self.quest, semester=self.semester)
+
+        with self.assertRaises(ValidationError):
+            self.merge()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.user, self.past)
+        self.assertTrue(User.objects.filter(pk=self.past.pk).exists())
+
+    def test_merge_users__drops_an_email_the_target_already_has(self):
+        """The same address on both accounts is kept once, on the account being kept."""
+        baker.make(EmailAddress, user=self.current, email='same@example.com', primary=True)
+        baker.make(EmailAddress, user=self.past, email='same@example.com')
+
+        output = self.merge()
+
+        addresses = EmailAddress.objects.filter(email='same@example.com')
+        self.assertEqual(addresses.count(), 1)
+        self.assertEqual(addresses.first().user, self.current)
+        self.assertIn('already on', output)
+
+    def test_merge_users__clears_the_stale_quest_availability_cache(self):
+        """The cache of which quests a student can see is rebuilt, since their work moved."""
+        baker.make(PrereqAllConditionsMet, user=self.past, model_name='quest_manager.quest', ids='[1]')
+        baker.make(PrereqAllConditionsMet, user=self.current, model_name='quest_manager.quest', ids='[2]')
+
+        self.merge()
+
+        caches = PrereqAllConditionsMet.objects.filter(user=self.current, model_name='quest_manager.quest')
+        self.assertEqual(caches.count(), 1)
+        self.assertNotEqual(caches.first().ids, '[2]')
+
+    def test_merge_users__keeps_the_targets_own_notification_options(self):
+        """Notification options are one row per user, so the kept account's own row survives alone."""
+        baker.make(UserNotificationOptionSet, user=self.past, quest_approved_without_comment=False)
+        baker.make(UserNotificationOptionSet, user=self.current, quest_approved_without_comment=True)
+
+        self.merge()
+
+        options = UserNotificationOptionSet.objects.filter(user=self.current)
+        self.assertEqual(options.count(), 1)
+        self.assertTrue(options.first().quest_approved_without_comment)
+
+    def test_merge_users__accepts_ids_instead_of_usernames(self):
+        """--by-id names the accounts by primary key, for usernames that are hard to type."""
+        past_id = self.past.pk
+
+        self.call_command(str(self.past.pk), str(self.current.pk), '--by-id', '--noinput')
+
+        self.assertFalse(User.objects.filter(pk=past_id).exists())
+
+    def test_merge_users__refuses_an_id_that_names_nobody(self):
+        """--by-id with an id nobody has, or something that is not an id at all, says so."""
+        with self.assertRaisesMessage(CommandError, 'No user with id'):
+            self.call_command('9999999', str(self.current.pk), '--by-id', '--noinput')
+
+        with self.assertRaisesMessage(CommandError, 'No user with id'):
+            self.call_command('past.student', str(self.current.pk), '--by-id', '--noinput')
+
+    def test_merge_users__drops_an_empty_portfolio_without_making_one(self):
+        """A duplicate whose portfolio holds nothing leaves the kept account without one."""
+        baker.make(Portfolio, user=self.past)
+
+        self.merge()
+
+        self.assertFalse(Portfolio.objects.filter(user=self.current).exists())
+        self.assertEqual(Portfolio.objects.count(), 0)
+
+    def test_merge_users__dry_run_changes_nothing(self):
+        """--dry-run reports what would move and leaves both accounts alone."""
+        submission = baker.make(QuestSubmission, user=self.past, quest=self.quest, semester=self.semester)
+
+        output = self.merge('--dry-run')
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.user, self.past)
+        self.assertTrue(User.objects.filter(pk=self.past.pk).exists())
+        self.assertIn('nothing was changed', output)
+
+    def test_merge_users__refuses_to_merge_an_account_into_itself(self):
+        """Naming one account twice is a mistake, not an instruction to delete it."""
+        with self.assertRaisesMessage(CommandError, 'nothing to merge'):
+            self.call_command(self.past.username, self.past.username, '--noinput')
+
+    def test_merge_users__refuses_an_unknown_username(self):
+        """A typo names nobody, and says so rather than merging the wrong pair."""
+        with self.assertRaisesMessage(CommandError, "No user named 'nobody'"):
+            self.call_command('nobody', self.current.username, '--noinput')
+
+    def test_merge_users__refuses_an_ambiguous_username(self):
+        """Usernames differing only in case name two accounts, so the operator picks by id."""
+        User.objects.create_user('PAST.student', password='password')
+
+        with self.assertRaisesMessage(CommandError, 'matches more than one account'):
+            self.call_command('past.student', self.current.username, '--noinput')
+
+    def test_merge_users__refuses_to_delete_the_deck_owner(self):
+        """The deck owner is a setting to change first: SiteConfig protects that row anyway."""
+        config = SiteConfig.get()
+        config.deck_owner = self.teacher
+        config.save()
+
+        with self.assertRaisesMessage(CommandError, "this deck's owner"):
+            self.call_command(self.teacher.username, self.current.username, '--noinput')
+
+    def test_merge_users__refuses_to_delete_the_decks_automation_user(self):
+        """Deleting the automation user would silently repoint every automatic action."""
+        config = SiteConfig.get()
+        config.deck_ai = self.teacher
+        config.save()
+
+        with self.assertRaisesMessage(CommandError, 'automation user'):
+            self.call_command(self.teacher.username, self.current.username, '--noinput')
+
+    def test_merge_users__asks_for_the_source_username_before_merging(self):
+        """Without --noinput the merge only goes ahead once the source username is typed back."""
+        with patch('builtins.input', return_value='not-the-username'):
+            with self.assertRaisesMessage(CommandError, 'did not match'):
+                self.call_command(self.past.username, self.current.username)
+
+        self.assertTrue(User.objects.filter(pk=self.past.pk).exists())
+
+        with patch('builtins.input', return_value=self.past.username):
+            self.call_command(self.past.username, self.current.username)
+
+        self.assertFalse(User.objects.filter(pk=self.past.pk).exists())
+
+    def test_merge_users__warns_when_the_target_would_be_in_two_open_semesters(self):
+        """A student belongs to one semester, so an old registration in a second open one is flagged."""
+        other_semester = baker.make(Semester, status=Semester.Status.OPEN)
+        baker.make(CourseStudent, user=self.current, semester=self.semester, block=baker.make(Block))
+        baker.make(CourseStudent, user=self.past, semester=other_semester, block=baker.make(Block))
+
+        output = self.merge()
+
+        self.assertIn('open semesters', output)
+
+    def test_merge_users__says_the_source_profile_is_discarded(self):
+        """The duplicate's alias, preferred name and settings are dropped, and the report says so."""
+        output = self.merge('--dry-run')
+
+        self.assertIn('profile', output)
+        self.assertIn('is discarded', output)
+
+    def test_merge_users__every_relation_to_user_is_handled(self):
+        """Every foreign key into User is either reassigned or has a step of its own.
+
+        A new foreign key to User that nobody taught this command about would leave rows
+        pointing at the deleted account, or block the delete outright. This fails until the
+        new relation is listed here and dealt with in the command.
+        """
+        handled_by_reassignment = {
+            f'{model._meta.label}.{field}' for model, field in SIMPLE_REASSIGNMENTS
+        }
+        handled_by_their_own_step = {
+            # The one-row-per-user tables: the target keeps its own row.
+            'profile_manager.Profile.user',
+            'notifications.UserNotificationOptionSet.user',
+            # Its primary key is the user id, so the artwork moves instead.
+            'portfolios.Portfolio.user',
+            # Rebuilt rather than moved, since it is worked out from rows that just moved.
+            'prerequisites.PrereqAllConditionsMet.user',
+            # Moved with a check for duplicates and for who keeps the primary address.
+            'account.EmailAddress.user',
+            'socialaccount.SocialAccount.user',
+            # Checked for collisions against the target's own registrations.
+            'courses.CourseStudent.user',
+            # Roles the deck cannot lose: the command refuses a source holding one.
+            'siteconfig.SiteConfig.deck_owner',
+            'siteconfig.SiteConfig.deck_ai',
+        }
+
+        relations = {
+            f'{relation.related_model._meta.label}.{relation.field.name}'
+            for relation in User._meta.related_objects
+        }
+
+        self.assertEqual(relations - handled_by_reassignment - handled_by_their_own_step, set())

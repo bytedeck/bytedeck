@@ -33,6 +33,30 @@ def invalidate_badge_rarities_cache():
     cache.delete(BadgeRarityManager.rarities_cache_key())
 
 
+def active_students_q(user_path=''):
+    """Filter conditions matching the deck's active students, the people a badge's rarity
+    is a share of.
+
+    Staff, superusers and teachers' test accounts are never students (the same accounts
+    Tenant.get_active_user_count leaves out), and archived students (is_active=False) are
+    no longer active.
+
+    Args:
+        user_path (str): the lookup path from the model being filtered to its user, ending
+            in "__" (e.g. "user__" to filter BadgeAssertion); empty to filter User itself.
+
+    Returns:
+        Q: e.g. for "user__": Q(user__is_active=True, user__is_staff=False,
+        user__is_superuser=False, user__profile__is_test_account=False)
+    """
+    return Q(**{
+        f'{user_path}is_active': True,
+        f'{user_path}is_staff': False,
+        f'{user_path}is_superuser': False,
+        f'{user_path}profile__is_test_account': False,
+    })
+
+
 class BadgeRarityQuerySet(models.query.QuerySet):
     # these write paths fire no signals, so they must invalidate the cache themselves
     def update(self, **kwargs):
@@ -193,6 +217,20 @@ class BadgeQuerySet(models.query.QuerySet):
     def get_published(self):
         return self.filter(published=True)
 
+    def with_num_students_granted(self):
+        """Annotate each badge with num_students_granted_annotated: how many active students
+        hold it at least once. A page showing the rarity of many badges reads the count from
+        here rather than making a query per badge (see
+        Badge.fraction_of_active_students_granted_this, which counts the same way).
+
+        Returns:
+            BadgeQuerySet: these badges, each carrying num_students_granted_annotated (an int),
+            and still chainable like any other queryset.
+        """
+        return self.annotate(num_students_granted_annotated=Count(
+            'badgeassertion__user', filter=active_students_q('badgeassertion__user__'), distinct=True,
+        ))
+
 
 class BadgeManager(models.Manager):
     def get_queryset(self):
@@ -307,37 +345,55 @@ class Badge(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMix
         else:
             return SiteConfig.get().get_default_icon_url()
 
-    # @cached_property
-    def fraction_of_active_users_granted_this(self):
+    def fraction_of_active_students_granted_this(self):
+        """The share of the deck's active students who hold this badge, from 0 to 1.
+
+        Both counts are of active students only (see active_students_q), so teachers and
+        test accounts neither dilute it nor add to it, and a student who has earned the badge
+        several times counts once: a badge every active student holds is exactly 1.
+
+        Returns:
+            float: e.g. 0.25 when 10 of 40 active students hold it; 0 on a deck with no
+            active students.
+        """
         from django.core.cache import cache
         from django.db import connection
 
-        # views can provide this via .annotate(num_assertions_annotated=Count('badgeassertion'))
-        # to avoid one COUNT query per badge on list pages; where no annotation is available
-        # (e.g. badge popovers on profile pages and ajax quest info), the count is cached briefly
-        num_assertions = getattr(self, 'num_assertions_annotated', None)
-        if num_assertions is None:
-            count_cache_key = f'{connection.schema_name}-badge-assertion-count-{self.pk}'
-            num_assertions = cache.get(count_cache_key)
-            if num_assertions is None:
-                num_assertions = BadgeAssertion.objects.filter(badge=self).count()
-                cache.set(count_cache_key, num_assertions, 60)
+        # views can provide this via Badge.objects.all().with_num_students_granted() to avoid
+        # one COUNT query per badge on list pages; where no annotation is available (e.g.
+        # badge popovers on profile pages and ajax quest info), the count is cached briefly
+        num_granted = getattr(self, 'num_students_granted_annotated', None)
+        if num_granted is None:
+            count_cache_key = f'{connection.schema_name}-badge-student-count-{self.pk}'
+            num_granted = cache.get(count_cache_key)
+            if num_granted is None:
+                num_granted = User.objects.filter(active_students_q(), badgeassertion__badge=self).distinct().count()
+                cache.set(count_cache_key, num_granted, 60)
 
         # the same count is needed for every badge on a page, so cache it briefly
-        cache_key = f'{connection.schema_name}-active-user-count'
-        num_users = cache.get(cache_key)
-        if num_users is None:
-            num_users = User.objects.filter(is_active=True).count()
-            cache.set(cache_key, num_users, 60)
-        if not num_users:
+        cache_key = f'{connection.schema_name}-active-student-count'
+        num_students = cache.get(cache_key)
+        if num_students is None:
+            num_students = User.objects.filter(active_students_q()).count()
+            cache.set(cache_key, num_students, 60)
+        if not num_students:
             return 0
-        return num_assertions / num_users
+        # The two counts are taken at different moments (either can be up to a minute old), so a
+        # student who joins and earns the badge in between can put the holders briefly above the
+        # total. A share of the students can't pass all of them, so it stops at 1.
+        return min(num_granted / num_students, 1)
 
-    def percent_of_active_users_granted_this(self):
-        return self.fraction_of_active_users_granted_this() * 100
+    def percent_of_active_students_granted_this(self):
+        """fraction_of_active_students_granted_this() as a percentage.
+
+        Returns:
+            float: from 0 to 100, e.g. 25.0 when 10 of 40 active students hold it; 0 on a deck
+            with no active students.
+        """
+        return self.fraction_of_active_students_granted_this() * 100
 
     def get_rarity_icon(self):
-        percentile = self.percent_of_active_users_granted_this()
+        percentile = self.percent_of_active_students_granted_this()
         badge_rarity = BadgeRarity.objects.get_rarity(percentile)
         if badge_rarity:
             return badge_rarity.get_icon_html()

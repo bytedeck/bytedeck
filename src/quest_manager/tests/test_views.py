@@ -1729,6 +1729,88 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
                 self.assertFalse(self.sub.is_completed)
                 self.assertErrorMessage(response)
 
+    def test_complete__file_already_on_the_draft_satisfies_verification(self):
+        """A file stored on the draft counts as something to verify, with no comment (#2756).
+
+        Choosing a file saves the draft at once and stores the file on it (#2749), then
+        clears the input the file was chosen in. So by the time the student presses Submit,
+        the file they can see in their attachments list is on the draft and is not in the
+        request at all. A quest that asks for "a file or a comment" has to accept it.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        Document.objects.create(comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'))
+
+        response = self.post_complete(submission_comment="")
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+    def test_complete__file_already_on_the_draft_is_published_with_it(self):
+        """The file stored on the draft is on the comment the completion publishes.
+
+        The draft comment is what gets published, so its stored files go with it: the
+        teacher approving the quest sees the file the student was shown as attached.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        document = Document.objects.create(
+            comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'),
+        )
+
+        self.post_complete(submission_comment="")
+
+        document.refresh_from_db()
+        published = Comment.objects.all_with_target_object(self.sub)
+        self.assertIn(document.comment, published)
+
+    def test_complete__locks_the_submission_before_it_reads_the_drafts_files(self):
+        """The submission row is locked before the draft's files are counted, and only that row.
+
+        What the student has attached is read from the draft and then published from it later
+        in the same request, while the student can delete a draft file at the same moment. The
+        delete endpoint takes this row's lock, so taking it here first is what keeps the files
+        checked and the files published the same ones.
+
+        The lock names the submission alone (FOR UPDATE OF): the query joins the quest, and
+        locking that row too would queue every student completing the same quest behind one
+        another.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        Document.objects.create(comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'))
+
+        with CaptureQueriesContext(connection) as queries:
+            self.post_complete(submission_comment="")
+
+        statements = [query['sql'] for query in queries]
+        locks = [index for index, sql in enumerate(statements) if 'FOR UPDATE' in sql]
+        reads_of_files = [index for index, sql in enumerate(statements) if 'FROM "comments_document"' in sql]
+
+        self.assertEqual(len(locks), 1, 'the submission is locked exactly once')
+        self.assertIn('FOR UPDATE OF "quest_manager_questsubmission"', statements[locks[0]])
+        self.assertTrue(reads_of_files, 'the draft files were read')
+        self.assertLess(locks[0], reads_of_files[0], 'the lock is taken before the files are read')
+
+    def test_complete__blank_comment_on_a_completed_quest_is_refused_without_a_draft(self):
+        """Commenting on a completed quest with nothing to say is refused, and does not crash.
+
+        Completing a quest clears its draft (mark_completed), so the Comment button on a
+        completed quest is the one way into this view with no draft at all. Asking the draft
+        for its files must not assume there is one, and with no comment and nothing posted
+        the student is asked to leave a comment rather than posting an empty one.
+        """
+        self.sub.is_completed = True
+        self.sub.draft_comment = None
+        self.sub.save()
+
+        response = self.post_complete(button='comment', submission_comment="")
+
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.assertErrorMessage(response)
+        self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
+
     def test_complete__comment_that_is_only_an_image_satisfies_verification(self):
         """A comment made entirely of a pasted image is a real comment and completes.
 
@@ -7700,15 +7782,18 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
 
 
 class SubmissionXPCourseTests(ByteDeckTenantTestCase):
-    """Where a submission's XP counts, said wherever that submission is shown.
+    """What a student chose when handing a quest in is listed under the comment they handed it
+    in with (#2757).
 
-    A student in several courses is asked which of them a quest should count toward when they
-    hand it in (issue #2440). The answer was not shown anywhere afterwards, so neither they nor
-    the teacher approving it could see where the XP was going (#2742).
+    A student in several courses is asked which of them a quest should count toward (issue
+    #2440), and a quest can let them say how much XP it is worth. Both answers are written into
+    the comment the quest is handed in with, one above the other, so each hand-in keeps the
+    choices it was made with: a quest returned and handed in again shows the new ones under the
+    new comment, and the teacher approving it reads them with the work.
     """
 
     def setUp(self):
-        """A student in two courses, with one quest handed in and waiting for a teacher."""
+        """A student in two courses, logged in, with a quest in progress."""
         self.teacher = baker.make(User, is_staff=True)
         self.student = baker.make(User)
         self.semester = SiteConfig.get().active_semester
@@ -7718,99 +7803,155 @@ class SubmissionXPCourseTests(ByteDeckTenantTestCase):
             baker.make('courses.CourseStudent', user=self.student, course=course,
                        block=baker.make('courses.Block'), semester=self.semester)
         self.submission = baker.make(
-            QuestSubmission, user=self.student, quest=baker.make(Quest),
-            semester=self.semester, is_completed=True,
+            QuestSubmission, user=self.student, quest=baker.make(Quest, xp=5),
+            semester=self.semester, draft_comment=baker.make(Comment, text='draft'),
         )
+        self.client.force_login(self.student)
 
-    def submission_page(self):
-        """Load the submission's own page, which is both the student's view and the teacher's.
+    def let_students_enter_xp(self):
+        """Make the quest one the student says the XP of, as they hand it in."""
+        self.submission.quest.xp_can_be_entered_by_students = True
+        self.submission.quest.save()
+
+    def hand_in(self, course, button='complete', **data):
+        """Post the submission form as the student, choosing `course` for the XP.
+
+        Args:
+            course (Course | None): the course picked, or None for "Split evenly between my
+                courses", which posts an empty value.
+            button (str): which of the form's buttons is pressed: "complete" hands the quest in,
+                "comment" adds to work already handed in.
+            **data: more form fields, e.g. xp_requested.
 
         Returns:
-            HttpResponse: the rendered submission page.
-        """
-        return self.client.get(reverse('quests:submission', args=[self.submission.id]))
-
-    def approvals_row(self):
-        """Load the content the approvals page drops into a submission's row when it is opened.
-
-        Returns:
-            HttpResponse: the JSON carrying that row's rendered html.
+            HttpResponse: the view's redirect.
         """
         return self.client.post(
+            reverse('quests:complete', args=[self.submission.id]),
+            data={button: True, 'comment_text': 'my work', 'course': course.pk if course else '', **data},
+        )
+
+    def newest_comment_text(self):
+        """The text of the comment most recently published on the submission.
+
+        Returns:
+            str: the stored comment HTML.
+        """
+        return Comment.objects.all_with_target_object(self.submission).order_by('-id').first().text
+
+    def test_complete__lists_the_course_under_the_comment(self):
+        """The course the student chose is written under the comment they handed the quest in with."""
+        self.hand_in(self.welding)
+
+        self.assertIn('<ul><li><b>XP counts toward: Welding</b></li></ul>', self.newest_comment_text())
+
+    def test_complete__lists_an_even_split_under_the_comment(self):
+        """Choosing to split the XP evenly is a choice too, and is written down the same way."""
+        self.hand_in(None)
+
+        self.assertIn('<li><b>XP split evenly between my courses</b></li>', self.newest_comment_text())
+
+    def test_complete__lists_the_requested_xp_and_the_course_together(self):
+        """On a quest the student says the XP of, both answers sit in one list, the XP above the course."""
+        self.let_students_enter_xp()
+
+        self.hand_in(self.pottery, xp_requested=12)
+
+        self.assertIn(
+            '<ul><li><b>XP requested: 12</b></li><li><b>XP counts toward: Pottery</b></li></ul>',
+            self.newest_comment_text(),
+        )
+
+    def test_complete__a_quest_handed_in_again_lists_its_new_course(self):
+        """A quest returned and handed in again for another course says so under the new comment,
+        and the first comment still says what the first hand-in chose."""
+        self.hand_in(self.welding)
+        # as the teacher's return does, from the row as the hand-in left it: this instance
+        # still holds the draft the hand-in published, and saving it would put that back
+        self.submission.refresh_from_db()
+        self.submission.mark_returned()
+        # opening the returned quest is what gives the student a fresh draft to hand in
+        self.client.get(reverse('quests:submission', args=[self.submission.id]))
+
+        self.hand_in(self.pottery)
+
+        first, second = [comment.text for comment in Comment.objects.all_with_target_object(self.submission).order_by('id')]
+        self.assertIn('XP counts toward: Welding', first)
+        self.assertIn('XP counts toward: Pottery', second)
+        self.assertNotIn('Welding', second)
+
+    def test_complete__escapes_the_course_name(self):
+        """A course name is text, so characters that mean something in HTML are written as text."""
+        self.pottery.title = 'Pots & <Pans>'
+        self.pottery.save()
+
+        self.hand_in(self.pottery)
+
+        text = self.newest_comment_text()
+        self.assertIn('XP counts toward: Pots &amp; &lt;Pans&gt;', text)
+        self.assertNotIn('<Pans>', text)
+
+    def test_complete__says_nothing_of_courses_for_a_student_in_one_course(self):
+        """A student in a single course is never asked, so there is no choice to write down."""
+        only_pottery = baker.make(User)
+        baker.make('courses.CourseStudent', user=only_pottery, course=self.pottery,
+                   block=baker.make('courses.Block'), semester=self.semester)
+        self.submission = baker.make(QuestSubmission, user=only_pottery, quest=baker.make(Quest, xp=5),
+                                     semester=self.semester, draft_comment=baker.make(Comment, text='draft'))
+        self.client.force_login(only_pottery)
+
+        self.hand_in(None)
+
+        text = self.newest_comment_text()
+        self.assertNotIn('XP counts toward', text)
+        self.assertNotIn('XP split evenly', text)
+
+    def test_complete__a_comment_on_work_already_handed_in_lists_no_choices(self):
+        """Commenting on a quest already handed in changes neither the XP it asks for nor the
+        course, so the comment does not claim either."""
+        self.let_students_enter_xp()
+        self.hand_in(self.welding, xp_requested=12)
+
+        self.hand_in(self.pottery, button='comment', xp_requested=20)
+
+        text = self.newest_comment_text()
+        self.assertNotIn('XP requested', text)
+        self.assertNotIn('XP counts toward', text)
+        self.submission.refresh_from_db()
+        self.assertEqual((self.submission.xp_requested, self.submission.course), (12, self.welding))
+
+    def test_submission__shows_the_choice_with_the_comment_not_above_it(self):
+        """On the submission page, the student and the teacher approving the work both read the
+        choice under the comment it was made with, and nowhere else."""
+        self.hand_in(self.welding)
+
+        for user in (self.student, self.teacher):
+            self.client.force_login(user)
+            response = self.client.get(reverse('quests:submission', args=[self.submission.id]))
+            self.assertContains(response, 'XP counts toward: Welding', count=1)
+            self.assertNotContains(response, 'submission-xp-course')
+
+    def test_ajax_approval_info__shows_the_choice_with_the_comment(self):
+        """The row a teacher opens on the approvals page shows the comment, and so the choice with it."""
+        self.hand_in(self.welding)
+        self.client.force_login(self.teacher)
+
+        response = self.client.post(
             reverse('quests:ajax_approval_info', args=[self.submission.id]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
 
-    def test_submission__names_the_course_the_xp_counts_toward(self):
-        """The student who chose it can see what they chose, on the submission they chose it for."""
-        self.submission.course = self.welding
-        self.submission.save()
-        self.client.force_login(self.student)
+        self.assertContains(response, 'XP counts toward: Welding', count=1)
+        self.assertNotContains(response, 'submission-xp-course')
 
-        response = self.submission_page()
-
-        self.assertContains(response, 'XP counts toward')
-        self.assertContains(response, 'Welding')
-
-    def test_submission__names_the_course_for_the_teacher_approving_it(self):
-        """The teacher deciding whether to approve it sees which course the XP lands in, which
-        is the thing they cannot otherwise find out (#2742)."""
-        self.submission.course = self.welding
-        self.submission.save()
-        self.client.force_login(self.teacher)
-
-        response = self.submission_page()
-
-        self.assertContains(response, 'XP counts toward')
-        self.assertContains(response, 'Welding')
-
-    def test_submission__says_when_the_xp_is_split_evenly(self):
-        """Nobody answering the question is itself an answer: the XP is shared between their
-        courses, which is worth saying rather than leaving to be guessed at."""
-        self.client.force_login(self.student)
-
-        response = self.submission_page()
-
-        self.assertContains(response, 'XP split evenly between all 2 courses')
-
-    def test_submission__says_nothing_to_a_student_in_one_course(self):
-        """All of a single-course student's XP counts toward it, so there is nothing to say and
-        the line would be noise on every deck that has no multicourse students at all."""
-        only_pottery = baker.make(User)
-        baker.make('courses.CourseStudent', user=only_pottery, course=self.pottery,
-                   block=baker.make('courses.Block'), semester=self.semester)
-        submission = baker.make(QuestSubmission, user=only_pottery, quest=baker.make(Quest),
-                                semester=self.semester, is_completed=True)
-        self.client.force_login(only_pottery)
-
-        response = self.client.get(reverse('quests:submission', args=[submission.id]))
-
-        self.assertNotContains(response, 'XP counts toward')
-        self.assertNotContains(response, 'XP split evenly')
-
-    def test_ajax_approval_info__names_the_course_the_xp_counts_toward(self):
-        """The approvals page is where a teacher works through submissions, so the row they open
-        to read the work says where its XP is going too."""
-        self.submission.course = self.welding
-        self.submission.save()
-        self.client.force_login(self.teacher)
-
-        response = self.approvals_row()
-
-        self.assertContains(response, 'XP counts toward')
-        self.assertContains(response, 'Welding')
-
-    def test_ajax_submission_info__names_the_course_the_xp_counts_toward(self):
-        """The student's own list of submissions says it as well, so they can check what they
-        chose without opening each quest."""
-        self.submission.course = self.welding
-        self.submission.save()
-        self.client.force_login(self.student)
+    def test_ajax_submission_info__shows_the_choice_with_the_comment(self):
+        """The row the student opens in their Completed tab shows the comment, and so the choice with it."""
+        self.hand_in(self.welding)
 
         response = self.client.post(
-            reverse('quests:ajax_info_in_progress', args=[self.submission.id]),
+            reverse('quests:ajax_info_completed', args=[self.submission.id]),
             HTTP_X_REQUESTED_WITH='XMLHttpRequest',
         )
 
-        self.assertContains(response, 'XP counts toward')
-        self.assertContains(response, 'Welding')
+        self.assertContains(response, 'XP counts toward: Welding', count=1)
+        self.assertNotContains(response, 'submission-xp-course')

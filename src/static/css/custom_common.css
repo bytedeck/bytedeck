@@ -806,10 +806,26 @@ h3.comment-heading {
 .comment-content {
     /* prevent long urls from breaking out of container or forcing a scrollbar */
     overflow-wrap: anywhere;
+    /* Keep a comment's own drawing inside its own box. Comment HTML is written by students
+       and may carry inline CSS, including the relative positioning the maths needs, and a
+       relatively positioned block keeps its space in the flow while painting wherever its
+       offsets put it: over the author's name and the staff flag, delete and ban buttons,
+       which this template renders above the content. Clipping here is what makes those
+       offsets safe to allow at all. */
+    overflow: hidden;
 }
 
 .comment-content img {
     max-width: 100%;
+}
+
+/* A display equation is one unbroken line (KaTeX sets white-space: nowrap on it), so one
+   wider than the comment runs past the edge and the clipping above would simply cut it off,
+   with nothing to say the rest is there. Scrolling it keeps all of it reachable. This is a
+   scroll container, so it clips its own contents too: an author who puts this class on
+   something else gets a box that scrolls, not one that paints over the page. */
+.comment-content .katex-display {
+    overflow-x: auto;
 }
 
 /***********ACCORDIAN COMMENTS *******************************/
