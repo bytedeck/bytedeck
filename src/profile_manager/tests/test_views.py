@@ -727,7 +727,10 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # Fill a whole page with students whose first name sorts ahead of the first-name target
         # below, so that target is pushed onto a later page under the default (first-name) ordering.
-        baker.make(User, first_name='AAAA', _quantity=per_page)
+        # Their usernames are fixed: left to model_bakery each is 150 random letters, and usernames
+        # are searched too, so a short term like "zebed" could turn up inside one by chance (#2766).
+        for i in range(per_page):
+            User.objects.create_user(f'filler{i}', first_name='AAAA')
 
         # One target per searchable column, each carrying a value that collides with nothing else.
         first_target = User.objects.create_user('zzz_first', first_name='Zebediah')
