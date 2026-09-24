@@ -1765,6 +1765,34 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         published = Comment.objects.all_with_target_object(self.sub)
         self.assertIn(document.comment, published)
 
+    def test_complete__locks_the_submission_before_it_reads_the_drafts_files(self):
+        """The submission row is locked before the draft's files are counted, and only that row.
+
+        What the student has attached is read from the draft and then published from it later
+        in the same request, while the student can delete a draft file at the same moment. The
+        delete endpoint takes this row's lock, so taking it here first is what keeps the files
+        checked and the files published the same ones.
+
+        The lock names the submission alone (FOR UPDATE OF): the query joins the quest, and
+        locking that row too would queue every student completing the same quest behind one
+        another.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        Document.objects.create(comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'))
+
+        with CaptureQueriesContext(connection) as queries:
+            self.post_complete(submission_comment="")
+
+        statements = [query['sql'] for query in queries]
+        locks = [index for index, sql in enumerate(statements) if 'FOR UPDATE' in sql]
+        reads_of_files = [index for index, sql in enumerate(statements) if 'FROM "comments_document"' in sql]
+
+        self.assertEqual(len(locks), 1, 'the submission is locked exactly once')
+        self.assertIn('FOR UPDATE OF "quest_manager_questsubmission"', statements[locks[0]])
+        self.assertTrue(reads_of_files, 'the draft files were read')
+        self.assertLess(locks[0], reads_of_files[0], 'the lock is taken before the files are read')
+
     def test_complete__blank_comment_on_a_completed_quest_is_refused_without_a_draft(self):
         """Commenting on a completed quest with nothing to say is refused, and does not crash.
 

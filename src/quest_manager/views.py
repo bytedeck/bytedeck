@@ -2203,6 +2203,7 @@ def _keep_posted_uploads(request, form, question_formset, submission, followup="
 
 @non_public_only_view
 @login_required
+@transaction.atomic
 def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
@@ -2222,7 +2223,23 @@ def complete(request, submission_id):
         Http404: on a GET, an unrecognized submit button, or a submission with no draft
             comment that is not already completed.
     """
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    # Locked for the whole request, because what the student has attached is decided from their
+    # draft (has_attachment, below) and then published from it several steps later. The student
+    # can delete a draft file at the same moment (ajax_delete_draft_attachment), and that
+    # endpoint takes this same row lock, so it waits: the files checked are the files published.
+    # Without it a delete landing between the two lets a quest that asks for a file complete
+    # with none.
+    #
+    # of=("self",) locks the submission alone. The manager's default filters join the quest,
+    # and a bare FOR UPDATE would lock that row too, making every student completing the same
+    # quest queue behind one another. include_related=False for the reason the delete endpoint
+    # gives: Postgres refuses FOR UPDATE on the nullable side of an outer join, which those
+    # joins would add. It leaves the default filters in place, so the same submissions are
+    # found as before.
+    submission = get_object_or_404(
+        QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+        pk=submission_id,
+    )
     origin_path = submission.get_absolute_url()
 
     # EARLY EXIT CONDITIONS: ####################
