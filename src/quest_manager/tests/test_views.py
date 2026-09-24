@@ -1729,6 +1729,60 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
                 self.assertFalse(self.sub.is_completed)
                 self.assertErrorMessage(response)
 
+    def test_complete__file_already_on_the_draft_satisfies_verification(self):
+        """A file stored on the draft counts as something to verify, with no comment (#2756).
+
+        Choosing a file saves the draft at once and stores the file on it (#2749), then
+        clears the input the file was chosen in. So by the time the student presses Submit,
+        the file they can see in their attachments list is on the draft and is not in the
+        request at all. A quest that asks for "a file or a comment" has to accept it.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        Document.objects.create(comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'))
+
+        response = self.post_complete(submission_comment="")
+
+        self.assertRedirects(response, expected_url=reverse('quests:quests'))
+        self.sub.refresh_from_db()
+        self.assertTrue(self.sub.is_completed)
+
+    def test_complete__file_already_on_the_draft_is_published_with_it(self):
+        """The file stored on the draft is on the comment the completion publishes.
+
+        The draft comment is what gets published, so its stored files go with it: the
+        teacher approving the quest sees the file the student was shown as attached.
+        """
+        self.sub.quest.verification_required = True
+        self.sub.quest.save()
+        document = Document.objects.create(
+            comment=self.draft_comment, docfile=ContentFile(b'my work', name='work.txt'),
+        )
+
+        self.post_complete(submission_comment="")
+
+        document.refresh_from_db()
+        published = Comment.objects.all_with_target_object(self.sub)
+        self.assertIn(document.comment, published)
+
+    def test_complete__blank_comment_on_a_completed_quest_is_refused_without_a_draft(self):
+        """Commenting on a completed quest with nothing to say is refused, and does not crash.
+
+        Completing a quest clears its draft (mark_completed), so the Comment button on a
+        completed quest is the one way into this view with no draft at all. Asking the draft
+        for its files must not assume there is one, and with no comment and nothing posted
+        the student is asked to leave a comment rather than posting an empty one.
+        """
+        self.sub.is_completed = True
+        self.sub.draft_comment = None
+        self.sub.save()
+
+        response = self.post_complete(button='comment', submission_comment="")
+
+        self.assertRedirects(response, expected_url=self.sub.get_absolute_url())
+        self.assertErrorMessage(response)
+        self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
+
     def test_complete__comment_that_is_only_an_image_satisfies_verification(self):
         """A comment made entirely of a pasted image is a real comment and completes.
 
