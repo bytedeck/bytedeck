@@ -179,7 +179,11 @@ class BadgeShareOfActiveStudentsTest(ByteDeckTenantTestCase):
         cache.clear()
 
     def make_test_account(self):
-        """A student account a teacher flagged as a test account, so it isn't a real student."""
+        """Make a student account a teacher flagged as a test account, so it isn't a real student.
+
+        Returns:
+            User: the new, active, non-staff user, with profile.is_test_account set and saved.
+        """
         user = baker.make(User)
         user.profile.is_test_account = True
         user.profile.full_clean()
@@ -194,6 +198,18 @@ class BadgeShareOfActiveStudentsTest(ByteDeckTenantTestCase):
 
         self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1)
         self.assertEqual(self.badge.percent_of_active_students_granted_this(), 100)
+
+    def test_fraction_of_active_students_granted_this__never_passes_all_of_them(self):
+        """The two counts are cached apart for up to a minute, so a student who joins and earns
+        the badge between them can put the holders above a total cached before they joined.
+        It still reads 100% at most."""
+        from django.core.cache import cache
+        # the total as it was cached when only one of the two students had joined
+        cache.set(f'{connection.schema_name}-active-student-count', 1, 60)
+        for student in (self.student1, self.student2):
+            baker.make(BadgeAssertion, user=student, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1)
 
     def test_fraction_of_active_students_granted_this__only_students_count_as_holders(self):
         """Staff, superusers and test accounts holding the badge add nothing to it: only one of

@@ -222,6 +222,10 @@ class BadgeQuerySet(models.query.QuerySet):
         hold it at least once. A page showing the rarity of many badges reads the count from
         here rather than making a query per badge (see
         Badge.fraction_of_active_students_granted_this, which counts the same way).
+
+        Returns:
+            BadgeQuerySet: these badges, each carrying num_students_granted_annotated (an int),
+            and still chainable like any other queryset.
         """
         return self.annotate(num_students_granted_annotated=Count(
             'badgeassertion__user', filter=active_students_q('badgeassertion__user__'), distinct=True,
@@ -374,10 +378,18 @@ class Badge(IsAPrereqMixin, IsLibraryContentMixin, HasPrereqsMixin, TagsModelMix
             cache.set(cache_key, num_students, 60)
         if not num_students:
             return 0
-        return num_granted / num_students
+        # The two counts are taken at different moments (either can be up to a minute old), so a
+        # student who joins and earns the badge in between can put the holders briefly above the
+        # total. A share of the students can't pass all of them, so it stops at 1.
+        return min(num_granted / num_students, 1)
 
     def percent_of_active_students_granted_this(self):
-        """fraction_of_active_students_granted_this() as a percentage, from 0 to 100."""
+        """fraction_of_active_students_granted_this() as a percentage.
+
+        Returns:
+            float: from 0 to 100, e.g. 25.0 when 10 of 40 active students hold it; 0 on a deck
+            with no active students.
+        """
         return self.fraction_of_active_students_granted_this() * 100
 
     def get_rarity_icon(self):
