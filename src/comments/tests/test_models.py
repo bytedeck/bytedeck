@@ -130,6 +130,21 @@ class CleanHTMLTests(TestCase):
         cleaned_text = clean_html(text)
         self.assertEqual(cleaned_text, expected_output)
 
+    def test_clean_html__keeps_a_list_with_formatted_items_as_one_list(self):
+        """A list whose items hold bold text stays one list, rather than each later item being
+        pushed into a list of its own nested inside it."""
+        text = '<ul><li><b>one</b></li><li><b>two</b></li><li>a <a href="http://example.com">link</a></li><li>four</li></ul>'
+        expected_output = (
+            '<ul><li><b>one</b></li><li><b>two</b></li>'
+            '<li>a <a href="http://example.com" target="_blank">link</a></li><li>four</li></ul>'
+        )
+        self.assertEqual(clean_html(text), expected_output)
+
+    def test_clean_html__keeps_a_numbered_list_numbered(self):
+        """A numbered list's items are already in a list, so they are not wrapped in a bulleted one."""
+        text = '<ol><li>one</li><li><b>two</b></li><li>three</li></ol>'
+        self.assertEqual(clean_html(text), text)
+
     def test_clean_html__orphan_li_after_empty_ul_is_left_in_place(self):
         """A bare <li> whose previous <li> was skipped (because that one followed a <ul>) hits the
         'no open <ul> group yet' path and is left where it is rather than re-wrapped."""

@@ -131,8 +131,13 @@ def clean_html(text, convert_newlines=True):
     ulgroup = 0
     uls = []
     for li in soup.findAll('li'):
+        # An <li> already in a list is left alone. Its parent is what says so: the element before
+        # it only does for a list's first item, since a later item follows the last tag inside
+        # the item before it (a <b>, say), and an <ol>'s items would read as bare as well.
+        if li.parent and li.parent.name in ('ul', 'ol'):
+            continue
         previous_element = li.findPrevious()
-        # if <li> already wrapped in <ul>, do nothing
+        # a bare <li> straight after a <ul> start tag is left where it is
         if previous_element and previous_element.name == 'ul':
             continue
         # if <li> is the first element of a <li> group, wrap it in a new <ul>
