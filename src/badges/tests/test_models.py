@@ -121,17 +121,17 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         self.assertIn(matching, qs)
         self.assertNotIn(other, qs)
 
-    def test_fraction_of_active_users_granted_this__returns_zero_when_no_active_users(self):
-        """fraction_of_active_users_granted_this() returns 0 (no division by zero) when the
-        active-user count is zero."""
+    def test_fraction_of_active_students_granted_this__returns_zero_when_no_active_students(self):
+        """fraction_of_active_students_granted_this() returns 0 (no division by zero) when the
+        active-student count is zero."""
         from django.core.cache import cache
         from django.db import connection
-        # Prime the active-user-count cache to 0 so the guard short-circuits before dividing.
+        # Prime the active-student-count cache to 0 so the guard short-circuits before dividing.
         # Clean it up so the cached zero (60s TTL) can't leak into later tests in this process.
-        cache_key = f'{connection.schema_name}-active-user-count'
+        cache_key = f'{connection.schema_name}-active-student-count'
         self.addCleanup(cache.delete, cache_key)
         cache.set(cache_key, 0, 60)
-        self.assertEqual(self.badge.fraction_of_active_users_granted_this(), 0)
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 0)
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
     def test_get_rarity_icon__without_rarity(self, mock_get_rarity):
@@ -144,7 +144,7 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         self.assertEqual(result, '')
 
     @mock.patch('badges.models.BadgeRarity.objects.get_rarity')
-    @mock.patch('badges.models.Badge.percent_of_active_users_granted_this')
+    @mock.patch('badges.models.Badge.percent_of_active_students_granted_this')
     def test_get_rarity_icon__with_rarity(self, mock_percentile, mock_get_rarity):
         """get_rarity_icon() returns the rarity's icon html when the badge has a rarity."""
         mock_percentile.return_value = 80  # Set the desired percentile value
@@ -158,6 +158,85 @@ class BadgeTestModel(ByteDeckTenantTestCase):
         mock_get_rarity.assert_called_once_with(80)  # Verify the correct percentile is passed
         mock_badge_rarity.get_icon_html.assert_called_once()
         self.assertEqual(result, '<span class="badge-icon">Icon</span>')
+
+
+class BadgeShareOfActiveStudentsTest(ByteDeckTenantTestCase):
+    """fraction_of_active_students_granted_this(): the share of the deck's active students who
+    hold a badge, shown as "% have earned this" beside its rarity (issue #2760)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, two active students and a badge none of them holds yet."""
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.student1 = baker.make(User)
+        cls.student2 = baker.make(User)
+        cls.badge = baker.make(Badge)
+
+    def setUp(self):
+        """Start each test with a cold cache: both counts are cached for 60s, so one cached by
+        an earlier test would otherwise stand in for this test's."""
+        from django.core.cache import cache
+        cache.clear()
+
+    def make_test_account(self):
+        """A student account a teacher flagged as a test account, so it isn't a real student."""
+        user = baker.make(User)
+        user.profile.is_test_account = True
+        user.profile.full_clean()
+        user.profile.save()
+        return user
+
+    def test_fraction_of_active_students_granted_this__staff_dont_dilute_it(self):
+        """A badge every active student holds reads 100%, however many teachers the deck has."""
+        baker.make(User, is_staff=True, _quantity=3)
+        for student in (self.student1, self.student2):
+            baker.make(BadgeAssertion, user=student, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1)
+        self.assertEqual(self.badge.percent_of_active_students_granted_this(), 100)
+
+    def test_fraction_of_active_students_granted_this__only_students_count_as_holders(self):
+        """Staff, superusers and test accounts holding the badge add nothing to it: only one of
+        the two students holds it, so half of them have earned it."""
+        superuser = baker.make(User, is_superuser=True)
+        for user in (self.teacher, superuser, self.make_test_account(), self.student1):
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_fraction_of_active_students_granted_this__archived_students_are_left_out(self):
+        """Archived students count on neither side, whether or not they hold the badge."""
+        archived_holder = baker.make(User, is_active=False)
+        baker.make(User, is_active=False)
+        for user in (archived_holder, self.student1):
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_fraction_of_active_students_granted_this__a_student_earning_it_twice_counts_once(self):
+        """A repeatable badge earned twice by one of the two students is held by half of them."""
+        baker.make(BadgeAssertion, user=self.student1, badge=self.badge, _quantity=2)
+
+        self.assertEqual(self.badge.fraction_of_active_students_granted_this(), 1 / 2)
+
+    def test_with_num_students_granted__counts_the_same_students(self):
+        """The annotation the badge list reads counts exactly the holders the badge counts on
+        its own: each active student once, and nobody else."""
+        superuser = baker.make(User, is_superuser=True)
+        archived = baker.make(User, is_active=False)
+        holders = (self.teacher, superuser, self.make_test_account(), archived, self.student1, self.student1)
+        for user in holders:
+            baker.make(BadgeAssertion, user=user, badge=self.badge)
+        # another badge's assertions aren't this badge's
+        baker.make(BadgeAssertion, user=self.student2, badge=baker.make(Badge))
+
+        annotated = Badge.objects.all().with_num_students_granted().get(pk=self.badge.pk)
+
+        self.assertEqual(annotated.num_students_granted_annotated, 1)
+        self.assertEqual(
+            annotated.fraction_of_active_students_granted_this(),
+            self.badge.fraction_of_active_students_granted_this(),
+        )
 
 
 class BadgeStudentsWhoQualifyUngrantedTest(ByteDeckTenantTestCase):
@@ -607,30 +686,31 @@ class BadgeAssertionTestModel(ByteDeckTenantTestCase):
         self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_a, False).exists())
         self.assertTrue(BadgeAssertion.objects.all_for_user_badge(self.student, badge_b, False).exists())
 
-    def test_fraction_of_active_users_granted_this__matches_ratio(self):
-        """fraction/percent_of_active_users_granted_this() reflect the share of active users with the badge."""
+    def test_fraction_of_active_students_granted_this__matches_ratio(self):
+        """fraction/percent_of_active_students_granted_this() reflect the share of active students with the badge."""
         num_students_with_badge = 3
 
         students_with_badge = baker.make(User, _quantity=num_students_with_badge)
         self.assertEqual(len(students_with_badge), num_students_with_badge)
 
-        total_students = User.objects.filter(is_active=True).count()
+        # this class's users are all plain students or staff, so the students are the non-staff
+        total_students = User.objects.filter(is_active=True, is_staff=False).count()
 
         badge = baker.make(Badge)
 
         for student in students_with_badge:
             baker.make(BadgeAssertion, user=student, badge=badge)
 
-        # fraction_of_active_users_granted_this() caches the active-user and
-        # assertion counts for 60s; clear so counts cached by earlier tests in
+        # fraction_of_active_students_granted_this() caches the active-student and
+        # holder counts for 60s; clear so counts cached by earlier tests in
         # this process can't leak into the assertion below
         from django.core.cache import cache
         cache.clear()
 
-        fraction = badge.fraction_of_active_users_granted_this()
+        fraction = badge.fraction_of_active_students_granted_this()
         self.assertEqual(fraction, num_students_with_badge / total_students)
 
-        percentile = badge.percent_of_active_users_granted_this()
+        percentile = badge.percent_of_active_students_granted_this()
         self.assertEqual(percentile, num_students_with_badge / total_students * 100)
 
     def test_post_save_receiver__creates_notifications(self):

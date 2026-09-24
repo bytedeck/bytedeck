@@ -651,6 +651,32 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.assertContains(request, "CustomBadge Type")
 
 
+class BadgeListRarityTests(ByteDeckTenantTestCase):
+    """The badge list's popovers give each badge's share of the deck's active students (issue #2760)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, and two students who both hold one badge."""
+        cls.teacher = baker.make(User, is_staff=True)
+        cls.students = baker.make(User, _quantity=2)
+        cls.badge = baker.make(Badge)
+        for student in cls.students:
+            baker.make(BadgeAssertion, user=student, badge=cls.badge)
+
+    def test_badge_list__a_badge_every_student_holds_reads_100_percent(self):
+        """The teachers on the deck don't pull a badge every student holds below 100%, and the
+        count comes from the list's annotation rather than a query per badge."""
+        from django.core.cache import cache
+        cache.clear()  # the counts are cached for 60s, so start from nothing
+        self.client.force_login(self.students[0])
+
+        response = self.client.get(reverse('badges:list'))
+
+        self.assertContains(response, '100.0% have earned this')
+        listed = [badge for badge_type in response.context['badge_types'] for badge in badge_type.badge_set.all()]
+        self.assertEqual(next(b for b in listed if b.pk == self.badge.pk).num_students_granted_annotated, 2)
+
+
 class BadgeTypeViewTests(ByteDeckTenantTestCase):
 
     @classmethod
