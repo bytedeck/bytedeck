@@ -2078,6 +2078,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "num_matching_submissions": submission_tab.num_matching,
         "group_filter_choices": Block.objects.in_open_semesters(),
         "current_group": submission_tab.group_filter.pk if submission_tab.group_filter else '',
+        "current_group_name": submission_tab.group_filter.name if submission_tab.group_filter else '',
     }
     return render(request, template, context)
 

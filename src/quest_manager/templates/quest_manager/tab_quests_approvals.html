@@ -59,6 +59,15 @@
   <p class="text-muted">
     {{ num_matching_submissions }} submission{{ num_matching_submissions|pluralize }} match{{ num_matching_submissions|pluralize:"es," }} "{{ submission_search_term }}"{% if current_group %} in this {{ group_label|lower }}{% endif %}.
   </p>
+{% elif current_group %}
+  {% comment %}
+    A chosen {group} says how much is in it even with nothing searched: the sidebar's badge
+    counts the whole queue, so without this nothing on the page gives the size of the list
+    being worked through (#2699).
+  {% endcomment %}
+  <p class="text-muted">
+    {{ num_matching_submissions }} submission{{ num_matching_submissions|pluralize }} in {{ current_group_name }}.
+  </p>
 {% endif %}
 
 {% if tab.submissions %}

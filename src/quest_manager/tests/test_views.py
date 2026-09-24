@@ -6420,6 +6420,23 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         self.assertContains(response, '1 submission matches "al" in this group.')
         self.assertEqual(self._usernames(block=self.block_b.pk, q='al'), ['al'])
 
+    def test_approvals__a_chosen_group_says_how_many_submissions_it_holds(self):
+        """With a group chosen and nothing searched, the count names the group and says how much
+        is in it. The sidebar's badge counts the whole queue, so nothing else on the page gives
+        the size of the list being worked through (#2699)."""
+        for block, expected in ((self.block_b, '2 submissions in 8B.'), (self.block_a, '1 submission in 7A.')):
+            with self.subTest(group=block.name):
+                response = self.client.get(reverse('quests:submitted_all'), {'block': block.pk})
+
+                self.assertContains(response, expected)
+
+    def test_approvals__an_unfiltered_tab_has_no_count(self):
+        """With no group chosen and nothing searched there is no count line: the whole tab's size
+        is what the sidebar's badge reports."""
+        response = self.client.get(reverse('quests:submitted_all'))
+
+        self.assertNotRegex(response.content.decode(), r'\d+ submissions? (in|match)')
+
     def test_approvals__the_group_filter_and_a_sort_apply_together(self):
         """Ordering a filtered tab reorders its results rather than dropping the filter."""
         self.assertEqual(self._usernames(block=self.block_b.pk, sort='group'), ['bo', 'al'])
