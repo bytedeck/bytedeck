@@ -16,9 +16,37 @@ EMBEDDED_CONTENT_TAGS = frozenset({
     "img", "iframe", "video", "audio", "source", "track", "embed", "object", "svg", "canvas", "math",
 })
 
+# Tags that make a block of their own, which a paragraph cannot hold. A fragment with any of these
+# in it is already laid out in blocks, so `in_a_paragraph` leaves it as it is.
+BLOCK_TAGS = frozenset({
+    "p", "div", "ul", "ol", "li", "dl", "dt", "dd", "table", "caption", "thead", "tbody", "tfoot",
+    "tr", "th", "td", "blockquote", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "figure",
+    "figcaption", "section", "article", "aside", "header", "footer", "nav", "main", "address",
+    "details", "summary", "fieldset", "form",
+})
+
 # The name of each opening tag in a fragment, e.g. "<p><img src='x'>" -> ["p", "img"]. Only text
 # outside a tag can be escaped, so an `&lt;img&gt;` the user typed is never matched here.
 _OPENING_TAG_RE = re.compile(r"<\s*([a-zA-Z][a-zA-Z0-9:-]*)")
+
+
+def in_a_paragraph(fragment):
+    """The fragment laid out in blocks: in a paragraph of its own when it is only text and inline
+    tags, and as it is when it already has blocks.
+
+    The Summernote editor lays a comment out in paragraphs and lists itself, while a plain
+    textarea, or text the app writes, is bare. Putting the editor's markup inside another
+    paragraph nests a paragraph or a list inside one, which HTML does not allow: a browser closes
+    the outer paragraph early and leaves a stray end tag behind (#2713).
+
+    Args:
+        fragment (str): the HTML fragment, e.g. "done" or "<p>done</p>".
+
+    Returns:
+        str: e.g. "<p>done</p>" for both of those.
+    """
+    tags = {name.lower() for name in _OPENING_TAG_RE.findall(fragment)}
+    return fragment if tags & BLOCK_TAGS else f"<p>{fragment}</p>"
 
 
 def is_empty_html(value):

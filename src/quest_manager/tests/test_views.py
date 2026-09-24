@@ -1541,6 +1541,31 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
             )
         return response
 
+    def test_complete__keeps_the_editors_paragraphs_as_they_are(self):
+        """The editor lays a comment out in paragraphs already, so the published comment is that
+        markup rather than those paragraphs nested inside another one (#2713)."""
+        self.post_complete(submission_comment="<p>Done!</p><p>Second paragraph.</p>")
+
+        published = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(published.text, "<p>Done!</p><p>Second paragraph.</p>")
+
+    def test_complete__puts_a_plain_comment_in_a_paragraph(self):
+        """Text with no markup of its own, as the quick reply box posts it, gets its paragraph."""
+        self.post_complete(submission_comment="thanks")
+
+        self.assertEqual(Comment.objects.all_with_target_object(self.sub).get().text, "<p>thanks</p>")
+
+    def test_complete__puts_the_placeholder_text_in_a_paragraph(self):
+        """The text the view writes for a quest handed in with no comment is a paragraph too."""
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(submission_comment="<p><br></p>")
+
+        self.assertEqual(
+            Comment.objects.all_with_target_object(self.sub).get().text, "<p>(submitted without comment)</p>"
+        )
+
     def test_complete__quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
         Are redirected to their available quests page, submission is marked completed and has a completion time.
@@ -7844,6 +7869,18 @@ class SubmissionXPCourseTests(ByteDeckTenantTestCase):
         self.hand_in(self.welding)
 
         self.assertIn('<ul><li><b>XP counts toward: Welding</b></li></ul>', self.newest_comment_text())
+
+    def test_complete__lists_the_choices_after_the_comment_not_inside_it(self):
+        """The list follows the comment's paragraph rather than sitting inside it, where a list
+        cannot go (#2713)."""
+        self.let_students_enter_xp()
+
+        self.hand_in(self.pottery, xp_requested=12)
+
+        self.assertEqual(
+            self.newest_comment_text(),
+            '<p>my work</p><ul><li><b>XP requested: 12</b></li><li><b>XP counts toward: Pottery</b></li></ul>',
+        )
 
     def test_complete__lists_an_even_split_under_the_comment(self):
         """Choosing to split the XP evenly is a choice too, and is written down the same way."""

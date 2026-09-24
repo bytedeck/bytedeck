@@ -42,7 +42,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from utilities.html import is_empty_html
+from utilities.html import in_a_paragraph, is_empty_html
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -2413,14 +2413,16 @@ def complete(request, submission_id):
         if "course" in form.fields:
             course = form.cleaned_data.get("course")
             choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
-    if choices:
-        comment_text += "<ul>" + "".join(f"<li><b>{choice}</b></li>" for choice in choices) + "</ul>"
+    choices_html = "<ul>" + "".join(f"<li><b>{choice}</b></li>" for choice in choices) + "</ul>" if choices else ""
 
     # The submission's draft_comment property (a Comment object) is used to save a new comment
     # at the end of this view when `mark_completed` is called on the submission,
     # so make sure the draft comment is set properly with the form's latest comment text.
     draft_comment = submission.draft_comment
-    draft_text = f"<p>{comment_text}</p>"
+    # The comment and then the list, side by side: the editor lays the comment out in paragraphs
+    # already, so only bare text (the quick reply box's, or the placeholder above) is given one,
+    # and a list cannot sit inside a paragraph either (#2713).
+    draft_text = in_a_paragraph(comment_text) + choices_html
     if draft_comment:
         # update all comment fields
         #
