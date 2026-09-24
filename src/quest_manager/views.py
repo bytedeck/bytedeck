@@ -126,9 +126,10 @@ class CategoryList(NonPublicOnlyViewMixin, LoginRequiredMixin, ListView):
         # instead of a COUNT/SUM per campaign (see Category.quest_count / xp_sum);
         # the filter must match Category.current_quests(): published and not archived
         current_quest_filter = Q(quest__published=True) & ~Q(quest__archived=True)
+        # a sum over no quests is NULL, so a campaign with none would show None for its XP (#2626)
         queryset = queryset.annotate(
             quest_count_annotated=Count('quest', filter=current_quest_filter),
-            xp_sum_annotated=Sum('quest__xp', filter=current_quest_filter),
+            xp_sum_annotated=Coalesce(Sum('quest__xp', filter=current_quest_filter), 0),
         )
 
         # An aggregate annotation groups the query, and Django emits no ORDER BY at all for a

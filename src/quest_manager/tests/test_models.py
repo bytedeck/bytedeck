@@ -117,6 +117,13 @@ class CategoryTestModel(ByteDeckTenantTestCase):  # aka Campaigns
         # check that the XP sum is correct
         self.assertEqual(self.category.xp_sum(), 3)
 
+    def test_xp_sum__is_0_for_a_campaign_with_no_quests(self):
+        """Asked outside the campaign list (a map's campaign label, a Library page), a campaign
+        with no quests has 0 XP available rather than None (#2626)."""
+        baker.make(Quest, campaign=self.category, xp=5, published=False)  # not current, so not counted
+
+        self.assertEqual(self.category.xp_sum(), 0)
+
     def test_quest_count__counts_quests(self):
         """ Test that the number of all quests in a campaign is returned correctly """
 

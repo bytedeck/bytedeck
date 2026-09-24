@@ -10,7 +10,7 @@ from django.contrib.contenttypes.fields import GenericRelation
 from django.core.exceptions import ObjectDoesNotExist, MultipleObjectsReturned
 from django.db import models
 from django.db.models import BooleanField, Count, DateTimeField, Exists, ExpressionWrapper, F, Max, OuterRef, Q, Sum
-from django.db.models.functions import Greatest
+from django.db.models.functions import Coalesce, Greatest
 from django.urls import reverse
 from django.utils import timezone
 
@@ -184,7 +184,8 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
         aggregate query per campaign."""
         if hasattr(self, 'xp_sum_annotated'):
             return self.xp_sum_annotated
-        return self.current_quests().aggregate(Sum('xp'))['xp__sum']
+        # a sum over no quests is None, and a campaign with none has 0 XP available (#2626)
+        return self.current_quests().aggregate(total=Coalesce(Sum('xp'), 0))['total']
 
     def condition_met_as_prerequisite(self, user, num_required=1):
         """

@@ -4450,6 +4450,18 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         titles = [campaign.title for campaign in response.context['object_list']]
         self.assertEqual(titles, sorted(titles))
 
+    def test_CategoryList_view__an_empty_campaign_has_0_xp_available(self):
+        """A campaign with no quests yet has 0 XP available, as it has 0 quests, rather than the
+        None a sum over nothing comes back as (#2626)."""
+        empty = baker.make(Category, title="Coming Soon", published=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:categories'))
+
+        listed = next(campaign for campaign in response.context['object_list'] if campaign.pk == empty.pk)
+        self.assertEqual(listed.xp_sum(), 0)
+        self.assertNotContains(response, '<td>None</td>')
+
     def test_CategoryList_view__loads_the_bootstrap_table_stylesheet(self):
         """The campaigns page keeps the stylesheet its table is styled by (#2624).
 
