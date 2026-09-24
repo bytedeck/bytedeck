@@ -50,20 +50,28 @@
 
         <div class="comment-content user-content">{{comment.text|safe}}</div>
         {% with comment.document_set.all as docs %}{% if docs %}
-        <hr class="tighter">
-        <p>Attached files:</p>
-        <ul>
-          {% for document in docs %}
-          <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
-            {{ document.docfile|filename }}</a>
-              {% if document.is_valid_portfolio_type %}
-              <a title = "Add {{ document.docfile|filename|striptags }} to your portfolio."
-                        href="{% url 'portfolios:art_add' document.id %}"
-              class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
-              {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
+        {% comment %} The files as rows of one box, the way the submission form lists a draft's
+           files (quest_manager/snippets/attachments_field.html), so a student's attachments read
+           the same before and after they hand the quest in (#2752). The list is the panel's
+           direct child, so Bootstrap draws it flush with the panel's border. {% endcomment %}
+        <div class="bt-attachments">
+          <p><strong>Attached files</strong></p>
+          <div class="panel panel-default">
+            <ul class="list-group">
+              {% for document in docs %}
+              <li class="list-group-item">
+                {% if document.is_valid_portfolio_type %}
+                <a title="Add {{ document.docfile|filename|striptags }} to your portfolio."
+                   href="{% url 'portfolios:art_add' document.id %}"
+                   class="btn btn-default btn-xs pull-right">Add to Portfolio</a>
+                {% endif %}
+                <a href="{{ document.docfile.url }}" target="_blank">
+                  <i class="fa fa-fw fa-paperclip"></i>{{ document.docfile|filename }}</a>
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
         {% endif %}{% endwith %}
         {% with comment.question_submissions.all as answers %}{% if answers %}
           {% include "questions/snippets/comment_answers.html" %}

@@ -747,10 +747,6 @@ hr.tightest {
     padding-bottom: 5px;
 }
 
-li.file-link {
-    margin-bottom: 5px;
-}
-
 .panel-title small {
     /* default 65% is too small here */
     font-size: 75%
@@ -1286,9 +1282,10 @@ table[data-toggle="table"].bt-reveal {
     list-style-type: square;
 }
 
-/* The submission form's attachments (#2749): one box holding the files saved with the draft
-   and the button that adds more. Bootstrap's panel and list-group carry the borders and the
-   padding, so both themes style it without a colour of its own here. */
+/* Attachments as one box (#2749): on the submission form, the files saved with the draft and
+   the button that adds more; under a posted comment, the files it was posted with (#2752).
+   Bootstrap's panel and list-group carry the borders and the padding, so both themes style it
+   without a colour of its own here. */
 .bt-attachments .panel {
     margin-bottom: 0;
 }
