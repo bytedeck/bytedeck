@@ -191,24 +191,11 @@
 
         buttonElement.insertAdjacentHTML("beforeend", addButtonCopy);
 
-        // get the datepicker options from newly added form field
-        // initialize the datepicker widget using the options from its class
-        var $datepicker = $(`#id_form-${newIndex}-date`)
-
-        // The picker is an enhancement on a text input the teacher can type a date into, so
-        // the row works without it. Its plugin is fetched from a CDN, and on a network that
-        // cannot reach that CDN this would otherwise throw and take the caller down with it,
-        // which for the copy button below means the rest of its dates never arrive.
-        if (typeof $datepicker.datetimepicker === "function") {
-            var config = JSON.parse($datepicker.attr("data-dbdp-config"));
-
-            // have to sub in `backend_date_format` if options.format does not exist
-            // Null-coalescing operator
-            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/Nullish_coalescing_assignment
-            config.options.format ??= config.backend_date_format;
-
-            $datepicker.datetimepicker(config.options);
-        }
+        // The new row's date picker needs nothing from here: django-bootstrap-datepicker-plus
+        // watches the page for inputs being added and attaches a picker to each one's .dbdp
+        // wrapper itself. Nothing in this function may rely on the picker either, since its
+        // plugin comes from a CDN: on a network that cannot reach it, the row still has to work
+        // as a plain text input, and the copy button below still has to add the rest of its dates.
     }
 
     function RemoveForm(index) {
