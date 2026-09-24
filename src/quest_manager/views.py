@@ -5,7 +5,7 @@ import uuid
 from collections import namedtuple
 from datetime import datetime, timezone as dt_timezone
 
-from django.utils.html import format_html
+from django.utils.html import escape, format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -2399,10 +2399,22 @@ def complete(request, submission_id):
             comment_text = "(submitted without comment)"
 
     xp_requested = 0
-    # If custom XP, then we need to get the XP value and append it to the comment.
-    if isinstance(form, SubmissionFormCustomXP):
-        xp_requested = form.cleaned_data.get("xp_requested")
-        comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
+    # What the student chose on the form is listed under the comment they hand the quest in with,
+    # one choice above the other (#2757). Each hand-in's comment keeps the choices it was made
+    # with, so a quest returned and handed in again shows the new ones under the new comment
+    # while the earlier comment still shows the old. Only a hand-in records them, since that is
+    # the only time they take effect: a comment on work already handed in changes neither.
+    choices = []
+    if "complete" in request.POST:
+        if isinstance(form, SubmissionFormCustomXP):
+            xp_requested = form.cleaned_data.get("xp_requested")
+            choices.append(f"XP requested: {xp_requested}")
+        # the form asks only a student who has courses to choose between (XPCourseChoiceMixin)
+        if "course" in form.fields:
+            course = form.cleaned_data.get("course")
+            choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
+    if choices:
+        comment_text += "<ul>" + "".join(f"<li><b>{choice}</b></li>" for choice in choices) + "</ul>"
 
     # The submission's draft_comment property (a Comment object) is used to save a new comment
     # at the end of this view when `mark_completed` is called on the submission,
