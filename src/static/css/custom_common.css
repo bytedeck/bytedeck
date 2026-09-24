@@ -819,6 +819,15 @@ h3.comment-heading {
     max-width: 100%;
 }
 
+/* A display equation is one unbroken line (KaTeX sets white-space: nowrap on it), so one
+   wider than the comment runs past the edge and the clipping above would simply cut it off,
+   with nothing to say the rest is there. Scrolling it keeps all of it reachable. This is a
+   scroll container, so it clips its own contents too: an author who puts this class on
+   something else gets a box that scrolls, not one that paints over the page. */
+.comment-content .katex-display {
+    overflow-x: auto;
+}
+
 /***********ACCORDIAN COMMENTS *******************************/
 
 /* lists within list-groups */
