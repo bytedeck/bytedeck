@@ -39,7 +39,7 @@ numpy>=2.5.2,<3.0
 stripe>=15.5.0,<16  # deck subscription checkout/billing portal (epic #1729)
 
 # subdependencies
-psycopg2-binary>=2.9.12,<3.0  # since our backend is PostgreSQL, Django and django-tenants use this to interact with the db
+psycopg2-binary>=2.9.13,<3.0  # since our backend is PostgreSQL, Django and django-tenants use this to interact with the db
 # pulled in via django-redis/celery. The old reason for <8 (the redis 5.0
 # server couldn't speak RESP3) is gone -- all environments now run redis:7 --
 # but the ceiling stays until celery/kombu declare redis-py 8 support.
