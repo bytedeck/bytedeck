@@ -39,7 +39,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student', password=cls.test_password)
-        cls.test_student2 = baker.make(User)
+        # A fixed username: left to model_bakery it is 150 random letters, which the student-list
+        # search tests could match by chance (#2766).
+        cls.test_student2 = User.objects.create_user('test_student2')
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
