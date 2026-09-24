@@ -2203,6 +2203,7 @@ def _keep_posted_uploads(request, form, question_formset, submission, followup="
 
 @non_public_only_view
 @login_required
+@transaction.atomic
 def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
@@ -2222,7 +2223,23 @@ def complete(request, submission_id):
         Http404: on a GET, an unrecognized submit button, or a submission with no draft
             comment that is not already completed.
     """
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    # Locked for the whole request, because what the student has attached is decided from their
+    # draft (has_attachment, below) and then published from it several steps later. The student
+    # can delete a draft file at the same moment (ajax_delete_draft_attachment), and that
+    # endpoint takes this same row lock, so it waits: the files checked are the files published.
+    # Without it a delete landing between the two lets a quest that asks for a file complete
+    # with none.
+    #
+    # of=("self",) locks the submission alone. The manager's default filters join the quest,
+    # and a bare FOR UPDATE would lock that row too, making every student completing the same
+    # quest queue behind one another. include_related=False for the reason the delete endpoint
+    # gives: Postgres refuses FOR UPDATE on the nullable side of an outer join, which those
+    # joins would add. It leaves the default filters in place, so the same submissions are
+    # found as before.
+    submission = get_object_or_404(
+        QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+        pk=submission_id,
+    )
     origin_path = submission.get_absolute_url()
 
     # EARLY EXIT CONDITIONS: ####################
@@ -2345,6 +2362,15 @@ def complete(request, submission_id):
     # notification further down still needs to know whether there was ever a real comment.
     has_comment = not is_empty_html(comment_text)
 
+    # Whether the student has attached anything, counting the files stored on their draft as
+    # well as any posted with this request. Choosing a file saves the draft at once and stores
+    # the file on it (#2749), then empties the input it was chosen in, so a file the student
+    # can see in their attachments list is on the draft by the time they press Submit and is
+    # not in request.FILES at all (#2756). The draft comment is what gets published below, so
+    # those files go out with the submission either way.
+    draft_has_files = bool(submission.draft_comment_id) and submission.draft_comment.document_set.exists()
+    has_attachment = bool(request.FILES) or draft_has_files
+
     if not has_comment:
 
         # If the student answered at least one question, those answers are the submission's
@@ -2354,7 +2380,7 @@ def complete(request, submission_id):
         # If the `verification_required` flag is set, then the teacher is expecting either
         # a comment or a file (something to check).  We already know there isn't a comment
         # so check for files.
-        elif submission.quest.verification_required and not request.FILES:
+        elif submission.quest.verification_required and not has_attachment:
             messages.error(
                 request,
                 "Please read the Submission Instructions more carefully.  "
@@ -2363,7 +2389,7 @@ def complete(request, submission_id):
             return redirect(origin_path)
         # If this form is being used to add a comment to an already completed quest, then
         # we need to make sure the student atually left a comment
-        elif "comment" in request.POST and not request.FILES:
+        elif "comment" in request.POST and not has_attachment:
             messages.error(request, "Please leave a comment.")
             return redirect(origin_path)
         # else none of these are true, then add some default text to the blank comment
