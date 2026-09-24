@@ -2,9 +2,19 @@
     <p>{{ p.description|safe|default:"None." }}</p>
     <h3>Content</h3>
 
-    <!-- Hidden html5 video divs -->
+    <!-- Hidden captions and html5 video divs, which the lightbox reads by selector -->
     <!-- See: http://sachinchoolur.github.io/lightGallery/demos/html5-videos.html -->
     {% for art in p.artwork_set.all %}
+        {% comment %}
+          Each caption is an element the gallery link points to (data-sub-html="#art-caption-N"),
+          not markup inside the attribute: lightGallery reads the attribute back, which decodes
+          Django's escaping, and injects the result with .html(), so a title or description written
+          into the attribute would run as HTML. Read from an element, it stays escaped (#2518).
+          These sit outside #gallery because justifiedGallery lays out every <a> and <div> in it.
+        {% endcomment %}
+        <div class="hidden" id="art-caption-{{ art.id }}">
+            <h4>{{ art.title }}</h4><p>{% if art.description is None %}<br>{% else %}{{ art.description }}{% endif %}</p>
+        </div>
         {% if art.video_file %}
         <div style="display:none;" id="video-{{ art.id }}">
             <video class="lg-video-object lg-html5" controls preload="none">
@@ -20,7 +30,7 @@
         <a href="{% if not art.video_file %}{{ art.get_link }}{% endif %}"
            {% if art.is_video %}data-poster="{{ art.get_image_url }}"{% endif %}
            {% if art.video_file %}data-html="#video-{{ art.id }}"{% endif %}
-           data-sub-html="<h4>{{ art.title }}</h4><p>{{ art.description|default_if_none:"<br>" }}</p>"
+           data-sub-html="#art-caption-{{ art.id }}"
            >
             <img alt="{{ art.title }}" src="{{ art.get_image_url }}" />
             {# Display a marker in the center of the thumbnail upon hover       #}

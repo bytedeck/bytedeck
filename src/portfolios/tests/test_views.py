@@ -158,6 +158,25 @@ class PortfolioViewTests(ByteDeckTenantTestCase):
             expected_url=reverse('portfolios:detail', args=[self.portfolio.pk])
         )
 
+    def test_public__an_artworks_caption_is_escaped_text_in_an_element(self):
+        """The lightbox caption is the artwork's title and description, escaped, inside a hidden
+        element that the gallery link names by selector.
+
+        Written into the link's data-sub-html attribute instead, the caption is read back with its
+        escaping decoded and injected as HTML by the lightbox, so student-typed markup ran on the
+        public page (#2518). tests/test_gallery_render.py shows that happening in a browser.
+        """
+        art = baker.make(
+            Artwork, portfolio=self.portfolio, title='<b>bold</b>', description='<i>tilted</i>',
+            image_file=generate_test_png_file(),
+        )
+
+        response = self.client.get(reverse('portfolios:public', args=[self.portfolio.uuid]))
+
+        self.assertContains(response, f'data-sub-html="#art-caption-{art.id}"')
+        self.assertContains(response, '<h4>&lt;b&gt;bold&lt;/b&gt;</h4><p>&lt;i&gt;tilted&lt;/i&gt;</p>')
+        self.assertNotContains(response, 'data-sub-html="<')
+
     def test_DetailView__listed_locally(self):
         """When a portfolio is listed locally, other users should be able to access it"""
 
