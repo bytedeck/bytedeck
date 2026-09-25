@@ -40,7 +40,8 @@
   {% if request.user.is_staff %}
   {% with submission as s %}
   <div class="pull-right submission-buttons-other-top">
-    {% include "quest_manager/submission_buttons_other.html" %}
+    {# This row sits outside the approval form below, so its skip button names that form to submit it (#2787). #}
+    {% include "quest_manager/submission_buttons_other.html" with skip_form="submission-approve-form" %}
   </div>
   {% endwith %}
   {% endif %}
@@ -100,7 +101,7 @@
          browser's "Leave site?" prompt (#2572). The comment box is a div, not a nested form, so
          the attribute here covers it and every answer editor. {% endcomment %}
       {% if request.user.is_staff %}
-        <form method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
+        <form id="submission-approve-form" method="POST" enctype="multipart/form-data" action="{% url 'quests:approve' submission.id%}" data-warn-unsaved>
         {% if next %}
           {% comment %}
           Set when this page is reached by correcting a form that did not validate, so the

@@ -19,9 +19,13 @@
     <!-- <a href="{% url 'quests:skip' s.id %}" class="btn btn-default" role="button"
         title="SKIP this quest: do not grant XP for this quest (or badges resulting) but mark as complete">
         <i class="fa fa-fw fa-share"></i></a> -->
-    <button type='submit' name='skip_button' class='btn btn-default'
+    {% comment %}
+      A submit button for the approval form. Where this row is drawn inside that form it submits it
+      as it is; where it is drawn outside, the include passes the form's id as skip_form (#2787).
+    {% endcomment %}
+    <button type='submit' name='skip_button' class='btn btn-default'{% if skip_form %} form="{{ skip_form }}"{% endif %}
         title='SKIP this quest: do not grant XP for this quest (or badges resulting), but mark as approved'>
-        <i class="fa fa-fw fa-share"></i></a>
+        <i class="fa fa-fw fa-share"></i>
     </button>
 
       {% if not s.flagged_by %}

@@ -5636,6 +5636,19 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertEqual(comments.count(), 1)
         self.assertEqual(comments.first().text, "<p>(Skipped - You were not granted XP for this quest)</p>")
 
+    def test_submission_page__top_skip_button_submits_the_approval_form(self):
+        """On a submission's own page, the row of staff buttons above the submission sits outside the approval
+        form, so its skip button names that form to submit it (#2787). Without that, clicking it submitted nothing.
+        The skip button inside the form needs no such link."""
+        response = self.client.get(reverse('quests:submission', args=[self.sub.id]))
+        soup = BeautifulSoup(response.content, 'html.parser')
+
+        form = soup.find('form', action=reverse('quests:approve', args=[self.sub.id]))
+        top_skip = soup.select_one('.submission-buttons-other-top').find('button', attrs={'name': 'skip_button'})
+        self.assertEqual(form.get('id'), 'submission-approve-form')
+        self.assertEqual(top_skip.get('form'), form['id'])
+        self.assertIsNone(form.find('button', attrs={'name': 'skip_button'}).get('form'))
+
     def test_approve__every_button_type_acts_and_returns_to_the_approvals_page(self):
         """Each of the four buttons does its job and sends the teacher back to the queue (#2689).
 
