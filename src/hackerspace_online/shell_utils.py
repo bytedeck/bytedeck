@@ -44,7 +44,13 @@ def generate_students(num=100, quiet=False):
         # firstname.lastname
         first = names.get_first_name()
         last = names.get_last_name()
-        username = f"{first.lower()}.{last.lower()}"
+        # Names are drawn from census frequencies, so a common pair comes up twice now and then,
+        # and usernames are unique: a name already taken gets a number after it (#2782).
+        username = base = f"{first.lower()}.{last.lower()}"
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{base}{suffix}"
         email = f"{username}@example.com"
         user = User.objects.create(username=username, email=email, first_name=first, last_name=last)
 
