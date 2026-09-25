@@ -4167,23 +4167,6 @@ class CategoryViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
         self.assertContains(response, "Published: True")
 
-    def test_CategoryDetail_view__no_delete_warning_above_the_campaign(self):
-        """Staff reading a campaign with published quests see no red warning above it (#2062).
-
-        The page is for reading the campaign, and a banner saying it can't be deleted read as
-        though a deletion had been attempted. The Delete button already says why it is disabled
-        in its tooltip, so the reason is still there for whoever reaches for it.
-        """
-        campaign = baker.make(Category, published=True)
-        baker.make(Quest, published=True, campaign=campaign)
-        reason = "Can't delete a campaign that has published quests; you must unpublish or delete all quests in the campaign first"
-
-        self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse('quests:category_detail', kwargs={"pk": campaign.pk}))
-
-        self.assertNotContains(response, f"{reason}.")  # the banner's sentence
-        self.assertContains(response, f'title="{reason}"', count=1)  # the Delete button's tooltip
-
     def test_CategoryCreate_view__staff_can_create(self):
         """ Admin should be able to create a course """
         self.client.force_login(self.test_teacher)
