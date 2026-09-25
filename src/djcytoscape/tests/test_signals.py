@@ -1,11 +1,12 @@
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.db import transaction
 
 from model_bakery import baker
 
 from djcytoscape.models import CytoElement, CytoScape
-from djcytoscape.tasks import MAP_REGENERATION_DELAY, regenerate_map
+from djcytoscape.tasks import MAP_REGENERATION_DELAY, pending_regeneration_key, regenerate_map
 from djcytoscape.tests.utils import simulate_regeneration_starting
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
@@ -23,7 +24,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         when saving or deleting an object linked to a Cytoscape map """
 
         # should regenerate map on save
-        object_.save()
+        with self.committed():
+            object_.save()
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
         self.assertEqual(CytoScape.objects.get_related_maps(object_).count(), 1)
@@ -31,7 +33,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         # should regenerate map on delete
         # the CytoElement linked also deleted (cascade). Therefore, no related maps
         simulate_regeneration_starting(scape.id)
-        object_.delete()
+        with self.committed():
+            object_.delete()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
         self.assertEqual(CytoScape.objects.get_related_maps(object_).count(), 0)
@@ -43,12 +46,21 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         # clear the marker first, so the flag is the only thing that can be keeping
         # this save off the queue
         simulate_regeneration_starting(scape.id)
-        object_.save()
+        with self.committed():
+            object_.save()
         self.assertEqual(task.call_count, 2)
 
     def setUp(self):
         """Grab the tenant's SiteConfig singleton for toggling map_auto_update."""
         self.config = SiteConfig.get()
+
+    def committed(self):
+        """A block whose on-commit callbacks run as it closes, as a real commit runs them.
+
+        The regeneration is queued from one (#2659), and TestCase never commits the
+        transaction each test runs in, so without this nothing a test saves is queued.
+        """
+        return self.captureOnCommitCallbacks(execute=True)
 
     def tearDown(self):
         """Restore map_auto_update to its enabled default after each test."""
@@ -94,13 +106,15 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         scape = CytoScape.generate_map(origin, "Map")
 
         # should regenerate map on save
-        prereq.save()
+        with self.committed():
+            prereq.save()
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
         # should regenerate map on delete
         simulate_regeneration_starting(scape.id)
-        prereq.delete()
+        with self.committed():
+            prereq.delete()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
@@ -111,7 +125,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         # clear the marker first, so the flag is the only thing that can be keeping
         # this save off the queue
         simulate_regeneration_starting(scape.id)
-        prereq.save()
+        with self.committed():
+            prereq.save()
         self.assertEqual(task.call_count, 2)
 
     def test_regenerate_related_maps__a_run_of_saves_queues_one_regeneration(self, task):
@@ -126,8 +141,9 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         quest = baker.make(Quest)
         scape = CytoScape.generate_map(quest, "Map")
 
-        for _ in range(5):
-            quest.save()
+        with self.committed():
+            for _ in range(5):
+                quest.save()
 
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
@@ -135,6 +151,47 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         # the wait is what makes collapsing them sound: the one rebuild that runs reads
         # the database after the rest of the run of saves has landed
         self.assertEqual(task.call_args.kwargs['countdown'], MAP_REGENERATION_DELAY)
+
+    def test_regenerate_related_maps__waits_for_the_save_to_commit(self, task):
+        """Nothing is queued, or claimed, until the transaction the save is part of commits.
+
+        A worker picks a queued regeneration up at once, so one queued mid-transaction could
+        rebuild the map from a database that does not have the change yet, and nothing would
+        queue another (#2659). A library import saves a whole campaign inside one transaction.
+        """
+        quest = baker.make(Quest)
+        scape = CytoScape.generate_map(quest, "Map")
+
+        with self.captureOnCommitCallbacks(execute=False) as on_commit:
+            quest.save()
+
+        self.assertEqual(task.call_count, 0)
+        self.assertIsNone(cache.get(pending_regeneration_key(scape.id)))
+
+        # and once it commits, the one rebuild is queued and the map claimed
+        for callback in on_commit:
+            callback()
+        self.assertEqual(task.call_count, 1)
+        self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
+        self.assertTrue(cache.get(pending_regeneration_key(scape.id)))
+
+    def test_regenerate_related_maps__a_rolled_back_save_queues_and_claims_nothing(self, task):
+        """A save whose transaction rolls back queues no regeneration and leaves no claim.
+
+        A claim left behind with no task to release it would fold the map's next real save
+        into a regeneration that never comes, for up to MAP_REGENERATION_PENDING_TIMEOUT.
+        """
+        quest = baker.make(Quest)
+        scape = CytoScape.generate_map(quest, "Map")
+
+        with self.committed():
+            with self.assertRaises(RuntimeError):
+                with transaction.atomic():
+                    quest.save()
+                    raise RuntimeError("roll the save back")
+
+        self.assertEqual(task.call_count, 0)
+        self.assertIsNone(cache.get(pending_regeneration_key(scape.id)))
 
     def test_regenerate_related_maps__a_save_after_the_regeneration_starts_queues_another(self, task):
         """A save landing once the queued regeneration has begun gets one of its own.
@@ -146,12 +203,14 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         quest = baker.make(Quest)
         scape = CytoScape.generate_map(quest, "Map")
 
-        quest.save()
+        with self.committed():
+            quest.save()
         self.assertEqual(task.call_count, 1)
 
         simulate_regeneration_starting(scape.id)
 
-        quest.save()
+        with self.committed():
+            quest.save()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
@@ -174,13 +233,15 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         task.reset_mock()
         cache.clear()
 
-        quest.save()
+        with self.committed():
+            quest.save()
         self.assertEqual(task.call_count, 1)
         self.assertEqual(sorted(task.call_args.kwargs['args'][0]), sorted([map_a.id, map_b.id]))
 
         simulate_regeneration_starting(map_a.id)
 
-        quest.save()
+        with self.committed():
+            quest.save()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [map_a.id], "map B's pending regeneration should still cover it")
 
@@ -203,7 +264,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         cache.clear()
 
         draft.published = True
-        draft.save()
+        with self.committed():
+            draft.save()
 
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
@@ -229,7 +291,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         cache.clear()
 
         draft.published = True
-        draft.save()
+        with self.committed():
+            draft.save()
 
         # run exactly what the signal queued
         self.assertEqual(task.call_count, 1, "publishing the quest queued no regeneration at all")
@@ -257,7 +320,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         cache.clear()
 
         draft.published = True
-        draft.save()
+        with self.committed():
+            draft.save()
 
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
@@ -277,7 +341,8 @@ class TestRegenerateMapSignals(ByteDeckTenantTestCase):
         cache.clear()
 
         draft.published = True
-        draft.save()
+        with self.committed():
+            draft.save()
 
         self.assertEqual(task.call_count, 0)
 

@@ -226,14 +226,17 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         prereq = Prereq.add_simple_prereq(quest, origin)
         scape = CytoScape.generate_map(origin, "Map")
 
-        # should regenerate map on save
-        prereq.save()
+        # should regenerate map on save. The regeneration is queued once the save commits
+        # (#2659), and TestCase never commits, so captureOnCommitCallbacks runs it here.
+        with self.captureOnCommitCallbacks(execute=True):
+            prereq.save()
         self.assertEqual(task.call_count, 1)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
         # should regenerate map on delete
         simulate_regeneration_starting(scape.id)
-        prereq.delete()
+        with self.captureOnCommitCallbacks(execute=True):
+            prereq.delete()
         self.assertEqual(task.call_count, 2)
         self.assertEqual(task.call_args.kwargs['args'][0], [scape.id])
 
@@ -245,7 +248,8 @@ class PrerequisitesSignalsTest(ByteDeckTenantTestCase):
         # clear the marker first, so the flag is the only thing that can be keeping
         # this save off the queue
         simulate_regeneration_starting(scape.id)
-        prereq.save()
+        with self.captureOnCommitCallbacks(execute=True):
+            prereq.save()
         self.assertEqual(task.call_count, 2)
 
     def test_on_quest_badge_save_with_rank_prereq__creation(self):
