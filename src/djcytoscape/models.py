@@ -664,9 +664,6 @@ class CytoScape(models.Model):
         #     if obj.max_repeats != 0:
         #         post += ' ⟲'
 
-        # json.dumps to escape special characters in the object, such as single and double quote marks.
-        # dumps not working...just try manually
-        title = title.replace('"', '\\"')
         return title + post
 
     def create_first_node(self, obj):
