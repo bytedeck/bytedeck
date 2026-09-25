@@ -178,6 +178,33 @@ def media_kind_of(file_name):
     return ''
 
 
+def stored_file_mime_types(file_name):
+    """Return the media types a stored file could have been declared as, guessed from its name.
+
+    A stored file keeps no record of the type the browser declared when it was uploaded, so
+    its name is all there is to go on. Audio and video formats share their containers: the
+    name of a `.3gp` or `.ogg` file cannot say whether it holds sound or pictures, and the
+    guessers disagree about them (Python's `mimetypes` names `.3gp` `audio/3gpp`, while a
+    browser declares it `video/3gpp`). So for those both spellings are returned, and a video
+    that a video question accepted on upload is not turned away later for the guess.
+
+    Args:
+        file_name (str): the stored file's name or path.
+
+    Returns:
+        set[str]: the media types the file could be, or an empty set when its name gives no
+        type to guess from.
+    """
+    mime_type = mimetypes.guess_type(file_name)[0]
+    if mime_type is None:
+        return set()
+
+    kind, _, subtype = mime_type.partition('/')
+    if kind in ('audio', 'video'):
+        return {f'audio/{subtype}', f'video/{subtype}'}
+    return {mime_type}
+
+
 class GFKChoiceIterator(ModelChoiceIterator):
 
     def __iter__(self):
@@ -387,9 +414,10 @@ class RestrictedFileFormField(forms.FileField):
     """A file field that accepts only the types and sizes it was told to.
 
     Three things are checked, in `validate_file`: whether the file can carry a script a
-    browser would run, whether its declared media type is one this field takes, and how big
-    it is. The first is a site-wide refusal a field opts out of per upload; the other two are
-    the field's own settings.
+    browser would run, whether its media type (as declared, or for a file already stored,
+    as guessed from its name) is one this field takes, and how big it is. The first is a
+    site-wide refusal a field opts out of per upload; the other two are the field's own
+    settings.
     """
 
     def __init__(self, *args, **kwargs):
@@ -433,11 +461,13 @@ class RestrictedFileFormField(forms.FileField):
         Args:
             file: the uploaded file, or the stored ``FieldFile`` Django's ``FileField.clean``
                 returns when a form re-submits without choosing a new one. A stored file has
-                no ``content_type``, so only the name-based rules apply to it.
+                no ``content_type``, so its type is guessed from its name instead, and its
+                size, checked when it was uploaded, is not checked again.
 
         Raises:
             ValidationError: if the file is script-capable and this field does not allow it,
-                if its declared type is outside ``content_types``, or if it is too large.
+                if its declared type (for a stored file, its guessed type) is outside
+                ``content_types``, or if it is too large.
         """
         name = getattr(file, "name", "") or ""
         extension = os.path.splitext(name.lower())[1]
@@ -447,8 +477,22 @@ class RestrictedFileFormField(forms.FileField):
         try:
             content_type = declared_mime_type(file.content_type)
         except AttributeError:
-            # A stored FieldFile has no content_type, so there is no declared type left to
-            # check. Its name was checked above, against the rules in force right now.
+            # Nothing was declared, so this is either no file at all (the field was left empty,
+            # or cleared: None or False), which leaves nothing to check, or a stored FieldFile.
+            if not file:
+                return
+            # A stored FieldFile is a file the form kept, such as a draft's answer submitted
+            # without being chosen again. Its type was checked when it was uploaded, but
+            # against the rules in force then, and a question's allowed types can narrow
+            # after a student has saved a file to their draft (#2564). So the type is guessed
+            # from the name and held to this field's types as they are now. A name that gives
+            # nothing to guess from cannot be shown to fit a restricted list, so it is refused,
+            # as an upload whose type the browser could not tell would be.
+            if self.content_types != "All" and not stored_file_mime_types(name) & set(self.content_types):
+                raise ValidationError(
+                    "The file saved here (%s) is not a supported filetype, so choose another to "
+                    "replace it. Acceptable filetypes are: %s" % (os.path.basename(name), str(self.content_types))
+                )
             return
 
         # A declared script-capable type has to be one this field allows *and* be backed by an

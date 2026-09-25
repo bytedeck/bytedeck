@@ -1,4 +1,5 @@
 import json
+import posixpath
 import re
 from unittest.mock import patch
 
@@ -378,6 +379,26 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
             quest_submission=self.submission, question=file_question, comment__isnull=True)
         self.assertFalse(file_row.response_file)
 
+    def test_complete__an_optional_image_question_left_empty_completes(self):
+        """An optional file question restricted to images can be left without a file (#2564).
+
+        With no file chosen and none saved, there is nothing for the type check to look at. A
+        check that took the empty field for a saved file it could not type would stop every
+        student who skipped the question from handing the quest in.
+        """
+        baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=False,
+            instructions="<p>Attach a photo if you have one.</p>", allowed_file_type="image",
+        )
+
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()})
+
+        self.assertRedirects(response, reverse("quests:quests"))
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+
     def test_complete__file_field_left_alone_keeps_the_saved_file(self):
         """Re-submitting without re-choosing a file keeps the one already saved (#2165).
 
@@ -409,6 +430,55 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
         file_row.refresh_from_db()
         self.assertEqual(file_row.response_file.name, kept_name)
         # and it published with the completion, rather than as an empty answer
+        self.assertIsNotNone(file_row.comment_id)
+
+    def test_complete__a_kept_file_the_question_no_longer_takes_is_refused(self):
+        """A file kept on the draft is held to the question's types as they are on submit (#2564).
+
+        The student attaches a PDF while the question takes any file, and it is kept on their
+        draft. The teacher then narrows the question to images. Submitting without choosing a
+        new file must not publish the PDF as the answer to an image question: the student is
+        told the saved file no longer fits, and a replacement goes through.
+        """
+        file_question = baker.make(
+            Question, quest=self.quest, ordinal=3, type="file_upload", required=True,
+            instructions="<p>Attach your work.</p>", allowed_file_type="all",
+        )
+
+        # first attempt: the PDF is kept, and the blank required text answer sends it back
+        first = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data(short_text="")}
+        first[self.file_field_name(file_question)] = SimpleUploadedFile(
+            "report.pdf", b"%PDF-1.4", content_type="application/pdf")
+        self.client.post(self.complete_url(), data=first)
+        file_row = QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=file_question, comment__isnull=True)
+        kept_name = posixpath.basename(file_row.response_file.name)
+        self.assertTrue(kept_name.startswith("report"))
+
+        file_question.allowed_file_type = "image"
+        file_question.save()
+
+        # second attempt: text answer fixed, the kept PDF left in place
+        response = self.client.post(
+            self.complete_url(),
+            data={"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, f"The file saved here ({kept_name}) is not a supported filetype")
+        self.submission.refresh_from_db()
+        self.assertFalse(self.submission.is_completed)
+        file_row.refresh_from_db()
+        self.assertIsNone(file_row.comment_id, "the PDF was published as the image question's answer")
+
+        # third attempt: an image replaces it, and the submission goes through
+        third = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()}
+        third[self.file_field_name(file_question)] = SimpleUploadedFile(
+            "my-work.png", b"file_content", content_type="image/png")
+        response = self.client.post(self.complete_url(), data=third)
+
+        self.assertRedirects(response, reverse("quests:quests"))
+        file_row.refresh_from_db()
+        self.assertIn("my-work", file_row.response_file.name)
         self.assertIsNotNone(file_row.comment_id)
 
     def test_complete__quest_without_questions_unchanged(self):

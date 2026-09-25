@@ -18,6 +18,7 @@ from utilities.fields import (
     GFKChoiceField,
     RestrictedFileFormField,
     media_kind_of,
+    stored_file_mime_types,
 )
 from utilities.models import RestrictedFileField
 
@@ -208,6 +209,67 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         stored = SimpleNamespace(size=1, name="uploads/payload.svg")  # no content_type attribute
         with self.assertRaises(ValidationError):
             field.validate_file(stored)
+
+    def test_validate_file__holds_a_stored_file_to_the_types_as_they_are_now(self):
+        """A kept draft file has to be a type the field takes now, guessed from its name (#2564).
+
+        A stored file has no declared type, and it was checked on upload against the types the
+        question had then. A teacher who narrows the question to images afterwards must not
+        have a PDF, saved to a student's draft while any file was allowed, published as the
+        answer when the draft is submitted.
+        """
+        field = RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"])
+
+        field.validate_file(SimpleNamespace(size=1, name="quest/question/submission/photo.png"))
+        with self.assertRaisesMessage(
+            ValidationError, "The file saved here (report.pdf) is not a supported filetype, so choose another"
+        ):
+            field.validate_file(SimpleNamespace(size=1, name="quest/question/submission/report.pdf"))
+
+        # a field that takes any type has nothing to hold a stored file to
+        RestrictedFileFormField().validate_file(SimpleNamespace(size=1, name="quest/question/submission/report.pdf"))
+
+    def test_clean__a_restricted_field_left_empty_or_cleared_has_nothing_to_check(self):
+        """An optional restricted field with no file, or one being cleared, cleans without error.
+
+        Neither is a file, so neither has a type to hold to the list. Both reach `validate_file`
+        with no declared type, as a stored file does, and must not be mistaken for a stored file
+        whose name gives nothing to guess from: that would refuse every form saved with the field
+        empty, such as a deck's settings with no custom stylesheet.
+        """
+        field = RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"], required=False)
+        self.assertIsNone(field.clean(None))
+        self.assertIs(field.clean(False), False)
+
+    def test_validate_file__a_stored_file_whose_name_gives_no_type_fails_a_restricted_field(self):
+        """A kept file whose type cannot be guessed from its name is refused where types are listed.
+
+        Nothing shows it to be one of the listed types, just as an upload the browser cannot
+        type (it declares `application/octet-stream`) is refused. A Scratch project saved while
+        a question took any file, and kept after the question was narrowed to images, is the
+        case in point. A field that takes any type still takes it.
+        """
+        restricted = RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"])
+        for name in ("my-game.sb3", "no-extension"):
+            with self.subTest(name=name):
+                with self.assertRaises(ValidationError):
+                    restricted.validate_file(SimpleNamespace(size=1, name=name))
+                RestrictedFileFormField().validate_file(SimpleNamespace(size=1, name=name))
+
+    def test_validate_file__a_stored_video_is_not_refused_for_how_its_name_is_guessed(self):
+        """A kept `.3gp` video passes a video field, though Python guesses it as audio (#2564).
+
+        Python's `mimetypes` names `.3gp` `audio/3gpp`, while a browser declares it `video/3gpp`,
+        the spelling the video list holds. The guess stands for both spellings, so a video the
+        question accepted on upload is not refused when the draft holding it is submitted. It is
+        still not an image, so an image field refuses it.
+        """
+        RestrictedFileFormField(content_types=FILE_MIME_TYPES["video"]).validate_file(
+            SimpleNamespace(size=1, name="clips/field-trip.3gp"))
+
+        with self.assertRaises(ValidationError):
+            RestrictedFileFormField(content_types=FILE_MIME_TYPES["image"]).validate_file(
+                SimpleNamespace(size=1, name="clips/field-trip.3gp"))
 
     def test_validate_file__rejects_an_unsafe_type_declared_with_parameters_or_odd_case(self):
         """A declared media type is matched by its type alone, whatever else it carries (#2559).
@@ -436,3 +498,26 @@ class MediaKindOfTest(SimpleTestCase):
             with self.subTest(mime_type=mime_type):
                 self.assertIn(mime_type, FILE_MIME_TYPES["image"] + FILE_MIME_TYPES["video"] + FILE_MIME_TYPES["audio"])
                 self.assertNotEqual(media_kind_of(f"file{extension}"), "")
+
+
+class StoredFileMimeTypesTest(SimpleTestCase):
+    """What `stored_file_mime_types` says a stored file could be, which a kept file is held to (#2564)."""
+
+    def test_stored_file_mime_types__names_the_type_its_name_gives(self):
+        """An ordinary file is the one type its name gives, whatever the path or letter case."""
+        self.assertEqual(stored_file_mime_types("quest/question/submission/photo.PNG"), {"image/png"})
+        self.assertEqual(stored_file_mime_types("report.pdf"), {"application/pdf"})
+
+    def test_stored_file_mime_types__gives_audio_and_video_both_spellings(self):
+        """An audio or video container is both, since its name cannot say which it holds.
+
+        `.3gp` is the case that needs it: Python guesses `audio/3gpp`, browsers declare
+        `video/3gpp`. The same holds the other way for `.webm`, guessed as video.
+        """
+        self.assertEqual(stored_file_mime_types("clip.3gp"), {"audio/3gpp", "video/3gpp"})
+        self.assertEqual(stored_file_mime_types("recording.webm"), {"audio/webm", "video/webm"})
+
+    def test_stored_file_mime_types__is_empty_for_a_name_with_nothing_to_guess_from(self):
+        """A name no guesser knows gives no type at all, rather than a guess that could be wrong."""
+        self.assertEqual(stored_file_mime_types("my-game.sb3"), set())
+        self.assertEqual(stored_file_mime_types("README"), set())
