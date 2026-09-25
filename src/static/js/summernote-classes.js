@@ -42,13 +42,16 @@
           var el = e.target;
           var elem = $(":focus");
           var outputText='';
+          // Everything this reads and binds is found through $editor, the editor this plugin
+          // instance belongs to: a page can hold several editors (the quest form has three), and
+          // a page-wide selector would reach into the others too (#2735).
           if (options.disableTableNesting === true) {
-            $('.note-toolbar [aria-label="Table"]').prop('disabled', false);
+            $editor.find('.note-toolbar [aria-label="Table"]').prop('disabled', false);
           }
           if (!el.classList.contains('note-editable')) {
             if (options.disableTableNesting === true) {
               if (el.nodeName == 'TD') {
-                $('.note-toolbar [aria-label="Table"]').prop('disabled', true);
+                $editor.find('.note-toolbar [aria-label="Table"]').prop('disabled', true);
               }
             }
             outputText += el.nodeName;
@@ -68,7 +71,7 @@
               outputText += '&quot;';
             }
             $editor.find('.note-status-output').html(outputText);
-            $('.note-classes').on('click', function(){
+            $editor.find('.note-status-output .note-classes').on('click', function(){
               $(this).toggleClass('note-classes-active');
               var classes=$(this).data('class');
               $(el).toggleClass(classes);
