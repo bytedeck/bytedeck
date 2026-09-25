@@ -1964,6 +1964,15 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
+    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
+    show_all_blocks_button = True
+
+    grouped_blocks = Block.objects.grouped_teachers_blocks()
+    teachers = grouped_blocks.keys()
+    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
+    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
+        show_all_blocks_button = False
+
     page = request.GET.get("page")
     # The approvals tabs show whose submission it is, and no campaign column, so that is
     # what they search and order by. The in-progress tab's Status cell carries no time.
@@ -1977,11 +1986,15 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
         # The tab lists the teacher's own groups unless they ask for all of them, as Submitted
-        # does (#2672). A quest's own list of past approvals stays every teacher's: there "/all/"
-        # means every semester rather than every group.
+        # does (#2672), but only where the heading offers the "All" to ask with. A deck whose
+        # only teacher is this one hides that pair, and there their own groups would leave out
+        # the approved work of any student in no group, with nothing to reach it by, so the tab
+        # lists everyone's. A quest's own list of past approvals stays every teacher's: there
+        # "/all/" means every semester rather than every group.
+        own_groups_only = current_teacher_only and quest is None and show_all_blocks_button
         approved_submissions = QuestSubmission.objects.all_approved(
             quest=quest, active_semester_only=active_sem_only,
-            teacher=request.user if current_teacher_only and quest is None else None,
+            teacher=request.user if own_groups_only else None,
         )
         submission_tab = submission_tab_page(request, approved_submissions, page, user=True)
         approved_submissions = submission_tab.page
@@ -2054,15 +2067,6 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
                 award_choices=award_choices,
                 auto_id=f"id_quick_reply_{submission.id}_%s",
             )
-
-    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
-    show_all_blocks_button = True
-
-    grouped_blocks = Block.objects.grouped_teachers_blocks()
-    teachers = grouped_blocks.keys()
-    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
-    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
-        show_all_blocks_button = False
 
     # Where that button's two halves go, on the tabs that list one teacher's groups by default:
     # (their own groups, every group). A quest's own past approvals are every teacher's, so it

@@ -6555,6 +6555,38 @@ class ApprovedTabGroupsTest(ByteDeckTenantTestCase):
         self.assertEqual(listed, {submission.id for submission in self.approved.values()})
         self.assertEqual(self.groups_buttons(response), {})
 
+    def test_approvals__the_decks_only_teacher_sees_every_approval(self):
+        """On a deck where the signed-in teacher is the only one with groups, the heading offers no
+        "My groups" / "All" pair, so the Approved tab lists everyone's, as it did before the pair.
+
+        Narrowed to their own groups, it would leave out the approved work of a student in no
+        group, with no "All" to reach it by.
+        """
+        Block.objects.update(current_teacher=self.teacher)
+        in_no_group = baker.make(
+            QuestSubmission, user=baker.make(User), quest=self.quest,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+
+        response, listed = self.approved_listed(reverse('quests:approved'))
+
+        self.assertEqual(listed, {submission.id for submission in self.approved.values()} | {in_no_group.id})
+        self.assertEqual(self.groups_buttons(response), {})
+
+    def test_approvals__with_several_teachers_a_student_in_no_group_is_under_all(self):
+        """Where the pair is offered, a student in no group is not in the teacher's own groups,
+        and "All" is where their approved work is found."""
+        in_no_group = baker.make(
+            QuestSubmission, user=baker.make(User), quest=self.quest,
+            semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
+        )
+
+        _, mine = self.approved_listed(reverse('quests:approved'))
+        _, everyone = self.approved_listed(reverse('quests:approved_all'))
+
+        self.assertNotIn(in_no_group.id, mine)
+        self.assertIn(in_no_group.id, everyone)
+
 
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
