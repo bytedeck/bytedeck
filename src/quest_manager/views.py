@@ -5,7 +5,7 @@ import uuid
 from collections import namedtuple
 from datetime import datetime, timezone as dt_timezone
 
-from django.utils.html import format_html
+from django.utils.html import escape, format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -35,7 +35,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
-from comments.models import Comment, Document, clean_html
+from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -1172,12 +1172,22 @@ def ajax_submission_info(request, submission_id=None):
 @non_public_only_view
 @login_required
 def detail(request, quest_id):
-    """
-    Display the quest if it is available to the user or if user is staff, otherwise check for a completed submission
-    and display that.  If no submission, and not available, then display a restricted version.
-    :param request:
-    :param quest_id:
-    :return:
+    """Display one quest, in whichever of its four shapes the student has earned.
+
+    Available to them, or theirs to edit, and they get the quest with its buttons. Held back by a
+    blocking quest, and they get it with the On Hold panel naming the quest in the way, since they
+    do qualify for this one (#2729). Otherwise, their own latest submission if they have one, and
+    failing that a preview of the quest saying they do not meet its prerequisites yet.
+
+    Args:
+        request (HttpRequest): the request, whose user decides which shape they get.
+        quest_id (int): the quest to show, archived ones included so an old link still resolves.
+
+    Returns:
+        HttpResponse: the rendered quest, or a redirect to the student's own submission of it.
+
+    Raises:
+        Http404: no quest carries this id.
     """
 
     q = get_object_or_404(Quest.objects.all_including_archived(), pk=quest_id)
@@ -1954,6 +1964,15 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
+    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
+    show_all_blocks_button = True
+
+    grouped_blocks = Block.objects.grouped_teachers_blocks()
+    teachers = grouped_blocks.keys()
+    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
+    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
+        show_all_blocks_button = False
+
     page = request.GET.get("page")
     # The approvals tabs show whose submission it is, and no campaign column, so that is
     # what they search and order by. The in-progress tab's Status cell carries no time.
@@ -1966,8 +1985,16 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         in_progress_submissions = submission_tab.page
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
+        # The tab lists the teacher's own groups unless they ask for all of them, as Submitted
+        # does (#2672), but only where the heading offers the "All" to ask with. A deck whose
+        # only teacher is this one hides that pair, and there their own groups would leave out
+        # the approved work of any student in no group, with nothing to reach it by, so the tab
+        # lists everyone's. A quest's own list of past approvals stays every teacher's: there
+        # "/all/" means every semester rather than every group.
+        own_groups_only = current_teacher_only and quest is None and show_all_blocks_button
         approved_submissions = QuestSubmission.objects.all_approved(
-            quest=quest, active_semester_only=active_sem_only
+            quest=quest, active_semester_only=active_sem_only,
+            teacher=request.user if own_groups_only else None,
         )
         submission_tab = submission_tab_page(request, approved_submissions, page, user=True)
         approved_submissions = submission_tab.page
@@ -2041,14 +2068,14 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
                 auto_id=f"id_quick_reply_{submission.id}_%s",
             )
 
-    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
-    show_all_blocks_button = True
-
-    grouped_blocks = Block.objects.grouped_teachers_blocks()
-    teachers = grouped_blocks.keys()
-    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
-    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
-        show_all_blocks_button = False
+    # Where that button's two halves go, on the tabs that list one teacher's groups by default:
+    # (their own groups, every group). A quest's own past approvals are every teacher's, so it
+    # has no such pair (#2672).
+    groups_urls = None
+    if view_type == ApprovalsViewTabTypes.SUBMITTED:
+        groups_urls = (reverse("quests:submitted"), reverse("quests:submitted_all"))
+    elif view_type == ApprovalsViewTabTypes.APPROVED and quest is None:
+        groups_urls = (reverse("quests:approved"), reverse("quests:approved_all"))
 
     context = {
         "heading": "Quest Approval",
@@ -2060,6 +2087,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
+        "groups_urls": groups_urls,
         # Read by the tab's table and the search and filter controls above it
         "sortable_columns": submission_tab.sortable_columns,
         "sort_column": submission_tab.sort_column,
@@ -2193,6 +2221,7 @@ def _keep_posted_uploads(request, form, question_formset, submission, followup="
 
 @non_public_only_view
 @login_required
+@transaction.atomic
 def complete(request, submission_id):
     """
     When a student has completed a quest, or is commenting on an already completed quest, this view is called
@@ -2212,7 +2241,23 @@ def complete(request, submission_id):
         Http404: on a GET, an unrecognized submit button, or a submission with no draft
             comment that is not already completed.
     """
-    submission = get_object_or_404(QuestSubmission, pk=submission_id)
+    # Locked for the whole request, because what the student has attached is decided from their
+    # draft (has_attachment, below) and then published from it several steps later. The student
+    # can delete a draft file at the same moment (ajax_delete_draft_attachment), and that
+    # endpoint takes this same row lock, so it waits: the files checked are the files published.
+    # Without it a delete landing between the two lets a quest that asks for a file complete
+    # with none.
+    #
+    # of=("self",) locks the submission alone. The manager's default filters join the quest,
+    # and a bare FOR UPDATE would lock that row too, making every student completing the same
+    # quest queue behind one another. include_related=False for the reason the delete endpoint
+    # gives: Postgres refuses FOR UPDATE on the nullable side of an outer join, which those
+    # joins would add. It leaves the default filters in place, so the same submissions are
+    # found as before.
+    submission = get_object_or_404(
+        QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+        pk=submission_id,
+    )
     origin_path = submission.get_absolute_url()
 
     # EARLY EXIT CONDITIONS: ####################
@@ -2335,6 +2380,15 @@ def complete(request, submission_id):
     # notification further down still needs to know whether there was ever a real comment.
     has_comment = not is_empty_html(comment_text)
 
+    # Whether the student has attached anything, counting the files stored on their draft as
+    # well as any posted with this request. Choosing a file saves the draft at once and stores
+    # the file on it (#2749), then empties the input it was chosen in, so a file the student
+    # can see in their attachments list is on the draft by the time they press Submit and is
+    # not in request.FILES at all (#2756). The draft comment is what gets published below, so
+    # those files go out with the submission either way.
+    draft_has_files = bool(submission.draft_comment_id) and submission.draft_comment.document_set.exists()
+    has_attachment = bool(request.FILES) or draft_has_files
+
     if not has_comment:
 
         # If the student answered at least one question, those answers are the submission's
@@ -2344,7 +2398,7 @@ def complete(request, submission_id):
         # If the `verification_required` flag is set, then the teacher is expecting either
         # a comment or a file (something to check).  We already know there isn't a comment
         # so check for files.
-        elif submission.quest.verification_required and not request.FILES:
+        elif submission.quest.verification_required and not has_attachment:
             messages.error(
                 request,
                 "Please read the Submission Instructions more carefully.  "
@@ -2353,7 +2407,7 @@ def complete(request, submission_id):
             return redirect(origin_path)
         # If this form is being used to add a comment to an already completed quest, then
         # we need to make sure the student atually left a comment
-        elif "comment" in request.POST and not request.FILES:
+        elif "comment" in request.POST and not has_attachment:
             messages.error(request, "Please leave a comment.")
             return redirect(origin_path)
         # else none of these are true, then add some default text to the blank comment
@@ -2363,16 +2417,33 @@ def complete(request, submission_id):
             comment_text = "(submitted without comment)"
 
     xp_requested = 0
-    # If custom XP, then we need to get the XP value and append it to the comment.
-    if isinstance(form, SubmissionFormCustomXP):
-        xp_requested = form.cleaned_data.get("xp_requested")
-        comment_text += f"<ul><li><b>XP requested: {xp_requested}</b></li></ul>"
+    # What the student chose on the form is listed under the comment they hand the quest in with,
+    # one choice above the other (#2757). Each hand-in's comment keeps the choices it was made
+    # with, so a quest returned and handed in again shows the new ones under the new comment
+    # while the earlier comment still shows the old. Only a hand-in records them, since that is
+    # the only time they take effect: a comment on work already handed in changes neither.
+    choices = []
+    if "complete" in request.POST:
+        if isinstance(form, SubmissionFormCustomXP):
+            xp_requested = form.cleaned_data.get("xp_requested")
+            choices.append(f"XP requested: {xp_requested}")
+        # the form asks only a student who has courses to choose between (XPCourseChoiceMixin)
+        if "course" in form.fields:
+            course = form.cleaned_data.get("course")
+            choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
+    # They sit below a rule, apart from what the student wrote, with the comment's attached
+    # files following them (comments/comments.html draws no second rule above those).
+    choices_html = (
+        f'<hr class="tighter"><ul class="{COMMENT_DETAILS_CLASS}">'
+        + "".join(f"<li><b>{choice}</b></li>" for choice in choices)
+        + "</ul>"
+    ) if choices else ""
 
     # The submission's draft_comment property (a Comment object) is used to save a new comment
     # at the end of this view when `mark_completed` is called on the submission,
     # so make sure the draft comment is set properly with the form's latest comment text.
     draft_comment = submission.draft_comment
-    draft_text = f"<p>{comment_text}</p>"
+    draft_text = f"<p>{comment_text}</p>" + choices_html
     if draft_comment:
         # update all comment fields
         #
@@ -2523,6 +2594,25 @@ def complete(request, submission_id):
 @non_public_only_view
 @login_required
 def start(request, quest_id):
+    """Start this quest for the signed-in student, or say why they cannot.
+
+    Three things stand in the way, and each one answers differently. A blocking quest holding this
+    one back sends them to the quest's page with the quest responsible named, since they qualify
+    for this one and only have to wait (#2729). A submission of it already in progress sends them
+    to that submission. Anything else means they have no business starting it at all, which is
+    what a hand-edited quest id in the url looks like.
+
+    Args:
+        request (HttpRequest): the request, whose user the quest is started for.
+        quest_id (int): the quest to start.
+
+    Returns:
+        HttpResponseRedirect: to the new submission, or to whichever of the two explanations
+        above applies.
+
+    Raises:
+        Http404: no quest carries this id, or it is not this student's to start.
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
 
     if not quest.is_available(request.user):

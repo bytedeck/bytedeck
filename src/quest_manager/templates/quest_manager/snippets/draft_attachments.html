@@ -4,29 +4,28 @@
   removes it. Only the student who owns the draft sees this: these are their own pending
   attachments, not yet posted for anyone else to read.
 
-  Rows of the attachments control (snippets/attachments_field.html), sitting above the button
-  that adds more, so the files and the way to add or remove one read as a single thing (#2749).
-  A file input always renders empty, since browsers never repopulate one, so this list is the
-  only record of what is attached (#2427), and the button on each row is what drops a file
-  chosen by mistake: choosing again in the input adds to what is stored rather than replacing
-  it.
+  A bulleted list, as a posted comment lists its files (comments/comments.html), so a student's
+  attachments read the same before and after they hand the quest in (#2752). It sits above the
+  button that adds more (snippets/attachments_field.html, #2749). A file input always renders
+  empty, since browsers never repopulate one, so this list is the only record of what is
+  attached (#2427), and the button beside each file is what drops one chosen by mistake:
+  choosing again in the input adds to what is stored rather than replacing it.
 
   Rendered from `draft_documents`, and re-rendered into the page by the draft-save and
   attachment-delete endpoints, so the list has a single source of markup.
 {% endcomment %}
 {% if draft_documents %}
-  <ul class="list-group bt-attachments-list">
+  <ul class="file-links">
     {% for document in draft_documents %}
-      <li class="list-group-item">
+      {% comment %} get_download_url, not the storage url: a file that can carry a script is
+         handed over as a download rather than opened in the page (#2726). {% endcomment %}
+      <li class="file-link"><a href="{{ document.get_download_url }}" target="_blank">
+        {{ document.docfile|filename }}</a>
         <button type="button" class="btn btn-default btn-xs pull-right draft-attachment-delete"
                 data-delete-url="{% url 'quests:ajax_delete_draft_attachment' document.id %}"
                 title="Delete {{ document.docfile|filename|striptags }} from your submission. It is removed for good, so attach it again if you still need it.">
           <i class="fa fa-trash-o text-danger"></i> Delete
         </button>
-        {% comment %} get_download_url, not the storage url: a file that can carry a script is
-           handed over as a download rather than opened in the page (#2726). {% endcomment %}
-        <a href="{{ document.get_download_url }}" target="_blank">
-          <i class="fa fa-fw fa-paperclip"></i>{{ document.docfile|filename }}</a>
       </li>
     {% endfor %}
   </ul>

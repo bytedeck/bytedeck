@@ -18,6 +18,11 @@ from django.db.models.signals import pre_delete
 
 # Create your models here.
 
+#: The class of a list of details the app adds below what a comment's author wrote, under a rule
+#: of its own: a quest's hand-in choices (quest_manager.views.complete). The comment template
+#: reads it, through Comment.has_details, to draw one rule below a comment rather than two.
+COMMENT_DETAILS_CLASS = "comment-details"
+
 
 class CommentQuerySet(models.query.QuerySet):
 
@@ -133,8 +138,13 @@ def clean_html(text, convert_newlines=True):
     ulgroup = 0
     uls = []
     for li in soup.findAll('li'):
+        # An <li> already in a list is left alone. Its parent is what says so: the element before
+        # it only does for a list's first item, since a later item follows the last tag inside
+        # the item before it (a <b>, say), and an <ol>'s items would read as bare as well.
+        if li.parent and li.parent.name in ('ul', 'ol'):
+            continue
         previous_element = li.findPrevious()
-        # if <li> already wrapped in <ul>, do nothing
+        # a bare <li> straight after a <ul> start tag is left where it is
         if previous_element and previous_element.name == 'ul':
             continue
         # if <li> is the first element of a <li> group, wrap it in a new <ul>
@@ -178,6 +188,18 @@ class Comment(models.Model):
 
     def __str__(self):
         return self.text
+
+    @property
+    def has_details(self):
+        """Whether this comment ends with details the app listed below its author's words.
+
+        Those come with a rule above them, so whatever follows the comment (its attached files)
+        needs no second one.
+
+        Returns:
+            bool: True when the text holds a COMMENT_DETAILS_CLASS list.
+        """
+        return f'class="{COMMENT_DETAILS_CLASS}"' in (self.text or '')
 
     def get_target_object(self):
         if self.target_object_id is not None:
