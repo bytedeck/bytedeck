@@ -41,6 +41,22 @@ class MarkRangeModelTest(ByteDeckTenantTestCase):
         expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
         self.assertEqual(str(self.mr_50), expected_str)
 
+    def test_color_headers__the_database_fills_it_in(self):
+        """A range inserted without the column still colors headers, and the insert doesn't fail.
+
+        During a deploy the outgoing version, which doesn't know the column, is still creating
+        ranges, so the database itself has to supply the value.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO courses_markrange (name, minimum_mark, active, color_light, color_dark, days) "
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                ["From the outgoing version", 60.0, True, "#FFFFFF", "#000000", "1,2,3,4,5,6,7"],
+            )
+            pk = cursor.fetchone()[0]
+
+        self.assertTrue(MarkRange.objects.get(pk=pk).color_headers)
+
 
 class MarkRangeManagerTest(ByteDeckTenantTestCase):
     @classmethod

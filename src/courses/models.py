@@ -160,6 +160,19 @@ class MarkRange(models.Model):
     name = models.CharField(max_length=50, default="Chillax Line")
     minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
     active = models.BooleanField(default=True)
+    # db_default as well as default: during a deploy the outgoing version still inserts ranges
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and
+    # the deploy window").
+    color_headers = models.BooleanField(
+        default=True,
+        db_default=True,
+        verbose_name="Use this color in student headers",
+        help_text=(
+            "Students whose mark is in this range get this color in their header. This has no effect "
+            "unless “Activate Header Colors by Mark” is on in Site Configuration. When unchecked, this "
+            "range only appears on the graph in the Mark Calculations page."
+        ),
+    )
     color_light = RGBColorField(default='#BEFFFA', help_text='Color to be used in the light theme')
     color_dark = RGBColorField(default='#337AB7', help_text='Color to be used in the dark theme')
     days = models.CharField(
