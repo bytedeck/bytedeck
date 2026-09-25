@@ -50,9 +50,12 @@
 
         <div class="comment-content user-content">{{comment.text|safe}}</div>
         {% with comment.document_set.all as docs %}{% if docs %}
-        <hr class="tighter">
+        {% comment %} One rule sets everything below a comment apart from the words above it. A
+           comment ending with details under a rule of their own (a quest's hand-in choices,
+           quest_manager.views.complete) has it already, so its files follow with no second one. {% endcomment %}
+        {% if not comment.has_details %}<hr class="tighter">{% endif %}
         <p>Attached files:</p>
-        <ul>
+        <ul class="file-links">
           {% for document in docs %}
           <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
             {{ document.docfile|filename }}</a>

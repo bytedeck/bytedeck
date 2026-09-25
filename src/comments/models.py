@@ -16,6 +16,11 @@ from django.db.models.signals import pre_delete
 
 # Create your models here.
 
+#: The class of a list of details the app adds below what a comment's author wrote, under a rule
+#: of its own: a quest's hand-in choices (quest_manager.views.complete). The comment template
+#: reads it, through Comment.has_details, to draw one rule below a comment rather than two.
+COMMENT_DETAILS_CLASS = "comment-details"
+
 
 class CommentQuerySet(models.query.QuerySet):
 
@@ -181,6 +186,18 @@ class Comment(models.Model):
 
     def __str__(self):
         return self.text
+
+    @property
+    def has_details(self):
+        """Whether this comment ends with details the app listed below its author's words.
+
+        Those come with a rule above them, so whatever follows the comment (its attached files)
+        needs no second one.
+
+        Returns:
+            bool: True when the text holds a COMMENT_DETAILS_CLASS list.
+        """
+        return f'class="{COMMENT_DETAILS_CLASS}"' in (self.text or '')
 
     def get_target_object(self):
         if self.target_object_id is not None:
