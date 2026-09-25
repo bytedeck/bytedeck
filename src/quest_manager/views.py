@@ -1976,8 +1976,12 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         in_progress_submissions = submission_tab.page
     elif "/approved/" in request.path_info:
         view_type = ApprovalsViewTabTypes.APPROVED
+        # The tab lists the teacher's own groups unless they ask for all of them, as Submitted
+        # does (#2672). A quest's own list of past approvals stays every teacher's: there "/all/"
+        # means every semester rather than every group.
         approved_submissions = QuestSubmission.objects.all_approved(
-            quest=quest, active_semester_only=active_sem_only
+            quest=quest, active_semester_only=active_sem_only,
+            teacher=request.user if current_teacher_only and quest is None else None,
         )
         submission_tab = submission_tab_page(request, approved_submissions, page, user=True)
         approved_submissions = submission_tab.page
@@ -2060,6 +2064,15 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
     if len(teachers) == 1 and list(teachers)[0] == request.user.id:
         show_all_blocks_button = False
 
+    # Where that button's two halves go, on the tabs that list one teacher's groups by default:
+    # (their own groups, every group). A quest's own past approvals are every teacher's, so it
+    # has no such pair (#2672).
+    groups_urls = None
+    if view_type == ApprovalsViewTabTypes.SUBMITTED:
+        groups_urls = (reverse("quests:submitted"), reverse("quests:submitted_all"))
+    elif view_type == ApprovalsViewTabTypes.APPROVED and quest is None:
+        groups_urls = (reverse("quests:approved"), reverse("quests:approved_all"))
+
     context = {
         "heading": "Quest Approval",
         "tab_list": tab_list,
@@ -2070,6 +2083,7 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         "quest": quest,
         "quick_reply_text": SiteConfig.get().submission_quick_text,
         "show_all_blocks_button": show_all_blocks_button,
+        "groups_urls": groups_urls,
         # Read by the tab's table and the search and filter controls above it
         "sortable_columns": submission_tab.sortable_columns,
         "sort_column": submission_tab.sort_column,

@@ -6460,6 +6460,102 @@ class ApprovalsGroupColumnTest(ByteDeckTenantTestCase):
         self.assertContains(response, '<input type="hidden" name="sort" value="-group">')
 
 
+class ApprovedTabGroupsTest(ByteDeckTenantTestCase):
+    """The Approved tab lists a teacher's own groups, with "All" beside it for everyone's, the way
+    the Submitted tab does (#2672)."""
+
+    def setUp(self):
+        """Two teachers with a group each, and a student in each group with a quest approved."""
+        self.teacher, other_teacher = baker.make(User, is_staff=True, _quantity=2)
+        semester = SiteConfig.get().active_semester
+        self.quest = baker.make(Quest)
+        self.approved = {}
+        for whose, block_teacher in (('mine', self.teacher), ('theirs', other_teacher)):
+            student = baker.make(User)
+            baker.make('courses.CourseStudent', user=student, semester=semester,
+                       block=baker.make('courses.Block', current_teacher=block_teacher))
+            self.approved[whose] = baker.make(QuestSubmission, user=student, quest=self.quest, semester=semester,
+                                              is_completed=True, is_approved=True)
+        self.client.force_login(self.teacher)
+
+    def approved_listed(self, url):
+        """Load an approvals page and read which approved submissions its Approved tab lists.
+
+        Args:
+            url (str): the page to load.
+
+        Returns:
+            tuple: the response, and the set of the listed submissions' ids.
+        """
+        response = self.client.get(url)
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3-Flagged
+        return response, {submission.id for submission in response.context['tab_list'][2]['submissions']}
+
+    def groups_buttons(self, response):
+        """The "My groups" / "All" pair in the page heading, as each link's url and style.
+
+        Args:
+            response (HttpResponse): the rendered approvals page.
+
+        Returns:
+            dict: each button's label mapped to (its url, its bootstrap button class).
+        """
+        # the pair as one unit, so the "All" of a quest's own semester choice is not mistaken for it
+        found = re.search(
+            r'href="([^"]+)"\s+class="btn (btn-\w+)">My groups</a>\s*<a href="([^"]+)"\s+class="btn (btn-\w+)">All</a>',
+            response.content.decode(),
+        )
+        if found is None:
+            return {}
+        mine_url, mine_style, all_url, all_style = found.groups()
+        return {'My groups': (mine_url, mine_style), 'All': (all_url, all_style)}
+
+    def test_approvals__approved_tab_lists_the_teachers_own_groups(self):
+        """By default the tab holds the approved work of the teacher's own students only."""
+        response, listed = self.approved_listed(reverse('quests:approved'))
+
+        self.assertEqual(listed, {self.approved['mine'].id})
+        self.assertTrue(response.context['current_teacher_only'])
+
+    def test_approvals__approved_all_tab_lists_every_teachers(self):
+        """"All" holds every teacher's approved work."""
+        response, listed = self.approved_listed(reverse('quests:approved_all'))
+
+        self.assertEqual(listed, {submission.id for submission in self.approved.values()})
+        self.assertFalse(response.context['current_teacher_only'])
+
+    def test_approvals__approved_tab_offers_my_groups_and_all(self):
+        """The heading offers both, with the one being shown picked out."""
+        mine = self.groups_buttons(self.client.get(reverse('quests:approved')))
+        everyone = self.groups_buttons(self.client.get(reverse('quests:approved_all')))
+
+        self.assertEqual(mine, {
+            'My groups': (reverse('quests:approved'), 'btn-primary'),
+            'All': (reverse('quests:approved_all'), 'btn-default'),
+        })
+        self.assertEqual(everyone, {
+            'My groups': (reverse('quests:approved'), 'btn-default'),
+            'All': (reverse('quests:approved_all'), 'btn-primary'),
+        })
+
+    def test_approvals__submitted_tab_offers_its_own_pair(self):
+        """The Submitted tab's pair still switches the Submitted tab."""
+        buttons = self.groups_buttons(self.client.get(reverse('quests:submitted')))
+
+        self.assertEqual(buttons, {
+            'My groups': (reverse('quests:submitted'), 'btn-primary'),
+            'All': (reverse('quests:submitted_all'), 'btn-default'),
+        })
+
+    def test_approvals__a_quests_past_approvals_are_every_teachers(self):
+        """A quest's own list of past approvals is everyone's, as it was, and offers only its
+        semester choice rather than the groups pair."""
+        response, listed = self.approved_listed(reverse('quests:approved_for_quest', args=[self.quest.id]))
+
+        self.assertEqual(listed, {submission.id for submission in self.approved.values()})
+        self.assertEqual(self.groups_buttons(response), {})
+
+
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
 
