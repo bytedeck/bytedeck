@@ -35,7 +35,7 @@ from django.views.generic.edit import CreateView, DeleteView, UpdateView
 from hackerspace_online.decorators import staff_member_required, xml_http_request_required
 
 from badges.models import BadgeAssertion
-from comments.models import Comment, Document, clean_html
+from comments.models import COMMENT_DETAILS_CLASS, Comment, Document, clean_html
 from comments.sanitize import sanitize_comment_html
 from comments.utils import accepted_attachments, save_draft_attachments
 from questions.forms import QuestionSubmissionFormsetFactory
@@ -2426,14 +2426,19 @@ def complete(request, submission_id):
         if "course" in form.fields:
             course = form.cleaned_data.get("course")
             choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
-    if choices:
-        comment_text += "<ul>" + "".join(f"<li><b>{choice}</b></li>" for choice in choices) + "</ul>"
+    # They sit below a rule, apart from what the student wrote, with the comment's attached
+    # files following them (comments/comments.html draws no second rule above those).
+    choices_html = (
+        f'<hr class="tighter"><ul class="{COMMENT_DETAILS_CLASS}">'
+        + "".join(f"<li><b>{choice}</b></li>" for choice in choices)
+        + "</ul>"
+    ) if choices else ""
 
     # The submission's draft_comment property (a Comment object) is used to save a new comment
     # at the end of this view when `mark_completed` is called on the submission,
     # so make sure the draft comment is set properly with the form's latest comment text.
     draft_comment = submission.draft_comment
-    draft_text = f"<p>{comment_text}</p>"
+    draft_text = f"<p>{comment_text}</p>" + choices_html
     if draft_comment:
         # update all comment fields
         #
