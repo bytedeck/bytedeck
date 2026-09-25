@@ -12,23 +12,49 @@ from django.utils.http import url_has_allowed_host_and_scheme
 from tenant.views import non_public_only_view
 
 from hackerspace_online.decorators import xml_http_request_required
+from utilities.sorting import apply_sort, resolve_sort
 
 from .models import Notification
 
+#: The columns the notifications list can be ordered by, keyed as its headings name them.
+#: With none chosen it keeps the manager's own order, newest first.
+NOTIFICATION_SORT_COLUMNS = {
+    'date': 'timestamp',
+    'status': 'unread',
+}
 
-@non_public_only_view
-@login_required
-def list(request):
+
+def notifications_page(request, notifications):
+    """Search, order and cut a page from a list of the reader's notifications (#2703).
+
+    All of it happens here, before the page is taken, because the browser only ever holds
+    one page: a search or sort applied there would answer a question about those 15
+    notifications rather than about the list (#2410, #2582). `id` settles notifications
+    that tie on the chosen column, newest first, so paging through a sorted list shows each
+    of them exactly once.
+
+    Args:
+        request (HttpRequest): the current request, for its `q`, `sort` and `page`.
+        notifications (NotificationQuerySet): the list to show, all of the reader's or only
+            the unread.
+
+    Returns:
+        dict: the template's context: the page as `notifications`, the search term and how
+        many matched it, and the column and direction the list is ordered by.
+    """
+    search_term = request.GET.get('q', '').strip()
+    notifications = notifications.search(search_term)
+
+    sort_column, sort_descending = resolve_sort(request, NOTIFICATION_SORT_COLUMNS)
+    notifications = apply_sort(notifications, NOTIFICATION_SORT_COLUMNS, sort_column, sort_descending, tie_break='-id')
+
     # each rendered notification reads its sender/target/action generic FK
     # objects; prefetch them so the page issues a few grouped queries instead
     # of several per notification
-    notifications_list = Notification.objects.all_for_user(request.user).prefetch_related(
-        'sender_object', 'target_object', 'action_object',
-    )
+    notifications = notifications.prefetch_related('sender_object', 'target_object', 'action_object')
 
-    paginator = Paginator(notifications_list, 15)
+    paginator = Paginator(notifications, 15)
     page = request.GET.get('page', 1)
-
     try:
         notifications = paginator.page(page)
     except PageNotAnInteger:
@@ -36,20 +62,28 @@ def list(request):
     except EmptyPage:
         notifications = paginator.page(paginator.num_pages)
 
-    context = {
+    return {
         'notifications': notifications,
+        'search_term': search_term,
+        'num_matching': paginator.count,
+        'sort_column': sort_column,
+        'sort_descending': sort_descending,
     }
 
+
+@non_public_only_view
+@login_required
+def list(request):
+    """Every notification the reader has had, searchable, sortable and a page at a time."""
+    context = notifications_page(request, Notification.objects.all_for_user(request.user))
     return render(request, 'notifications/list.html', context)
 
 
 @non_public_only_view
 @login_required
 def list_unread(request):
-    notifications = Notification.objects.all_unread(request.user)
-    context = {
-        "notifications": notifications,
-    }
+    """The reader's unread notifications, searchable, sortable and a page at a time."""
+    context = notifications_page(request, Notification.objects.all_unread(request.user))
     return render(request, "notifications/list.html", context)
 
 

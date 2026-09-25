@@ -24,9 +24,78 @@ class UserNotificationOptionSet(models.Model):
     quest_approved_without_comment = models.BooleanField(default=True)
 
 
+#: What a notification's sender, target or action is called where the notification is shown,
+#: as lookups into the model it is: each model's own __str__, as far as the database holds it.
+#: A search matches a word against these, since the sentence itself is only built when it is
+#: shown (see NotificationQuerySet.search).
+NAME_LOOKUPS = {
+    ('auth', 'user'): ('username', 'first_name', 'last_name'),
+    ('profile_manager', 'profile'): ('user__username', 'user__first_name', 'user__last_name', 'preferred_name', 'alias'),
+    ('quest_manager', 'quest'): ('name',),
+    ('quest_manager', 'questsubmission'): ('quest__name',),
+    ('quest_manager', 'category'): ('title',),
+    ('badges', 'badge'): ('name',),
+    ('courses', 'rank'): ('name',),
+    ('announcements', 'announcement'): ('title',),
+    ('comments', 'comment'): ('text',),
+}
+
+
+def _named(role, word):
+    """The notifications whose sender, target or action is called something containing `word`.
+
+    The object is held through a generic foreign key, so there is no join to follow: each
+    kind of object the app sends notifications about is searched in its own table, and a
+    notification matches when its content type is that kind and its object id is among the
+    matches. The base manager is used, so an object that a default manager leaves out (an
+    archived quest, say) is still found by the notification that names it.
+
+    Args:
+        role (str): 'sender', 'target' or 'action', the generic foreign key to match.
+        word (str): one word of the search.
+
+    Returns:
+        Q: the condition on Notification.
+    """
+    matches = Q()
+    for (app_label, model_name), lookups in NAME_LOOKUPS.items():
+        model = apps.get_model(app_label, model_name)
+        named = Q()
+        for lookup in lookups:
+            named |= Q(**{f'{lookup}__icontains': word})
+        matches |= Q(**{
+            f'{role}_content_type': ContentType.objects.get_for_model(model),
+            f'{role}_object_id__in': model._base_manager.filter(named).values('pk'),
+        })
+    return matches
+
+
 class NotificationQuerySet(models.query.QuerySet):
     def get_user(self, recipient):
         return self.filter(recipient=recipient)
+
+    def search(self, search_term):
+        """Narrow to the notifications matching every word of a search term (#2703).
+
+        A notification's sentence is built when it is shown, from its sender, verb, target
+        and action (Notification.__str__), so no column holds it to search. Each word is
+        matched against what the sentence is made of instead: the verb, the link text, and
+        the names of the sender, the target and the action (NAME_LOOKUPS). Several words
+        narrow the results rather than widening them, as the quest lists' search does.
+
+        Args:
+            search_term (str): what the reader typed, or '' for no narrowing.
+
+        Returns:
+            NotificationQuerySet: the matching notifications.
+        """
+        notifications = self
+        for word in search_term.split():
+            notifications = notifications.filter(
+                Q(verb__icontains=word) | Q(target_link_text__icontains=word)
+                | _named('sender', word) | _named('target', word) | _named('action', word)
+            )
+        return notifications
 
     # object matching sender, target or action object
     def get_object_anywhere(self, object):

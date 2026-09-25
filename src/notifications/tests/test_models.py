@@ -570,3 +570,79 @@ class NotificationEscapingTest(ByteDeckTenantTestCase):
         notification = self.make_notification(verb='did something')
 
         self.assertTrue(hasattr(str(notification), '__html__'))
+
+
+class NotificationSearchTest(ByteDeckTenantTestCase):
+    """NotificationQuerySet.search matches what a notification's sentence is made of (#2703)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, and a student whose notifications are searched."""
+        cls.teacher = Recipe(User, is_staff=True, username='ms.rivera').make()
+        cls.student = baker.make(User)
+
+    def notify_about(self, target=None, action=None, **fields):
+        """A notification to the student from the teacher, about a target, with an action.
+
+        Args:
+            target (Model): what the notification is about, or None.
+            action (Model): the action object, or None.
+            **fields: other Notification fields to set, the verb among them.
+
+        Returns:
+            Notification: the saved notification.
+        """
+        for role, obj in (('target', target), ('action', action)):
+            if obj is not None:
+                fields[f'{role}_content_type'] = ContentType.objects.get_for_model(obj)
+                fields[f'{role}_object_id'] = obj.pk
+        return baker.make(
+            Notification, recipient=self.student,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+            **{'verb': 'did something', **fields},
+        )
+
+    def found(self, search_term):
+        """The ids of the student's notifications a search finds.
+
+        Args:
+            search_term (str): what the student typed.
+
+        Returns:
+            set: the matching notifications' ids.
+        """
+        return set(Notification.objects.all_for_user(self.student).search(search_term).values_list('id', flat=True))
+
+    def test_search__matches_each_part_of_the_sentence(self):
+        """The sender's name, the verb, the link text, and the name of whatever the notification is
+        about or acts with are each found, whichever kind of object that is."""
+        badge = self.notify_about(target=baker.make('badges.Badge', name='Proficiency'), verb='granted you a')
+        quest = self.notify_about(target=baker.make('quest_manager.Quest', name='Kinetic Sculpture'), verb='commented on')
+        submission = self.notify_about(
+            target=baker.make('quest_manager.QuestSubmission', quest__name='Pixel Art Portrait'), verb='returned')
+        announcement = self.notify_about(target=baker.make('announcements.Announcement', title='Field trip'), verb='posted')
+        comment = self.notify_about(action=baker.make('comments.Comment', text='Nice colours'), verb='replied')
+        link = self.notify_about(verb='sent a notice', target_link_text='subscription details page.')
+
+        self.assertEqual(self.found('proficiency'), {badge.id})
+        self.assertEqual(self.found('kinetic'), {quest.id})
+        self.assertEqual(self.found('pixel'), {submission.id})
+        self.assertEqual(self.found('field trip'), {announcement.id})
+        self.assertEqual(self.found('colours'), {comment.id})
+        self.assertEqual(self.found('subscription'), {link.id})
+        self.assertEqual(self.found('returned'), {submission.id})
+        self.assertEqual(self.found('rivera'), {badge.id, quest.id, submission.id, announcement.id, comment.id, link.id})
+
+    def test_search__each_word_narrows_the_results(self):
+        """Several words find the notifications matching all of them, not any."""
+        badge = self.notify_about(target=baker.make('badges.Badge', name='Proficiency'), verb='granted you a')
+        self.notify_about(target=baker.make('badges.Badge', name='Participation'), verb='granted you a')
+
+        self.assertEqual(self.found('granted proficiency'), {badge.id})
+
+    def test_search__an_empty_search_leaves_the_list_alone(self):
+        """No words, no narrowing."""
+        first = self.notify_about()
+        second = self.notify_about()
+
+        self.assertEqual(self.found('  '), {first.id, second.id})

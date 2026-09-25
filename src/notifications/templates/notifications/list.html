@@ -9,34 +9,61 @@
 {% endblock %}
 {% block content %}
 
-<table class='table'>
-{% for note in notifications %}
-<tr>
-  <td class='notification-icons'>{{note.font_icon|safe}}</td>
-  <td >{{note|safe}} </td>
-  <td><small>{{note.timestamp}}<small></td>
-  <td>{% if not note.unread %}Read {% else %} Unread {% endif %}</td>
-</tr>
+{% comment %}
+  Searching, sorting and paging are all done by the server, so they cover every notification
+  in the list rather than the page the browser is holding (#2703). Submitting drops any
+  ?page=, so a new search starts at its own first page, and the sort stays as it was.
+{% endcomment %}
+<form class="form-inline list-search-form" method="get" action="">
+  {% if sort_column %}<input type="hidden" name="sort" value="{% if sort_descending %}-{% endif %}{{ sort_column }}">{% endif %}
+  <div class="form-group">
+    <label class="sr-only" for="notifications-search">Search notifications</label>
+    <div class="input-group">
+      <input type="search" class="form-control" id="notifications-search" name="q"
+             value="{{ search_term }}" placeholder="Search names, quests, badges and announcements">
+      <span class="input-group-btn">
+        <button class="btn btn-default" type="submit" title="Search every notification in this list">
+          <i class="fa fa-fw fa-search"></i>
+        </button>
+        {% if search_term %}
+          <a class="btn btn-default" href="{% querystring q=None page=None %}" role="button" title="Clear this search">
+            <i class="fa fa-fw fa-times"></i>
+          </a>
+        {% endif %}
+      </span>
+    </div>
+  </div>
+</form>
 
-{% endfor %}
+{% if search_term %}
+  <p class="text-muted">
+    {{ num_matching }} notification{{ num_matching|pluralize }} match{{ num_matching|pluralize:"es," }} "{{ search_term }}".
+  </p>
+{% endif %}
+
+<table class='table'>
+  <thead>
+    <tr>
+      <th></th>
+      <th>Notification</th>
+      <th class="text-nowrap">{% include "snippets/sortable_column_heading.html" with column="date" label="Date" %}</th>
+      <th class="text-nowrap">{% include "snippets/sortable_column_heading.html" with column="status" label="Status" %}</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for note in notifications %}
+    <tr>
+      <td class='notification-icons'>{{note.font_icon|safe}}</td>
+      <td>{{note|safe}}</td>
+      <td><small>{{note.timestamp}}</small></td>
+      <td>{% if note.unread %}Unread{% else %}Read{% endif %}</td>
+    </tr>
+  {% empty %}
+    <tr><td colspan="4">{% if search_term %}No notifications match that search.{% else %}No notifications.{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
 </table>
 
-{% if notifications.paginator.num_pages > 1 %}
-<ul class="pagination pagination-centered">
-    {% if notifications.has_previous %}
-        <li><a href="{% url 'notifications:list' %}?page=1"><<</a></li>
-        <li><a href="{% url 'notifications:list' %}?page={{ notifications.previous_page_number }}"><</a></li>
-    {% endif %}
-
-    {% for i in notifications.paginator.page_range %}
-        <li {% if notifications.number == i %} class="active" {% endif %}><a href="{% url 'notifications:list' %}?page={{i}}">{{i}}</a></li>
-    {% endfor %}
-
-    {% if notifications.has_next %}
-        <li><a href="{% url 'notifications:list' %}?page={{ notifications.next_page_number }}">></a></li>
-        <li><a href="{% url 'notifications:list' %}?page={{ notifications.paginator.num_pages }}">>></a></li>
-    {% endif %}
-</ul>
-{% endif %}
+{% include "quest_manager/pagination_controls.html" with items=notifications %}
 
 {% endblock %}

@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
@@ -5,6 +7,7 @@ from django.db.models import Max
 from django.shortcuts import reverse
 from django.test import override_settings
 from django.test.utils import CaptureQueriesContext
+from django.utils import timezone
 
 from model_bakery import baker
 
@@ -376,3 +379,108 @@ class NotificationViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('notifications:read', args=[note.id]))
 
         self.assertEqual(response.status_code, 404)
+
+
+class NotificationListSearchSortTests(ByteDeckTenantTestCase):
+    """The notifications lists search, sort and page in the database, over every notification
+    rather than the page the browser is holding (#2703)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher who sends, and a student who reads."""
+        cls.teacher = User.objects.create_user('test_teacher', is_staff=True)
+        cls.student = User.objects.create_user('test_student')
+
+    def setUp(self):
+        """Sign the student in."""
+        self.client.force_login(self.student)
+
+    def notify(self, verb='did something', days_ago=0, unread=True):
+        """A notification to the student from the teacher, dated some days back.
+
+        Args:
+            verb (str): what the teacher did.
+            days_ago (int): how long ago it was sent.
+            unread (bool): whether the student has yet to read it.
+
+        Returns:
+            Notification: the saved notification.
+        """
+        notification = baker.make(
+            Notification, recipient=self.student, verb=verb, unread=unread,
+            sender_content_type=ContentType.objects.get_for_model(self.teacher), sender_object_id=self.teacher.id,
+        )
+        Notification.objects.filter(pk=notification.pk).update(timestamp=timezone.now() - timedelta(days=days_ago))
+        return notification
+
+    def listed(self, url_name='notifications:list', **params):
+        """The ids a list shows on the page asked for, in order.
+
+        Args:
+            url_name (str): which list to load.
+            **params: its query string.
+
+        Returns:
+            tuple: the response, and the listed notifications' ids.
+        """
+        response = self.client.get(reverse(url_name), params)
+        return response, [notification.id for notification in response.context['notifications']]
+
+    def test_list__a_search_covers_every_page(self):
+        """A match that sits on the list's second page is found, and the count says how many
+        notifications matched."""
+        oldest = self.notify(verb='finally approved', days_ago=30)
+        for days_ago in range(16):
+            self.notify(days_ago=days_ago)
+
+        response, listed = self.listed(q='approved')
+
+        self.assertEqual(listed, [oldest.id])
+        self.assertContains(response, '1 notification matches "approved".')
+
+    def test_list__sorts_the_whole_list_by_date_and_status(self):
+        """The Date and Status headings order the list: oldest or newest first, read or unread
+        first. With no sort it keeps its newest-first order."""
+        old_read = self.notify(days_ago=3, unread=False)
+        middle_unread = self.notify(days_ago=2)
+        new_read = self.notify(days_ago=1, unread=False)
+
+        self.assertEqual(self.listed()[1], [new_read.id, middle_unread.id, old_read.id])
+        self.assertEqual(self.listed(sort='date')[1], [old_read.id, middle_unread.id, new_read.id])
+        self.assertEqual(self.listed(sort='-date')[1], [new_read.id, middle_unread.id, old_read.id])
+        # ties on status go newest first
+        self.assertEqual(self.listed(sort='status')[1], [new_read.id, old_read.id, middle_unread.id])
+        self.assertEqual(self.listed(sort='-status')[1], [middle_unread.id, new_read.id, old_read.id])
+
+    def test_list__page_links_keep_the_search_and_the_sort(self):
+        """Paging through a search keeps it, and its sort, applied."""
+        for days_ago in range(20):
+            self.notify(verb='approved', days_ago=days_ago)
+
+        response = self.client.get(reverse('notifications:list'), {'q': 'approved', 'sort': 'date'})
+
+        self.assertContains(response, '?q=approved&amp;sort=date&amp;page=2')
+
+    def test_list__says_when_nothing_matches(self):
+        """A search that finds nothing says so, rather than showing an empty table."""
+        self.notify(verb='approved')
+
+        response, listed = self.listed(q='zebra')
+
+        self.assertEqual(listed, [])
+        self.assertContains(response, 'No notifications match that search.')
+
+    def test_list_unread__is_searched_sorted_and_paged_too(self):
+        """The Unread list is a page at a time, like the full one, and takes the same search.
+        Read notifications stay out of it."""
+        for days_ago in range(16):
+            self.notify(days_ago=days_ago)
+        read = self.notify(verb='approved', unread=False)
+        unread = self.notify(verb='approved', days_ago=20)
+
+        response, listed = self.listed('notifications:list_unread')
+        self.assertEqual(response.context['notifications'].paginator.num_pages, 2)
+        self.assertEqual(len(listed), 15)
+
+        self.assertEqual(self.listed('notifications:list_unread', q='approved')[1], [unread.id])
+        self.assertNotIn(read.id, self.listed('notifications:list_unread', q='approved')[1])
