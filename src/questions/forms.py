@@ -45,6 +45,22 @@ class AnswerSummernoteWidget(ByteDeckSummernoteSafeInplaceWidget):
         return settings
 
 
+class AnswerFileInput(forms.ClearableFileInput):
+    """The file input for a file-upload answer, without Django's "Currently:" link.
+
+    A file saved with the student's draft is the field's initial value, and
+    ClearableFileInput shows one as "Currently: <link>", linking the file at its storage URL.
+    The submission page already shows a saved file on its "Attached:" line, which hands an
+    SVG or HTML file over through the download view, since opening one at its storage URL
+    runs whatever script it carries (#2559). The widget's own link bypassed that, and showed
+    the file twice (#2785). This draws the input and, on an optional question with a saved
+    file, the box that removes it.
+    """
+
+    template_name = "questions/widgets/answer_file_input.html"
+    clear_checkbox_label = "Remove the saved file"
+
+
 class QuestionForm(forms.ModelForm):
     """Displayed to the teacher when they are creating or editing a Question.
 
@@ -265,7 +281,7 @@ class QuestionSubmissionForm(forms.ModelForm):
                 # one page are indistinguishable by name. The aria-label adds the question number
                 # while keeping the label's own words, which is what WCAG 2.5.3 (Label in Name)
                 # requires of a control whose visible label is text (#2570).
-                widget=forms.ClearableFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
+                widget=AnswerFileInput(attrs={"multiple": False, "aria-label": self._file_aria_label()}),
                 label="Attach files",
                 help_text=help_text,
             )

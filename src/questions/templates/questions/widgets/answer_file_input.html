@@ -1,0 +1,12 @@
+{% comment %} Django's clearable file input, less its "Currently: <link>" to the saved file's storage
+   URL: the submission page names and links a saved file on its "Attached:" line, through the
+   download view where the file could run a script (#2785). {% endcomment %}
+<input type="{{ widget.type }}" name="{{ widget.name }}"{% include "django/forms/widgets/attrs.html" %}>
+{% if widget.is_initial and not widget.required %}
+<div class="checkbox">
+  <label for="{{ widget.checkbox_id }}">
+    <input type="checkbox" name="{{ widget.checkbox_name }}" id="{{ widget.checkbox_id }}"{% if widget.attrs.disabled %} disabled{% endif %}{% if widget.attrs.checked %} checked{% endif %}>
+    {{ widget.clear_checkbox_label }}
+  </label>
+</div>
+{% endif %}

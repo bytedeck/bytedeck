@@ -197,6 +197,79 @@ class SubmissionPageFormsetTest(QuestionSubmissionFlowTestBase):
         self.assertEqual(formset.forms[0].question, self.long_question)
 
 
+    def _saved_answer_file(self, name, content, ordinal=3, **question_kwargs):
+        """Add a file question to the quest, save a file to its draft row, and return the row.
+
+        Args:
+            name (str): the file's name.
+            content (bytes): the file's content.
+            ordinal (int): the question's position; the quest's own two questions are 1 and 2.
+            **question_kwargs: the question's fields beyond its quest, position and type.
+
+        Returns:
+            QuestionSubmission: the draft row, holding the saved file.
+        """
+        question = baker.make(Question, quest=self.quest, ordinal=ordinal, type="file_upload", **question_kwargs)
+        row = sync_draft_question_submissions(self.submission).get(question=question)
+        row.response_file = SimpleUploadedFile(name, content)
+        row.save()
+        return row
+
+    def test_submission_page__a_saved_svg_answer_is_never_linked_at_its_storage_url(self):
+        """An SVG saved with the draft is linked through the download view only (#2785).
+
+        The file input used to draw "Currently:" and a link to the saved file's storage URL,
+        beside the "Attached:" line that #2559 routes through the download view. Opening an
+        SVG at its storage URL runs whatever script it carries, so the page must not hand
+        that URL out anywhere.
+        """
+        row = self._saved_answer_file(
+            "my-logo.svg", b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+            required=False, allowed_file_type="image", allow_script_capable_files=True,
+        )
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertNotContains(response, row.response_file.url)
+        self.assertContains(response, reverse("questions:answer_file_download", args=[row.id]))
+
+    def test_submission_page__a_saved_file_is_shown_once(self):
+        """A saved file appears once, on the "Attached:" line, not also as "Currently:" (#2785)."""
+        row = self._saved_answer_file("my-report.pdf", b"%PDF-1.4", required=True, allowed_file_type="all")
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, f'href="{row.response_file.url}"', count=1)
+        self.assertNotContains(response, "Currently:")
+
+    def test_submission_page__an_optional_question_offers_to_remove_its_saved_file(self):
+        """An optional question with a saved file keeps a box that removes it; a required one has none.
+
+        The widget's own "Clear" box was the only way to take a saved file off an optional
+        answer without replacing it, so it stays, under a label that says what it does.
+        """
+        optional = self._saved_answer_file("notes.pdf", b"%PDF-1.4", ordinal=3, required=False, allowed_file_type="all")
+        self._saved_answer_file("report.pdf", b"%PDF-1.4", ordinal=4, required=True, allowed_file_type="all")
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, "Remove the saved file", count=1)
+        self.assertContains(response, f'name="{self.file_field_name(optional.question)}-clear"')
+
+    def test_complete__the_remove_box_takes_the_saved_file_off_an_optional_answer(self):
+        """Ticking the box submits the optional answer without the file saved to the draft."""
+        row = self._saved_answer_file("notes.pdf", b"%PDF-1.4", required=False, allowed_file_type="all")
+
+        data = {"complete": True, "comment_text": "<p>a comment</p>", **self.formset_data()}
+        data[f"{self.file_field_name(row.question)}-clear"] = "on"
+        response = self.client.post(reverse("quests:complete", args=[self.submission.id]), data=data)
+
+        self.assertRedirects(response, reverse("quests:quests"))
+        row.refresh_from_db()
+        self.assertFalse(row.response_file)
+        self.assertIsNotNone(row.comment_id)
+
+
 class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
     """Completing a quest validates, saves, and publishes the question answers."""
 
