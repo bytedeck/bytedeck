@@ -1169,8 +1169,10 @@ class QuestSubmissionManager(models.Manager):
             quest (Quest): the quest to narrow to, or None for every quest.
             up_to_date (datetime): the latest approval time to include (inclusive), or None for no cutoff.
             active_semester_only (bool): whether to keep only the active semester's submissions.
-            teacher (User): the teacher whose students to narrow to, or None for every teacher's.
-                It narrows whether or not a user is given.
+            teacher (User): the teacher whose submissions to narrow to, or None for every
+                teacher's. As for_teacher_only draws it, that is the work of the students in
+                their groups plus any submission of a quest that names them to be notified,
+                whoever made it. It narrows whether or not a user is given.
 
         Returns:
             QuestSubmissionQuerySet: the approved submissions.

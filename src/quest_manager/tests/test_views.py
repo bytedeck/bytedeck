@@ -6557,7 +6557,7 @@ class ApprovedTabGroupsTest(ByteDeckTenantTestCase):
 
     def test_approvals__the_decks_only_teacher_sees_every_approval(self):
         """On a deck where the signed-in teacher is the only one with groups, the heading offers no
-        "My groups" / "All" pair, so the Approved tab lists everyone's, as it did before the pair.
+        "My groups" / "All" pair, so the Approved tab lists everyone's.
 
         Narrowed to their own groups, it would leave out the approved work of a student in no
         group, with no "All" to reach it by.
