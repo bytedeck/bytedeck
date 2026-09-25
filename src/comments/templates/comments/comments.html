@@ -57,7 +57,11 @@
         <p>Attached files:</p>
         <ul class="file-links">
           {% for document in docs %}
-          <li class="file-link"><a  href="{{ document.docfile.url }}" target="_blank" >
+          {% comment %} get_download_url, not the storage url: a web file (SVG, HTML) opened from
+             here would run its script in the session of whoever followed the link, usually the
+             teacher marking the work, so those are handed over as downloads instead. Everything
+             else is still linked at its storage url and opens in a tab (#2726). {% endcomment %}
+          <li class="file-link"><a  href="{{ document.get_download_url }}" target="_blank" >
             {{ document.docfile|filename }}</a>
               {% if document.is_valid_portfolio_type %}
               <a title = "Add {{ document.docfile|filename|striptags }} to your portfolio."

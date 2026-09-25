@@ -5,7 +5,9 @@ from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
 from django.db import models
+from django.urls import reverse
 from django.utils.html import escape
+from utilities.fields import UNSAFE_UPLOAD_EXTENSIONS
 from utilities.html import urlize
 
 from notifications.models import deleted_object_receiver
@@ -260,6 +262,33 @@ class Document(models.Model):
         from portfolios.views import is_acceptable_image_type, is_acceptable_vid_type
         filename = os.path.basename(self.docfile.name)
         return is_acceptable_image_type(filename) or is_acceptable_vid_type(filename)
+
+    @property
+    def is_script_capable(self):
+        """Whether this attachment is a file a browser would run a script from (#2726).
+
+        Answered from the stored file rather than from whatever rule was in force when it was
+        uploaded: those rules change, and a change to them must not quietly start linking a
+        stored HTML attachment at its storage URL again, which is the whole exposure.
+
+        Returns:
+            bool: True for a stored HTML, SVG, XML or MHTML file, False for anything else.
+        """
+        return os.path.splitext(self.docfile.name.lower())[1] in UNSAFE_UPLOAD_EXTENSIONS
+
+    def get_download_url(self):
+        """The url the app links this attachment at.
+
+        A script-capable file goes through the download view, which hands it over as an
+        attachment instead of opening it in the page. Everything else is linked at its storage
+        url as before, so an image a teacher is marking still opens in a tab (#2726).
+
+        Returns:
+            str: the url to link this attachment at.
+        """
+        if self.is_script_capable:
+            return reverse('comments:document_download', args=[self.id])
+        return self.docfile.url
 
 
 pre_delete.connect(deleted_object_receiver, sender=Comment)
