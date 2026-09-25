@@ -1,6 +1,8 @@
 
 from django.contrib.auth import get_user_model
 from django.db import models
+from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from url_or_relative_url_field.fields import URLOrRelativeURLField
 
@@ -87,10 +89,14 @@ class MenuItem(models.Model):
     def __str__(self):
         """Return the navbar link's HTML: an anchor to ``url`` carrying the icon and label.
 
-        The navbar renders this with ``|safe``, so the icon class list comes from
-        ``fa_icon_class``, which holds it to Font Awesome class tokens.
+        The navbar renders this with ``|safe``, so the url and label are escaped into it by
+        format_html, and the icon class list comes from ``fa_icon_class``, which holds it to
+        Font Awesome class tokens.
         """
-        target = 'target="_blank"' if self.open_link_in_new_tab else ''
-        return '<a href="{}" {} class="menuitem">' \
-               '<i class="fa-fw {}"></i>&nbsp;&nbsp;{}' \
-               '</a>'.format(self.url, target, self.fa_icon_class, self.label)
+        return format_html(
+            '<a href="{}"{} class="menuitem"><i class="fa-fw {}"></i>&nbsp;&nbsp;{}</a>',
+            self.url,
+            mark_safe(' target="_blank"') if self.open_link_in_new_tab else '',
+            self.fa_icon_class,
+            self.label,
+        )

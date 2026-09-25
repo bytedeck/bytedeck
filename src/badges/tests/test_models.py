@@ -2,6 +2,7 @@ import datetime
 
 from unittest import mock
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
@@ -47,6 +48,44 @@ class BadgeRarityModelTest(ByteDeckTenantTestCase):
         self.assertEqual(BadgeRarity.objects.get_rarity(100), ubercommon)
         # >100 is considered 100 for the purposes of rarity
         self.assertEqual(BadgeRarity.objects.get_rarity(110), ubercommon)
+
+    def test_get_icon_html__escapes_the_name(self):
+        """The rarity's name reaches the icon (rendered |safe on the badge page and its popover)
+        as text, in its title, its class and its screen-reader label (#2520)."""
+        rarity = baker.make(BadgeRarity, name="<b>Loud</b>", color="gray", fa_icon="certificate", percentile=45.0)
+
+        html = rarity.get_icon_html()
+
+        self.assertNotIn("<b>", html)
+        self.assertIn("title='&lt;b&gt;Loud&lt;/b&gt;'", html)
+        self.assertIn("<span class='sr-only'>&lt;b&gt;Loud&lt;/b&gt;</span>", html)
+
+    def test_get_icon_html__draws_a_color_that_is_not_one_without_it(self):
+        """A stored color that carries more than a color, from anywhere that skips the form's
+        validator, is left out of the icon's style instead of adding declarations to it."""
+        rarity = baker.make(BadgeRarity, name="Odd", color="red;background:url(//x.test/a.png)",
+                            fa_icon="certificate", percentile=45.0)
+
+        html = rarity.get_icon_html()
+
+        self.assertIn("style='color:'", html)
+        self.assertNotIn("url(", html)
+
+    def test_css_color__is_the_color_without_its_trailing_semicolon(self):
+        """The hex form the help text shows, "#7b7b7b;", is drawn as "#7b7b7b"; a name as itself."""
+        self.assertEqual(baker.make(BadgeRarity, color="#7b7b7b;", percentile=45.0).css_color, "#7b7b7b")
+        self.assertEqual(baker.make(BadgeRarity, color="royalblue", percentile=46.0).css_color, "royalblue")
+
+    def test_color__refuses_more_than_a_color(self):
+        """The form's validator accepts a color name or a hex value, and nothing else (#2520)."""
+        for color in ("gray", "RoyalBlue", "#7b7b7b", "#7b7b7b;", "#fff"):
+            with self.subTest(color=color):
+                baker.prepare(BadgeRarity, name="Fine", color=color, fa_icon="certificate", percentile=45.0).full_clean()
+
+        for color in ("red;background:url(//x.test/a.png)", "red' onmouseover='x", "rgb(1,2,3)", ""):
+            with self.subTest(color=color):
+                with self.assertRaises(ValidationError):
+                    baker.prepare(BadgeRarity, name="Bad", color=color, fa_icon="certificate", percentile=45.0).full_clean()
 
 
 class BadgeTypeModelTest(ByteDeckTenantTestCase):

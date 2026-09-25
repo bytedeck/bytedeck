@@ -175,6 +175,19 @@ class MenuItemFaIconTest(ByteDeckTenantTestCase):
         self.assertIn('<i class="fa-fw fa fa-star-o"></i>', str(menu_item))
         self.assertNotIn("fa-fa-", str(menu_item))
 
+    def test_str__escapes_the_label_and_url(self):
+        """The menu link's HTML (rendered |safe in every page's navbar) carries the label and the url
+        as text, and the new-tab target only when it is asked for (#2520)."""
+        menu_item = baker.make(MenuItem, fa_icon="star", label="<b>Loud</b>", url="/a/?x=1&y=2",
+                               open_link_in_new_tab=False)
+        new_tab = baker.make(MenuItem, fa_icon="star", label="Ranks", url="/courses/ranks/", open_link_in_new_tab=True)
+
+        self.assertEqual(
+            str(menu_item),
+            '<a href="/a/?x=1&amp;y=2" class="menuitem"><i class="fa-fw fa fa-star"></i>&nbsp;&nbsp;&lt;b&gt;Loud&lt;/b&gt;</a>',
+        )
+        self.assertIn('<a href="/courses/ranks/" target="_blank" class="menuitem">', str(new_tab))
+
     def test_normalize_fa_icon_names__reduces_a_value_that_kept_its_prefix(self):
         """The data migration turns a menu item icon typed as "fa-star-o" into "star-o",
         which is what actually renders."""

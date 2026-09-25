@@ -1,12 +1,15 @@
+import re
 import uuid
 from collections import defaultdict
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.validators import RegexValidator
 from django.db import models, transaction
 from django.db.models import Max, Sum, Count, Q
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils.html import format_html
 
 from django.dispatch import receiver
 from django.db.models.signals import post_delete, post_save
@@ -111,6 +114,14 @@ class BadgeRarityManager(models.Manager):
         return None
 
 
+#: A rarity's color goes into its icon's ``style="color:..."``. Escaping keeps it inside that
+#: attribute but not inside the one declaration, so it is held to what the field's help text offers:
+#: a color name or a hex value, with or without the trailing semicolon the help text's example has.
+RARITY_COLOR_RE = re.compile(r'^\s*(#[0-9A-Fa-f]{3,8}|[A-Za-z]+)\s*;?\s*$')
+RARITY_COLOR_VALIDATOR = RegexValidator(
+    RARITY_COLOR_RE, 'Enter an HTML color name, e.g. "gray", or a hex value, e.g. "#7b7b7b".')
+
+
 class BadgeRarity(models.Model):
     """
     A dynamic rarity system that determines the rarity of a badge based on how often it has been granted.
@@ -135,6 +146,7 @@ class BadgeRarity(models.Model):
     color = models.CharField(
         max_length=50,
         default='gray',
+        validators=[RARITY_COLOR_VALIDATOR],
         help_text='An HTML color name "gray" or hex value in the format: "#7b7b7b;"',
     )
     # Flows, unescaped, into the rarity icon HTML below (rendered |safe), so it is
@@ -161,17 +173,31 @@ class BadgeRarity(models.Model):
         """The Font Awesome class list to drop into ``<i class="...">``: ``fa fa-<name>``."""
         return fa_icon_class(self.fa_icon)
 
+    @property
+    def css_color(self):
+        """The color to draw this rarity's icon in, bare, or '' when the stored value is not one.
+
+        Only a form runs RARITY_COLOR_VALIDATOR, so this holds the same line for a value that
+        arrives another way (the admin's list edit, a fixture, the database itself).
+
+        Returns:
+            str: a color name or hex value with no trailing semicolon, e.g. "gray", or ''.
+        """
+        found = RARITY_COLOR_RE.match(self.color or '')
+        return found.group(1) if found else ''
+
     def get_icon_html(self):
         """The coloured, labelled icon that stands for this rarity wherever a badge's
-        rarity is shown (the badge page and its popover, both of which render it |safe)."""
-        icon = "<i class='{} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>".format(
-            self.fa_icon_class,
-            self.name,
-            self.name,
-            self.color,
+        rarity is shown (the badge page and its popover, both of which render it |safe).
+
+        Returns:
+            SafeString: the icon and its screen-reader label, with the name escaped.
+        """
+        return format_html(
+            "<i class='{} fa-fw rarity-{}' title='{}' style='color:{}' aria-hidden='true'></i>"
+            "<span class='sr-only'>{}</span>",
+            self.fa_icon_class, self.name, self.name, self.css_color, self.name,
         )
-        aria_span = f"<span class='sr-only'>{self.name}</span>"
-        return icon + aria_span
 
 
 class BadgeType(models.Model):
