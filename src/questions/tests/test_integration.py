@@ -465,6 +465,7 @@ class CompleteWithQuestionsTest(QuestionSubmissionFlowTestBase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, f"The file saved here ({kept_name}) is not a supported filetype")
+        self.assertNotContains(response, "You must upload a file")  # it did; the file is the wrong type
         self.submission.refresh_from_db()
         self.assertFalse(self.submission.is_completed)
         file_row.refresh_from_db()

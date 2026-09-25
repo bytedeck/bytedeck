@@ -300,6 +300,34 @@ class QuestionSubmissionFormTest(ByteDeckTenantTestCase):
         self.assertIn(".note-editable').attr('aria-label', ariaLabel)", long_html)
         self.assertIn('aria-label="Attach files for question 3"', file_html)
 
+    def test_clean__a_refused_file_is_not_also_reported_missing(self):
+        """A required file question that refuses the file it was given says only why (#2564).
+
+        A field that failed its own validation is absent from cleaned_data, so the required
+        check read the refused file as no file at all and added "You must upload a file" to
+        the refusal: a student who had attached one was told they had not. With nothing
+        attached, that message still stands.
+        """
+        not_a_video = SimpleUploadedFile("notes.txt", b"file_content", content_type="text/plain")
+        form = QuestionSubmissionForm(data={}, files={"response_file": not_a_video}, instance=self.file_answer)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("Filetype not supported", str(form.errors["response_file"]))
+        self.assertNotIn("You must upload a file", str(form.errors))
+
+        form = QuestionSubmissionForm(data={}, instance=self.file_answer)
+        self.assertFalse(form.is_valid())
+        self.assertIn("You must upload a file", str(form.errors))
+
+    def test_clean__a_short_answer_over_the_limit_is_not_also_reported_missing(self):
+        """A required short answer that is too long is told it is too long, not that it is missing."""
+        form = QuestionSubmissionForm(
+            data={"response_text": "x" * (SHORT_ANSWER_MAX_LENGTH + 1)}, instance=self.short_answer)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(f"at most {SHORT_ANSWER_MAX_LENGTH} characters", str(form.errors["response_text"]))
+        self.assertNotIn("You must provide a text response", str(form.errors))
+
     def test_clean__required_text_missing_is_invalid(self):
         """A required text question rejects an empty response with a friendly error, and
         accepts a filled one."""

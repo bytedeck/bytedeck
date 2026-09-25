@@ -388,7 +388,14 @@ class QuestionSubmissionForm(forms.ModelForm):
                 "This answer no longer matches one of the quest's questions. Please reload the page and try again."
             )
 
-        if self.question.required and not self.has_answer():
+        # has_answer() reads cleaned_data, where an answer its own field refused (a file of a
+        # type the question does not take, a short answer over its limit) is absent, so it reads
+        # as unanswered: a student who attached a file of the wrong type was also told to
+        # upload one (#2564). The field's own error says what is wrong; the message here is for
+        # an answer that is missing.
+        answer_field = "response_file" if self.question.type == QuestionType.FILE_UPLOAD else "response_text"
+        refused = self.has_error(answer_field) and not self.has_error(answer_field, code="required")
+        if self.question.required and not refused and not self.has_answer():
             if self.question.type == QuestionType.FILE_UPLOAD:
                 raise ValidationError('You must upload a file for this type of question.')
             raise ValidationError('You must provide a text response for this type of question.')
