@@ -178,10 +178,14 @@ class Category(IsAPrereqMixin, IsLibraryContentMixin, models.Model):
         return self.current_quests().count()
 
     def xp_sum(self):
-        """ Returns the total XP available from completing all published quests in this campaign.
-        Repeating quests are only counted once.
-        Views can provide xp_sum_annotated (see CategoryList) to avoid an
-        aggregate query per campaign."""
+        """Return the total XP available from completing all published quests in this campaign.
+
+        Repeating quests are only counted once. Views can provide xp_sum_annotated (see
+        CategoryList) to avoid an aggregate query per campaign.
+
+        Returns:
+            int: the XP of the campaign's current quests added up, or 0 when it has none (#2626).
+        """
         if hasattr(self, 'xp_sum_annotated'):
             return self.xp_sum_annotated
         # a sum over no quests is None, and a campaign with none has 0 XP available (#2626)
