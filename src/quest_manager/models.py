@@ -1163,6 +1163,19 @@ class QuestSubmissionManager(models.Manager):
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
         If teacher is provided, only the submissions that teacher is responsible for (see
         for_teacher_only), as the Approved tab lists them for a teacher's own groups (#2672).
+
+        Args:
+            user (User): whose approved submissions to return, or None for every student's.
+            quest (Quest): the quest to narrow to, or None for every quest.
+            up_to_date (datetime): the latest approval time to include (inclusive), or None for no cutoff.
+            active_semester_only (bool): whether to keep only the active semester's submissions.
+            teacher (User): the teacher whose submissions to narrow to, or None for every
+                teacher's. As for_teacher_only draws it, that is the work of the students in
+                their groups plus any submission of a quest that names them to be notified,
+                whoever made it. It narrows whether or not a user is given.
+
+        Returns:
+            QuestSubmissionQuerySet: the approved submissions.
         """
         qs = self.get_queryset(active_semester_only,
                                exclude_quests_not_published=False,
