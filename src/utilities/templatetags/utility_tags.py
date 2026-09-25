@@ -75,6 +75,27 @@ def checkcross(value):
         return 'fa fa-times'
 
 
+@register.filter
+def elided_page_range(page):
+    """Return the page numbers a pagination control links, for one page of results.
+
+    A long list would otherwise link every one of its pages: 334 links for 5000 rows at 15 a
+    page, which wrap across the screen and push the first/previous/next/last links away from
+    where the eye looks for them (#2448). This keeps a window of pages either side of the
+    current one plus the first and last, and puts an ellipsis in each gap.
+
+    Usage: ``{% for i in items|elided_page_range %}`` where ``items`` is a ``Page``. An entry
+    equal to ``items.paginator.ELLIPSIS`` stands for the pages left out.
+
+    Args:
+        page (django.core.paginator.Page): the page being shown.
+
+    Returns:
+        iterator: page numbers (int), with ``Paginator.ELLIPSIS`` in place of each gap.
+    """
+    return page.paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1)
+
+
 @register.simple_tag
 def public_email_logo_url():
     """The absolute URL of the ByteDeck wordmark used in platform emails.

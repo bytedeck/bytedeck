@@ -1,6 +1,9 @@
+{% load utility_tags %}
 {% comment %}
   Page links keep the rest of the query string (a search term, a filter) so paging through
-  results doesn't silently drop what the user asked for.
+  results doesn't silently drop what the user asked for. Only a window of pages around the
+  current one is linked, with the first and last always there and an ellipsis for each gap,
+  so a long list doesn't lay out hundreds of links (#2448).
 {% endcomment %}
 {% if items.paginator.num_pages > 1 %}
 <ul class="pagination pagination-centered">
@@ -9,8 +12,12 @@
         <li><a href="{% querystring page=items.previous_page_number %}"><</a></li>
     {% endif %}
 
-    {% for i in items.paginator.page_range %}
-        <li {% if items.number == i %} class="active" {% endif %}><a href="{% querystring page=i %}">{{i}}</a></li>
+    {% for i in items|elided_page_range %}
+        {% if i == items.paginator.ELLIPSIS %}
+            <li class="disabled"><span>{{ i }}</span></li>
+        {% else %}
+            <li {% if items.number == i %} class="active" {% endif %}><a href="{% querystring page=i %}">{{i}}</a></li>
+        {% endif %}
     {% endfor %}
 
     {% if items.has_next %}
