@@ -747,6 +747,11 @@ hr.tightest {
     padding-bottom: 5px;
 }
 
+/* A comment's attached files, both posted (comments/comments.html) and still on a submission's
+   draft (quest_manager/snippets/draft_attachments.html), drawn alike (#2752). */
+ul.file-links {
+    list-style-type: circle;
+}
 li.file-link {
     margin-bottom: 5px;
 }
@@ -1301,32 +1306,9 @@ table[data-toggle="table"].bt-reveal {
     list-style-type: square;
 }
 
-/* The submission form's attachments (#2749): one box holding the files saved with the draft
-   and the button that adds more. Bootstrap's panel and list-group carry the borders and the
-   padding, so both themes style it without a colour of its own here. */
-.bt-attachments .panel {
-    margin-bottom: 0;
-}
-/* The rows sit inside the container the server re-renders, so they are not the panel's own
-   direct children and do not pick up its flush-list-group rules. Same effect, applied here. */
-.bt-attachments .list-group {
-    margin-bottom: 0;
-}
-.bt-attachments .list-group-item {
-    border-left-width: 0;
-    border-right-width: 0;
-    border-radius: 0;
-}
-.bt-attachments .list-group-item:first-child {
-    border-top-width: 0;
-}
-/* The button that opens the file picker, and the hint under it, are the last row of the same
-   box: a panel footer gives them the padding and the dividing line, in both themes. With no
-   files attached it is the whole box. */
-.bt-attachments .panel-footer {
-    border-radius: 0 0 3px 3px;
-}
-.bt-attachments .panel-footer .help-block {
+/* The submission form's attachments (#2749): the files saved with the draft, as a bulleted list
+   like a posted comment's (#2752), and below them the button that adds more. */
+.bt-attachments-add .help-block {
     margin-bottom: 0;
 }
 /* The file input is operated through the button beside it: clipped rather than hidden, so it
