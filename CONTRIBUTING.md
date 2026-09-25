@@ -158,6 +158,33 @@ traffic, that is real requests failing during a lesson.
 
    After this ships, nothing running mentions the column, but it is still there.
 
+   **If the column is `NOT NULL`**, and it has no database default (a field's `default=` is
+   applied by Django, not by Postgres, so most don't), the new version's `INSERT`s leave it
+   out and fail with a not-null violation: creating a row breaks until release two. So in
+   that case release one also lets the column take `NULL`, which the outgoing version, still
+   writing a value, never notices:
+
+   ```python
+   operations = [
+       migrations.SeparateDatabaseAndState(
+           database_operations=[
+               migrations.RunSQL(
+                   sql='ALTER TABLE "quest_manager_quest" ALTER COLUMN "old_field" DROP NOT NULL;',
+                   reverse_sql=[
+                       # rows the new version wrote while the column allowed NULL
+                       'UPDATE "quest_manager_quest" SET "old_field" = 0 WHERE "old_field" IS NULL;',
+                       'ALTER TABLE "quest_manager_quest" ALTER COLUMN "old_field" SET NOT NULL;',
+                   ],
+               ),
+           ],
+           state_operations=[migrations.RemoveField(model_name="quest", name="old_field")],
+       ),
+   ]
+   ```
+
+   `DROP NOT NULL` only changes the table's definition: Postgres neither rewrites nor scans
+   the table for it, so it holds its lock for a moment even on a large one.
+
 2. **Release two.** Actually drop the column, once no deployed version knows about it.
    This one has to be `RunSQL`, **not** another `RemoveField`:
 
