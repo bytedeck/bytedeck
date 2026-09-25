@@ -27,7 +27,17 @@ def random_name():
 
 
 def generate_students(num=100, quiet=False):
-    """ Generates 100 students for the current deck (is_staff=False)
+    """Generate students (non-staff users) for the current deck.
+
+    Each gets a random first and last name, the username `firstname.lastname` in lower case,
+    and the email `<username>@example.com`. A username already taken gets the next free number
+    after it (`john.smith2`, `john.smith3`, ...): the names are drawn at random, so a common
+    pair comes up twice now and then (#2782).
+
+    Args:
+        num (int): how many students to create. Defaults to 100.
+        quiet (bool): True to print nothing; by default each student is printed as it is made.
+
     Run with:
 
     python src/manage.py tenant_command shell
