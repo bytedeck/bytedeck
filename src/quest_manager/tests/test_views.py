@@ -413,8 +413,8 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(self.client.post(reverse('quests:skip', args=[s1_pk])).status_code, 404)
         self.assert403('quests:approve', args=[s1_pk])
         self.assert200('quests:submission_past', args=[s1_pk])
-        self.assert403('quests:flag', args=[s1_pk])
-        self.assert403('quests:unflag', args=[s1_pk])
+        self.assertEqual(self.client.post(reverse('quests:flag', args=[s1_pk])).status_code, 403)
+        self.assertEqual(self.client.post(reverse('quests:unflag', args=[s1_pk])).status_code, 403)
         self.assert404('quests:complete', args=[s1_pk])
 
         # Not this student's submission: sent back to their own quests page, not shown someone else's work
@@ -678,7 +678,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assert200('quests:submission', args=[s1_pk])
         # Flag it: the view updates the row, so this object has to be re-read to see it
         self.assertRedirects(
-            response=self.client.get(reverse('quests:flag', args=[s1_pk])),
+            response=self.client.post(reverse('quests:flag', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
         self.sub1.refresh_from_db()
@@ -686,7 +686,7 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
 
         # Unflag it
         self.assertRedirects(
-            response=self.client.get(reverse('quests:unflag', args=[s1_pk])),
+            response=self.client.post(reverse('quests:unflag', args=[s1_pk])),
             expected_url=reverse('quests:approvals'),
         )
         self.sub1.refresh_from_db()
@@ -3630,7 +3630,7 @@ class FlagSubmissionViewTests(ByteDeckTenantTestCase):
         """Flagging stores the teacher who flagged it, not merely that a flag exists."""
         self.client.force_login(self.other_teacher)
 
-        response = self.client.get(reverse('quests:flag', args=[self.submission.pk]))
+        response = self.client.post(reverse('quests:flag', args=[self.submission.pk]))
 
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.flagged_by, self.other_teacher)
@@ -3642,7 +3642,7 @@ class FlagSubmissionViewTests(ByteDeckTenantTestCase):
         self.submission.save()
         self.client.force_login(self.test_teacher)
 
-        response = self.client.get(reverse('quests:unflag', args=[self.submission.pk]))
+        response = self.client.post(reverse('quests:unflag', args=[self.submission.pk]))
 
         self.submission.refresh_from_db()
         self.assertIsNone(self.submission.flagged_by)
@@ -3655,8 +3655,68 @@ class FlagSubmissionViewTests(ByteDeckTenantTestCase):
         """A flag url for a missing submission 404s rather than reporting a flag it did not set."""
         self.client.force_login(self.test_teacher)
 
-        self.assert404('quests:flag', args=[0])
-        self.assert404('quests:unflag', args=[0])
+        for url_name in ('quests:flag', 'quests:unflag'):
+            with self.subTest(url_name=url_name):
+                self.assertEqual(self.client.post(reverse(url_name, args=[0])).status_code, 404)
+
+    def test_flag_and_unflag__refuse_a_get(self):
+        """Neither url changes a flag on a GET (#2389).
+
+        A GET is what following a link, a prefetch, or a page holding an <img> pointed at the url
+        sends, with the teacher's own session. The flag stays as it was, whoever is asking.
+        """
+        self.client.force_login(self.test_teacher)
+
+        self.assertEqual(self.client.get(reverse('quests:flag', args=[self.submission.pk])).status_code, 405)
+        self.submission.refresh_from_db()
+        self.assertIsNone(self.submission.flagged_by)
+
+        self.submission.flagged_by = self.other_teacher
+        self.submission.save()
+        self.assertEqual(self.client.get(reverse('quests:unflag', args=[self.submission.pk])).status_code, 405)
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.flagged_by, self.other_teacher)
+
+    def test_ajax_unflag__clears_the_flag(self):
+        """The unflag button's ajax POST clears the flag and answers with JSON (#2389)."""
+        self.submission.flagged_by = self.other_teacher
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('quests:ajax_unflag'), data={'submission_id': self.submission.pk},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {})
+        self.submission.refresh_from_db()
+        self.assertIsNone(self.submission.flagged_by)
+
+    def test_ajax_unflag__a_get_or_a_missing_submission_is_a_404(self):
+        """A GET changes nothing, and neither does a POST naming a submission that does not exist."""
+        self.submission.flagged_by = self.other_teacher
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+        ajax = {'HTTP_X_REQUESTED_WITH': 'XMLHttpRequest'}
+
+        self.assertEqual(self.client.get(reverse('quests:ajax_unflag'), **ajax).status_code, 404)
+        self.assertEqual(
+            self.client.post(reverse('quests:ajax_unflag'), data={'submission_id': 0}, **ajax).status_code, 404)
+        self.submission.refresh_from_db()
+        self.assertEqual(self.submission.flagged_by, self.other_teacher)
+
+    def test_unflag_button__posts_over_ajax_rather_than_linking(self):
+        """The Flagged tab's unflag button carries the submission for the script, not a link (#2389)."""
+        self.submission.flagged_by = self.test_teacher
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:flagged'))
+
+        self.assertContains(response, 'btn-unflag-submission')
+        self.assertContains(response, f'data-sub-id="{self.submission.pk}"')
+        self.assertNotContains(response, reverse('quests:unflag', args=[self.submission.pk]))
 
 
 class SkipQuestViewTests(ByteDeckTenantTestCase):

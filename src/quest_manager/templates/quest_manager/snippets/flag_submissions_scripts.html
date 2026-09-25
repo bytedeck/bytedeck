@@ -1,35 +1,44 @@
 <script>
 
     $(document).ready(function() {
-        // Flag submissions via Ajax when button clicked:
+        // Flag and unflag submissions via Ajax when their buttons are clicked. Both post, so no
+        // link or page load can change a flag (#2389), and neither needs a form of its own: the
+        // buttons sit inside the approval form on the pages that include them.
         $(document).on('click', '.btn-flag-submission', function(event){
             event.preventDefault(); // prevent browser from reloading
-            flag_submission(this);
+            send_flag_change(this, "{% url 'quests:ajax_flag' %}", "flagged");
+        });
+
+        $(document).on('click', '.btn-unflag-submission', function(event){
+            event.preventDefault(); // prevent browser from reloading
+            send_flag_change(this, "{% url 'quests:ajax_unflag' %}", "unflagged");
         });
 
     });
 
-    function flag_submission(btn) {
-        $btn = $(btn);
+    // Post the change for the button's submission, showing a spinner and then a tick in place of
+    // the button's own icon. `done` names the change for the error message ("flagged").
+    function send_flag_change(btn, url, done) {
+        var $btn = $(btn);
 
-        $iconOriginal = $btn.find('i')
-        $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>')
-        $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>')
+        // the button's own icon: one <i> on the flag button, a stacked pair on the unflag button
+        var $iconOriginal = $btn.children();
+        var $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>');
+        var $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>');
 
-        if($btn.find($iconSpin).length == 0 && $btn.find($iconSuccess).length == 0) {
+        // a click while an earlier one is still showing its spinner or tick does nothing
+        if ($btn.find('.fa-spinner, .fa-check').length == 0) {
 
-            $iconOriginal.hide(0)
-            $btn.append($iconSpin)
-            $btn.append($iconSuccess)
-
-            sub_id = $btn.data('sub-id')
+            $iconOriginal.hide(0);
+            $btn.append($iconSpin);
+            $btn.append($iconSuccess);
 
             $.ajax({
-                url : "{% url 'quests:ajax_flag' %}",
+                url : url,
                 type : "POST", // http method
                 data : {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
-                    submission_id: sub_id
+                    submission_id: $btn.data('sub-id')
                 }, // data sent with the post request
 
                 // handle a successful response
@@ -47,8 +56,9 @@
 
                 // handle a non-successful response
                 error : function(xhr,errmsg,err) {
+                    $iconSpin.remove(); $iconSuccess.remove(); $iconOriginal.show(0);
                     console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                    alert("ERROR!\n\nSorry, something went wrong and the quest wasn't flagged.  \n\nSee the browser console for error details.");
+                    alert("ERROR!\n\nSorry, something went wrong and the quest wasn't " + done + ".  \n\nSee the browser console for error details.");
                 }
             });
         }

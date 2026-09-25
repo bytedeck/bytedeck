@@ -31,8 +31,9 @@
             <i class="fa fa-fw fa-flag-o" ></i>
         </a>
       {% else %}
-        <a href="{% url 'quests:unflag' s.id %}" class="btn btn-default" role="button"
-            title="UNFLAG this quest">
+        <a href="#" class="btn btn-default btn-unflag-submission" role="button"
+            title="UNFLAG this quest"
+            data-sub-id="{{s.id}}">
           <span class="fa-stack fa-sm" style="font-size:0.63em;">
             <i class="fa fa-flag-o fa-stack-1x"></i>
             <i class="fa fa-ban fa-stack-2x" style="color: tomato"></i>

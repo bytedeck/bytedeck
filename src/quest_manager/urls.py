@@ -26,6 +26,7 @@ urlpatterns = [
     # Ajax
     re_path(r'^ajax/$', views.ajax_submission_count, name='ajax_submission_count'),
     re_path(r'^ajax_flag/$', views.ajax_flag, name='ajax_flag'),
+    re_path(r'^ajax_unflag/$', views.ajax_unflag, name='ajax_unflag'),
     re_path(r'^ajax_quest_info/(?P<quest_id>[0-9]+)/$', views.ajax_quest_info, name='ajax_quest_info'),
     re_path(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_root'),
     re_path(r'^ajax_quest_info/$', views.ajax_quest_info, name='ajax_quest_all'),

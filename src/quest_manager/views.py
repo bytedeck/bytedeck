@@ -3207,9 +3207,16 @@ def ajax_submission_count(request):
 ########################
 
 
+@require_POST
 @non_public_only_view
 @staff_member_required
 def flag(request, submission_id):
+    """Flag a submission for follow-up, recording which teacher raised the flag.
+
+    POST only, so following a link or loading a page that points here cannot raise a flag in
+    a teacher's name (#2389). The flag button on the approvals and submission pages goes
+    through `ajax_flag`; this is its plain-form twin.
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     # record who raised the flag, so it is attributable on a deck with several teachers
@@ -3235,9 +3242,41 @@ def ajax_flag(request):
         raise Http404
 
 
+@xml_http_request_required
+@non_public_only_view
+@staff_member_required
+def ajax_unflag(request):
+    """Clear a submission's flag, for the unflag button on the approvals and submission pages.
+
+    The twin of `ajax_flag`, which the flag button beside it uses (#2389). The button sits
+    inside the approval form on two of the three pages that include it, where a form of its
+    own would be dropped as a nested form, so it posts from script instead.
+
+    Returns:
+        JsonResponse: an empty object once the flag is cleared.
+
+    Raises:
+        Http404: for anything but a POST, or for a submission that does not exist.
+    """
+    if request.method == "POST":
+        sub = get_object_or_404(QuestSubmission, pk=request.POST.get("submission_id"))
+        sub.flagged_by = None
+        sub.save()
+        return JsonResponse(data={})
+    else:
+        raise Http404
+
+
+@require_POST
 @non_public_only_view
 @staff_member_required
 def unflag(request, submission_id):
+    """Clear a submission's flag and say which one, then return to the approvals page.
+
+    POST only, so following a link or loading a page that points here cannot clear a flag in
+    a teacher's name (#2389). The unflag button goes through `ajax_unflag`; this is its
+    plain-form twin.
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     sub.flagged_by = None
