@@ -286,6 +286,7 @@ CLIENT_SORTED_LIST_TABLES = (
     "courses/templates/courses/rank_list.html",
     "courses/templates/courses/semester_list.html",
     "djcytoscape/templates/djcytoscape/cytoscape_list.html",
+    "portfolios/templates/portfolios/list.html",
     "quest_manager/templates/quest_manager/common_quest_info_list.html",
     "utilities/templates/flatpages/flatpage-list.html",
     "utilities/templates/utilities/menuitem_list.html",

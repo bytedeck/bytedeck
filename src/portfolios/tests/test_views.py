@@ -158,6 +158,41 @@ class PortfolioViewTests(ByteDeckTenantTestCase):
             expected_url=reverse('portfolios:detail', args=[self.portfolio.pk])
         )
 
+    def test_portfolio_tables__load_bootstrap_table(self):
+        """The portfolios list and a portfolio's edit page both mark a table up for
+        bootstrap-table, so both load its assets. Without them the table stayed hidden behind the
+        loading spinner until its fallback timer, then showed raw, with no search, sorting or
+        column picker (#2691)."""
+        self.client.force_login(baker.make(User, is_staff=True))
+        for url in (reverse('portfolios:list'), reverse('portfolios:edit', args=[self.portfolio.pk])):
+            with self.subTest(url=url):
+                self.assertTemplateUsed(self.client.get(url), 'snippets/bootstrap_table.html')
+
+    def test_edit__lists_the_art_in_a_table(self):
+        """A portfolio with art lists it in the edit page's table, behind its loading spinner."""
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(reverse('portfolios:edit', args=[self.portfolio.pk]))
+
+        self.assertContains(response, 'class="bt-loading"')
+        self.assertContains(response, f'<td>{self.art.title}</td>', html=True)
+        self.assertNotContains(response, 'No art has been added to this portfolio.')
+
+    def test_edit__an_empty_portfolio_says_so_in_place_of_the_table(self):
+        """A portfolio with no art says so in a paragraph, and the edit page draws no art table.
+
+        The message cannot be a row of the table: text in a <tr> with no cell is not valid table
+        markup, so a browser moves it out above the table, and bootstrap-table then draws an empty
+        table under it (#2691)."""
+        empty_portfolio = baker.make('portfolios.Portfolio', user=baker.make(User))
+        self.client.force_login(baker.make(User, is_staff=True))
+
+        response = self.client.get(reverse('portfolios:edit', args=[empty_portfolio.pk]))
+
+        self.assertContains(response, '<p>No art has been added to this portfolio.</p>', html=True)
+        self.assertNotContains(response, '<table')
+        self.assertNotContains(response, 'class="bt-loading"')
+
     def test_DetailView__listed_locally(self):
         """When a portfolio is listed locally, other users should be able to access it"""
 
