@@ -1542,6 +1542,31 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
             )
         return response
 
+    def test_complete__keeps_the_editors_paragraphs_as_they_are(self):
+        """The editor lays a comment out in paragraphs already, so the published comment is that
+        markup rather than those paragraphs nested inside another one (#2713)."""
+        self.post_complete(submission_comment="<p>Done!</p><p>Second paragraph.</p>")
+
+        published = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(published.text, "<p>Done!</p><p>Second paragraph.</p>")
+
+    def test_complete__puts_a_plain_comment_in_a_paragraph(self):
+        """Text with no markup of its own, as the quick reply box posts it, gets its paragraph."""
+        self.post_complete(submission_comment="thanks")
+
+        self.assertEqual(Comment.objects.all_with_target_object(self.sub).get().text, "<p>thanks</p>")
+
+    def test_complete__puts_the_placeholder_text_in_a_paragraph(self):
+        """The text the view writes for a quest handed in with no comment is a paragraph too."""
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(submission_comment="<p><br></p>")
+
+        self.assertEqual(
+            Comment.objects.all_with_target_object(self.sub).get().text, "<p>(submitted without comment)</p>"
+        )
+
     def test_complete__quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
         Are redirected to their available quests page, submission is marked completed and has a completion time.

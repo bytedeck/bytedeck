@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
-from utilities.html import EMBEDDED_CONTENT_TAGS, is_empty_html, textify, urlize
+from utilities.html import EMBEDDED_CONTENT_TAGS, in_a_paragraph, is_empty_html, textify, urlize
 from comments.models import clean_html
 
 
@@ -317,3 +317,31 @@ class IsEmptyHtmlTests(SimpleTestCase):
         """
         self.assertFalse(is_empty_html("<p>&lt;img&gt;</p>"))
 
+
+class InAParagraphTests(SimpleTestCase):
+    """Tests for `utilities.html.in_a_paragraph`, which lays a fragment out in blocks without
+    nesting a paragraph inside another (#2713)."""
+
+    def test_in_a_paragraph__wraps_bare_text(self):
+        """Text with no markup of its own, as a plain textarea posts it, becomes a paragraph."""
+        self.assertEqual(in_a_paragraph("done"), "<p>done</p>")
+
+    def test_in_a_paragraph__wraps_text_with_only_inline_tags(self):
+        """Bold text and links sit inside a paragraph rather than making one."""
+        fragment = 'a <b>bold</b> <a href="https://example.org">link</a>'
+        self.assertEqual(in_a_paragraph(fragment), f"<p>{fragment}</p>")
+
+    def test_in_a_paragraph__leaves_the_editors_paragraphs_as_they_are(self):
+        """The editor lays its text out in paragraphs already, so they are not put inside another."""
+        fragment = "<p>one</p><p>two</p>"
+        self.assertEqual(in_a_paragraph(fragment), fragment)
+
+    def test_in_a_paragraph__leaves_other_blocks_as_they_are(self):
+        """A list, a heading or a quote is a block of its own too."""
+        for fragment in ("<ul><li>x</li></ul>", "<h3>Title</h3>", "<blockquote>q</blockquote>", "<OL><li>x</li></OL>"):
+            with self.subTest(fragment=fragment):
+                self.assertEqual(in_a_paragraph(fragment), fragment)
+
+    def test_in_a_paragraph__a_typed_tag_is_text(self):
+        """An escaped tag the user typed about is text, so it still gets its paragraph."""
+        self.assertEqual(in_a_paragraph("&lt;p&gt; makes a paragraph"), "<p>&lt;p&gt; makes a paragraph</p>")
