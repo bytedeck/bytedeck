@@ -742,6 +742,24 @@ class BlockManager(models.Manager):
             pk__in=CourseStudent.objects.get_queryset().in_open_semesters().values_list('block_id', flat=True)
         )
 
+    def is_only_teacher_with_groups(self, user):
+        """Whether every group on the deck is this user's.
+
+        Their approval queues then offer no "My groups" / "All" pair, since the two would be
+        the same groups, and so by default they list every student's work rather than their own
+        groups'. Narrowed to their groups, a queue would leave out the work of a student in no
+        group, with nothing on the page to reach it by (#2776).
+
+        Args:
+            user (User): the signed-in staff member.
+
+        Returns:
+            bool: True when the deck has groups and this user teaches each of them. A group
+            with no teacher, or another teacher's, makes it False.
+        """
+        teachers = self.grouped_teachers_blocks().keys()
+        return len(teachers) == 1 and user.id in teachers
+
     def grouped_teachers_blocks(self):
         blocks = self.get_queryset().select_related('current_teacher').values_list('current_teacher', 'name')
         grouped = {}

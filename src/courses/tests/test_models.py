@@ -170,6 +170,37 @@ class BlockModelManagerTest(ByteDeckTenantTestCase):
         # teacher2 teaches C and D block
         self.assertListEqual(group[teacher2.id], [block_c.name, block_d.name])
 
+    def test_is_only_teacher_with_groups__every_group_is_theirs(self):
+        """A teacher of every group on the deck, the Default group included, is its only one."""
+        teacher = baker.make(User, is_staff=True)
+        baker.make(Block, current_teacher=teacher)
+        Block.objects.update(current_teacher=teacher)
+
+        self.assertTrue(Block.objects.is_only_teacher_with_groups(teacher))
+
+    def test_is_only_teacher_with_groups__another_teacher_has_a_group(self):
+        """One group of someone else's is enough to make them not the only one."""
+        teacher = baker.make(User, is_staff=True)
+        Block.objects.update(current_teacher=teacher)
+        baker.make(Block, current_teacher=baker.make(User, is_staff=True))
+
+        self.assertFalse(Block.objects.is_only_teacher_with_groups(teacher))
+
+    def test_is_only_teacher_with_groups__a_group_with_no_teacher(self):
+        """A group nobody teaches is not theirs either."""
+        teacher = baker.make(User, is_staff=True)
+        Block.objects.update(current_teacher=teacher)
+        baker.make(Block, current_teacher=None)
+
+        self.assertFalse(Block.objects.is_only_teacher_with_groups(teacher))
+
+    def test_is_only_teacher_with_groups__a_deck_with_no_groups(self):
+        """With no groups at all there is nobody who teaches every one."""
+        teacher = baker.make(User, is_staff=True)
+        Block.objects.all().delete()
+
+        self.assertFalse(Block.objects.is_only_teacher_with_groups(teacher))
+
 
 class SemesterModelManagerTest(ByteDeckTenantTestCase):
     @classmethod

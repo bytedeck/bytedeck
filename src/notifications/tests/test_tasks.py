@@ -10,6 +10,7 @@ from django.test import override_settings
 from django.utils import timezone
 from django_tenants.utils import get_tenant_model
 
+from courses.models import Block
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from notifications import tasks
 from notifications.models import Notification
@@ -362,6 +363,30 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
 
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notification), html_content)  # Links to notifications
+
+    def test_generate_notification_email__lists_what_the_submitted_tab_lists(self):
+        """A teacher's email lists the work their Submitted tab lists. With another teacher's group
+        on the deck, a student in no group's work is not theirs. Once every group on the deck is
+        theirs, it is (#2776)."""
+        teacher = baker.make(User, is_staff=True, email="teacher@email.com")
+        # unread, so an email is made either way and the list in it is what differs
+        baker.make(
+            Notification, recipient=teacher,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=teacher.id,
+        )
+        others = baker.make(Block, current_teacher=baker.make(User, is_staff=True))
+        Block.objects.exclude(pk=others.pk).update(current_teacher=teacher)
+        in_no_group = baker.make(
+            'quest_manager.QuestSubmission', user=baker.make(User), semester=self.sem,
+            is_completed=True, is_approved=False,
+        )
+
+        with_another_teacher = generate_notification_email(teacher, 'https://test.com').alternatives[0][0]
+        Block.objects.update(current_teacher=teacher)
+        with_every_group_theirs = generate_notification_email(teacher, 'https://test.com').alternatives[0][0]
+
+        self.assertNotIn(str(in_no_group), with_another_teacher)
+        self.assertIn(str(in_no_group), with_every_group_theirs)
 
     def test_generate_notification_email__non_enrolled_student_returns_none(self):
         """A non-staff student not enrolled in a current course gets no notification email, even

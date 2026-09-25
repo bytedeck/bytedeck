@@ -6588,6 +6588,82 @@ class ApprovedTabGroupsTest(ByteDeckTenantTestCase):
         self.assertIn(in_no_group.id, everyone)
 
 
+class SubmittedTabGroupsTest(ByteDeckTenantTestCase):
+    """The Submitted tab lists a teacher's own groups, with "All" beside it for everyone's. A
+    teacher of every group on the deck has no such pair, and their tab lists everyone's (#2776).
+    The navbar's Approvals count counts what the tab lists."""
+
+    def setUp(self):
+        """Two teachers with a group each and a student in each group, and a student in no group,
+        each with a quest awaiting approval."""
+        self.teacher, other_teacher = baker.make(User, is_staff=True, _quantity=2)
+        semester = SiteConfig.get().active_semester
+        quest = baker.make(Quest)
+        students = {'in no group': baker.make(User)}
+        for whose, block_teacher in (('mine', self.teacher), ('theirs', other_teacher)):
+            students[whose] = baker.make(User)
+            baker.make('courses.CourseStudent', user=students[whose], semester=semester,
+                       block=baker.make('courses.Block', current_teacher=block_teacher))
+        self.submitted = {
+            whose: baker.make(QuestSubmission, user=student, quest=quest, semester=semester,
+                              is_completed=True, is_approved=False)
+            for whose, student in students.items()
+        }
+        self.client.force_login(self.teacher)
+
+    def submitted_listed(self, url):
+        """Load an approvals page and read which submissions its Submitted tab lists.
+
+        Args:
+            url (str): the page to load.
+
+        Returns:
+            set: the listed submissions' ids.
+        """
+        response = self.client.get(url)
+        # Tabs: 0-In Progress, 1-Submitted, 2-Approved, 3-Flagged
+        return {submission.id for submission in response.context['tab_list'][1]['submissions']}
+
+    def navbar_count(self):
+        """The number the navbar shows beside "Approvals" for the signed-in teacher.
+
+        Returns:
+            int: the count the navbar's script is sent.
+        """
+        response = self.client.post(
+            reverse('quests:ajax_submission_count'), content_type='application/json', HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        return response.json()['count']
+
+    def test_approvals__submitted_tab_lists_the_teachers_own_groups(self):
+        """With other teachers' groups on the deck, the tab holds the teacher's own students' work,
+        and "All" holds everyone's, the student in no group's included."""
+        self.assertEqual(self.submitted_listed(reverse('quests:submitted')), {self.submitted['mine'].id})
+        self.assertEqual(
+            self.submitted_listed(reverse('quests:submitted_all')),
+            {submission.id for submission in self.submitted.values()},
+        )
+
+    def test_approvals__the_decks_only_teacher_sees_everything_submitted(self):
+        """A teacher of every group on the deck has no "All" to ask with, so their tab lists
+        everyone's work, the student in no group's included."""
+        Block.objects.update(current_teacher=self.teacher)
+
+        self.assertEqual(
+            self.submitted_listed(reverse('quests:submitted')),
+            {submission.id for submission in self.submitted.values()},
+        )
+
+    def test_ajax_submission_count__counts_what_the_submitted_tab_lists(self):
+        """The navbar counts the teacher's own groups' work where the deck has other teachers'
+        groups, and everyone's once every group is theirs."""
+        self.assertEqual(self.navbar_count(), 1)
+
+        Block.objects.update(current_teacher=self.teacher)
+
+        self.assertEqual(self.navbar_count(), 3)
+
+
 class QuestSubmissionSummaryTest(ByteDeckTenantTestCase):
     """Tests for the staff QuestSubmissionSummary metrics view (quests:summary)."""
 

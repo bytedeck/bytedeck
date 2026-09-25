@@ -12,6 +12,7 @@ from django.template.loader import get_template
 from django_tenants.utils import get_tenant_model, tenant_context
 
 from hackerspace_online.celery import app
+from courses.models import Block
 from quest_manager.models import QuestSubmission
 from notifications.models import Notification
 
@@ -178,7 +179,12 @@ def generate_notification_email(user, root_url):
     submissions_awaiting_approval = None
 
     if user.is_staff:
-        submissions_awaiting_approval = QuestSubmission.objects.all_awaiting_approval(teacher=user)
+        # What their Submitted tab lists by default: their own groups, or everyone's for a
+        # teacher of every group on the deck (#2776)
+        own_groups_only = not Block.objects.is_only_teacher_with_groups(user)
+        submissions_awaiting_approval = QuestSubmission.objects.all_awaiting_approval(
+            teacher=user if own_groups_only else None
+        )
 
     # Do not generate email notification for users that are not currently enrolled
     if not user.is_staff and not user.profile.has_current_course:

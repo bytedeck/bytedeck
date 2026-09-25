@@ -1964,14 +1964,9 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
 
     view_type = ApprovalsViewTabTypes.SUBMITTED
 
-    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user
-    show_all_blocks_button = True
-
-    grouped_blocks = Block.objects.grouped_teachers_blocks()
-    teachers = grouped_blocks.keys()
-    # If there is only one user with assigned blocks AND that user is the current user, the header button is redundant and isn't displayed
-    if len(teachers) == 1 and list(teachers)[0] == request.user.id:
-        show_all_blocks_button = False
+    # Header button that toggles displaying all quest approvals or only those from groups assigned to the current user.
+    # A teacher of every group on the deck would find both halves the same, so it isn't displayed for them.
+    show_all_blocks_button = not Block.objects.is_only_teacher_with_groups(request.user)
 
     page = request.GET.get("page")
     # The approvals tabs show whose submission it is, and no campaign column, so that is
@@ -2005,12 +2000,12 @@ def approvals(request, quest_id=None, template="quest_manager/quest_approval.htm
         flagged_submissions = submission_tab.page
     else:  # default is /submitted/ (awaiting approval)
         view_type = ApprovalsViewTabTypes.SUBMITTED
-        if current_teacher_only:
-            teacher = request.user
-        else:
-            teacher = None
+        # The teacher's own groups unless they ask for all of them, but only where the heading
+        # offers the "All" to ask with, as on the Approved tab. A teacher of every group on the
+        # deck gets everyone's, which takes in the work of a student in no group (#2776).
+        own_groups_only = current_teacher_only and show_all_blocks_button
         submitted_submissions = QuestSubmission.objects.all_awaiting_approval(
-            teacher=teacher
+            teacher=request.user if own_groups_only else None
         )
         submission_tab = submission_tab_page(request, submitted_submissions, page, user=True)
         submitted_submissions = submission_tab.page
@@ -3186,8 +3181,11 @@ def ajax_submission_count(request):
     """Returns the number of submissions awaiting approval for the current user
     This is used to update the number beside the "Approvals" button in the navbar"""
     if request.method == "POST":
+        # What the Submitted tab lists by default: the teacher's own groups, or everyone's for a
+        # teacher of every group on the deck (#2776)
+        own_groups_only = not Block.objects.is_only_teacher_with_groups(request.user)
         submission_count = QuestSubmission.objects.all_awaiting_approval(
-            teacher=request.user
+            teacher=request.user if own_groups_only else None
         ).count()
 
         return JsonResponse(data={"count": submission_count})
