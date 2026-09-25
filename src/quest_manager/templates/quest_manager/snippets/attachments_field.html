@@ -1,6 +1,7 @@
 {% comment %}
-  The submission's attachments as one control: the files already saved with the draft, and
-  the button that adds more, in a single box (#2749).
+  The submission's attachments as one control: the files already saved with the draft, listed
+  the way a posted comment lists its files (comments/comments.html), with the button that adds
+  more below them (#2749, #2752).
 
   The file input itself is reachable only through that button. A bare file input sits beside
   the browser's own "No file chosen", which says nothing here: a chosen file is saved as soon
@@ -12,21 +13,19 @@
 {% endcomment %}
 <div class="form-group bt-attachments">
   <label class="control-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-  <div class="panel panel-default">
-    {% comment %} What the draft-save and attachment-delete endpoints re-render into, so the
-       list stays current without a reload. {% endcomment %}
-    <div id="draft-attachments">
-      {% include "quest_manager/snippets/draft_attachments.html" %}
-    </div>
-    <div class="panel-footer bt-attachments-add">
-      {{ field }}
-      <label class="btn btn-default btn-sm" for="{{ field.id_for_label }}">
-        <i class="fa fa-fw fa-paperclip"></i> Choose files
-      </label>
-      <span class="help-block">{{ field.help_text|safe }}</span>
-      {% for error in field.errors %}
-        <span class="help-block text-danger">{{ error }}</span>
-      {% endfor %}
-    </div>
+  {% comment %} What the draft-save and attachment-delete endpoints re-render into, so the
+     list stays current without a reload. {% endcomment %}
+  <div id="draft-attachments">
+    {% include "quest_manager/snippets/draft_attachments.html" %}
+  </div>
+  <div class="bt-attachments-add">
+    {{ field }}
+    <label class="btn btn-default btn-sm" for="{{ field.id_for_label }}">
+      <i class="fa fa-fw fa-paperclip"></i> Choose files
+    </label>
+    <span class="help-block">{{ field.help_text|safe }}</span>
+    {% for error in field.errors %}
+      <span class="help-block text-danger">{{ error }}</span>
+    {% endfor %}
   </div>
 </div>

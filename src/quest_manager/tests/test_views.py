@@ -7473,17 +7473,19 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, "wrong-file")
-        # a row of the attachments control, above the button that adds more (#2749)
-        self.assertContains(response, 'class="list-group bt-attachments-list"')
+        # an item of the bulleted list a posted comment lists its files in (#2752), above the
+        # button that adds more (#2749)
+        self.assertContains(response, '<ul class="file-links">')
+        self.assertContains(response, '<li class="file-link">')
         self.assertContains(
             response,
             f'data-delete-url="{reverse("quests:ajax_delete_draft_attachment", args=[self.document.id])}"',
         )
 
     def test_submission__attaching_is_one_control_holding_the_files_and_the_button(self):
-        """The files and the way to add one are a single box, and the file input is reached
-        through a button: a bare one stands beside the browser's "No file chosen", which says
-        nothing once a chosen file is stored and listed straight away (#2749)."""
+        """The files and the way to add one sit together as one form group, and the file input is
+        reached through a button: a bare one stands beside the browser's "No file chosen", which
+        says nothing once a chosen file is stored and listed straight away (#2749)."""
         response = self.client.get(self.submission.get_absolute_url())
 
         self.assertContains(response, 'class="form-group bt-attachments"')
@@ -7939,7 +7941,18 @@ class SubmissionXPCourseTests(ByteDeckTenantTestCase):
         """The course the student chose is written under the comment they handed the quest in with."""
         self.hand_in(self.welding)
 
-        self.assertIn('<ul><li><b>XP counts toward: Welding</b></li></ul>', self.newest_comment_text())
+        self.assertIn('<ul class="comment-details"><li><b>XP counts toward: Welding</b></li></ul>', self.newest_comment_text())
+
+    def test_complete__lists_the_choices_below_a_rule_apart_from_the_comment(self):
+        """The choices follow the student's own words below a rule, outside their paragraph, so
+        they read as details of the hand-in rather than as part of what the student wrote (#2752)."""
+        self.hand_in(self.welding)
+
+        self.assertEqual(
+            self.newest_comment_text(),
+            '<p>my work</p><hr class="tighter"/>'
+            '<ul class="comment-details"><li><b>XP counts toward: Welding</b></li></ul>',
+        )
 
     def test_complete__lists_an_even_split_under_the_comment(self):
         """Choosing to split the XP evenly is a choice too, and is written down the same way."""
@@ -7954,7 +7967,7 @@ class SubmissionXPCourseTests(ByteDeckTenantTestCase):
         self.hand_in(self.pottery, xp_requested=12)
 
         self.assertIn(
-            '<ul><li><b>XP requested: 12</b></li><li><b>XP counts toward: Pottery</b></li></ul>',
+            '<ul class="comment-details"><li><b>XP requested: 12</b></li><li><b>XP counts toward: Pottery</b></li></ul>',
             self.newest_comment_text(),
         )
 
