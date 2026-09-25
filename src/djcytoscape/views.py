@@ -1,3 +1,4 @@
+import json
 from django.http import HttpResponseRedirect
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -163,13 +164,15 @@ def quest_map_personalized(request, scape_id, user_id):
 
         scape = get_object_or_404(CytoScape, id=scape_id)
 
-        if scape.class_styles_json is None or scape.class_styles_json is None:
+        if scape.elements_json is None or scape.class_styles_json is None:
             scape.update_cache()
 
         context = {
             'scape': scape,
-            'elements': scape.elements_json,
-            'class_styles': scape.class_styles_json,
+            # Parsed here so the template can hand them to json_script, which escapes <, > and &
+            # on the way into the page: a name holding "</script>" cannot end the block (#2519).
+            'elements': json.loads(scape.elements_json),
+            'class_styles': json.loads(scape.class_styles_json),
             'approved_quests': approved_quest_ids,
             'awaiting_approval_quests': awaiting_quest_ids,
             'earned_badges': earned_badge_ids,
