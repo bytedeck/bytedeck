@@ -1155,12 +1155,14 @@ class QuestSubmissionManager(models.Manager):
     def flagged(self, user):
         return self.get_queryset().filter(flagged_by=user)
 
-    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True, teacher=None):
         """
         Return a queryset of all approved submissions within the provided parameters.
 
         If user is None, then this is a staff member's view of all approved submissions.
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
+        If teacher is provided, only the submissions that teacher is responsible for (see
+        for_teacher_only), as the Approved tab lists them for a teacher's own groups (#2672).
         """
         qs = self.get_queryset(active_semester_only,
                                exclude_quests_not_published=False,
@@ -1176,7 +1178,7 @@ class QuestSubmissionManager(models.Manager):
         if up_to_date is not None:
             qs = qs.get_completed_before(up_to_date)
 
-        return qs
+        return qs.for_teacher_only(teacher)
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
