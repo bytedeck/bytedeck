@@ -44,11 +44,11 @@ class Command(BaseCommand):
             defaults={'name': 'Shared Library'},
         )
 
-        # Set the domain whether or not the tenant was just created. A new tenant already has
-        # one, because the post_save signal derives a domain from the tenant's *name*, and
-        # 'Shared Library' contains a space, so that domain can never be reached: on a fresh
-        # database the Library deck was unreachable at library.<ROOT_DOMAIN> until initdb was
-        # run a second time (#2382).
+        # Set the domain whether or not the tenant was just created. A new tenant is given
+        # library.<ROOT_DOMAIN> by the post_save signal, which builds the subdomain from the
+        # schema name (#2404). A Library made before that was given one built from its name,
+        # 'Shared Library', which has a space in it and can never be reached (#2382), so any
+        # other domain is replaced here and this one made primary.
         library_domain = 'library.' + settings.ROOT_DOMAIN
         library_tenant.domains.exclude(domain=library_domain).delete()
         domain, _ = library_tenant.domains.get_or_create(domain=library_domain)

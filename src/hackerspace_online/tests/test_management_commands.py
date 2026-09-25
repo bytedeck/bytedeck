@@ -98,10 +98,10 @@ class InitDbTest(TestCase, CommandMixin):
     def test_initdb__gives_the_shared_library_a_reachable_domain(self):
         """A single initdb run leaves the Library deck reachable at library.<ROOT_DOMAIN> (#2382).
 
-        The tenant post_save signal derives a domain from the tenant's name, and the Library
-        tenant is named 'Shared Library', so the derived domain contains a space and can never
-        be reached. initdb has to set the intended domain itself, on the first run rather than
-        only on a re-run against a database where the tenant already exists.
+        The Library tenant is named 'Shared Library', and a domain built from that name has a
+        space in it and can never be reached. The deck has to answer at library.<ROOT_DOMAIN>
+        after the first run, not only after a re-run against a database where the tenant
+        already exists, with no unreachable domain left beside it.
         """
         self.call_command()
 

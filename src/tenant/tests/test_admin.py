@@ -590,7 +590,8 @@ class PublicTenantTestAdminPublic(ByteDeckTenantTestCase):
             self.assertIsInstance(non_public_tenant, Tenant)
             # schema names should be all lower case and dashes converted to underscores
             self.assertEqual(non_public_tenant.schema_name, "non_public")
-            # the subdomain keeps the name as typed (lower cased), so it does not match the schema name
+            # the subdomain is the schema name with its underscores turned back into dashes (#2404),
+            # so it reads as the name was typed, lower cased, rather than as the schema name
             self.assertEqual(non_public_tenant.get_primary_domain().domain, f"non-public.{settings.ROOT_DOMAIN}")
 
         with tenant_context(non_public_tenant):
