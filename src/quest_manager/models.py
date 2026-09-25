@@ -1155,12 +1155,27 @@ class QuestSubmissionManager(models.Manager):
     def flagged(self, user):
         return self.get_queryset().filter(flagged_by=user)
 
-    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):
+    def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True, teacher=None):
         """
         Return a queryset of all approved submissions within the provided parameters.
 
         If user is None, then this is a staff member's view of all approved submissions.
         If quest is provided, then this is a staff member's view of all approved submissions for that quest.
+        If teacher is provided, only the submissions that teacher is responsible for (see
+        for_teacher_only), as the Approved tab lists them for a teacher's own groups (#2672).
+
+        Args:
+            user (User): whose approved submissions to return, or None for every student's.
+            quest (Quest): the quest to narrow to, or None for every quest.
+            up_to_date (datetime): the latest approval time to include (inclusive), or None for no cutoff.
+            active_semester_only (bool): whether to keep only the active semester's submissions.
+            teacher (User): the teacher whose submissions to narrow to, or None for every
+                teacher's. As for_teacher_only draws it, that is the work of the students in
+                their groups plus any submission of a quest that names them to be notified,
+                whoever made it. It narrows whether or not a user is given.
+
+        Returns:
+            QuestSubmissionQuerySet: the approved submissions.
         """
         qs = self.get_queryset(active_semester_only,
                                exclude_quests_not_published=False,
@@ -1176,7 +1191,7 @@ class QuestSubmissionManager(models.Manager):
         if up_to_date is not None:
             qs = qs.get_completed_before(up_to_date)
 
-        return qs
+        return qs.for_teacher_only(teacher)
 
     # i.e In Progress
     def all_not_completed(self, user=None, active_semester_only=True, blocking=False):
