@@ -9,9 +9,12 @@
   is clipped rather than hidden outright so it can still take keyboard focus, and the button
   it opens carries the focus ring.
 
-  Rendered from `field` (the form's attachments field) and `draft_documents`.
+  Rendered from `field` (the form's attachments field) and `draft_documents`. The wrapper takes
+  the id crispy gives a field's form group (div_id_attachments), which the submission form's
+  rule for insetting its fields keys on (.panel-summernote in custom_common.css), so the files
+  and the button line up with the fields around them.
 {% endcomment %}
-<div class="form-group bt-attachments">
+<div id="div_id_{{ field.name }}" class="form-group bt-attachments">
   <label class="control-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
   {% comment %} What the draft-save and attachment-delete endpoints re-render into, so the
      list stays current without a reload. {% endcomment %}

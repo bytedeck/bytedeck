@@ -12,6 +12,7 @@ or they could be moved into a `test_urls.py` module.
 
 import re
 
+from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -7492,6 +7493,18 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, 'Choose files')
         # the input is still on the form, for the picker the button opens and for the POST
         self.assertContains(response, 'name="attachments"')
+
+    def test_submission__attachments_are_inset_like_the_fields_around_them(self):
+        """The attachments' form group carries the id crispy gives a field's, which the form's
+        rule for insetting its fields (custom_common.css, `.panel-summernote #div_id_attachments`)
+        keys on, so the files and the button line up with the other fields rather than running
+        to the form's edges."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        group = soup.select_one('.panel-summernote #div_id_attachments')
+        self.assertIsNotNone(group)
+        self.assertIn('bt-attachments', group['class'])
 
     def test_submission__removing_an_attachment_asks_no_confirmation(self):
         """Removing one of your own draft's files takes the one click (#2749). The file was
