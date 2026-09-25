@@ -524,6 +524,23 @@ class NotificationEscapingTest(ByteDeckTenantTestCase):
         self.assertNotIn('<b>here</b>', rendered)
         self.assertIn('&lt;b&gt;here&lt;/b&gt;', rendered)
 
+    def test_as_text__is_the_sentence_as_typed_without_markup(self):
+        """The digest's text part reads the sentence as it was typed: its link and markup gone,
+        its escaping undone, on one line (#2359)."""
+        quest = baker.make('quest_manager.Quest', name='Tom & <b>Jerry</b>')
+        notification = self.make_notification(
+            verb='said "hi" on', target_content_type=ContentType.objects.get_for_model(quest),
+            target_object_id=quest.id,
+        )
+
+        text = notification.as_text()
+
+        self.assertIn('said "hi" on Tom & <b>Jerry</b>', text)
+        self.assertNotIn('<a ', text)
+        self.assertNotIn('<em>', text)
+        self.assertNotIn('&amp;', text)
+        self.assertNotIn('\n', text)
+
     def test_str__keeps_the_image_preview_of_a_comment(self):
         """An image in the previewed comment survives, which is the point of html_strip.
 

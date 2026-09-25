@@ -16,6 +16,7 @@ from quest_manager.models import QuestSubmission
 from notifications.models import Notification
 
 from profile_manager.models import Profile
+from siteconfig.models import SiteConfig
 from utilities.mail import deck_from_email
 
 User = get_user_model()
@@ -168,6 +169,7 @@ def generate_notification_email(user, root_url):
         and (for staff) no submissions awaiting approval.
     """
     html_template = get_template('notifications/email_notifications.html')
+    text_template = get_template('notifications/email_notifications.txt')
     # Name the deck the email is from so recipients can tell decks apart even when a deck
     # hasn't customised its logo (#2338). root_url is the deck's root URL, so its host is
     # the deck's domain (e.g. "deckname.bytedeck.com"); .hostname drops any scheme/port.
@@ -185,15 +187,18 @@ def generate_notification_email(user, root_url):
         return None
 
     if unread_notifications or submissions_awaiting_approval:
-        text_content = str(unread_notifications)
-
-        html_content = html_template.render({
+        # The same digest twice: as HTML, and as plain text for a client that shows the text
+        # part (#2359). `config` gives both the deck's signature.
+        context = {
             'user': user,
             'notifications': unread_notifications,
             'submissions': submissions_awaiting_approval,
             'root_url': root_url,
-            'profile_edit_url': reverse('profiles:profile_edit_own')
-        })
+            'profile_edit_url': reverse('profiles:profile_edit_own'),
+            'config': SiteConfig.get(),
+        }
+        text_content = text_template.render(context)
+        html_content = html_template.render(context)
         # Show the deck's domain as the sender name so a recipient can tell which deck an
         # email is from at a glance, while keeping the actual sending address (the one the
         # mail server is authorised for) unchanged (#2338).

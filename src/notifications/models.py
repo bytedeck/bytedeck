@@ -1,3 +1,5 @@
+import html
+
 from django.apps import apps
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -6,7 +8,7 @@ from django.db import models
 from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.html import format_html
+from django.utils.html import format_html, strip_tags
 from django.utils.safestring import mark_safe
 
 from comments.sanitize import sanitize_comment_html
@@ -296,6 +298,18 @@ class Notification(models.Model):
         else:
             url = format_html("{}</a>", url_common_part)  # this is for 'teacher returned/approved ...'
         return url
+
+    def as_text(self):
+        """The notification's sentence as plain text, for the digest email's text part (#2359).
+
+        The words __str__ renders, without its markup: the tags are stripped, and then the
+        escaping format_html applied is undone, since a text part is read as typed rather than
+        as HTML. Stripping first keeps a name that holds something tag-like ("<b>") as written.
+
+        Returns:
+            str: the sentence, on one line.
+        """
+        return " ".join(html.unescape(strip_tags(str(self))).split())
 
     def mark_read(self):
         self.unread = False

@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.mail import EmailMultiAlternatives
 from django.test import override_settings
 from django.utils import timezone
@@ -302,6 +303,52 @@ class NotificationTasksTests(ByteDeckTenantTestCase):
         self.assertIn("Unread notifications:", html_content)
         self.assertIn(str(notifications[0]), html_content)  # Links to notifications
         self.assertIn(str(notifications[1]), html_content)  # Links to notifications
+
+    def test_generate_notification_email__text_part_lists_the_notifications(self):
+        """The plain-text part lists each unread notification as its sentence and its link, read
+        as typed, not a QuerySet's repr (#2359)."""
+        notification = baker.make(
+            Notification, recipient=self.test_student1, verb='said "hi" & waved',
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        text = generate_notification_email(self.test_student1, 'https://test.com').body
+
+        self.assertNotIn('QuerySet', text)
+        self.assertIn('Unread notifications:', text)
+        self.assertIn(notification.as_text(), text)
+        self.assertIn('said "hi" & waved', text)
+        self.assertIn('https://test.com' + notification.get_url(), text)
+        self.assertNotIn('<a ', text)
+
+    def test_generate_notification_email__staff_text_part_lists_the_submissions(self):
+        """A teacher's plain-text part lists the submissions awaiting their approval, each with
+        its link, as the HTML part does (#2359)."""
+        sub = baker.make('quest_manager.QuestSubmission')
+
+        with patch('notifications.tasks.QuestSubmission.objects.all_awaiting_approval', return_value=[sub]):
+            text = generate_notification_email(self.test_teacher, 'https://test.com').body
+
+        self.assertIn('Quest submissions awaiting your approval:', text)
+        self.assertIn(f'{sub}: {sub.user}', text)
+        self.assertIn('https://test.com' + sub.get_absolute_url(), text)
+
+    def test_generate_notification_email__both_parts_carry_the_decks_signature(self):
+        """The deck's outgoing email signature closes both parts of the digest."""
+        config = SiteConfig.get()
+        config.outgoing_email_signature = 'The Hackerspace Team'
+        config.save()
+        # the cached SiteConfig would otherwise carry the signature into the next test
+        self.addCleanup(cache.delete, SiteConfig.cache_key())
+        baker.make(
+            Notification, recipient=self.test_student1,
+            sender_content_type=ContentType.objects.get_for_model(User), sender_object_id=self.test_teacher.id,
+        )
+
+        email = generate_notification_email(self.test_student1, 'https://test.com')
+
+        self.assertIn('The Hackerspace Team', email.body)
+        self.assertIn('The Hackerspace Team', email.alternatives[0][0])
 
     @override_settings(DEFAULT_FROM_EMAIL="noreply@bytedeck.com")
     def test_generate_notification_email__from_names_the_deck(self):

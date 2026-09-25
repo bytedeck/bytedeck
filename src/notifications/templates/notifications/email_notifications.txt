@@ -1,0 +1,26 @@
+{% autoescape off %}{% comment %}
+  The plain-text part of the notification digest (#2359): the same digest as
+  email_notifications.html, for a mail client that shows the text part. Nothing here is read
+  as HTML, so nothing is escaped, and each notification is its sentence as text followed by
+  the link its HTML version carries.
+{% endcomment %}Hello {{ user.get_full_name }},
+{% if user.is_staff %}
+Quest submissions awaiting your approval:
+{% for sub in submissions %}
+- {{ sub }}: {{ sub.user }}
+  {{ root_url }}{{ sub.get_absolute_url }}
+{% empty %}
+- None
+{% endfor %}{% endif %}
+Unread notifications:
+{% for notice in notifications %}
+- {{ notice.as_text }}
+  {{ root_url }}{{ notice.get_url }}
+{% empty %}
+- None
+{% endfor %}
+{% firstof config.outgoing_email_signature config.site_name %}
+
+If you no longer want to receive these emails, edit your profile:
+{{ root_url }}{{ profile_edit_url }}
+{% endautoescape %}
