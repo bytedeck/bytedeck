@@ -1,3 +1,6 @@
+import re
+
+from bs4 import BeautifulSoup
 from django.utils import timezone
 from io import BytesIO
 from django.urls import reverse
@@ -256,6 +259,37 @@ class PortfolioViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, reverse('portfolios:edit', args=[self.portfolio.pk]))
         self.assertFalse(Artwork.objects.filter(pk=self.art.pk).exists())
+
+    def test_edit__art_with_no_description_leaves_its_cell_empty(self):
+        """Art stored with no description (Add to Portfolio stores none) has an empty cell in the
+        Description column, not the word "None" (#2772)."""
+        self.assertIsNone(self.art.description)
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:edit', args=[self.portfolio.pk]))
+
+        soup = BeautifulSoup(response.content, 'html.parser')
+        column = [th.get('data-field') for th in soup.select('thead th')].index('description')
+        self.assertEqual(soup.select('tbody tr')[0].find_all('td')[column].get_text(strip=True), '')
+
+    def test_ArtworkDeleteView__art_with_no_description_shows_an_empty_description(self):
+        """The delete page's Description line is empty for art with no description, not "None"
+        (#2772)."""
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_delete', args=[self.art.pk]))
+
+        description = BeautifulSoup(response.content, 'html.parser').find('p', string=re.compile(r'^Description:'))
+        self.assertEqual(description.get_text(strip=True), 'Description:')
+
+    def test_ArtworkDeleteView__the_image_is_described_by_the_arts_title(self):
+        """The picture of the art being deleted carries its title as its alt text."""
+        self.client.force_login(self.test_student)
+
+        response = self.client.get(reverse('portfolios:art_delete', args=[self.art.pk]))
+
+        image = BeautifulSoup(response.content, 'html.parser').select_one('.well img')
+        self.assertEqual(image['alt'], self.art.title)
 
     def test_is_acceptable_vid_type__accepts_video_extensions_only(self):
         """is_acceptable_vid_type recognises video file extensions and rejects others."""

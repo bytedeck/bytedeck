@@ -44,7 +44,7 @@
             <td>{{ art.title }}</td>
             <td>{{ art.date }}</td>
             <td>{{ art.get_art_type }}</td>
-            <td>{{ art.description }}</td>
+            <td>{{ art.description|default_if_none:"" }}</td>
             <td>
                 <a class="btn btn-info btn-sm" title="Edit this Portfolio entry"
                    href="{% url 'portfolios:art_update' art.pk %}">

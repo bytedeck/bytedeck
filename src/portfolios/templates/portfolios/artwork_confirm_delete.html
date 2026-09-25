@@ -12,10 +12,10 @@
     <p>Artist: {{ object.portfolio.user }}</p>
     <p>Title: {{ object.title }}</p>
     <p>Date: {{ object.date }}</p>
-    <p>Description: {{ object.description }}</p>
+    <p>Description: {{ object.description|default_if_none:"" }}</p>
     <p>Art Type: {{ object.get_art_type }}</p>
     <p>Link: <a href="{{ object.get_link }}">{{ object.get_link }}</a></p>
-    <p><img class="img-responsive" alt="{{ art.title }}" src="{{ object.get_image_url }}" /></p>
+    <p><img class="img-responsive" alt="{{ object.title }}" src="{{ object.get_image_url }}" /></p>
   </div>
   <a href="{% url 'portfolios:edit' object.portfolio.pk %}" role="button" class="btn btn-info">Cancel</a>
   <input type="submit" value="Delete" class="btn btn-danger" />
