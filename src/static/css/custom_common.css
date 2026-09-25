@@ -1109,6 +1109,21 @@ div.btn-group.action-btn-group {
         padding-right:7px;
     }
 
+    /* The container's 7px padding halves Bootstrap's 15px gutter, so the grid inside it is halved
+       to match. A row's negative margin has to equal the padding around it: at Bootstrap's -15px,
+       every row would stick out 8px past both edges of the screen and every page would scroll
+       sideways (#2750). Content stays where it is; only the gap between side-by-side columns
+       narrows. */
+    #main-container .row {
+        margin-left: -7px;
+        margin-right: -7px;
+    }
+
+    #main-container .row > [class*="col-"] {
+        padding-left: 7px;
+        padding-right: 7px;
+    }
+
     .navbar-brand > img {
         margin-left: -7px;
     }
