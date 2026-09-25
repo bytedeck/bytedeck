@@ -63,7 +63,8 @@ class PhoneWidthRenderTest(ByteDeckTenantTestCase):
 
     @classmethod
     def setUpTestData(cls):
-        """A student and a teacher to view the pages as."""
+        """A student and a teacher to view the pages as, kept on the class as ``cls.student`` and
+        ``cls.teacher`` for every test. Returns nothing."""
         cls.student = User.objects.create_user('phone_student')
         cls.teacher = User.objects.create_user('phone_teacher', is_staff=True)
 
@@ -121,6 +122,15 @@ class PhoneWidthRenderTest(ByteDeckTenantTestCase):
 
         Everything else, scripts included, is refused, so the page's layout is the stylesheets'
         alone and nothing reaches out of the test.
+
+        Args:
+            route (playwright.sync_api.Route): the intercepted request's route, which is answered
+                (``fulfill``) or refused (``abort``).
+            request (playwright.sync_api.Request): the request the browser made.
+            html (str): the rendered page, served at ``PAGE_ORIGIN/page/``.
+
+        Returns:
+            None: the request is answered through ``route``.
         """
         path = urlparse(request.url).path
         if request.url == f"{PAGE_ORIGIN}/page/":
