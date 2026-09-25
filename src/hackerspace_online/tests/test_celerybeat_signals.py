@@ -4,7 +4,7 @@ from django.db import connection
 from django.forms import model_to_dict
 from django.utils import timezone
 
-from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
+from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, PeriodicTasks, SolarSchedule
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -117,3 +117,30 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
 
         self.assertIsNotNone(public_task)
         self.assertEqual(task.name, public_task.name)
+
+    def test_save_PeriodicTask_signal__an_update_tells_beat_the_schedule_changed(self):
+        """Saving a periodic task that is already in the public schema updates the public copy, and records the change
+        where beat looks for it.
+
+        Beat reloads its schedule only when the public schema's PeriodicTasks record moves (or every few minutes). The
+        public copy is changed with a queryset update(), which sends no signals, so the record has to be moved by hand,
+        or beat goes on running the task on its old schedule (#820). Both schedules exist before the task is saved, so
+        creating one can't move the record instead.
+        """
+        first_schedule = CrontabSchedule(minute='5')
+        first_schedule.save()
+        second_schedule = CrontabSchedule(minute='10')
+        second_schedule.save()
+
+        task = PeriodicTask(name='Sample Task', crontab=first_schedule, task='just_a_random.task.run')
+        task.save()
+
+        with schema_context(PUBLIC_SCHEMA):
+            last_change_before = PeriodicTasks.last_change()
+
+        task.crontab = second_schedule
+        task.save()
+
+        with schema_context(PUBLIC_SCHEMA):
+            self.assertEqual(PeriodicTask.objects.get(name=task.name).crontab.minute, '10')
+            self.assertGreater(PeriodicTasks.last_change(), last_change_before)

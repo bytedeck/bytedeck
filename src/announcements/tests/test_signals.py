@@ -1,7 +1,11 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import connection
+from django.utils import timezone
 
-from django_celery_beat.models import PeriodicTask
+from django_celery_beat.models import PeriodicTask, PeriodicTasks
 from django_tenants.utils import get_public_schema_name, schema_context
 from model_bakery import baker
 
@@ -88,3 +92,26 @@ class AnnouncementsSignalsTest(ByteDeckTenantTestCase):
         task2 = PeriodicTask.objects.get(name__contains=announcement.id)
         # Didn't create a new PeriodicTask object
         self.assertEqual(task, task2)
+
+    def test_save_announcement_signal__moving_onto_a_used_minute_tells_beat(self):
+        """Moving a scheduled announcement onto a minute another announcement already uses reschedules its publish task,
+        and records the change where beat looks for it.
+
+        The minute's schedule already exists, so nothing new is created that would record a change on its own. Without
+        the record, beat keeps the task at its old time and publishes the announcement early (#820).
+        """
+        release = timezone.now() + timedelta(days=1)
+        moved = baker.make(Announcement, auto_publish=True, datetime_released=release)
+        baker.make(Announcement, auto_publish=True, datetime_released=release + timedelta(minutes=5))
+
+        with schema_context(PUBLIC_SCHEMA):
+            last_change_before = PeriodicTasks.last_change()
+
+        moved.datetime_released = release + timedelta(minutes=5)
+        moved.save()
+
+        task_name = f"Autopublish task for Announcement #{moved.id} on schema {connection.schema_name}"
+        with schema_context(PUBLIC_SCHEMA):
+            public_task = PeriodicTask.objects.get(name=task_name)
+            self.assertEqual(int(public_task.crontab.minute), moved.datetime_released.minute)
+            self.assertGreater(PeriodicTasks.last_change(), last_change_before)

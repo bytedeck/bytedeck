@@ -12,7 +12,7 @@ from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
 from django.forms import model_to_dict
 
-from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
+from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, PeriodicTasks, SolarSchedule
 from django_tenants.utils import get_public_schema_name, schema_context
 
 PUBLIC_SCHEMA = get_public_schema_name()
@@ -79,11 +79,16 @@ def save_task_to_public_schema(sender, instance, **kwargs):
 
     with schema_context(PUBLIC_SCHEMA):
         task_qs = PeriodicTask.objects.filter(name=task_name)
-        # Using `update` and `create` here since it doesn't call `.save()` method.
-        # `.save()` method triggers signals and if used here, it would create a maximum recursion depth.
         if task_qs:
             task_qs.update(**task_dict)
+            # A queryset update() sends no signals, so django_celery_beat's own receiver never records
+            # that the task changed. Beat reloads its schedule only when that record moves (or every few
+            # minutes), so without this it keeps running the task at its old time (#820). django_celery_beat
+            # asks for this call after any bulk update.
+            PeriodicTasks.update_changed()
         else:
+            # create() saves, so its signals fire in the public schema: this receiver returns at once
+            # there, and django_celery_beat records the change itself.
             new_values = {'name': task_name}
             new_values.update(task_dict)
             PeriodicTask.objects.create(**new_values)
