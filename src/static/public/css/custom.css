@@ -120,6 +120,22 @@
       letter-spacing: 0.2em;
     }
 
+    /* A custom page's own content (public/flatpage.html and flatpage-wide.html wrap it in
+       .BD-flatpage): a plain paragraph reads as Bootstrap's .lead and a plain h1 as h1-BD, in
+       capitals, so a page needs neither class="lead" nor the h1-bd tag to look like the rest. */
+    .BD-flatpage p {
+      font-size: 1.25rem;
+      font-weight: 300;
+    }
+
+    .BD-flatpage h1 {
+      font-size: 39.06px;
+      font-weight: normal;
+      line-height: 60px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+    }
+
     h2-BD {
       font-size: 23px;
       line-height: 35px;
