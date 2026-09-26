@@ -5197,6 +5197,31 @@ class DetailViewTest(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['available'])
 
+    def test_detail__staff_see_the_quests_settings(self):
+        """A teacher reading a quest sees the staff-only settings the quest list's preview shows (#1073).
+
+        Whether a teacher has to approve it, whether it is published, when it opens and whether a
+        student outside a course can take it were on the preview in the quest list, but not on the
+        quest's own page.
+        """
+        quest = baker.make(Quest, verification_required=False, published=True, available_outside_course=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_detail', args=[quest.id]))
+
+        self.assertContains(response, "Visible to staff only")
+        self.assertContains(response, "Requires Approval: no")
+        self.assertContains(response, "Published: yes")
+        self.assertContains(response, "Available without course: yes")
+
+    def test_detail__students_do_not_see_the_quests_settings(self):
+        """A student reading a quest sees none of the staff-only settings (#1073)."""
+        with patch('quest_manager.models.Quest.is_available', return_value=True):
+            response = self.client.get(reverse('quests:quest_detail', args=[self.quest.id]))
+
+        self.assertNotContains(response, "Visible to staff only")
+        self.assertNotContains(response, "Requires Approval")
+
     def test_detail__not_available_nor_editable_shows_preview(self):
         """ Should only display a preview version of the quest
         """
