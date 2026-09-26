@@ -123,7 +123,7 @@ class PeriodicTaskSignalsTest(ByteDeckTenantTestCase):
         where beat looks for it.
 
         Beat reloads its schedule only when the public schema's PeriodicTasks record moves (or every few minutes). The
-        public copy is changed with a queryset update(), which sends no signals, so the record has to be moved by hand,
+        public copy is changed with a queryset update(), which skips save() and so doesn't move it: it has to be moved by hand,
         or beat goes on running the task on its old schedule (#820). Both schedules exist before the task is saved, so
         creating one can't move the record instead.
         """
