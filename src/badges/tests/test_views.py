@@ -503,6 +503,33 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertTrue(any(grant_url in m for m in messages))
 
+    def test_badge_prereqs_update__one_message_says_so_and_links_the_grant_check(self):
+        """Saving a published badge's prerequisites shows one message: that they were updated,
+        with the link to check for and grant the badge to students who now qualify (#2061)."""
+        self.client.force_login(self.test_teacher)
+
+        prereq_quest = baker.make(Quest)
+        ct = ContentType.objects.get_for_model(prereq_quest)
+        form_prefix = "prerequisites-prereq-parent_content_type-parent_object_id"
+        formset_data = {
+            f"{form_prefix}-TOTAL_FORMS": "1",
+            f"{form_prefix}-INITIAL_FORMS": "0",
+            f"{form_prefix}-MAX_NUM_FORMS": "1000",
+            f"{form_prefix}-0-prereq_object": f"{ct.id}-{prereq_quest.id}",
+            f"{form_prefix}-0-prereq_count": "1",
+            f"{form_prefix}-0-or_prereq_count": "1",
+        }
+        response = self.client.post(
+            reverse('badges:badge_prereqs_update', args=[self.test_badge.id]), data=formset_data
+        )
+
+        grant_url = reverse('badges:grant_qualifying', args=[self.test_badge.id])
+        messages = [str(m) for m in response.wsgi_request._messages]
+        about_the_save = [m for m in messages if "Prerequisites have been updated" in m or grant_url in m]
+        self.assertEqual(len(about_the_save), 1)
+        self.assertIn(f"Prerequisites have been updated for {self.test_badge}.", about_the_save[0])
+        self.assertIn(grant_url, about_the_save[0])
+
     def test_badge_prereqs_update__unpublished_badge_not_prompted_to_grant(self):
         """Saving prerequisites on an unpublished badge does NOT show the grant-check
         prompt, since an unpublished badge can't be granted (issue #1157).

@@ -54,10 +54,7 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
 
         form.save()
 
-        messages.success(
-            self.request,
-            f"Prerequisites have been updated for {self.object}."
-        )
+        messages.success(self.request, self.get_updated_message())
 
         if SiteConfig.get().map_auto_update:
             maps = CytoScape.objects.get_related_maps(self.object)
@@ -68,6 +65,15 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
                 )
 
         return HttpResponseRedirect(self.get_success_url())
+
+    def get_updated_message(self):
+        """The message shown once changed prerequisites are saved.
+
+        Returns:
+            str: the success message. A subclass can add to it, as BadgePrereqsUpdate does, so
+            the teacher still gets a single message.
+        """
+        return f"Prerequisites have been updated for {self.object}."
 
     def get_success_url(self):
         return self.object.get_absolute_url()
