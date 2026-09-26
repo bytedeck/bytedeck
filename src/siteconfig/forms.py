@@ -67,6 +67,7 @@ class SiteConfigForm(forms.ModelForm):
                 "color_headers_by_mark",
                 "enable_google_signin",
                 "approve_oldest_first",
+                "submission_comments_oldest_first",
                 "display_marks_calculation",
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
