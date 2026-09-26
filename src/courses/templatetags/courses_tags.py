@@ -11,10 +11,10 @@ register = template.Library()
 def color_style_from_mark(user):
     """ This should go in the style tag: style="{}"
     """
-    mark_range = MarkRange.objects.get_range_for_user(user)
-    # A range can be kept out of headers, and then appears only on the Mark Calculations graph.
-    # Its students get no color rather than a lower range's, which would misstate their mark.
-    if mark_range and mark_range.color_headers:
+    # Ranges kept out of headers are passed over, so a student whose mark is in one gets the color
+    # of the next range below it that colors headers.
+    mark_range = MarkRange.objects.get_range_for_user(user, headers_only=True)
+    if mark_range:
         if user.profile.dark_theme:
             hex_color = mark_range.color_dark
         else:

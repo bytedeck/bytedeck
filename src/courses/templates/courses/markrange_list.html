@@ -11,7 +11,7 @@
 {% block content %}
 <p>Mark ranges have two uses: they can be used to change the color of the header of your deck when a student reaches a certain mark; and,
    they will show up as reference lines on the graph in the Mark Calculations page. A range with "Use this color in student headers"
-   unchecked only shows on the graph.</p>
+   unchecked only shows on the graph, and its students' headers take the color of the next checked range below it.</p>
     {% include 'snippets/table_loading.html' %}
     <table {% include 'snippets/list_table_attrs.html' %}>
       <thead>

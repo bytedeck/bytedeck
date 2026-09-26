@@ -115,8 +115,19 @@ def whole_xp_shares(registrations, exact_shares):
 
 
 class MarkRangeManager(models.Manager):
-    def get_range(self, mark, courses=None):
-        """ return the MarkRange encompassed by this mark adn the list of courses """
+    def get_range(self, mark, courses=None, headers_only=False):
+        """The highest active range this mark reaches, among the ranges for every course and those
+        for the given courses.
+
+        Args:
+            mark (float): the mark as a percentage.
+            courses (iterable of Course): the courses whose own ranges count as well.
+            headers_only (bool): count only the ranges that color student headers, so a mark in a
+                range kept out of them finds the next range below it that colors them.
+
+        Returns:
+            MarkRange or None: the highest range the mark qualifies for, if any.
+        """
         self.get_queryset().filter(active=True)
         day = timezone.localtime(timezone.now()).isoweekday()
         # ranges for all courses
@@ -127,10 +138,12 @@ class MarkRangeManager(models.Manager):
                 ranges_qs = ranges_qs | courses_qs
 
         ranges_qs = ranges_qs.filter(minimum_mark__lte=mark)  # filter out ranges that are too high
+        if headers_only:
+            ranges_qs = ranges_qs.filter(color_headers=True)
 
         return ranges_qs.last()  # return the highest range that qualifies
 
-    def get_range_for_user(self, user):
+    def get_range_for_user(self, user, headers_only=False):
         """The mark range this user's cached mark falls in, or None when they have no mark.
 
         A student can hold a course and still have no mark: a course run on XP alone has none
@@ -140,6 +153,7 @@ class MarkRangeManager(models.Manager):
 
         Args:
             user: the student whose mark range is wanted.
+            headers_only (bool): count only the ranges that color student headers (see get_range).
 
         Returns:
             MarkRange or None: the highest range their mark qualifies for.
@@ -151,7 +165,7 @@ class MarkRangeManager(models.Manager):
         student_course_ids = user.profile.current_courses().values_list('course', flat=True)
         if student_course_ids:
             courses = Course.objects.filter(id__in=student_course_ids)
-            return self.get_range(mark, courses)
+            return self.get_range(mark, courses, headers_only=headers_only)
         else:
             return None
 
@@ -168,9 +182,10 @@ class MarkRange(models.Model):
         db_default=True,
         verbose_name="Use this color in student headers",
         help_text=(
-            "Students whose mark is in this range get this color in their header. This has no effect "
-            "unless “Activate Header Colors by Mark” is on in Site Configuration. When unchecked, this "
-            "range only appears on the graph in the Mark Calculations page."
+            "Students whose mark is in this range get this color in their header. When unchecked, this "
+            "range only appears on the graph in the Mark Calculations page, and its students get the "
+            "color of the next checked range below it. This has no effect unless “Activate Header "
+            "Colors by Mark” is on in Site Configuration."
         ),
     )
     color_light = RGBColorField(default='#BEFFFA', help_text='Color to be used in the light theme')

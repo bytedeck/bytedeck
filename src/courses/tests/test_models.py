@@ -96,6 +96,16 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
 
+    def test_get_range__headers_only_passes_over_ranges_kept_out_of_headers(self):
+        """With headers_only, a mark in a range kept out of student headers finds the next range
+        below it that colors them, or none when no such range is below it."""
+        self.mr_75.color_headers = False
+        self.mr_75.save()
+
+        self.assertEqual(MarkRange.objects.get_range(80.0), self.mr_75)
+        self.assertEqual(MarkRange.objects.get_range(80.0, headers_only=True), self.mr_50)
+        self.assertIsNone(MarkRange.objects.get_range(40.0, headers_only=True))
+
     def test_get_range_for_user__none_when_the_student_has_no_mark(self):
         """A student can hold a course and still have no mark: a course run on XP alone has
         none (issue #403), and a mark is only cached once something recalculates it. Asking the
