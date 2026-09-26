@@ -135,6 +135,18 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, 'id="modalProgress"')
         self.assertContains(response, 'id="form"')
 
+    def test_verify_deck_request__message_shows_under_the_navbar_in_its_colour(self):
+        """Following the verification link lands on Create New Deck with "Email verified!" in a success alert
+        under the navbar, in the page's flow, rather than in a yellow band pinned over the navbar (#1974)."""
+        nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
+        response = self.client.get(reverse("decks:verify_deck_request", args=[nonce]), follow=True)
+
+        content = response.content.decode()
+        navbar_end = content.index("</nav>")
+        message = content.index("Email verified! Now create your deck.")
+        self.assertGreater(message, navbar_end)
+        self.assertIn('class="alert alert-success', content[navbar_end:message])
+
     def test_form__errors_for_missing_fields(self):
         """Form errors occur if first_name, last_name, or invalid email are missing."""
         self.client.force_login(self.superuser)
@@ -241,10 +253,8 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, f"free {TRIAL_LENGTH_DAYS}-day trial")
         self.assertContains(response, f"{TRIAL_MAX_ACTIVE_USERS} current student")
         self.assertContains(response, f"{GRACE_PERIOD_DAYS}-day grace period")
-        # the info box is an ordinary in-flow alert; the public stylesheet's
-        # fixed-toast styling is reserved for the BD-flash flash banner
+        # the terms sit in the page's info box
         self.assertContains(response, "alert alert-warning")
-        self.assertNotContains(response, "BD-flash")
 
     def test_RequestNewDeck_get__outlines_the_flow_steps(self):
         """The request form page outlines the whole flow (verify email, emailed

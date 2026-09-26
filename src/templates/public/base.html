@@ -23,23 +23,12 @@
       <!-- Google Font link-->
       <link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
       <!-- Custom CSS (bump ?v= when the file changes, so browsers refetch it) -->
-      <link rel="stylesheet" href="{% static 'public/css/custom.css' %}?v=2">
+      <link rel="stylesheet" href="{% static 'public/css/custom.css' %}?v=3">
 
   </head>
 
 
   <body>
-
-    <!-- Messages -->
-
-    {% if messages %}{% for message in messages %}
-    <div class="alert BD-flash alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'warning' }}{% endif %} alert-dismissible fade show text-center lead" role="alert">
-        <b>{% include "_message_body.html" %}</b>
-        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
-          <span aria-hidden="true">&times;</span>
-        </button>
-    </div>
-    {% endfor %}{% endif %}
 
 <!--
       For the Addition of the Subscriptions section. Due to bootstrap limitations, to get
@@ -101,6 +90,16 @@
       </ul>
     </div>
   </nav>
+
+  <!-- Messages: a band under the navbar, in the page's flow, coloured by the message's level -->
+  {% if messages %}{% for message in messages %}
+  <div class="alert alert-{% if message.level_tag == 'error' %}danger{% else %}{{ message.level_tag|default:'warning' }}{% endif %} alert-dismissible fade show text-center lead rounded-0 mb-0" role="alert">
+      <b>{% include "_message_body.html" %}</b>
+      <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+        <span aria-hidden="true">&times;</span>
+      </button>
+  </div>
+  {% endfor %}{% endif %}
 
 <!-- Page Content -->
 {% block content %}{% endblock %}
