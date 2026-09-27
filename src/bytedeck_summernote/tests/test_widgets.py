@@ -1,4 +1,18 @@
+import re
+
+from django.conf import settings
+from django.contrib.staticfiles import finders
+from django.test import SimpleTestCase
 from django.urls import reverse
+
+from django_summernote.utils import get_config
+
+from bytedeck_summernote.widgets import (
+    ByteDeckSummernoteAdvancedInplaceWidget,
+    ByteDeckSummernoteAdvancedWidget,
+    ByteDeckSummernoteSafeInplaceWidget,
+    ByteDeckSummernoteSafeWidget,
+)
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -89,3 +103,50 @@ class TestByteDeckSummernoteAdvancedWidget(ByteDeckTenantTestCase):
         html = widget.render("foobar", "lorem ipsum", attrs={"id": "id_foobar"})
 
         assert '"codeviewFilter": false' in html
+
+
+class TestByteDeckSummernoteMenus(SimpleTestCase):
+    """The toolbar, and the menus that pop up over a clicked image, link or table."""
+
+    # A button's name as Summernote and its plugins register it: context.memo('button.<name>', ...)
+    BUTTON_NAME = re.compile(r"""memo\(\s*["']button\.([\w-]+)["']""")
+
+    def registered_buttons(self, script_urls):
+        """The buttons that Summernote itself, and those of the given scripts served from our own static files, register."""
+        paths = ['summernote/summernote.min.js']
+        paths += [url.removeprefix(settings.STATIC_URL) for url in script_urls if url.startswith(settings.STATIC_URL)]
+        names = set()
+        for path in paths:
+            with open(finders.find(path), encoding='utf-8') as script:
+                names.update(self.BUTTON_NAME.findall(script.read()))
+        return names
+
+    def test_summernote_settings__carry_the_pop_up_menus(self):
+        """Every editor widget hands Summernote the configured menus, with the buttons our plugins add: Image Shapes
+        over an image, and Table Headers and Table Styles over a table (#268)."""
+        widget_classes = (
+            ByteDeckSummernoteSafeWidget,
+            ByteDeckSummernoteSafeInplaceWidget,
+            ByteDeckSummernoteAdvancedWidget,
+            ByteDeckSummernoteAdvancedInplaceWidget,
+        )
+        for widget_class in widget_classes:
+            with self.subTest(widget=widget_class.__name__):
+                popover = widget_class().summernote_settings()['popover']
+                self.assertIn(['custom', ['imageShapes']], popover['image'])
+                self.assertIn(['custom', ['tableHeaders', 'tableStyles']], popover['table'])
+
+    def test_config__names_only_buttons_that_exist(self):
+        """Every button that the toolbar and the menus name is registered by Summernote or by a plugin the editor
+        loads, in both the iframe and the inplace editor. Summernote skips a name it doesn't know without a word, so a
+        misspelled or renamed button would simply be missing from the editor (#268)."""
+        summernote = get_config()['summernote']
+        named = {
+            button
+            for groups in [summernote['toolbar'], *summernote['popover'].values()]
+            for _group, buttons in groups
+            for button in buttons
+        }
+        for scripts in ('js', 'js_for_inplace'):
+            with self.subTest(scripts=scripts):
+                self.assertEqual(named - self.registered_buttons(get_config()[scripts]), set())
