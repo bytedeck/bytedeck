@@ -1,6 +1,7 @@
 import os
+import warnings
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
@@ -99,6 +100,15 @@ class CommentManager(models.Manager):
         return comment
 
 
+# BeautifulSoup warns when the markup it is handed looks more like a URL or a file name than
+# HTML, in case the caller meant to open it rather than parse it. Every parse in this app is of
+# HTML or text a person typed, never a location, and a comment that is nothing but a link is how
+# a student hands in a Google Doc, so the approvals page logged the warning for those (#1280). The
+# filter is process-wide, which also covers the app's other parses of typed text, and unlike
+# warnings.catch_warnings() it is safe under uwsgi's threads.
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+
+
 def clean_html(text, convert_newlines=True):
     """ Several steps to clean HTML input by user:
     1. formats unformatted links
@@ -110,7 +120,7 @@ def clean_html(text, convert_newlines=True):
     # http://stackoverflow.com/questions/32937126/beautifulsoup-replacewith-method-adding-escaped-html-want-it-unescaped/32937561?noredirect=1#comment53702552_32937561
 
     soup = BeautifulSoup(text, "html.parser")
-    text_nodes = soup.find_all(text=True)
+    text_nodes = soup.find_all(string=True)
     # https://stackoverflow.com/questions/53588107/prevent-beautifulsoups-find-all-from-converting-escaped-html-tags/53592575?noredirect=1#comment94061687_53592575
     # text_nodes2 = [escape(x) for x in soup.strings]
     for textNode in text_nodes:
@@ -123,8 +133,10 @@ def clean_html(text, convert_newlines=True):
         urlized_text = urlize(escaped_text, trim_url_limit=50)
         textNode.replace_with(BeautifulSoup(urlized_text, "html.parser"))
 
-    # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#unicode-dammit
-    soup = BeautifulSoup(soup.renderContents(), "html.parser", from_encoding="UTF-8")
+    # Parse the result again, so the links urlize wrote into the text nodes above are tags the
+    # steps below can find. Reading it back from text keeps bs4 from decoding bytes, which logs a
+    # decoding warning for an empty comment, as every new draft is (#1280).
+    soup = BeautifulSoup(soup.decode_contents(), "html.parser")
 
     # All links in comments: force open in new tab
     links = soup.find_all('a')
@@ -135,13 +147,13 @@ def clean_html(text, convert_newlines=True):
     # https://stackoverflow.com/questions/55619920/how-to-fix-missing-ul-tags-in-html-list-snippet-with-python-and-beautiful-soup
     ulgroup = 0
     uls = []
-    for li in soup.findAll('li'):
+    for li in soup.find_all('li'):
         # An <li> already in a list is left alone. Its parent is what says so: the element before
         # it only does for a list's first item, since a later item follows the last tag inside
         # the item before it (a <b>, say), and an <ol>'s items would read as bare as well.
         if li.parent and li.parent.name in ('ul', 'ol'):
             continue
-        previous_element = li.findPrevious()
+        previous_element = li.find_previous()
         # a bare <li> straight after a <ul> start tag is left where it is
         if previous_element and previous_element.name == 'ul':
             continue
