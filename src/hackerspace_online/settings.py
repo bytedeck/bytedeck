@@ -939,6 +939,26 @@ SUMMERNOTE_CONFIG = {
             ['help', ['help']],
         ],
 
+        # The menus that pop up over a clicked image, link or table. They belong here with the toolbar:
+        # django-summernote hands the editor only this 'summernote' dict (#268). The image menu's size
+        # buttons carry Summernote 0.8.20's names, and "custom" holds the buttons our plugins add.
+        'popover': {
+            'image': [
+                ['custom', ['imageShapes']],
+                ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
+                ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                ['remove', ['removeMedia']]
+            ],
+            'link': [
+                ['link', ['linkDialogShow', 'unlink']]
+            ],
+            'table': [
+                ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
+                ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
+                ['custom', ['tableHeaders', 'tableStyles']]
+            ],
+        },
+
         # You can also add custom settings for external plugins
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
@@ -1033,23 +1053,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
-
-    'popover': {
-        'image': [
-            ['custom', ['imageShapes']],
-            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
-            ['float', ['floatLeft', 'floatRight', 'floatNone']],
-            ['remove', ['removeMedia']]
-        ],
-        'link': [
-            ['link', ['linkDialogShow', 'unlink']]
-        ],
-        'table': [
-            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeaders', 'tableStyles']]
-        ],
-    },
 
     # Lazy initialize
     # If you want to initialize summernote at the bottom of page, set this as True

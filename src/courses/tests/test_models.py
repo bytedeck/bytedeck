@@ -41,6 +41,22 @@ class MarkRangeModelTest(ByteDeckTenantTestCase):
         expected_str = f"{self.mr_50.name} ({self.mr_50.minimum_mark}%)"
         self.assertEqual(str(self.mr_50), expected_str)
 
+    def test_color_headers__the_database_fills_it_in(self):
+        """A range inserted without the column still colors headers, and the insert doesn't fail.
+
+        During a deploy the outgoing version, which doesn't know the column, is still creating
+        ranges, so the database itself has to supply the value.
+        """
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "INSERT INTO courses_markrange (name, minimum_mark, active, color_light, color_dark, days) "
+                "VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+                ["From the outgoing version", 60.0, True, "#FFFFFF", "#000000", "1,2,3,4,5,6,7"],
+            )
+            pk = cursor.fetchone()[0]
+
+        self.assertTrue(MarkRange.objects.get(pk=pk).color_headers)
+
 
 class MarkRangeManagerTest(ByteDeckTenantTestCase):
     @classmethod
@@ -79,6 +95,16 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
+
+    def test_get_range__headers_only_passes_over_ranges_kept_out_of_headers(self):
+        """With headers_only, a mark in a range kept out of student headers finds the next range
+        below it that colors them, or none when no such range is below it."""
+        self.mr_75.color_headers = False
+        self.mr_75.save()
+
+        self.assertEqual(MarkRange.objects.get_range(80.0), self.mr_75)
+        self.assertEqual(MarkRange.objects.get_range(80.0, headers_only=True), self.mr_50)
+        self.assertIsNone(MarkRange.objects.get_range(40.0, headers_only=True))
 
     def test_get_range_for_user__none_when_the_student_has_no_mark(self):
         """A student can hold a course and still have no mark: a course run on XP alone has

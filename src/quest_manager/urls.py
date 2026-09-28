@@ -53,6 +53,7 @@ urlpatterns = [
     re_path(r'^approvals/submitted/all/$', views.approvals, name='submitted_all'),
     re_path(r'^approvals/in-progress/$', views.approvals, name='in_progress'),
     re_path(r'^approvals/approved/$', views.approvals, name='approved'),
+    re_path(r'^approvals/approved/all/$', views.approvals, name='approved_all'),
     re_path(r'^approvals/flagged/$', views.approvals, name='flagged'),
     re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/$', views.approvals, name='approved_for_quest'),
     re_path(r'^approvals/approved/(?P<quest_id>[0-9]+)/all/$', views.approvals, name='approved_for_quest_all'),

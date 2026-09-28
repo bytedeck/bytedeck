@@ -11,15 +11,13 @@
 {% load static %}
 
 {% block heading_inner %}{{ heading }}
-    {% if view_type == VIEW_TYPES.SUBMITTED %}
-      {% if show_all_blocks_button %}
-        <div class="btn-group">
-            <a href="{% url 'quests:submitted' %}"
-               class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My {{ config.custom_name_for_group|lower }}s</a>
-            <a href="{% url 'quests:submitted_all' %}"
-               class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
-        </div>
-      {% endif %}
+    {% if groups_urls and show_all_blocks_button %}
+      <div class="btn-group">
+          <a href="{{ groups_urls.0 }}"
+             class="btn {% if current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">My {{ config.custom_name_for_group|lower }}s</a>
+          <a href="{{ groups_urls.1 }}"
+             class="btn {% if not current_teacher_only %}btn-primary{% else %}btn-default{% endif %}">All</a>
+      </div>
     {% endif %}
     {% if not past_approvals_all == None %}
       <div class="btn-group">

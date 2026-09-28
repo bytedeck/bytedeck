@@ -39,7 +39,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student', password=cls.test_password)
-        cls.test_student2 = baker.make(User)
+        # A fixed username: left to model_bakery it is 150 random letters, which the student-list
+        # search tests could match by chance (#2766).
+        cls.test_student2 = User.objects.create_user('test_student2')
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
@@ -727,7 +729,10 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # Fill a whole page with students whose first name sorts ahead of the first-name target
         # below, so that target is pushed onto a later page under the default (first-name) ordering.
-        baker.make(User, first_name='AAAA', _quantity=per_page)
+        # Their usernames are fixed: left to model_bakery each is 150 random letters, and usernames
+        # are searched too, so a short term like "zebed" could turn up inside one by chance (#2766).
+        for i in range(per_page):
+            User.objects.create_user(f'filler{i}', first_name='AAAA')
 
         # One target per searchable column, each carrying a value that collides with nothing else.
         first_target = User.objects.create_user('zzz_first', first_name='Zebediah')

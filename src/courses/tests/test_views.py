@@ -1178,6 +1178,17 @@ class MarkRangeViewTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:markranges'))
         self.assertTrue(MarkRange.objects.filter(name="TestMarkRange").exists())
 
+    def test_MarkRangeCreate_view__offers_the_header_option_checked(self):
+        """A new range starts with "Use this color in student headers" checked, and the option's
+        help text names the Site Configuration setting it depends on by that setting's own label."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('courses:markrange_create'))
+
+        field = response.context['form']['color_headers']
+        self.assertTrue(field.value())
+        self.assertIn(SiteConfig._meta.get_field('color_headers_by_mark').verbose_name, field.help_text)
+
     def test_MarkRangeUpdate_view__staff_can_update(self):
         """Staff users can edit existing MarkRange objects through the update view form"""
 
@@ -3070,6 +3081,18 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
             [markrange.xp_needed for markrange in ranges[self.course]],
             [math.floor(self.course.xp_for_100_percent * 0.5 * 0.5)],
         )
+
+    def test_mark_calculations__a_range_kept_out_of_headers_is_still_drawn(self):
+        """Keeping a range out of student headers leaves it on the graph: it only changes whether
+        its color reaches the header."""
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Graph Only', minimum_mark=50, active=True, color_headers=False)
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+
+        names = [markrange.name for pane in response.context['course_panes'] for markrange in pane['markranges']]
+        self.assertIn('Graph Only', names)
 
     def test_mark_calculations__a_courses_own_mark_range_stays_in_its_own_tab(self):
         """A mark range can be assigned to particular courses. With each course explained in its

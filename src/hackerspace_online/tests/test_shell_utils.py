@@ -1,5 +1,6 @@
 import io
 from contextlib import redirect_stdout
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 
@@ -27,6 +28,16 @@ class ShellUtilsTest(ByteDeckTenantTestCase):
         generate_students(create_this_many, quiet=True)
         num_students_after = User.objects.filter(is_staff=False).count()
         self.assertEqual(num_students_after, num_students_before + create_this_many)
+
+    def test_generate_students__a_name_drawn_twice_gets_a_number(self):
+        """The same first and last name drawn twice makes two students rather than failing on
+        the second's username, which must be unique (#2782)."""
+        with patch('hackerspace_online.shell_utils.names.get_first_name', return_value='John'), \
+                patch('hackerspace_online.shell_utils.names.get_last_name', return_value='Smith'):
+            generate_students(2, quiet=True)
+
+        self.assertTrue(User.objects.filter(username='john.smith').exists())
+        self.assertTrue(User.objects.filter(username='john.smith2', email='john.smith2@example.com').exists())
 
     def test_generate_quests__creates_requested_quests_and_campaigns(self):
         """ Generates the provided number of students (10) """

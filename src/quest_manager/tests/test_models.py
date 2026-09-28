@@ -458,6 +458,21 @@ class SubmissionManagerTest(ByteDeckTenantTestCase):
         """Capture the active semester shared across the tests."""
         cls.active_semester = SiteConfig.get().active_semester
 
+    def test_all_approved__teacher_limits_it_to_the_students_they_teach(self):
+        """With a teacher, only the approved work of the students in that teacher's groups, as
+        the Approved tab lists it by default (#2672); without one, everyone's."""
+        teacher, other_teacher = baker.make(User, is_staff=True, _quantity=2)
+        approved = []
+        for block_teacher in (teacher, other_teacher):
+            student = baker.make(User)
+            baker.make(CourseStudent, user=student, course=baker.make(Course), semester=self.active_semester,
+                       block=baker.make('courses.Block', current_teacher=block_teacher))
+            approved.append(baker.make(QuestSubmission, user=student, is_completed=True, is_approved=True,
+                                       semester=self.active_semester))
+
+        self.assertQuerySetEqual(QuestSubmission.objects.all_approved(teacher=teacher), [approved[0]])
+        self.assertQuerySetEqual(QuestSubmission.objects.all_approved(), approved, ordered=False)
+
     def test_all_approved__filters_by_semester_quest_and_user(self):
         """ Tests of QuestSubmissionManager.all_approved()
         def all_approved(self, user=None, quest=None, up_to_date=None, active_semester_only=True):

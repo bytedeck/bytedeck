@@ -16,7 +16,7 @@ class SemesterAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
 
 
 class MarkRangeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
-    list_display = ('id', 'name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days')
+    list_display = ('id', 'name', 'minimum_mark', 'active', 'color_headers', 'color_light', 'color_dark', 'days')
 
 
 class RankAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):

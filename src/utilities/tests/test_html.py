@@ -1,3 +1,6 @@
+import warnings
+
+from bs4 import MarkupResemblesLocatorWarning
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
 from utilities.html import EMBEDDED_CONTENT_TAGS, is_empty_html, textify, urlize
@@ -214,6 +217,39 @@ class UrlizeTests(SimpleTestCase):
         self.assertEqual(result.count('<a '), 1)
         self.assertIn('href="http://example.com"', result)
         self.assertIn('target="_blank"', result)
+
+    def test_clean_html__a_comment_that_is_only_a_link_raises_no_warning(self):
+        """A comment that is nothing but a link is cleaned without bs4's "looks like a URL" warning (#1280).
+
+        bs4 warns when the markup it is given looks more like a location than HTML. A student
+        handing in a Google Doc writes exactly that, so the approvals page logged the warning for
+        their comments. The "always" filter is appended, so it shows any warning nothing earlier
+        in the filter list silences, which is where the app's own filter sits.
+        """
+        link = "https://docs.google.com/document/d/abc123/edit"
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", append=True)
+            result = clean_html(link)
+
+        self.assertEqual([w.message for w in caught if issubclass(w.category, MarkupResemblesLocatorWarning)], [])
+        self.assertIn(f'href="{link}"', result)
+
+    def test_clean_html__makes_no_deprecated_bs4_call(self):
+        """clean_html uses none of the bs4 spellings deprecated since 4.0 (#1280).
+
+        `find_all(text=...)`, `renderContents()`, `findAll()` and `findPrevious()` each warn on
+        every call. The input reaches every step: a link to urlize and a bare <li> to wrap.
+        """
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)
+            result = clean_html("<ul><li>one</li></ul><li>two</li> see www.example.com")
+
+        self.assertIn('href="http://www.example.com"', result)
+
+    def test_clean_html__an_empty_comment_logs_nothing(self):
+        """An empty comment, as every new draft is, is cleaned without a decoding warning in the log (#1280)."""
+        with self.assertNoLogs("bs4.dammit", level="WARNING"):
+            self.assertEqual(clean_html(""), "")
 
     def test_clean_html__multiple_urls(self):
         """
