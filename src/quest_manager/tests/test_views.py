@@ -7887,6 +7887,27 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
 
         self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
 
+    def test_ajax_save_draft__locks_the_submission_before_it_reads_the_drafts_files(self):
+        """The submission row is locked before the draft's files are read, and only that row.
+
+        A large file keeps the save carrying it busy for a while, and a student who presses
+        Submit meanwhile sends the same file again with the submit. The submit takes this row's
+        lock, so the save taking it too is what makes the later of the two wait and then find
+        the earlier one's copy, where both would otherwise find none and store one each (#2804).
+        """
+        with CaptureQueriesContext(connection) as queries:
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        statements = [query['sql'] for query in queries]
+        locks = [index for index, sql in enumerate(statements) if 'FOR UPDATE' in sql]
+        reads_of_files = [index for index, sql in enumerate(statements) if 'FROM "comments_document"' in sql]
+
+        self.assertEqual(len(locks), 1, 'the submission is locked exactly once')
+        self.assertIn('FOR UPDATE OF "quest_manager_questsubmission"', statements[locks[0]])
+        self.assertTrue(reads_of_files, 'the draft files were read')
+        self.assertLess(locks[0], reads_of_files[0], 'the lock is taken before the files are read')
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 1)
+
     def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
         """Choosing a file the draft already holds and then submitting publishes one copy of it,
         not two: the submit path attaches through the same helper the draft save uses (#2720)."""
