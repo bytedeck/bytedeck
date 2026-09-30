@@ -572,10 +572,28 @@ class ProfileNameMethodsTest(ByteDeckTenantTestCase):
         self.profile = self.user.profile
 
     def test_str__includes_preferred_name_and_alias(self):
-        """__str__ shows 'First (Preferred) Last, aka <clipped alias>' when all are set."""
+        """__str__ shows 'Preferred (First) Last, aka <clipped alias>' when all are set: the
+        preferred name leads, as it does everywhere else the student is named (#2807)."""
         self.profile.preferred_name = "Janey"
         self.profile.alias = "JD"
-        self.assertEqual(str(self.profile), "Jane (Janey) Doe, aka JD")
+        self.assertEqual(str(self.profile), "Janey (Jane) Doe, aka JD")
+
+    def test_teacher_name__first_and_last_without_a_preferred_name(self):
+        """With no preferred name there is nothing to put in brackets."""
+        self.assertEqual(self.profile.teacher_name(), "Jane Doe")
+
+    def test_teacher_name__no_trailing_space_without_a_last_name(self):
+        """A student who has given only first names is named by those alone."""
+        self.user.last_name = ""
+        self.profile.preferred_name = "Janey"
+        self.assertEqual(self.profile.teacher_name(), "Janey (Jane)")
+
+    def test_teacher_name__username_before_a_first_name_is_given(self):
+        """A new student with no names yet is shown by their username, alias or not."""
+        self.user.first_name = ""
+        self.profile.alias = "JD"
+        self.assertEqual(self.profile.teacher_name(), self.user.username)
+        self.assertEqual(str(self.profile), self.user.username)
 
     def test_get_preferred_name__prefers_preferred_over_first_name(self):
         """get_preferred_name returns the preferred name when one is set."""
