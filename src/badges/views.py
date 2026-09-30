@@ -8,7 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import JsonResponse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.urls import reverse, reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -313,12 +313,24 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
-            result_message += profile.preferred_full_name() + "; "
 
-        messages.success(request, result_message)
+        student_links = format_html_join(
+            "; ",
+            "<a href='{}'>{}</a>",
+            ((profile.get_absolute_url(), profile.preferred_full_name()) for profile in profiles),
+        )
+        messages.success(
+            request,
+            format_html(
+                "{} <a href='{}'>{}</a> granted to {}; ",
+                SiteConfig.get().custom_name_for_badge,
+                badge.get_absolute_url(),
+                badge,
+                student_links,
+            ),
+        )
         return redirect('badges:list')
 
     context = {
@@ -358,7 +370,17 @@ def assertion_create(request, user_id, badge_id):
             new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp,
             course=form.cleaned_data.get('course'),
         )
-        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
+        messages.success(
+            request,
+            format_html(
+                "{} <a href='{}'>{}</a> granted to <a href='{}'>{}</a>",
+                SiteConfig.get().custom_name_for_badge,
+                new_ass.badge.get_absolute_url(),
+                new_ass,
+                new_ass.user.profile.get_absolute_url(),
+                new_ass.user,
+            ),
+        )
         return redirect('badges:list')
 
     context = {
@@ -389,9 +411,17 @@ def assertion_delete(request, assertion_id):
                  "</span>",
             verb='revoked')
 
-        messages.success(request,
-                         ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
-                          ))
+        messages.success(
+            request,
+            format_html(
+                "{} <a href='{}'>{}</a> revoked from <a href='{}'>{}</a>",
+                SiteConfig.get().custom_name_for_badge,
+                assertion.badge.get_absolute_url(),
+                assertion,
+                assertion.user.profile.get_absolute_url(),
+                assertion.user,
+            ),
+        )
         # Revoking and the XP it takes back go together, in one transaction: deleting the
         # assertion queues the rebuild of this student's cache of available quests, held
         # back until commit by prerequisites.tasks.TransactionAwareTask. So the transaction

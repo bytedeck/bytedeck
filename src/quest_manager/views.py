@@ -1573,11 +1573,13 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
             messages.success(
                 self.request,
-                (
-                    "Badge "
-                    + str(new_assertion)
-                    + " granted to "
-                    + str(new_assertion.user)
+                format_html(
+                    "{} <a href='{}'>{}</a> granted to <a href='{}'>{}</a>",
+                    SiteConfig.get().custom_name_for_badge,
+                    new_assertion.badge.get_absolute_url(),
+                    new_assertion,
+                    new_assertion.user.profile.get_absolute_url(),
+                    new_assertion.user,
                 ),
             )
             rarity_icon = badge.get_rarity_icon()

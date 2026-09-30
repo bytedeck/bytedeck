@@ -209,6 +209,9 @@ class BadgeViewTests(ByteDeckTenantTestCase):
             data=form_data
         )
         self.assertRedirects(response, reverse("badges:list"))
+        grant_messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any(self.test_badge.get_absolute_url() in m for m in grant_messages))
+        self.assertTrue(any(self.test_student1.profile.get_absolute_url() in m for m in grant_messages))
 
         new_assertion = BadgeAssertion.objects.latest('timestamp')
         self.assertEqual(new_assertion.user, self.test_student1)
@@ -222,6 +225,9 @@ class BadgeViewTests(ByteDeckTenantTestCase):
             reverse('badges:revoke', args=[new_assertion.id]),
         )
         self.assertRedirects(response, reverse("profiles:profile_detail", args=[self.test_student1.profile.id]))
+        revoke_messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any(self.test_badge.get_absolute_url() in m for m in revoke_messages))
+        self.assertTrue(any(self.test_student1.profile.get_absolute_url() in m for m in revoke_messages))
 
         # shouldn't exist anymore now that we deleted it!
         with self.assertRaises(BadgeAssertion.DoesNotExist):
@@ -404,6 +410,10 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         response = self.client.post(reverse('badges:bulk_grant'), data=form_data)
 
         self.assertRedirects(response, reverse("badges:list"))
+        bulk_messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any(self.test_badge.get_absolute_url() in m for m in bulk_messages))
+        self.assertTrue(any(self.test_student1.profile.get_absolute_url() in m for m in bulk_messages))
+        self.assertTrue(any(self.test_student2.profile.get_absolute_url() in m for m in bulk_messages))
 
         # we just bulk granted 2 badges, so there should be two more than before!
         badge_assertions_after = BadgeAssertion.objects.all().count()
