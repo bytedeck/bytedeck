@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils.html import escape
 from utilities.html import urlize
+from utilities.uploads import UploadToOwnFolder
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
@@ -263,7 +264,7 @@ class Comment(models.Model):
 
 # Document Handler ############################################
 class Document(models.Model):
-    docfile = models.FileField(upload_to='documents/%Y/%m/%d')
+    docfile = models.FileField(upload_to=UploadToOwnFolder('documents/%Y/%m/%d'))
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
 
