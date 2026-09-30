@@ -264,7 +264,9 @@ class Comment(models.Model):
 
 # Document Handler ############################################
 class Document(models.Model):
-    docfile = models.FileField(upload_to=UploadToOwnFolder('documents/%Y/%m/%d'))
+    # 255, not FileField's default 100: the path holds a dated folder and a folder of its own
+    # before the name, and a name too long for the rest is cut short (see chosen_name)
+    docfile = models.FileField(upload_to=UploadToOwnFolder('documents/%Y/%m/%d'), max_length=255)
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
 
