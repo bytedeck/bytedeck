@@ -330,3 +330,59 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
 
         self.assertFalse(self.config.can_user_export_to_library(self.config.deck_owner, "test"))
         self.assertFalse(self.config.can_user_export_to_library(staff_user, "test"))
+
+
+class SiteConfigFillInSettingsTest(ByteDeckTenantTestCase):
+    """A quest's text can name one of the deck's settings between double square brackets, and
+    shows this deck's value for it there (#435)."""
+
+    def setUp(self):
+        """A deck called "Timberline's Digital Hackerspace", "Hackerspace" for short, whose
+        students are called Hackers."""
+        self.config = SiteConfig.get()
+        self.config.site_name = "Timberline's Digital Hackerspace"
+        self.config.site_name_short = 'Hackerspace'
+        self.config.custom_name_for_student = 'Hacker'
+        self.config.save()
+
+    def tearDown(self):
+        """Clear the cache after each test so cached SiteConfig data does not leak."""
+        cache.clear()
+
+    def test_fill_in_settings__by_field_name_or_label(self):
+        """A setting can be named by its field name, by that name with spaces, or by its label,
+        in any case and with any spacing, including the &nbsp; the editor sometimes stores."""
+        for named in (
+            '[[site_name_short]]', '[[site name short]]', '[[Site Name, Short]]', '[[ SITE_NAME_SHORT ]]',
+            '[[Site&nbsp;Name,&nbsp;Short]]',
+        ):
+            with self.subTest(named=named):
+                self.assertEqual(self.config.fill_in_settings(f'<p>Welcome to {named}!</p>'), '<p>Welcome to Hackerspace!</p>')
+        self.assertEqual(self.config.fill_in_settings('<p>[[Custom name for student]]s, [[site_name_short]]</p>'), '<p>Hackers, Hackerspace</p>')
+
+    def test_fill_in_settings__escapes_the_value(self):
+        """A value is written in as text, so an apostrophe or markup in it can't change the HTML
+        around it."""
+        self.assertEqual(self.config.fill_in_settings('<h1>[[Site Name, Full]]</h1>'), '<h1>Timberline&#x27;s Digital Hackerspace</h1>')
+        self.config.site_name_short = '<b>Hack</b>'
+        self.assertEqual(self.config.fill_in_settings('[[site_name_short]]'), '&lt;b&gt;Hack&lt;/b&gt;')
+
+    def test_fill_in_settings__an_image_gives_its_address(self):
+        """An image gives its address, so it can be an image's source. A deck that hasn't
+        uploaded one gives the image the site shows in its place."""
+        self.assertEqual(self.config.fill_in_settings('<img src="[[Banner Image]]">'), f'<img src="{static("img/banner.png")}">')
+        self.config.banner_image = 'banners/ours.png'
+        self.assertEqual(self.config.fill_in_settings('<img src="[[banner_image]]">'), f'<img src="{settings.MEDIA_URL}banners/ours.png">')
+
+    def test_fill_in_settings__leaves_anything_else_as_written(self):
+        """Double square brackets that name no setting stay as written. That includes a setting
+        meant for staff alone: a quest shared through the Library must not show students the
+        access code of the deck that imports it."""
+        for text in (
+            '[[access_code]]', '[[Access Code]]', '[[no such setting]]', 'grid[[0, 1]]', '[[site_name_short]',
+            '[ [site_name_short]]', '[[<b>site_name_short</b>]]',
+        ):
+            with self.subTest(text=text):
+                self.assertEqual(self.config.fill_in_settings(text), text)
+        self.assertIsNone(self.config.fill_in_settings(None))
+        self.assertEqual(self.config.fill_in_settings(''), '')
