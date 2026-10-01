@@ -33,7 +33,7 @@ from django.utils.timezone import localdate, timedelta
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 
-from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS
+from tenant.models import DeckNotice, GRACE_PERIOD_DAYS, TRIAL_MAX_ACTIVE_USERS, Tenant
 
 
 # expiry thresholds, most specific first: the first unfired one whose window has
@@ -79,6 +79,23 @@ def _limit_level(count, cap):
     if count * 100 >= cap * 90:
         return 'pct90'
     return None
+
+
+def _limit_level_covered(deck, level, period_key):
+    """Whether `level`, or a more severe limit level, has already gone out to `deck` for `period_key`.
+
+    Args:
+        deck (Tenant): The deck being evaluated.
+        level (str): One of LIMIT_LEVELS.
+        period_key (str): The period the notice is about (its semester).
+
+    Returns:
+        bool: True when the owner has already heard at least this much this period.
+    """
+    return DeckNotice.objects.filter(
+        tenant=deck, kind=DeckNotice.KIND_LIMIT, period_key=period_key,
+        threshold__in=LIMIT_LEVELS[LIMIT_LEVELS.index(level):],
+    ).exists()
 
 
 def _unfired(deck, kind, threshold, period_key):
@@ -224,11 +241,7 @@ def evaluate_deck_notices(deck):
         semester = Semester.objects.open().first()
         if level and semester:
             period_key = f'semester-{semester.pk}'
-            already_sent = DeckNotice.objects.filter(
-                tenant=deck, kind=DeckNotice.KIND_LIMIT, period_key=period_key,
-                threshold__in=LIMIT_LEVELS[LIMIT_LEVELS.index(level):],
-            ).exists()
-            if not already_sent:
+            if not _limit_level_covered(deck, level, period_key):
                 due.append((DeckNotice.KIND_LIMIT, level, period_key))
 
     return due
@@ -255,6 +268,14 @@ def process_deck_notices(deck):
         # never sent (_deliver orders its side effects so the non-rollbackable
         # email enqueue happens last)
         with transaction.atomic():
+            if kind == DeckNotice.KIND_LIMIT:
+                # A concurrent run may have sent a more severe limit level since this run
+                # evaluated. Holding the deck's row makes this run wait for that one to commit,
+                # and the recheck then finds its level covered, so a stale 90% heads-up can't
+                # follow a full warning.
+                Tenant.objects.select_for_update().get(pk=deck.pk)
+                if _limit_level_covered(deck, threshold, period_key):
+                    continue
             _, created = DeckNotice.objects.get_or_create(
                 tenant=deck, kind=kind, threshold=threshold, period_key=period_key
             )

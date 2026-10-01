@@ -575,6 +575,29 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertEqual(len(mail.outbox), 0)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process_deck_notices__limit_level_below_one_a_concurrent_run_sent_is_skipped(self):
+        """A run that evaluated the 90% heads-up while a concurrent run recorded and sent the full
+        warning rechecks the ledger with the deck's row locked, finds the warning, and sends nothing:
+        a heads-up never follows the warning it is milder than."""
+        from unittest.mock import patch
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        key = limit_period_key()
+        DeckNotice.objects.create(tenant=self.tenant, kind=DeckNotice.KIND_LIMIT, threshold='pct100', period_key=key)
+        # evaluation normally filters out covered levels; force it to return the stale one, as if
+        # the concurrent run recorded the warning a moment after this run evaluated
+        with patch('tenant.notices.evaluate_deck_notices', return_value=[(DeckNotice.KIND_LIMIT, 'pct90', key)]):
+            with CaptureQueriesContext(connection) as queries:
+                summary = self.run_engine_with_inline_email()
+
+        self.assertIn('sent 0 notice(s)', summary)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(DeckNotice.objects.filter(threshold='pct90').exists())
+        self.assertTrue(any('FOR UPDATE' in query['sql'] for query in queries.captured_queries))
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process_deck_notices__failed_delivery_rolls_back_ledger_so_next_run_retries(self):
         """If delivery raises after the ledger write, the row rolls back (and no email
         is queued -- the enqueue is sequenced after the in-app notification), so the
