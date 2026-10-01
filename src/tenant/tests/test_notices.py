@@ -723,9 +723,9 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('alt="[Logo]"', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
-    def test_process_deck_notices__limit_heads_up_says_nothing_is_wrong_and_what_the_limit_blocks(self):
+    def test_process_deck_notices__limit_heads_up_says_how_many_can_join_and_what_the_limit_blocks(self):
         """Below the cap the limit notice is a heads-up, and its subject and in-app notice say
-        so. The email says nothing is wrong, how many more students can join a course, and
+        so. The email opens as a heads-up, says how many more students can join a course, and
         what the cap will block once it's reached (#2824)."""
         Tenant.objects.filter(pk=self.tenant.pk).update(max_active_users=120, active_user_count=108)
         self.tenant.refresh_from_db()
@@ -734,13 +734,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         email = mail.outbox[0]
         self.assertEqual(email.subject, f'{SiteConfig.get().site_name_short}: current-student limit heads-up')
         html = ' '.join(email.alternatives[0][0].split())
-        self.assertIn('<strong>Just a heads-up, nothing is wrong:</strong>', html)
+        self.assertIn('<strong>Just a heads-up:</strong> your deck', html)
         self.assertIn("so <strong>12</strong> more students can join a course before it's full.", html)
         self.assertIn(
             "<strong>What happens at the limit:</strong> once the deck has 120 current students, a student who isn't in a"
             " course this semester can't join one", html)
         self.assertIn('If you expect more students, you can', html)
-        self.assertIn('Just a heads-up, nothing is wrong:', ' '.join(email.body.split()))  # the plain-text part too
+        self.assertIn('Just a heads-up:** your deck', ' '.join(email.body.split()))  # the plain-text part too
 
         notification = Notification.objects.get(recipient=SiteConfig.get().deck_owner, verb__contains='heads-up')
         self.assertEqual(

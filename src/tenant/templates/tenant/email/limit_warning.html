@@ -8,7 +8,7 @@
   to let their teacher know), and staff can't add them to a course either. Students already in a course aren't
   affected: they carry on as usual, and can still join another course.</p>
 {% else %}
-<p><strong>Just a heads-up, nothing is wrong:</strong> your deck <strong>{{ deck.name }}</strong> has
+<p><strong>Just a heads-up:</strong> your deck <strong>{{ deck.name }}</strong> has
   <strong>{{ count }}</strong> current student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed, so
   {% if seats_left == 1 %}only <strong>one</strong> more student{% else %}<strong>{{ seats_left }}</strong> more students{% endif %}
   can join a course before it's full.</p>
