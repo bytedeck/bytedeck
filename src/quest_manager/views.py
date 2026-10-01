@@ -2867,6 +2867,7 @@ def ajax_delete_draft_attachment(request, document_id):
 @xml_http_request_required
 @non_public_only_view
 @login_required
+@transaction.atomic
 def ajax_save_draft(request):
     """Autosave the requesting student's own draft comment, answers, and chosen files.
 
@@ -2897,7 +2898,18 @@ def ajax_save_draft(request):
         except (TypeError, ValueError):
             raise Http404("No valid submission id provided.")
 
-        sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
+        # Locked for the rest of the request, as the submit (complete) and the draft file
+        # delete lock it. A chosen file is stored only if the draft doesn't hold a copy yet,
+        # and a student who presses Submit while this save is still uploading a large file
+        # sends that file again with the submit. Without the lock each request looks before
+        # the other has stored anything, and both store it (#2804); with it, the second one
+        # waits and finds the first one's copy. of=("self",) and include_related=False for
+        # the reasons complete gives.
+        sub = get_object_or_404(
+            QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+            pk=submission_id,
+            user=request.user,
+        )
         # if there is no draft comment, then the quest is not in progress
         if not sub.draft_comment:
             raise Http404("No draft comment found. The quest is not in progress.")
