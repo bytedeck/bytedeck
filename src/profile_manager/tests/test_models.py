@@ -375,6 +375,18 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertEqual(self.profile.xp_cached, 50)
         self.assertEqual(self.profile.mark_cached, 10)
 
+    def test_xp_invalidate_cache__caches_the_mark_as_it_is_shown(self):
+        """The cached mark decides the student's mark range, so it is the mark as they are shown
+        it, to one decimal place with a half rounded up (#2826): 72.44996% is shown as 72.4% and
+        cached as 72.4, short of a 72.5% range, and 72.45% is shown and cached as 72.5. The
+        instance holds the same value as the saved row."""
+        for mark, cached in ((72.44996, Decimal('72.4')), (72.45, Decimal('72.5'))):
+            with self.subTest(mark=mark), patch('profile_manager.models.Profile.mark', return_value=mark):
+                self.profile.xp_invalidate_cache()
+                self.assertEqual(self.profile.mark_cached, cached)
+                self.profile.refresh_from_db()
+                self.assertEqual(self.profile.mark_cached, cached)
+
     def test_xp_invalidate_cache__names_the_patch_behind_a_mark_that_is_not_a_number(self):
         """A mark that is not a number cannot be stored, and the error says why.
 
