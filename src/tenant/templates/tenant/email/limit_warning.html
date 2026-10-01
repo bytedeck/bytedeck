@@ -1,7 +1,23 @@
 <p>Hi {{ config.deck_owner.get_full_name|default:config.deck_owner.username }},</p>
 
-<p>Your deck <strong>{{ deck.name }}</strong> has <strong>{{ count }}</strong> current
-  student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed{% if count >= cap %}: the limit has been reached, so no more students can register in a course.{% else %}: you're approaching the limit.{% endif %}</p>
+{% if count >= cap %}
+<p><strong>The current-student limit has been reached:</strong> your deck <strong>{{ deck.name }}</strong> has
+  <strong>{{ count }}</strong> current student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed.</p>
+
+<p><strong>What this means:</strong> a student who isn't in a course this semester can't join one now (they're asked
+  to let their teacher know), and staff can't add them to a course either. Students already in a course aren't
+  affected: they carry on as usual, and can still join another course.</p>
+{% else %}
+<p><strong>Just a heads-up, nothing is wrong:</strong> your deck <strong>{{ deck.name }}</strong> has
+  <strong>{{ count }}</strong> current student{{ count|pluralize }} of <strong>{{ cap }}</strong> allowed, so
+  {% if seats_left == 1 %}only <strong>one</strong> more student{% else %}<strong>{{ seats_left }}</strong> more students{% endif %}
+  can join a course before it's full.</p>
+
+<p><strong>What happens at the limit:</strong> once the deck has {{ cap }} current student{{ cap|pluralize }}, a
+  student who isn't in a course this semester can't join one (they're asked to let their teacher know), and staff
+  can't add them to a course either. Students already in a course aren't affected: they carry on as usual, and can
+  still join another course.</p>
+{% endif %}
 
 {# the GOVERNING clock (the latest one) names the deadline, and grace decks are told their clock already ran out (#1734 B5) #}
 {% if deck.in_grace_period %}
@@ -14,7 +30,8 @@
 {% endif %}
 
 <p>Only <em>current</em> students (registered in a course in the active semester) count; staff and archived
-  students never do. You can <a href="{{ archive_help_url }}">free up seats</a> by ending the semester or
-  archiving past students, or <a href="{{ subscribe_url }}">upgrade your subscription</a> for a higher limit.</p>
+  students never do. {% if count >= cap %}You can{% else %}If you expect more students, you can{% endif %}
+  <a href="{{ archive_help_url }}">free up seats</a> by ending the semester or archiving past students, or
+  <a href="{{ subscribe_url }}">upgrade your subscription</a> for a higher limit.</p>
 
 {% include "tenant/email/_email_footer.html" %}

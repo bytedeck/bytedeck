@@ -7,8 +7,10 @@ nightly ``deck_status_check`` task, right after the cached counts refresh:
   deadline (trial end, or paid_until). Four notices per period and nothing
   after: the deck keeps running through the grace window that follows, and the
   SUSPENDED notice closes the story out when that window ends.
-* LIMIT warnings: when the current-student count reaches 80% / 100% of the
-  effective cap; re-armed monthly so owners are reminded but not spammed.
+* LIMIT notices: a heads-up when the current-student count reaches 90% and 95%
+  of the effective cap and when one seat is left, then a warning when the cap is
+  reached. Each level goes out at most once per semester, and never after a
+  more severe one (#2824).
 * SUSPENDED: once per suspension (a deck whose clocks all lapsed).
 
 Delivery is two-channel: an email to the deck owner (via the existing
@@ -47,7 +49,37 @@ EXPIRY_THRESHOLDS = (('d1', 1), ('d7', 7), ('d14', 14), ('d30', 30))
 # two emails about the same charge on the same day (#2586).
 RENEWAL_NOTICE_DAYS = 14
 
-LIMIT_WARNING_FRACTION = 0.8
+# Current-student limit levels, least severe first. A deck that reaches one is sent the
+# most severe level it has reached, unless that level or a more severe one already went
+# out this semester: a deck that jumps from 85% to 96% gets only the 95% notice, and one
+# that later drops back to 92% gets no 90% notice after it (#2824).
+LIMIT_LEVELS = ('pct90', 'pct95', 'one-seat-left', 'pct100')
+
+
+def _limit_level(count, cap):
+    """The most severe current-student limit level a deck has reached.
+
+    On a small cap one count can meet both a percentage and the last seat (on a cap of 10,
+    the 9th student is at 90% and leaves one seat); the one-seat level wins, as the more
+    specific news.
+
+    Args:
+        count (int): the deck's current students.
+        cap (int): the deck's effective cap, a positive number of seats.
+
+    Returns:
+        str or None: one of LIMIT_LEVELS, or None when the deck has reached none of them.
+    """
+    if count >= cap:
+        return 'pct100'
+    if count and cap - count == 1:  # an empty deck with a one-seat cap isn't filling up
+        return 'one-seat-left'
+    if count * 100 >= cap * 95:
+        return 'pct95'
+    if count * 100 >= cap * 90:
+        return 'pct90'
+    return None
+
 
 def _unfired(deck, kind, threshold, period_key):
     """Whether this exact notice hasn't been recorded yet."""
@@ -119,7 +151,8 @@ def evaluate_deck_notices(deck):
     """Return the notices due for `deck` today, as (kind, threshold, period_key) tuples.
 
     Pure evaluation -- no ledger writes, no delivery. Reads the deck's derived
-    status properties and the DeckNotice ledger.
+    status properties, the DeckNotice ledger, and (for the limit notices) the
+    deck's open semesters, so it runs inside the deck's tenant context.
 
     A deck whose owner has a standing deletion request gets NO notices of any
     kind: asking for the deck to be deleted is the strongest possible signal
@@ -172,7 +205,7 @@ def evaluate_deck_notices(deck):
             if _unfired(deck, DeckNotice.KIND_EXPIRY, threshold, period_key):
                 due.append((DeckNotice.KIND_EXPIRY, threshold, period_key))
 
-    # --- current-student limit warnings, re-armed monthly ------------------------
+    # --- current-student limit, once per level per semester ----------------------
     # not for suspended decks: students cannot sign in there at all, so a
     # "you are running out of student seats" nag is both wrong and unwelcome on a
     # deck whose owner may have walked away. Suspension closes the semester
@@ -181,14 +214,22 @@ def evaluate_deck_notices(deck):
     # the count being zero
     cap = deck.effective_max_active_users
     if cap > 0 and not deck.is_suspended:
-        count = deck.active_user_count  # cached, refreshed moments earlier by the task
-        month_key = today.strftime('%Y-%m')
-        if count >= cap:
-            if _unfired(deck, DeckNotice.KIND_LIMIT, 'pct100', month_key):
-                due.append((DeckNotice.KIND_LIMIT, 'pct100', month_key))
-        elif count >= cap * LIMIT_WARNING_FRACTION:
-            if _unfired(deck, DeckNotice.KIND_LIMIT, 'pct80', month_key):
-                due.append((DeckNotice.KIND_LIMIT, 'pct80', month_key))
+        from courses.models import Semester
+
+        level = _limit_level(deck.active_user_count, cap)  # cached count, refreshed moments earlier by the task
+        # Keyed to the newest open semester (the manager lists newest term first), so
+        # the levels re-arm when a semester starts and students join its courses
+        # afresh. With no semester open nobody is current whatever the cached count
+        # says, so there is nothing to warn about.
+        semester = Semester.objects.open().first()
+        if level and semester:
+            period_key = f'semester-{semester.pk}'
+            already_sent = DeckNotice.objects.filter(
+                tenant=deck, kind=DeckNotice.KIND_LIMIT, period_key=period_key,
+                threshold__in=LIMIT_LEVELS[LIMIT_LEVELS.index(level):],
+            ).exists()
+            if not already_sent:
+                due.append((DeckNotice.KIND_LIMIT, level, period_key))
 
     return due
 
@@ -248,7 +289,11 @@ def _notification_detail(deck, kind):
             detail += f'; without a subscription the deck may be deleted after {date_format(deck.deletion_date)}'
         return detail + '.'
     if kind == DeckNotice.KIND_LIMIT:
-        return f'{deck.active_user_count} of {deck.effective_max_active_users} current-student seats are used.'
+        count, cap = deck.active_user_count, deck.effective_max_active_users
+        if count >= cap:
+            return f'{count} of {cap} current-student seats are used, so no more students can join a course.'
+        left = cap - count
+        return f"{count} of {cap} current-student seats are used, so {left} more student{'s' if left != 1 else ''} can join a course."
     if kind == DeckNotice.KIND_RENEWAL:
         # the billing date, not the governing deadline: those differ on a deck
         # whose trial date outlasts its paid period (#2588 review find)
@@ -284,6 +329,8 @@ def _deliver(deck, kind):
         # (the deck's own `cap` can differ, e.g. a paid cap during grace)
         'trial_cap': TRIAL_MAX_ACTIVE_USERS,
         'count': deck.active_user_count,
+        # how many more students can join a course before the cap stops them
+        'seats_left': deck.effective_max_active_users - deck.active_user_count,
         # every date the owner could want (maintainer request, 2026-07-25): when the
         # paid period ended/ends, how long ago, when the grace window closes, and --
         # for suspended decks -- the day the suspension began. None when not applicable.
@@ -330,6 +377,10 @@ def _deliver(deck, kind):
         context['renewal_days'] = (deck.paid_until - localdate()).days
 
     template_name, verb = templates[kind]
+    if kind == DeckNotice.KIND_LIMIT and deck.active_user_count < deck.effective_max_active_users:
+        # below the cap nothing is blocked yet, so the 90%, 95% and one-seat notices
+        # are labelled as the heads-ups they are (#2824)
+        verb = 'current-student limit heads-up'
     subject = f"{config.site_name_short}: {verb}"
     message = render_to_string(f'tenant/email/{template_name}.html', context)
 
