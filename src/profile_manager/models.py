@@ -214,16 +214,28 @@ class Profile(models.Model):
     #################################
 
     def __str__(self):
-        if self.user.first_name:
-            profile = self.user.first_name
-            if self.preferred_name:
-                profile += " (" + self.preferred_name + ")"
-            profile += " " + self.user.last_name
-            if self.alias:
-                profile += ", aka " + self.alias_clipped()
-        else:
-            profile = self.user.username
-        return profile
+        """The name teachers see: ``teacher_name()``, then ", aka <alias>" when there is an alias.
+
+        A student who hasn't given a first name yet is shown by their username alone.
+        """
+        name = self.teacher_name()
+        if self.user.first_name and self.alias:
+            name += ", aka " + self.alias_clipped()
+        return name
+
+    def teacher_name(self):
+        """The student's names as teachers see them: "Preferred (First) Last".
+
+        The preferred name leads, as it does everywhere else the student is named, and the first
+        name follows in brackets for the teacher, who may know the student by either. Without a
+        preferred name it is "First Last". A student who hasn't given a first name yet is shown
+        by their username.
+        """
+        if not self.user.first_name:
+            return self.user.username
+        if self.preferred_name:
+            return f"{self.preferred_name} ({self.user.first_name}) {self.user.last_name}".rstrip()
+        return f"{self.user.first_name} {self.user.last_name}".rstrip()
 
     class Meta:
         ordering = ['user__username']
