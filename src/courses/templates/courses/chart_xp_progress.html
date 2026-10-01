@@ -94,7 +94,6 @@
       type: 'line',
       label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat }}%)',
       mark: {{ mr.minimum_mark }},
-      reached_from: {{ mr.reached_from }},
       pointRadius: 0,
       backgroundColor: "rgb(0,0,0,0)",
       borderColor: "{% if request.user.profile.dark_theme %}{{ mr.color_dark }}{% else %}{{ mr.color_light }}{% endif %}",
@@ -115,9 +114,6 @@
   var data = {
       datasets: xp_datasets.concat(markranges)
   };
-
-  // need some starting data for the animation to work it seems..
-  generate_mark_lines(100)
 
   var options = {
 
@@ -252,46 +248,16 @@
     }
   }
 
-  // a mark the way students see it: to one decimal place, with a half rounded up
-  // (courses.models.mark_as_shown)
-  function markAsShown(mark) {
-    return Math.round(mark * 10) / 10;
-  }
-
-  // the least whole XP that reaches a mark range by day i of days: the XP whose mark is first
-  // shown as the range's minimum, which is what Current Mark Ranges by XP lists for it today
-  // (MarkRange.xp_to_reach, #2826)
-  function xpToReach(range, i, days) {
-    if (max_xp <= 0) {
-      return 0;
-    }
-    var fraction = i / days;
-    function reaches(xp) {
-      return markAsShown(xp / fraction * 100 / max_xp) >= range.mark;
-    }
-    // start from the XP the lowest reaching mark works out to, then settle on the exact one
-    var xp = Math.max(Math.ceil(range.reached_from * max_xp * fraction / 100), 0);
-    while (xp > 0 && reaches(xp - 1)) {
-      xp--;
-    }
-    while (!reaches(xp)) {
-      xp++;
-    }
-    return xp;
-  }
-
-  function generate_mark_lines(days) {
-    // Mark Line Generation
-    for(let range of markranges) {
-      range.data = [];
-    }
-
-    for (var i = 1; i <= days; i++) {
-        for (let range of markranges) {
-          var point = new DataPoint(i, xpToReach(range, i, days));
-          range.data.push(point);
-        }
-
+  // each range's line, as the chart's data gives it: the XP that reaches the range on each class
+  // day, worked out on the server like the XP listed for it below the chart (#2826)
+  function set_mark_lines(mark_lines) {
+    for (let range of markranges) {
+      var line = mark_lines.find(function(candidate) {
+        return candidate.mark === range.mark;
+      });
+      range.data = line ? line.xp.map(function(xp, day) {
+        return new DataPoint(day + 1, xp);
+      }) : [];
     }
   }
 
@@ -349,7 +315,7 @@
         percentAxis.display = data.uses_marks;
 
         generate_trend(data.days_in_semester);
-        generate_mark_lines(data.days_in_semester);
+        set_mark_lines(data.mark_lines);
         myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
 
         $('div.loading').remove();
