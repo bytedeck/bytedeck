@@ -39,12 +39,14 @@ class RequestDataTooBigMiddleware:
                     _ = request.POST
         except RequestDataTooBig:
             # if the size of the request (excluding any file uploads) exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE.
+            # The limit counts only the form's text, so a box holding a pasted image (a data URI, its
+            # bytes written out as text) is the usual culprit. The post never reaches its view, so the
+            # message says that nothing from it was kept.
             msg = (
-                "This requests exceeds the maximum size of {}. This is likely caused by"
-                " one of the text fields contains too much data, either from text (including whitespace)"
-                " or a large data URI (an image or other data encoded as text).".format(
-                    filesizeformat(settings.DATA_UPLOAD_MAX_MEMORY_SIZE)
-                )
+                f"Nothing was saved: this page sent more than {filesizeformat(settings.DATA_UPLOAD_MAX_MEMORY_SIZE)}"
+                " of text, the most the site accepts at once. A text box probably holds too much, such as"
+                " very long text or an image pasted in as text. Add images with the editor's picture"
+                " button instead, then try again."
             )
 
             # generate a more sensible response and redirect back
