@@ -137,7 +137,7 @@ class TenantCreateViewTest(ByteDeckTenantTestCase):
 
     def test_verify_deck_request__message_shows_under_the_navbar_in_its_colour(self):
         """Following the verification link lands on Create New Deck with "Email verified!" in a success alert
-        under the navbar, in the page's flow, rather than in a yellow band pinned over the navbar (#1974)."""
+        that comes after the navbar in the page, below it and clear of its links (#1974)."""
         nonce = DeckRequestService.create_request("John", "Doe", "john.doe@example.com")
         response = self.client.get(reverse("decks:verify_deck_request", args=[nonce]), follow=True)
 
