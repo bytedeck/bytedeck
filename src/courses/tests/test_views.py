@@ -3082,6 +3082,30 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
             [math.floor(self.course.xp_for_100_percent * 0.5 * 0.5)],
         )
 
+    @patch('courses.models.Semester.fraction_complete', return_value=0.1)
+    def test_mark_calculations__a_student_holding_the_xp_listed_for_a_range_is_at_it(self, fraction_complete):
+        """The XP listed for a range is the XP whose mark is first shown as its minimum, so a
+        student holding it is at the range and their header takes its colour, and one point less
+        leaves them in the range below. Out of 1000 XP a tenth of the way through, the 72.5%
+        Chillax Line lists 73 XP: 72 XP is 72%, short of it (#2826)."""
+        MarkRange.objects.all().delete()
+        baker.make(MarkRange, name='Pass', minimum_mark=49.5, color_light='#FFB3B3', color_dark='#FFB3B3')
+        baker.make(MarkRange, name='Chillax Line', minimum_mark=72.5, color_light='#BEFFFA', color_dark='#BEFFFA')
+        config = SiteConfig.get()
+        config.color_headers_by_mark = True
+        config.save()
+        self.client.force_login(self.student)
+
+        response = self.client.get(reverse('courses:my_marks'))
+        listed = {markrange.name: markrange.xp_needed for markrange in response.context['course_panes'][0]['markranges']}
+        self.assertEqual(listed['Chillax Line'], 73)
+
+        for xp, color in ((listed['Chillax Line'], '#BEFFFA'), (listed['Chillax Line'] - 1, '#FFB3B3')):
+            with self.subTest(xp=xp), patch_registration_xp(xp):
+                self.student.profile.xp_invalidate_cache()
+                response = self.client.get(reverse('courses:my_marks'))
+                self.assertContains(response, f'background-color: {color} !important;')
+
     def test_mark_calculations__a_range_kept_out_of_headers_is_still_drawn(self):
         """Keeping a range out of student headers leaves it on the graph: it only changes whether
         its color reaches the header."""
@@ -3168,56 +3192,28 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
     @patch('courses.models.Semester.fraction_complete')
     def test_current_mark_ranges_by_xp__correct_values(self, mock_sem_fraction_complete):
-        """
-        tests the markranges displayed under "Current Mark Ranges by XP" are correct based on the percentage of the semester completed.
-        specifically tests when semester is 0%, 50%, 75%, 100%, and 125% done.
-        """
+        """The XP listed under "Current Mark Ranges by XP" for the deck's default ranges (Pass
+        49.5%, B 72.5%, A 85.5%) when the semester is 0%, 50%, 75%, 100% and 125% done, in a
+        course out of 1000 XP. Each is the first whole XP whose mark is shown as the range's
+        minimum: halfway through, 247 XP is 49.4%, so Pass lists 248 (#2826)."""
         self.client.force_login(self.student)
+        expected = {
+            0: [0, 0, 0],
+            0.5: [248, 363, 428],
+            0.75: [371, 544, 641],
+            1: [495, 725, 855],
+            1.25: [619, 906, 1069],
+        }
+        for fraction_complete, xp_needed in expected.items():
+            with self.subTest(fraction_complete=fraction_complete):
+                mock_sem_fraction_complete.return_value = fraction_complete
+                response = self.client.get(reverse('courses:my_marks'))
 
-        # default markranges from initialization
-        # pass.minimum_mark = 0.495
-        # B.minimum_mark = 0.725
-        # A.minimum_mark = 0.855
-
-        # Check if markranges show 0% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0
-        response = self.client.get(reverse('courses:my_marks'))
-        self.assertContains(response, '0')  # XP should be 0 for all ranges
-
-        # Check if markranges show as 50% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0.5
-        response = self.client.get(reverse('courses:my_marks'))
-        self.assertTrue(mock_sem_fraction_complete.called)
-
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 500)
-        self.assertContains(response, '247')  # 500 * 0.495 = 247.5
-        self.assertContains(response, '362')  # 500 * 0.725 = 362.5
-        self.assertContains(response, '427')  # 500 * 0.855 = 427.5
-
-        # Check if markranges show as 75% of 1000 xp
-        mock_sem_fraction_complete.return_value = 0.75
-        response = self.client.get(reverse('courses:my_marks'))
-
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 750)
-        self.assertContains(response, '371')  # 750 * 0.495 = 371.25
-        self.assertContains(response, '543')  # 750 * 0.725 = 543.75
-        self.assertContains(response, '641')  # 750 * 0.855 = 641.25
-
-        # Check if markranges show as 100% of 1000 xp
-        mock_sem_fraction_complete.return_value = 1
-        response = self.client.get(reverse('courses:my_marks'))
-
-        self.assertEqual(1000 * mock_sem_fraction_complete.return_value, 1000)
-        self.assertContains(response, '495')  # 1000 * 0.495 = 495
-        self.assertContains(response, '725')  # 1000 * 0.725 = 725
-        self.assertContains(response, '855')  # 1000 * 0.855 = 855
-
-        # Test for over 100% completion
-        mock_sem_fraction_complete.return_value = 1.25
-        response = self.client.get(reverse('courses:my_marks'))
-        self.assertContains(response, '618')  # 1250 * 0.495 = 618.75
-        self.assertContains(response, '906')  # 1250 * 0.725 = 906.25
-        self.assertContains(response, '1068')  # 1250 * 0.855 = 1068.75
+                markranges = response.context['course_panes'][0]['markranges']
+                self.assertEqual([markrange.minimum_mark for markrange in markranges], [49.5, 72.5, 85.5])
+                self.assertEqual([markrange.xp_needed for markrange in markranges], xp_needed)
+                for markrange in markranges:
+                    self.assertContains(response, f'{markrange.name} ({markrange.minimum_mark}%): {markrange.xp_needed} XP')
 
 
 class AjaxRankPopupTests(ByteDeckTenantTestCase):

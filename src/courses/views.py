@@ -41,7 +41,6 @@ from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
 import numpy
-import math
 
 
 # Create your views here.
@@ -146,10 +145,9 @@ def _course_pane(registration, xp, fraction_complete):
             .order_by('minimum_mark').distinct('minimum_mark')
         )
         for markrange in markranges:
-            # two multiplications, which a template tag cannot do in one go
-            markrange.xp_needed = math.floor(
-                course.xp_for_100_percent * markrange.minimum_mark / 100 * fraction_complete
-            )
+            # the XP that first gives a mark shown as the range's minimum, so a student holding it
+            # is at the range (#2826)
+            markrange.xp_needed = markrange.xp_to_reach(course.xp_for_100_percent, fraction_complete)
 
     return {
         'registration': registration,

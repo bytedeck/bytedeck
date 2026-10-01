@@ -1,5 +1,6 @@
 from collections import Counter
 from datetime import date, datetime, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.db import connection
@@ -9,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from django.db.models import ProtectedError
+from django.template.defaultfilters import floatformat
 
 from django_tenants.utils import get_public_schema_name
 from freezegun import freeze_time
@@ -16,7 +18,9 @@ from unittest.mock import patch
 from model_bakery import baker
 
 from badges.models import Badge, BadgeAssertion
-from courses.models import Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester
+from courses.models import (
+    Block, Course, CourseStudent, ExcludedDate, Grade, MarkRange, Rank, Semester, mark_as_shown, mark_for_xp,
+)
 from courses.tests.utils import patch_registration_xp
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from quest_manager.models import Quest, QuestSubmission
@@ -58,6 +62,56 @@ class MarkRangeModelTest(ByteDeckTenantTestCase):
         self.assertTrue(MarkRange.objects.get(pk=pk).color_headers)
 
 
+class MarkRangeAsShownTest(ByteDeckTenantTestCase):
+    """A mark range is reached by a mark shown as its minimum or more, and the XP listed for it is
+    the XP that first gives that mark (#2826)."""
+
+    def test_mark_as_shown__one_decimal_place_with_a_half_rounded_up(self):
+        """A mark is shown to one decimal place with a half rounded up, the way the floatformat
+        filter shows it on the Mark Calculations page."""
+        self.assertEqual(mark_as_shown(72.45), Decimal('72.5'))
+        self.assertEqual(mark_as_shown(72.44996), Decimal('72.4'))
+        self.assertEqual(mark_as_shown(Decimal('72.5')), Decimal('72.5'))
+        for mark in (72.45, 72.44996, 49.95, 85.549, 100):
+            with self.subTest(mark=mark):
+                self.assertEqual(str(mark_as_shown(mark)), floatformat(mark, 1))
+
+    def test_reached_from__the_lowest_mark_shown_as_reaching_the_range(self):
+        """72.45% is shown as 72.5%, so it is the lowest mark that reaches a 72.5% range, and a
+        72.45% or 72.41% one too, since no shown mark lies between them and 72.5%."""
+        for minimum, lowest in ((72.5, 72.45), (72.45, 72.45), (72.41, 72.45), (72.0, 71.95)):
+            with self.subTest(minimum=minimum):
+                self.assertEqual(MarkRange(minimum_mark=minimum).reached_from, lowest)
+
+    def test_xp_to_reach__the_xp_whose_mark_is_first_shown_as_the_minimum(self):
+        """A student holding the XP listed for a range is at it, and one point less is not."""
+        chillax = MarkRange(minimum_mark=72.5)
+        # out of 1000 XP a tenth of the way through, exactly 72.5% takes 72.5 XP. 72 XP is 72%,
+        # short of the range, so the first whole XP that reaches it is 73
+        self.assertEqual(chillax.xp_to_reach(1000, 0.1), 73)
+        # out of 10000 XP at the end, 7245 XP is 72.45%, shown as 72.5%
+        self.assertEqual(chillax.xp_to_reach(10000, 1.0), 7245)
+        # nothing to reach before the first class day, nor in a course out of 0 XP
+        self.assertEqual(chillax.xp_to_reach(1000, 0), 0)
+        self.assertEqual(chillax.xp_to_reach(0, 0.5), 0)
+        # floating point can put the first estimate a point out either way. 33 class days into 61,
+        # 627 XP of 2000 is 57.95%, shown as 58%, one under the estimate. 50 days into 60, 643 XP
+        # of 800 works out to 96.44999...%, shown as 96.4%, so a 96.5% range takes one over it
+        self.assertEqual(MarkRange(minimum_mark=58).xp_to_reach(2000, 33 / 61), 627)
+        self.assertEqual(MarkRange(minimum_mark=96.5).xp_to_reach(800, 50 / 60), 644)
+        # and so for any course total, point in the semester and range
+        for xp_for_100_percent in (100, 999, 1000, 1234, 10000):
+            for fraction_complete in (0.07, 0.1, 1 / 3, 0.5, 0.9, 1.0):
+                for minimum in (0, 49.5, 50, 72.5, 85.5, 100):
+                    with self.subTest(xp_for_100_percent=xp_for_100_percent, fraction_complete=fraction_complete, minimum=minimum):
+                        xp = MarkRange(minimum_mark=minimum).xp_to_reach(xp_for_100_percent, fraction_complete)
+                        shown = mark_as_shown(mark_for_xp(xp, fraction_complete, xp_for_100_percent))
+                        self.assertGreaterEqual(shown, Decimal(str(minimum)))
+                        if xp > 0:
+                            shown_one_less = mark_as_shown(mark_for_xp(xp - 1, fraction_complete, xp_for_100_percent))
+                            self.assertLess(shown_one_less, Decimal(str(minimum)))
+
+
 class MarkRangeManagerTest(ByteDeckTenantTestCase):
     @classmethod
     def setUpTestData(cls):
@@ -95,6 +149,12 @@ class MarkRangeManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(MarkRange.objects.get_range(75.0), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c2]), self.mr_75)
         self.assertEqual(MarkRange.objects.get_range(101.0, [c1, c2]), mr_100_c1)
+
+    def test_get_range__a_mark_shown_as_the_minimum_reaches_the_range(self):
+        """A mark that is shown as a range's minimum is at that range (#2826): 74.95% is shown as
+        75%, so it reaches the 75% range, and 74.94% is shown as 74.9% and doesn't."""
+        self.assertEqual(MarkRange.objects.get_range(74.95), self.mr_75)
+        self.assertEqual(MarkRange.objects.get_range(74.94), self.mr_50)
 
     def test_get_range__headers_only_passes_over_ranges_kept_out_of_headers(self):
         """With headers_only, a mark in a range kept out of student headers finds the next range

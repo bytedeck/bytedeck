@@ -92,8 +92,9 @@
     {% for mr in pane.markranges %}
     {
       type: 'line',
-      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
+      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat }}%)',
       mark: {{ mr.minimum_mark }},
+      reached_from: {{ mr.reached_from }},
       pointRadius: 0,
       backgroundColor: "rgb(0,0,0,0)",
       borderColor: "{% if request.user.profile.dark_theme %}{{ mr.color_dark }}{% else %}{{ mr.color_light }}{% endif %}",
@@ -251,6 +252,34 @@
     }
   }
 
+  // a mark the way students see it: to one decimal place, with a half rounded up
+  // (courses.models.mark_as_shown)
+  function markAsShown(mark) {
+    return Math.round(mark * 10) / 10;
+  }
+
+  // the least whole XP that reaches a mark range by day i of days: the XP whose mark is first
+  // shown as the range's minimum, which is what Current Mark Ranges by XP lists for it today
+  // (MarkRange.xp_to_reach, #2826)
+  function xpToReach(range, i, days) {
+    if (max_xp <= 0) {
+      return 0;
+    }
+    var fraction = i / days;
+    function reaches(xp) {
+      return markAsShown(xp / fraction * 100 / max_xp) >= range.mark;
+    }
+    // start from the XP the lowest reaching mark works out to, then settle on the exact one
+    var xp = Math.max(Math.ceil(range.reached_from * max_xp * fraction / 100), 0);
+    while (xp > 0 && reaches(xp - 1)) {
+      xp--;
+    }
+    while (!reaches(xp)) {
+      xp++;
+    }
+    return xp;
+  }
+
   function generate_mark_lines(days) {
     // Mark Line Generation
     for(let range of markranges) {
@@ -259,7 +288,7 @@
 
     for (var i = 1; i <= days; i++) {
         for (let range of markranges) {
-          var point = new DataPoint(i, Math.floor(i * max_xp*range.mark/100 / days))
+          var point = new DataPoint(i, xpToReach(range, i, days));
           range.data.push(point);
         }
 
