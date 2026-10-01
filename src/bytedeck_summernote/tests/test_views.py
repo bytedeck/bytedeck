@@ -52,8 +52,8 @@ class TestByteDeckSummernoteUploadAttachment(ByteDeckTenantTestCase):
         """The editor posts the textarea's data-* attributes with the image, and a browser add-on can put its own there.
 
         The accessiBe overlay marks elements data-acsb-navigable, data-acsb-now-navigable and data-acsb-hidden,
-        which the editor posts as these three fields. django-summernote's view passed each posted field to
-        attachment.save(), so the upload failed with "save() got an unexpected keyword argument 'acsbNavigable'" (#1555).
+        which the editor posts as these three fields. django-summernote's own view passes each posted field to
+        attachment.save(), where they fail the upload with "save() got an unexpected keyword argument 'acsbNavigable'" (#1555).
         """
         response = self.client.post(
             reverse("django_summernote-upload_attachment"),

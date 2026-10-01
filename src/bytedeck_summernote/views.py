@@ -19,7 +19,7 @@ class ByteDeckSummernoteUploadAttachment(SummernoteUploadAttachment):
     (``origin.dataset`` in django-summernote's ``widget_common.html``), and django-summernote's view
     passes every posted field but the CSRF token to ``attachment.save()`` as a keyword argument, for
     custom attachment models whose ``save()`` takes extra ones. The stock ``Attachment`` takes none,
-    so any data attribute on the textarea failed the upload with a ``TypeError``. The app puts none
+    so through that view any data attribute on the textarea fails the upload with a ``TypeError``. The app puts none
     there, but browser add-ons can: the accessiBe accessibility overlay marks elements
     ``data-acsb-navigable`` and so on (#1555). Nothing posted is meant for ``save()``, so the
     view is handed no fields at all.
