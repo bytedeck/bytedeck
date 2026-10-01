@@ -562,10 +562,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process_deck_notices__concurrent_run_race_skips_delivery(self):
         """If another run records the ledger row between evaluation and get_or_create
-        (a lost race), this run skips delivery instead of double-sending."""
+        (a lost race), this run skips delivery instead of double-sending. The notice is an
+        expiry reminder: a limit notice is rechecked under the deck's lock before it gets
+        this far, which test_process_deck_notices__limit_level_below_one_a_concurrent_run_sent_is_skipped
+        covers."""
         from unittest.mock import patch
 
-        notice = (DeckNotice.KIND_LIMIT, 'pct100', limit_period_key())
+        notice = (DeckNotice.KIND_EXPIRY, 'd30', str(self.tenant.governing_deadline))
         DeckNotice.objects.create(tenant=self.tenant, kind=notice[0], threshold=notice[1], period_key=notice[2])
         # evaluation normally filters out recorded notices; force it to return the
         # already-recorded one, as if a concurrent run recorded it a moment after
