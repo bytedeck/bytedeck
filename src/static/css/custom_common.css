@@ -1426,3 +1426,29 @@ table[data-toggle="table"].bt-reveal {
     max-width: 100%;
     max-height: 40px;
 }
+
+
+/* Tick boxes on quest lists (js/tickable-lists.js, #1074). On a bulleted list the box takes the
+   bullet's place, in the list's indent, so an item's wrapped lines still line up under its text.
+   On a numbered list the number stays, and the box sits beside it at the start of the text. */
+ul.tickable {
+    list-style: none;
+}
+ul.tickable > li {
+    position: relative;
+}
+ul.tickable > li > .tickable-box,
+ul.tickable > li > p:first-child > .tickable-box {
+    position: absolute;
+    left: -1.5em;
+    top: 0.2em;
+    margin: 0;
+}
+ol.tickable > li > .tickable-box,
+ol.tickable > li > p:first-child > .tickable-box {
+    margin: 0 0.4em 0 0;
+    vertical-align: -2px;
+}
+.tickable-box {
+    cursor: pointer;
+}

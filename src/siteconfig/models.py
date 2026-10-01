@@ -277,6 +277,15 @@ class SiteConfig(models.Model):
         help_text="Controls the visibility of tags on user profiles. If set to False, only tags where the student has earned XP are displayed."
     )
 
+    tickable_lists = models.BooleanField(
+        verbose_name="Tick boxes on every list in a quest",
+        default=False,
+        db_default=False,
+        help_text="Check this to put a tick box on each item of every bulleted and numbered list in a quest's Quest Details and "
+                  "Submission Instructions, so students can tick off the steps as they go. The ticks aren't saved. Without this, "
+                  "only lists given the class \"tickable\" get tick boxes."
+    )
+
     # Custom stylesheet and javascript
     #
     custom_stylesheet = RestrictedFileField(

@@ -5212,6 +5212,23 @@ class DetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, "Quest Preview")  # Should be something on the page indicating it's a preview
         self.assertNotContains(response, "Start Quest")  # Definitely no "Start Quest" button
 
+    def test_detail__quest_sections_tick_off_their_tickable_lists(self):
+        """Quest Details and Submission Instructions are each marked as a section whose tickable lists
+        get tick boxes, and the page loads the script that adds them. Every list in them is tickable
+        only when the deck's tickable_lists option is on (#1074)."""
+        url = reverse('quests:quest_detail', args=[self.quest.id])
+        with patch('quest_manager.models.Quest.is_available', return_value=True):
+            response = self.client.get(url)
+        self.assertContains(response, '<div class="panel-body tickable-scope">', count=2)
+        self.assertContains(response, 'js/tickable-lists.js')
+
+        config = SiteConfig.get()
+        config.tickable_lists = True
+        config.save()
+        with patch('quest_manager.models.Quest.is_available', return_value=True):
+            response = self.client.get(url)
+        self.assertContains(response, '<div class="panel-body tickable-scope" data-tickable-all>', count=2)
+
     def test_detail__not_available_but_submission_exists_redirects(self):
         """ If they have a submission, it should redirect to that,
         otherwise only display a (preview) version of the quest

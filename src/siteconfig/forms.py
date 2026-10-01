@@ -78,6 +78,7 @@ class SiteConfigForm(forms.ModelForm):
                 "custom_name_for_tag",
                 "custom_profile_field",
                 "show_all_tags_on_profiles",
+                "tickable_lists",
                 "map_auto_update",
                 Accordion(
                     AccordionGroup(
