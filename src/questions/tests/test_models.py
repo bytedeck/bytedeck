@@ -1,8 +1,10 @@
 import datetime
+import tempfile
 
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
+from django.test import override_settings
 
 from freezegun import freeze_time
 from model_bakery import baker
@@ -411,3 +413,15 @@ class QuestionSubmissionModelTest(ByteDeckTenantTestCase):
         other_submission.delete()
         self.assertEqual(QuestionSubmission.objects.count(), old_count - 2)
         self.assertFalse(QuestionSubmission.objects.filter(quest_submission_id=other_submission.id).exists())
+
+    def test_response_file__stored_in_a_folder_of_its_own(self):
+        """A file answer goes in a folder of its own inside the day's folder, under the name the
+        student chose, so its address is one no earlier file has had (#2805)."""
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            self.question_submission.response_file = SimpleUploadedFile("answer.png", b"png")
+            self.question_submission.save()
+
+        self.assertRegex(
+            self.question_submission.response_file.name,
+            r"^quest/question/submission/\d{4}/\d{2}/\d{2}/[0-9a-f]{8}/answer\.png$",
+        )
