@@ -25,9 +25,14 @@ from utilities.models import MenuItem
 
 User = get_user_model()
 
-# tag for all initial quests (welcome + orientation campaign)
+# tag for all initial quests (welcome + orientation campaign + Unit 1)
 # including bytedeck proficiency badge
 intro_tag = "intro"
+
+# The quests a new deck's first maps start from: the Maps page finds them by these ids the first
+# time it opens (djcytoscape.views.primary)
+WELCOME_QUEST_IMPORT_ID = "bee53060-c332-4f75-85e1-6a8f9503ebe1"
+NEXT_MAP_QUEST_IMPORT_ID = "6feafb56-8b85-47e7-8d85-70ace2318e1d"
 
 
 def load_initial_tenant_data():
@@ -53,6 +58,7 @@ def load_initial_tenant_data():
     create_initial_badge_rarities()
     create_initial_badges()
     create_orientation_campaign()
+    create_next_map_quest()
 
 
 def set_initial_icons(object_list):
@@ -372,7 +378,7 @@ def create_orientation_campaign():
         instructions="<h3>\n    Welcome!\n</h3>\n<p>\n    This is your first intro quest.\n</p>\n<p>\n    This is where you give students information about this quest. You can add images, video tutorials, step-by-step written instructions, links, and anything else students need, in this space.\n</p>\n<p>\n    For this quest, you will probably want to give them a bit of a tour, or explanation, about how you're using ByteDeck. Here's a written intro, in case you want to start with that.\n</p>\n<p>\n    -----\n</p>\n<p>\n</p>\n<p>\n    This website is designed to give you a chance to explore content at your own pace. The content is broken down into larger units (campaigns) and within those are smaller lessons and assignments (quests like this one). As you progress you will need to submit your quests for approval before moving on. This involves following submission instructions and then using the Submit button at the bottom of the quest.\n</p>\n<p>\n    Some quests will be automatically approved and others you will need to wait for an instructor to approve. Your teacher may give you feedback on your submission and/or ask you to fix something about your quest and re-submit it, so make sure you pay attention to any notifications (little numbers that appear next to the bell icon at the top right of your screen).\n</p>\n<p>\n    You can always look at the \"Maps\" (left menu) to see what future quests will be available, so you can continue working without waiting for your quests to be approved.\n</p>",  # noqa
         submission_details="<p>This is where you tell students what they need to do to submit this quest successfully. This quest is automatically approved, so:</p><p>Just submit this quest and the next ones will automatically become available to you.<br></p>",  # noqa
         instructor_notes="<p>This is your teacher cheat sheet - anything that would help you decide whether to approve or return a quest. This quest is automatically approved, so you wouldn't need any notes here, but you will probably find this section useful in future quests.</p>",  # noqa
-        import_id="bee53060-c332-4f75-85e1-6a8f9503ebe1",
+        import_id=WELCOME_QUEST_IMPORT_ID,
         hideable=False,
         verification_required=False,
 
@@ -468,3 +474,47 @@ def create_orientation_campaign():
 
     # Message quest prereq is proficiency badge
     Prereq.add_simple_prereq(message_quest, proficiency_badge)
+
+
+def create_next_map_quest():
+    """Install "Unit 1", a starter quest that follows the Orientation campaign and leads to a map of its own (#1547).
+
+    New deck owners struggle to set up a second map, so this quest is a worked example they can rename,
+    rewrite or delete. Its prerequisite is the Orientation campaign, so it opens once a student has
+    completed every quest in that campaign. It is a map transition: on the Main map it links to a map
+    that starts with it, and the quests that require it appear on that map. Its text explains both to
+    the teacher. The Maps page generates its map along with the Main map, the first time it opens.
+    """
+    quest = Quest.objects.create(
+        name="Unit 1",
+        xp=0,
+        short_description="The first quest of Unit 1, which has a map of its own.",
+        instructions=(
+            "<h3>A quest that starts a new map</h3>"
+            "<p>This quest shows how a course can grow beyond the Main map. Rename it after your first unit, and replace"
+            " this text with an introduction to that unit for your students. If your course doesn't need a second map,"
+            " you can delete it.</p>"
+            "<h3>How it follows Orientation</h3>"
+            "<p>Its prerequisite is the Orientation campaign, so it becomes available once a student has completed every"
+            " quest in that campaign. A campaign can be a prerequisite of any quest or badge: set one with the quest's"
+            " Advanced Prerequisites Form.</p>"
+            "<h3>How it leads to a new map</h3>"
+            "<p>It has <b>Map transition</b> checked, under Advanced in the quest form. On the Main map it is a link to a"
+            " map of its own, which starts with this quest. Any quest that has this one as its prerequisite appears on"
+            " that map, below it, so each unit of your course can have its own map.</p>"
+        ),
+        submission_details=(
+            "<p>This is where you tell students what they need to do to submit this quest. It is automatically approved,"
+            " so:</p><p>Just submit this quest, and the quests on the Unit 1 map will become available to you.</p>"
+        ),
+        instructor_notes=(
+            "<p>This quest is automatically approved, so the quests that require it open as soon as a student submits"
+            " it.</p>"
+        ),
+        import_id=NEXT_MAP_QUEST_IMPORT_ID,
+        map_transition=True,
+        hideable=False,
+        verification_required=False,
+    )
+    quest.tags.add(intro_tag)
+    Prereq.add_simple_prereq(quest, Category.objects.get(title="Orientation"))

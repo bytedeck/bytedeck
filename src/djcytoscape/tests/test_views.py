@@ -12,6 +12,7 @@ from unittest.mock import patch
 from djcytoscape.models import CytoElement, CytoScape
 
 from profile_manager.models import Profile
+from quest_manager.models import Quest
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 
 User = get_user_model()
@@ -524,7 +525,10 @@ class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
 class PrimaryViewTests(ByteDeckTenantTestCase):
 
     def test_primary__generates_initial_map_on_first_view(self):
-        """Viewing the primary map for the first time generates the 'Main' map."""
+        """Viewing the primary map for the first time generates the 'Main' map, and the map that the
+        "Unit 1" starter quest leads to from it (#1547)."""
+        from tenant.initialization import NEXT_MAP_QUEST_IMPORT_ID
+
         # shouldn't be any maps from the start
         self.assertFalse(CytoScape.objects.exists())
 
@@ -535,9 +539,41 @@ class PrimaryViewTests(ByteDeckTenantTestCase):
         # Access the primary map view
         self.assert200('djcytoscape:primary')
 
-        # Should have generated the "Main" map
-        self.assertEqual(CytoScape.objects.count(), 1)
-        self.assertTrue(CytoScape.objects.filter(name="Main").exists())
+        # Should have generated the "Main" map, as the primary one, and the "Unit 1" map below it
+        self.assertEqual(CytoScape.objects.count(), 2)
+        main_map = CytoScape.objects.get(name="Main")
+        self.assertTrue(main_map.is_the_primary_scape)
+        unit_map = CytoScape.objects.get(name="Unit 1")
+        self.assertEqual(unit_map.initial_content_object, Quest.objects.get(import_id=NEXT_MAP_QUEST_IMPORT_ID))
+        self.assertEqual(unit_map.parent_scape, main_map)
+
+    def test_primary__unit_1_on_the_main_map_links_students_to_its_map(self):
+        """On the generated Main map, "Unit 1" follows the Orientation campaign as a link to its own
+        map, and a student who follows the link gets that map (#1547)."""
+        from tenant.initialization import NEXT_MAP_QUEST_IMPORT_ID
+
+        student = User.objects.create_user('student')
+        self.client.force_login(student)
+        self.assert200('djcytoscape:primary')
+
+        quest = Quest.objects.get(import_id=NEXT_MAP_QUEST_IMPORT_ID)
+        node = CytoElement.objects.get(
+            scape__name="Main", group=CytoElement.NODES, selector_id=CytoElement.generate_selector_id(quest))
+        self.assertTrue(node.is_transition)
+        response = self.client.get(node.href)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['scape'].name, "Unit 1")
+
+    def test_primary__next_map_quest_that_is_no_longer_a_map_transition_gets_no_map(self):
+        """A deck whose "Unit 1" quest no longer has Map transition checked before the Maps page
+        first opens gets only the Main map (#1547)."""
+        from tenant.initialization import NEXT_MAP_QUEST_IMPORT_ID
+
+        Quest.objects.filter(import_id=NEXT_MAP_QUEST_IMPORT_ID).update(map_transition=False)
+        self.client.force_login(User.objects.create_user('anyone'))
+        self.assert200('djcytoscape:primary')
+
+        self.assertEqual(list(CytoScape.objects.values_list('name', flat=True)), ["Main"])
 
 
 class RegenerateViewTests(ByteDeckTenantTestCase):

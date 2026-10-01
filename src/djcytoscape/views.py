@@ -20,6 +20,7 @@ from hackerspace_online.decorators import staff_member_required
 from badges.models import BadgeAssertion
 from quest_manager.models import QuestSubmission, Quest
 from siteconfig.models import SiteConfig
+from tenant.initialization import NEXT_MAP_QUEST_IMPORT_ID, WELCOME_QUEST_IMPORT_ID
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .models import CytoScape
@@ -202,11 +203,18 @@ def quest_map_interlink(request, ct_id, obj_id, originating_scape_id):
 @non_public_only_view
 @login_required
 def primary(request):
-    # Check if a map has been created, if not, generate it from the default Welcome quest
-    # the Welcome quests should have been created via data migration when the tenant was created
-    if not CytoScape.objects.exists() and Quest.objects.filter(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1').exists():
-        welcome_quest = Quest.objects.get(import_id='bee53060-c332-4f75-85e1-6a8f9503ebe1')
-        CytoScape.generate_map(welcome_quest, 'Main')
+    # A new deck has no maps until this page first opens: generate its Main map from the Welcome quest
+    # (installed with the deck, by tenant.initialization). The starter quest that follows Orientation
+    # links from Main to a map of its own, so that map is generated now too. The link only leads
+    # somewhere once its map exists: until then quest_map_interlink offers staff the form to generate
+    # it, and gives students a 404 (#1547).
+    if not CytoScape.objects.exists():
+        welcome_quest = Quest.objects.filter(import_id=WELCOME_QUEST_IMPORT_ID).first()
+        if welcome_quest:
+            main_map = CytoScape.generate_map(welcome_quest, 'Main')
+            next_map_quest = Quest.objects.filter(import_id=NEXT_MAP_QUEST_IMPORT_ID, map_transition=True).first()
+            if next_map_quest:
+                CytoScape.generate_map(next_map_quest, next_map_quest.name, parent_scape=main_map)
 
     try:
         scape = CytoScape.objects.get(is_the_primary_scape=True)

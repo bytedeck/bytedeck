@@ -124,13 +124,33 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         self.assertTrue(Category.objects.filter(title="Orientation").exists())
 
     def test_initialization__default_quests_created(self):
-        """ Initialization script should create 6 default Quest objects. """
+        """ Initialization script should create 7 default Quest objects. """
         self.assertTrue(Quest.objects.filter(name="Welcome to ByteDeck!").exists())
         self.assertTrue(Quest.objects.filter(name="ByteDeck Class Contract").exists())
         self.assertTrue(Quest.objects.filter(name="Create an Avatar").exists())
         self.assertTrue(Quest.objects.filter(name="Screenshots").exists())
         self.assertTrue(Quest.objects.filter(name="Who owns your creations?").exists())
         self.assertTrue(Quest.objects.filter(name="Send your teacher a Message").exists())
+        self.assertTrue(Quest.objects.filter(name="Unit 1").exists())
+
+    def test_create_next_map_quest__follows_orientation_and_leads_to_a_new_map(self):
+        """The "Unit 1" starter quest requires the Orientation campaign, is a map transition, and is
+        approved automatically, so a student who finishes Orientation moves straight on to its map (#1547)."""
+        from prerequisites.models import Prereq
+        from tenant.initialization import NEXT_MAP_QUEST_IMPORT_ID
+
+        quest = Quest.objects.get(import_id=NEXT_MAP_QUEST_IMPORT_ID)
+        self.assertEqual(quest.name, "Unit 1")
+        self.assertTrue(quest.map_transition)
+        self.assertFalse(quest.verification_required)
+        self.assertFalse(quest.hideable)
+        self.assertEqual(
+            [prereq.prereq_object for prereq in Prereq.objects.all_parent(quest)],
+            [Category.objects.get(title="Orientation")],
+        )
+        # its text explains both to the teacher
+        self.assertIn("Its prerequisite is the Orientation campaign", quest.instructions)
+        self.assertIn("<b>Map transition</b>", quest.instructions)
 
     def test_initialization__message_quest_notifies_owner(self):
         """ The quest "Send your teacher a Message" should have the deck owner assigned as the specific teacher to notify by default. """
@@ -140,10 +160,11 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
 
     def test_create_orientation_campaign__default_tags_created(self):
         """ test if intro tag is properly assigned to
-        "Welcome to ByteDeck!" + all quests in the orientation campaign.
+        "Welcome to ByteDeck!" + all quests in the orientation campaign + "Unit 1".
         """
         q_intro = Quest.objects.filter(tags__name="intro")
-        self.assertEqual(q_intro.count(), 6)
+        self.assertEqual(q_intro.count(), 7)
+        self.assertTrue(q_intro.filter(name="Unit 1").exists())
         self.assertTrue(q_intro.filter(name="Welcome to ByteDeck!").exists())
         self.assertTrue(q_intro.filter(name="ByteDeck Class Contract").exists())
         self.assertTrue(q_intro.filter(name="Create an Avatar").exists())
