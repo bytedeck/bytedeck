@@ -20,7 +20,7 @@ from django_resized import ResizedImageField
 from django_tenants.utils import get_public_schema_name
 
 from badges.models import BadgeAssertion
-from courses.models import CourseStudent, Rank, Semester
+from courses.models import CourseStudent, Rank, Semester, mark_as_shown
 from notifications.signals import notify
 from quest_manager.models import Quest, QuestSubmission
 from utilities.models import RestrictedFileField
@@ -414,7 +414,10 @@ class Profile(models.Model):
                 "in place before it saves a CourseStudent, since saving one asks for the "
                 "mark: use courses.tests.utils.patch_registration_xp()."
             )
-        self.mark_cached = mark
+        # kept as students are shown it, which is also what decides their mark range (#2826). The
+        # column holds one decimal place anyway, and rounding it here leaves this instance holding
+        # the same value as the saved row.
+        self.mark_cached = None if mark is None else mark_as_shown(mark)
 
         self.save()
         return xp

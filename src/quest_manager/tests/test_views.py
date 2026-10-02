@@ -13,6 +13,7 @@ or they could be moved into a `test_urls.py` module.
 import re
 
 from bs4 import BeautifulSoup
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -7579,6 +7580,20 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
         # a handler that saves nothing would satisfy the line above on its own
         self.assertContains(response, "if (save_draft(true)) return;")
+
+    def test_submission__a_file_too_large_to_upload_is_refused_before_it_is_sent(self):
+        """The page loads the browser's size check with the most one upload can carry, and the
+        attachments input carries its own 16 MB limit, so a file over either is refused as it is
+        chosen: before the draft save sends it to be turned away, or to nginx's bare 413 page
+        (#783)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(
+            response,
+            f'upload-size-check.js?v=1.0" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
+        )
+        soup = BeautifulSoup(response.content, 'html.parser')
+        self.assertEqual(soup.select_one('input[name="attachments"]')['data-max-size'], '16777216')
 
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post

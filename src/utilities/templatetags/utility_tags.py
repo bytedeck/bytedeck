@@ -72,6 +72,17 @@ def fill_in_settings(text):
     return SiteConfig.get().fill_in_settings(text)
 
 
+@register.simple_tag
+def max_upload_request_size():
+    """The most the files chosen in one form may add up to, in bytes, for the browser's check
+    of a file's size before it is uploaded (js/upload-size-check.js, #783).
+
+    Returns:
+        int: settings.MAX_UPLOAD_REQUEST_SIZE.
+    """
+    return settings.MAX_UPLOAD_REQUEST_SIZE
+
+
 # https://docs.djangoproject.com/en/5.2/howto/custom-template-tags/#inclusion-tags
 
 @register.inclusion_tag('utilities/list_of_links.html')
