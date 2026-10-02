@@ -13,6 +13,7 @@ or they could be moved into a `test_urls.py` module.
 import re
 
 from bs4 import BeautifulSoup
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
@@ -7559,6 +7560,20 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         # a handler that saves nothing would satisfy the line above on its own
         self.assertContains(response, "if (save_draft(true)) return;")
 
+    def test_submission__a_file_too_large_to_upload_is_refused_before_it_is_sent(self):
+        """The page loads the browser's size check with the most one upload can carry, and the
+        attachments input carries its own 16 MB limit, so a file over either is refused as it is
+        chosen: before the draft save sends it to be turned away, or to nginx's bare 413 page
+        (#783)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(
+            response,
+            f'upload-size-check.js?v=1.0" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
+        )
+        soup = BeautifulSoup(response.content, 'html.parser')
+        self.assertEqual(soup.select_one('input[name="attachments"]')['data-max-size'], '16777216')
+
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
         to the approve view instead, where their own files are handled separately."""
@@ -7886,6 +7901,27 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         self.save_draft(SimpleUploadedFile("my-work.png", b"a longer, corrected version", content_type="image/png"))
 
         self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
+
+    def test_ajax_save_draft__locks_the_submission_before_it_reads_the_drafts_files(self):
+        """The submission row is locked before the draft's files are read, and only that row.
+
+        A large file keeps the save carrying it busy for a while, and a student who presses
+        Submit meanwhile sends the same file again with the submit. The submit takes this row's
+        lock, so the save taking it too is what makes the later of the two wait and then find
+        the earlier one's copy, where both would otherwise find none and store one each (#2804).
+        """
+        with CaptureQueriesContext(connection) as queries:
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        statements = [query['sql'] for query in queries]
+        locks = [index for index, sql in enumerate(statements) if 'FOR UPDATE' in sql]
+        reads_of_files = [index for index, sql in enumerate(statements) if 'FROM "comments_document"' in sql]
+
+        self.assertEqual(len(locks), 1, 'the submission is locked exactly once')
+        self.assertIn('FOR UPDATE OF "quest_manager_questsubmission"', statements[locks[0]])
+        self.assertTrue(reads_of_files, 'the draft files were read')
+        self.assertLess(locks[0], reads_of_files[0], 'the lock is taken before the files are read')
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 1)
 
     def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
         """Choosing a file the draft already holds and then submitting publishes one copy of it,

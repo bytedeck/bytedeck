@@ -107,6 +107,23 @@ class SaveDraftAttachmentsTest(ByteDeckTenantTestCase):
         self.assertEqual(save_draft_attachments(again, self.draft_comment), 1)
         self.assertEqual(self.draft_comment.document_set.count(), 1)
 
+    def test_save_draft_attachments__a_long_named_file_sent_twice_is_stored_once(self):
+        """A long file name still lets a second copy be recognised (#2805).
+
+        Storage cuts a name too long for the field short and adds a suffix, and the cut can't be
+        undone, so a copy matches the stored file only while the whole path fits: the dated
+        folder, the upload's own folder, and a name of 120 characters here.
+        """
+        name = "a" * 116 + ".txt"
+        for _ in range(2):
+            save_draft_attachments(
+                self.bound_form([SimpleUploadedFile(name, b"file_content", content_type="text/plain")]),
+                self.draft_comment,
+            )
+
+        documents = self.draft_comment.document_set.all()
+        self.assertEqual([document.docfile.name.rsplit("/", 1)[-1] for document in documents], [name])
+
     def test_save_draft_attachments__stores_a_different_file_of_the_same_name(self):
         """Only a copy of what the draft already holds is skipped. A student attaching a corrected
         version under the same name still gets it stored, so nothing is dropped silently."""

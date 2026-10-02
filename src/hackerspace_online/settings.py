@@ -296,6 +296,13 @@ MIDDLEWARE = [
 # the intended cap. 16 MiB leaves headroom under the nginx limit.
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=16 * 1024 * 1024)
 
+# The most the files chosen in one form may add up to, in bytes. nginx refuses a request body
+# over client_max_body_size (17M, nginx/bytedeck.conf.template) before the app sees it, with a
+# bare 413 page, so the browser holds the files a form is about to send to this and says so
+# instead (js/upload-size-check.js, #783). It sits under nginx's cap to leave room for the rest
+# of the form.
+MAX_UPLOAD_REQUEST_SIZE = env.int('MAX_UPLOAD_REQUEST_SIZE', default=16 * 1024 * 1024)
+
 # LOGGING #########################################################
 #
 # With DEBUG=False (production/staging) Django's built-in logging emits almost

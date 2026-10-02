@@ -47,10 +47,13 @@ STORED_NAME_SUFFIX = re.compile(r"_[A-Za-z0-9]{7}$")
 def chosen_name(stored_name):
     """Return the name a stored upload was chosen under.
 
-    Uploads all land in one folder per day, shared by everyone on the deck, and storage will not
-    overwrite: a second `photo.jpg` that day is stored as `photo_Ab3dEf7.jpg`. So the stored name
-    is not the name the student's browser sent, and taking the suffix back off is what lets an
-    upload be recognised as a copy of one already attached.
+    An upload is stored in a folder of its own (``UploadToOwnFolder``) under the name the
+    student's browser sent, unless storage had to shorten a name too long for the field, which
+    it does by cutting it and adding a suffix like `_Ab3dEf7`. Older attachments sit directly in
+    their day's folder, shared by everyone on the deck, where storage, which will not overwrite,
+    stored a second `photo.jpg` that day as `photo_Ab3dEf7.jpg`. So the stored name is not always
+    the name the student's browser sent, and taking the suffix back off is what lets an upload be
+    recognised as a copy of one already attached.
 
     A file genuinely named like a suffixed one (`photo_Ab3dEf7.jpg`) reads here as `photo.jpg`.
     The only consequence is in save_draft_attachments, which also requires an exact size match
