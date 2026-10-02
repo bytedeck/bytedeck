@@ -289,6 +289,25 @@ class MarkRange(models.Model):
             xp += 1
         return xp
 
+    def xp_to_reach_by_day(self, xp_for_100_percent, days_in_semester):
+        """The XP that reaches this range on each class day of a semester: its line on the XP
+        Progress chart.
+
+        Each day's XP is xp_to_reach() at that point in the semester, so on today's date the line
+        is at the XP that Mark Calculations lists for the range (#2826).
+
+        Args:
+            xp_for_100_percent (int): the XP the course is out of.
+            days_in_semester (int): the semester's class days.
+
+        Returns:
+            list[int]: the XP for each class day, from the first.
+        """
+        return [
+            self.xp_to_reach(xp_for_100_percent, day / days_in_semester)
+            for day in range(1, days_in_semester + 1)
+        ]
+
 
 def invalidate_ranks_cache():
     """Remove the cached rank list (see RankManager.get_ranks_cached).

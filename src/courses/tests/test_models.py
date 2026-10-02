@@ -111,6 +111,22 @@ class MarkRangeAsShownTest(ByteDeckTenantTestCase):
                             shown_one_less = mark_as_shown(mark_for_xp(xp - 1, fraction_complete, xp_for_100_percent))
                             self.assertLess(shown_one_less, Decimal(str(minimum)))
 
+    def test_xp_to_reach_by_day__the_xp_to_reach_on_each_class_day(self):
+        """A range's line on the XP Progress chart is the XP that reaches it on each class day, so
+        on any day it is at the XP listed for the range that day. It rounds a mark as the rest of
+        the app does: 100 class days into 130, 3477 XP of 7800 works out to 57.94999...%, shown as
+        57.9%, so a 58% range takes 3478 XP that day."""
+        range_58 = MarkRange(minimum_mark=58)
+
+        line = range_58.xp_to_reach_by_day(7800, 130)
+
+        self.assertEqual(len(line), 130)
+        self.assertEqual(mark_as_shown(mark_for_xp(3477, 100 / 130, 7800)), Decimal('57.9'))
+        self.assertEqual(line[99], 3478)
+        self.assertEqual(line[99], range_58.xp_to_reach(7800, 100 / 130))
+        # a semester with no class days has no line
+        self.assertEqual(range_58.xp_to_reach_by_day(7800, 0), [])
+
 
 class MarkRangeManagerTest(ByteDeckTenantTestCase):
     @classmethod

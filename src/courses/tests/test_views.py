@@ -2540,6 +2540,7 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.assertEqual(json.loads(response.content), {
             'days_in_semester': 0,
             'xp_data': [],
+            'mark_lines': [],
             'xp_for_100_percent': self.course.xp_for_100_percent,
             'uses_marks': self.course.uses_marks,
         })
@@ -2558,6 +2559,7 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         self.assertEqual(json.loads(response.content), {
             'days_in_semester': 0,
             'xp_data': [],
+            'mark_lines': [],
             'xp_for_100_percent': 0,
             'uses_marks': False,
         })
@@ -2622,6 +2624,32 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         response = self.client.post(url, {'course': art.id}, HTTP_X_REQUESTED_WITH='XMLHttpRequest')
 
         self.assertEqual(json.loads(response.content)['xp_for_100_percent'], 500)
+
+    @freeze_time('2024-02-01')
+    def test_ajax_progress_chart__draws_each_mark_range_at_the_xp_that_reaches_it(self):
+        """Each of the charted course's mark ranges comes with its line: the XP that reaches it on
+        each class day, worked out on the server so it rounds a mark as the XP listed for the
+        range does. On today's date the line is at that listed XP (#2826). A range for another
+        course, or an inactive one, has no line."""
+        MarkRange.objects.all().delete()
+        everyone = baker.make(MarkRange, minimum_mark=49.5)
+        this_course = baker.make(MarkRange, minimum_mark=72.5, courses=[self.course])
+        baker.make(MarkRange, minimum_mark=60, courses=[baker.make(Course)])
+        baker.make(MarkRange, minimum_mark=85.5, active=False)
+        self.client.force_login(self.student)
+
+        response = self.client.post(
+            reverse('courses:ajax_progress_chart', args=[self.student.pk]), HTTP_X_REQUESTED_WITH='XMLHttpRequest')
+
+        xp_for_100_percent = self.course.xp_for_100_percent
+        days = self.semester.num_days()
+        mark_lines = json.loads(response.content)['mark_lines']
+        self.assertEqual(mark_lines, [
+            {'mark': 49.5, 'xp': everyone.xp_to_reach_by_day(xp_for_100_percent, days)},
+            {'mark': 72.5, 'xp': this_course.xp_to_reach_by_day(xp_for_100_percent, days)},
+        ])
+        today = mark_lines[1]['xp'][self.semester.days_so_far() - 1]
+        self.assertEqual(today, this_course.xp_to_reach(xp_for_100_percent, self.semester.fraction_complete()))
 
     @freeze_time('2024-02-01')
     def test_ajax_progress_chart__falls_back_to_a_course_the_student_is_in(self):
@@ -2931,7 +2959,8 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
     def test_ajax_progress_chart__reports_whether_the_charted_course_uses_marks(self):
         """The chart draws its mark lines and its percent axis from the course's total. A course
-        run on XP alone has no percentage, so the chart is told to leave both off (issue #403)."""
+        run on XP alone has no percentage, so the chart is told to leave both off (issue #403),
+        and is given no mark lines."""
         self.client.force_login(self.student)
         url = reverse('courses:ajax_progress_chart', args=[self.student.pk])
 
@@ -2942,6 +2971,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
 
         self.assertTrue(json.loads(graded.content)['uses_marks'])
         self.assertFalse(json.loads(for_joy.content)['uses_marks'])
+        self.assertEqual(json.loads(for_joy.content)['mark_lines'], [])
 
     def test_mark_calculations__reports_each_courses_own_xp(self):
         """Every course gets a tab reporting how much of the student's XP counts toward it.
