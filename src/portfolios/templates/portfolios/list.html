@@ -1,6 +1,8 @@
 {% extends "portfolios/base.html" %}
 {% load crispy_forms_tags %}
 
+{% block head %}{% include 'snippets/bootstrap_table.html' %}{% endblock %}
+
 {% block heading_inner %}{{ config.site_name_short }} Portfolios{% endblock %}
 
 {% block content %}
@@ -8,21 +10,17 @@
     <p><a class="btn btn-primary"
           href="{% url 'portfolios:current_user' %}">View Your Portfolio</a></p>
 
-    <!-- <table class="table table-striped"> -->
     {% include 'snippets/table_loading.html' %}
-    <table data-toggle='table'
-            data-sort-name='username'
-            data-sort-order='asc'
-            data-search='true'
-            data-show-columns='true'
-            data-icons='icons'
-            data-icons-prefix='fa'>
+    <table {% include 'snippets/list_table_attrs.html' %}
+           data-sort-name="username"
+           data-sort-order="asc"
+           data-show-columns="true">
       <thead>
         <tr>
-          <th data-sortable='true' data-field='username'>Username</th>
-          <th data-sortable='true' data-field='shared'>Shared</th>
-          <th data-sortable='true' data-field='uuid'>UUID</th>
-          <th data-sortable='true' data-field='id'>pk</th>
+          <th data-field="username" data-sortable="true">Username</th>
+          <th data-field="shared" data-sortable="true">Shared</th>
+          <th data-field="uuid" data-sortable="true">UUID</th>
+          <th data-field="id" data-sortable="true">pk</th>
         </tr>
       </thead>
       <tbody>
