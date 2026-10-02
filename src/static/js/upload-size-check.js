@@ -139,8 +139,9 @@ window.uploadSizeCheck = window.uploadSizeCheck || (function () {
   /**
    * Mark a file input as refused, with the note saying why among the things that describe it,
    * so a screen reader gives the reason whenever the input is focused; or take that back off.
-   * Descriptions the input already had stay, and an aria-invalid this script didn't set (the
-   * server's, for an error on the last submit) is left alone.
+   * Descriptions the input already had stay. So does an aria-invalid it already had (the
+   * server's, for an error on the last submit, which is still on the page): taking the refusal
+   * back off puts it back.
    * @param {HTMLInputElement} input
    * @param {string} noteId - the id of the input's note.
    * @param {boolean} refused - whether the input's files were just refused.
@@ -149,13 +150,21 @@ window.uploadSizeCheck = window.uploadSizeCheck || (function () {
     var ids = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter(function (id) {
       return id && id !== noteId;
     });
+    // set only while the input stands refused: its aria-invalid from before ("" if it had none)
+    var invalidBefore = input.dataset.uploadSizeInvalidBefore;
     if (refused) {
       ids.push(noteId);
+      if (invalidBefore === undefined) {
+        input.dataset.uploadSizeInvalidBefore = input.getAttribute("aria-invalid") || "";
+      }
       input.setAttribute("aria-invalid", "true");
-      input.dataset.uploadSizeRefused = "true";
-    } else if (input.dataset.uploadSizeRefused) {
-      input.removeAttribute("aria-invalid");
-      delete input.dataset.uploadSizeRefused;
+    } else if (invalidBefore !== undefined) {
+      if (invalidBefore) {
+        input.setAttribute("aria-invalid", invalidBefore);
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      delete input.dataset.uploadSizeInvalidBefore;
     }
     if (ids.length) {
       input.setAttribute("aria-describedby", ids.join(" "));

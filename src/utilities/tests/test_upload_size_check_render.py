@@ -156,6 +156,17 @@ class UploadSizeCheckRenderTest(SimpleTestCase):
         # no longer invalid, and described by what described it before
         self.assertEqual(self._aria("#limited"), [None, "limited-help", None])
 
+    def test_upload_size_check__an_input_the_server_marked_invalid_stays_marked(self):
+        """An input the server marked invalid, for an error on the last submit, is still marked
+        invalid after a refused file and then one within the limit: that error is still on the page."""
+        self.page.eval_on_selector("#limited", "input => input.setAttribute('aria-invalid', 'true')")
+        self._choose("#limited", 200)
+        self._choose("#limited", 50)
+
+        self.assertEqual(self._chosen("#limited"), 1)
+        self.assertEqual(self._notes("#limited"), [])
+        self.assertEqual(self._aria("#limited"), ["true", "limited-help", None])
+
     def test_upload_size_check__several_files_over_the_limit_are_counted(self):
         """When more than one chosen file is over the limit, the note says how many."""
         self._choose("#limited-several", 200, 50, 300)

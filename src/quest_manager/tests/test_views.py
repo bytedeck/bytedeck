@@ -7569,7 +7569,7 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertContains(
             response,
-            f'upload-size-check.js?v=1.0" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
+            f'upload-size-check.js?v=1.1" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
         )
         soup = BeautifulSoup(response.content, 'html.parser')
         attachments = soup.select_one('input[name="attachments"]')
