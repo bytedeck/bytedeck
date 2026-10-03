@@ -282,6 +282,7 @@ def create_initial_badges():
     # prerequisite yet isn't open to every student; it can be changed in Site Configuration
     config = SiteConfig.get()
     config.default_quest_prerequisite = bytedeck_proficiency
+    config.full_clean()
     config.save(update_fields=['default_quest_prerequisite'])
 
     # Awards

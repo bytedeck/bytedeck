@@ -443,6 +443,16 @@ class QuestPrereqsUpdate(ObjectPrereqsFormView):
 
 class QuestCopy(QuestCreate):
     def get_form_kwargs(self):
+        """Fill the create form with a copy of the quest being copied.
+
+        The form is bound to an unsaved copy of that quest, named with " - COPY" and given a new
+        import_id, and starts with the quest's tags and with the quest itself as the copy's
+        prerequisite.
+
+        Returns:
+            dict: the quest form's keyword arguments, with `instance` the unsaved copy and `initial`
+            holding its tags and prerequisite.
+        """
         kwargs = super().get_form_kwargs()
 
         # by default, set the quest this was copied from as the new_quest_prerequisite
