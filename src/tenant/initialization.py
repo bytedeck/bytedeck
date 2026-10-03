@@ -278,6 +278,13 @@ def create_initial_badges():
     )
     bytedeck_proficiency.tags.add(intro_tag)
 
+    # the deck's new quests start out requiring this badge, so a quest the teacher hasn't given a
+    # prerequisite yet isn't open to every student; it can be changed in Site Configuration
+    config = SiteConfig.get()
+    config.default_quest_prerequisite = bytedeck_proficiency
+    config.full_clean()
+    config.save(update_fields=['default_quest_prerequisite'])
+
     # Awards
     badge_type = BadgeType.objects.get(name="Award")  # created in previous data migration
     award_badges = Badge.objects.bulk_create([
