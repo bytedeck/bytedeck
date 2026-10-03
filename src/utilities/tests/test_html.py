@@ -376,6 +376,15 @@ class LinkEmbedsTests(SimpleTestCase):
         html = '<iframe src="//www.youtube.com/embed/1DKm96Ftfko?rel=0&amp;start=90&amp;end=120&amp;enablejsapi=1"></iframe>'
         self.assertIn('<a href="https://www.youtube.com/watch?v=1DKm96Ftfko&amp;t=90s">', link_embeds(html))
 
+    def test_link_embeds__an_unusable_start_time_is_left_out(self):
+        """A start time that isn't a plain number of seconds is left out of the link, rather than
+        stopping the email: more digits than int() takes from a string, a character that only
+        looks like a digit, or zero."""
+        for start in ("9" * 5000, "\u00b2", "0"):
+            with self.subTest(start=start[:10]):
+                html = f'<iframe src="//www.youtube.com/embed/1DKm96Ftfko?start={start}"></iframe>'
+                self.assertIn('<a href="https://www.youtube.com/watch?v=1DKm96Ftfko">', link_embeds(html))
+
     def test_link_embeds__a_vimeo_player_links_to_its_page(self):
         """A Vimeo player links to the video's page on vimeo.com."""
         html = '<p><iframe src="//player.vimeo.com/video/76979871" class="note-video-clip"></iframe></p>'

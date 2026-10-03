@@ -85,6 +85,9 @@ _VIDEO_PAGES = (
 # an opening <iframe> or <video> tag, however it's written
 _EMBED_TAG_RE = re.compile(r"<\s*(?:iframe|video)\b", re.IGNORECASE)
 
+# a player's start time: whole seconds in plain digits, up to 999999 (over 277 hours)
+_START_SECONDS_RE = re.compile(r"[0-9]{1,6}")
+
 
 def link_embeds(html, root_url=""):
     """Put a link in place of each video or page embedded in a fragment of HTML.
@@ -126,10 +129,12 @@ def link_embeds(html, root_url=""):
         for player, page, start_at in _VIDEO_PAGES:
             match = player.match(address)
             if match:
-                # the start time the editor's Embed Video dialog gives a YouTube player
+                # the start time the editor's Embed Video dialog gives a YouTube player, in whole
+                # seconds; anything else (more digits than a video runs to, or a character that
+                # only looks like a digit) is left out of the link
                 start = parse_qs(urlsplit(address).query).get("start", [""])[0]
                 page = page.format(match.group(1))
-                if start_at and start.isdigit() and int(start):
+                if start_at and _START_SECONDS_RE.fullmatch(start) and int(start):
                     page += start_at.format(int(start))
                 address, label = page, "Watch the video"
                 break
