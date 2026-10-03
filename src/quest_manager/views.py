@@ -386,6 +386,22 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
+    def get_initial(self):
+        """Start the new quest with the deck's default prerequisite as its badge prerequisite (#276).
+
+        A quest with no prerequisite is available to every student once it's published, so a deck
+        can name a badge (Site Configuration's Default quest prerequisite) that its new quests
+        require until the teacher changes or removes it under Basic Prerequisites.
+
+        Returns:
+            dict: the form's initial data, with `new_badge_prerequisite` when the deck has a default.
+        """
+        initial = super().get_initial()
+        default_prerequisite = SiteConfig.get().get_default_quest_prerequisite()
+        if default_prerequisite:
+            initial["new_badge_prerequisite"] = default_prerequisite
+        return initial
+
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
@@ -432,9 +448,11 @@ class QuestCopy(QuestCreate):
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
-        # Set initial tags and prerequisite for the form
+        # Set initial tags and prerequisite for the form. The quest it was copied from is the copy's
+        # prerequisite, so the deck's default badge prerequisite (QuestCreate.get_initial) is left out.
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
+        kwargs["initial"].pop("new_badge_prerequisite", None)
 
         # Create a new Quest instance based on the copied quest
         new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])

@@ -71,6 +71,7 @@ class SiteConfigForm(forms.ModelForm):
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
                 "students_choose_xp_course",
+                "default_quest_prerequisite",
                 "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",

@@ -18,6 +18,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
@@ -3005,6 +3006,55 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertRedirects(response, new_quest.get_absolute_url())
         self.assertEqual(new_quest.prereqs().count(), 2)
 
+    def _set_default_quest_prerequisite(self, badge):
+        """Set the deck's default quest prerequisite (Site Configuration) to `badge`, or to none.
+
+        The cached SiteConfig outlives the test's rollback, so it's cleared once the test is done.
+        """
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = badge
+        config.save()
+        self.addCleanup(cache.clear)
+
+    def test_quest_create__starts_with_the_default_prerequisite(self):
+        """The create form comes up with the deck's default quest prerequisite chosen as the new quest's
+        badge prerequisite, for a teacher and for a TA (#276)."""
+        default_badge = baker.make(Badge, name="Default Badge")
+        self._set_default_quest_prerequisite(default_badge)
+
+        for user in (self.test_teacher, self._make_TA()):
+            self.client.force_login(user)
+            response = self.client.get(reverse('quests:quest_create'))
+
+            self.assertEqual(response.context['form'].initial['new_badge_prerequisite'], default_badge)
+            badge_select = BeautifulSoup(response.content, 'html.parser').find('select', attrs={'name': 'new_badge_prerequisite'})
+            self.assertEqual([option['value'] for option in badge_select.find_all('option', selected=True)], [str(default_badge.pk)])
+
+    def test_quest_create__without_a_default_prerequisite(self):
+        """With no default quest prerequisite set, the create form leaves the badge prerequisite empty (#276)."""
+        self._set_default_quest_prerequisite(None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
+    def test_quest_create__default_prerequisite_deleted_while_the_config_is_cached(self):
+        """Deleting the default badge clears the setting without saving the SiteConfig, so the cached
+        config still holds the badge's id: the create form opens anyway, with no badge filled in (#276)."""
+        default_badge = baker.make(Badge)
+        default_badge_id = default_badge.id  # delete() clears the instance's id
+        self._set_default_quest_prerequisite(default_badge)
+        SiteConfig.get()  # cache the config while it names the badge
+        default_badge.delete()
+        self.assertEqual(SiteConfig.get().default_quest_prerequisite_id, default_badge_id)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
     def test_quest_update__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
         self.client.force_login(self.test_teacher)
@@ -3336,6 +3386,20 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+
+    def test_quest_copy__leaves_out_the_default_prerequisite(self):
+        """A copy's prerequisite is the quest it was copied from, so the form doesn't also fill in the
+        deck's default quest prerequisite as a badge prerequisite (#276)."""
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = baker.make(Badge)
+        config.save()
+        self.addCleanup(cache.clear)  # the cached SiteConfig outlives the test's rollback
+        self.client.force_login(self.test_teacher)
+
+        form_data = self.assert200('quests:quest_copy', args=[self.quest.id]).context['form'].initial
+
+        self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+        self.assertNotIn('new_badge_prerequisite', form_data)
 
     def test_quest_copy__teacher_post_creates_copy(self):
         """ values after being saved is the same as copied quest + '- COPY' being appended to name """
