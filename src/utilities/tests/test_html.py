@@ -370,6 +370,12 @@ class LinkEmbedsTests(SimpleTestCase):
             'https://www.youtube.com/watch?v=1DKm96Ftfko</a></span></p>',
         )
 
+    def test_link_embeds__a_youtube_player_keeps_its_start_time(self):
+        """A YouTube player set to start part-way through (the editor's Embed Video start time)
+        links to its watch page at that time."""
+        html = '<iframe src="//www.youtube.com/embed/1DKm96Ftfko?rel=0&amp;start=90&amp;end=120&amp;enablejsapi=1"></iframe>'
+        self.assertIn('<a href="https://www.youtube.com/watch?v=1DKm96Ftfko&amp;t=90s">', link_embeds(html))
+
     def test_link_embeds__a_vimeo_player_links_to_its_page(self):
         """A Vimeo player links to the video's page on vimeo.com."""
         html = '<p><iframe src="//player.vimeo.com/video/76979871" class="note-video-clip"></iframe></p>'

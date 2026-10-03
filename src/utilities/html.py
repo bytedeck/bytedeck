@@ -6,6 +6,7 @@ import html2text
 import bleach
 import html as html_module
 import re
+from urllib.parse import parse_qs, urlsplit
 
 from bs4 import BeautifulSoup
 from django.utils.html import strip_tags
@@ -69,11 +70,16 @@ def textify(html):
 
 # The page a video player's address stands for, for the players the editor embeds, so a link
 # opens the video's own page rather than a bare player: (pattern for the player's address, with
-# the video's id as its group; the video's page, formatted with that id).
+# the video's id as its group; the video's page, formatted with that id; how the page is told to
+# start part-way through, formatted with the seconds the player starts at, or None when the
+# editor gives the player no start time).
 _VIDEO_PAGES = (
-    (re.compile(r"^https?://(?:www\.)?youtube(?:-nocookie)?\.com/embed/([\w-]+)"), "https://www.youtube.com/watch?v={}"),
-    (re.compile(r"^https?://player\.vimeo\.com/video/(\d+)"), "https://vimeo.com/{}"),
-    (re.compile(r"^https?://(?:www\.)?dailymotion\.com/embed/video/(\w+)"), "https://www.dailymotion.com/video/{}"),
+    (
+        re.compile(r"^https?://(?:www\.)?youtube(?:-nocookie)?\.com/embed/([\w-]+)"),
+        "https://www.youtube.com/watch?v={}", "&t={}s",
+    ),
+    (re.compile(r"^https?://player\.vimeo\.com/video/(\d+)"), "https://vimeo.com/{}", None),
+    (re.compile(r"^https?://(?:www\.)?dailymotion\.com/embed/video/(\w+)"), "https://www.dailymotion.com/video/{}", None),
 )
 
 # an opening <iframe> or <video> tag, however it's written
@@ -86,8 +92,8 @@ def link_embeds(html, root_url=""):
     An email client shows no embedded player: it drops an <iframe>, and few play a <video>. So a
     video in an announcement left nothing behind in its email (#1249). Each one becomes a line
     linking to it: "Watch the video:" and the video's own page for a YouTube, Vimeo or Dailymotion
-    player, its file for a <video>, and "Open the embedded page:" and its address for anything
-    else embedded, such as a slide deck. The line is inline, as the embed was, since the editor
+    player (from the time a YouTube player was set to start at), its file for a <video>, and
+    "Open the embedded page:" and its address for anything else embedded, such as a slide deck. The line is inline, as the embed was, since the editor
     puts an embed inside a paragraph.
 
     An embed is left as it is when there's no web page to send a reader to: no address, one that
@@ -117,10 +123,15 @@ def link_embeds(html, root_url=""):
             continue
 
         label = "Watch the video" if embed.name == "video" else "Open the embedded page"
-        for player, page in _VIDEO_PAGES:
+        for player, page, start_at in _VIDEO_PAGES:
             match = player.match(address)
             if match:
-                address, label = page.format(match.group(1)), "Watch the video"
+                # the start time the editor's Embed Video dialog gives a YouTube player
+                start = parse_qs(urlsplit(address).query).get("start", [""])[0]
+                page = page.format(match.group(1))
+                if start_at and start.isdigit() and int(start):
+                    page += start_at.format(int(start))
+                address, label = page, "Watch the video"
                 break
 
         line = soup.new_tag("span")
