@@ -29,9 +29,19 @@ SETTING_TAG = re.compile(r'\[\[([^\[\]]+)\]\]')
 
 
 def _setting_key(name):
-    """A setting's name the way a [[...]] tag is matched against it: in lower case, with its
-    spacing evened out, so [[Site Name, Short]] matches "Site Name, Short"."""
-    return ' '.join(name.split()).lower()
+    """Return a setting's name the way a [[...]] tag is matched against it.
+
+    In lower case, with its spacing evened out and each comma followed by one space, so
+    [[Site Name, Short]], [[site name,short]] and [[Site Name , Short]] all match the label
+    "Site Name, Short".
+
+    Args:
+        name (str): a setting's field name or label, or the text between a tag's brackets.
+
+    Returns:
+        str: the name as it is looked up.
+    """
+    return ' '.join(re.sub(r'\s*,\s*', ', ', name).split()).lower()
 
 
 def get_default_deck_owner():
@@ -400,7 +410,15 @@ class SiteConfig(models.Model):
                 values[_setting_key(key)] = value
 
         def fill(match):
-            """The named setting's value, or the tag untouched when it names none."""
+            """Return what a [[...]] tag is replaced with.
+
+            Args:
+                match (re.Match): a tag found by SETTING_TAG, with the text between its
+                    brackets as its first group.
+
+            Returns:
+                str: the setting it names, escaped, or the tag as written when it names none.
+            """
             # the editor stores a space typed between words as &nbsp; at times
             key = _setting_key(unescape(match.group(1)))
             return escape(values[key]) if key in values else match.group(0)

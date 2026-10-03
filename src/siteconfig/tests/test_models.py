@@ -351,10 +351,11 @@ class SiteConfigFillInSettingsTest(ByteDeckTenantTestCase):
 
     def test_fill_in_settings__by_field_name_or_label(self):
         """A setting can be named by its field name, by that name with spaces, or by its label,
-        in any case and with any spacing, including the &nbsp; the editor sometimes stores."""
+        in any case and with any spacing, around a comma too, including the &nbsp; the editor
+        sometimes stores."""
         for named in (
             '[[site_name_short]]', '[[site name short]]', '[[Site Name, Short]]', '[[ SITE_NAME_SHORT ]]',
-            '[[Site&nbsp;Name,&nbsp;Short]]',
+            '[[Site&nbsp;Name,&nbsp;Short]]', '[[Site Name , Short]]', '[[site name,short]]',
         ):
             with self.subTest(named=named):
                 self.assertEqual(self.config.fill_in_settings(f'<p>Welcome to {named}!</p>'), '<p>Welcome to Hackerspace!</p>')
