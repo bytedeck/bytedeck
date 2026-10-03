@@ -3,7 +3,7 @@ import warnings
 from bs4 import MarkupResemblesLocatorWarning
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
-from utilities.html import EMBEDDED_CONTENT_TAGS, is_empty_html, textify, urlize
+from utilities.html import EMBEDDED_CONTENT_TAGS, is_empty_html, link_embeds, textify, urlize
 from comments.models import clean_html
 
 
@@ -353,3 +353,60 @@ class IsEmptyHtmlTests(SimpleTestCase):
         """
         self.assertFalse(is_empty_html("<p>&lt;img&gt;</p>"))
 
+
+class LinkEmbedsTests(SimpleTestCase):
+    """Tests for `utilities.html.link_embeds`, which puts a link where an email can't show what
+    is embedded (#1249)."""
+
+    def test_link_embeds__a_youtube_player_links_to_its_watch_page(self):
+        """The editor's YouTube player becomes a link to the video's own page, in its place."""
+        html = (
+            '<p><iframe frameborder="0" src="//www.youtube.com/embed/1DKm96Ftfko?rel=0" width="640" height="360" '
+            'class="note-video-clip"></iframe></p>'
+        )
+        self.assertEqual(
+            link_embeds(html),
+            '<p><span>Watch the video: <a href="https://www.youtube.com/watch?v=1DKm96Ftfko">'
+            'https://www.youtube.com/watch?v=1DKm96Ftfko</a></span></p>',
+        )
+
+    def test_link_embeds__a_vimeo_player_links_to_its_page(self):
+        """A Vimeo player links to the video's page on vimeo.com."""
+        html = '<p><iframe src="//player.vimeo.com/video/76979871" class="note-video-clip"></iframe></p>'
+        self.assertIn('Watch the video: <a href="https://vimeo.com/76979871">https://vimeo.com/76979871</a>', link_embeds(html))
+
+    def test_link_embeds__a_video_file_links_to_the_file(self):
+        """A <video> links to its file, from its own address or its first source. An address on
+        the deck itself is made whole with the deck's root URL, so it opens from an inbox."""
+        self.assertIn(
+            'Watch the video: <a href="https://deck.example.com/media/clip.mp4">',
+            link_embeds('<video controls src="/media/clip.mp4"></video>', 'https://deck.example.com'),
+        )
+        self.assertIn(
+            'Watch the video: <a href="https://cdn.example.com/clip.webm">',
+            link_embeds('<video controls><source src="https://cdn.example.com/clip.webm" type="video/webm"></video>'),
+        )
+
+    def test_link_embeds__another_embedded_page_links_to_its_address(self):
+        """An embed that isn't a video player, such as a slide deck, links to its own address."""
+        self.assertEqual(
+            link_embeds('<iframe src="https://docs.google.com/presentation/d/abc/embed"></iframe>'),
+            '<span>Open the embedded page: <a href="https://docs.google.com/presentation/d/abc/embed">'
+            'https://docs.google.com/presentation/d/abc/embed</a></span>',
+        )
+
+    def test_link_embeds__html_without_embeds_is_left_as_written(self):
+        """HTML with nothing embedded comes back exactly as it went in."""
+        for html in ('<p>Hello<br>there</p>', '', None):
+            with self.subTest(html=html):
+                self.assertEqual(link_embeds(html), html)
+
+    def test_link_embeds__an_embed_without_a_web_address_is_left_alone(self):
+        """No link is made where there's no web page to open: an embed with no address, one
+        that runs script, or one on the deck itself when the deck's address isn't known."""
+        for html in (
+            '<iframe></iframe>', '<iframe src="javascript:alert(1)"></iframe>', '<video></video>',
+            '<video src="/media/clip.mp4"></video>',
+        ):
+            with self.subTest(html=html):
+                self.assertEqual(link_embeds(html), html)
