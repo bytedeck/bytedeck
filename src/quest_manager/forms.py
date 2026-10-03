@@ -117,6 +117,16 @@ class QuestForm(forms.ModelForm):
                   'hideable', 'sort_order', 'date_available', 'time_available', 'date_expired', 'time_expired',
                   'available_outside_course', 'archived', 'editor')
 
+        help_texts = {
+            # the quest's text fills in the settings it names (#435)
+            'instructions': (
+                "Write a Site Configuration setting between double square brackets, such as [[Site Name, Short]] "
+                "or [[Custom name for student]], to show your deck's own value for it. An image, such as "
+                "[[Banner Image]], gives its address. This works in the Submission Instructions and Instructor "
+                "Notes too, and lets a quest shared through the Library show the names of whichever deck uses it."
+            ),
+        }
+
         date_options = {
             'showMeridian': False,
             # 'todayBtn': True,

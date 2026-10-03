@@ -5317,6 +5317,27 @@ class DetailViewTest(ByteDeckTenantTestCase):
         response = self.assert200('quests:quest_detail', args=[self.quest.id])
         self.assertNotContains(response, 'Export this quest to the Library')
 
+    def test_detail__quest_text_shows_the_settings_it_names(self):
+        """A setting named between double square brackets in Quest Details, Submission
+        Instructions or Instructor Notes shows as this deck's value for it (#435)."""
+        config = SiteConfig.get()
+        config.site_name_short = 'Hackerspace'
+        config.custom_name_for_student = 'Hacker'
+        config.save()
+        quest = baker.make(
+            Quest,
+            instructions='<p>Welcome to [[Site Name, Short]]!</p>',
+            submission_details='<p>Every [[custom_name_for_student]] hands in a screenshot.</p>',
+            instructor_notes='<p>Marked by the [[site_name_short]] teachers.</p>',
+        )
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200('quests:quest_detail', args=[quest.id])
+
+        self.assertContains(response, '<p>Welcome to Hackerspace!</p>', html=True)
+        self.assertContains(response, '<p>Every Hacker hands in a screenshot.</p>', html=True)
+        self.assertContains(response, '<p>Marked by the Hackerspace teachers.</p>', html=True)
+
 
 class ApproveViewTest(ByteDeckTenantTestCase):
     """ Tests for:
