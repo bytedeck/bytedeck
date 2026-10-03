@@ -213,6 +213,11 @@
               <a class="btn btn-danger" href="{% url 'quests:drop' submission.id %}" role="button"
                  title="Remove this quest from your &quot;In Progress&quot; tab, delete any saved draft, and it will re-appear in your Available quests tab.">Drop Quest</a>
             {% endif %}
+            {# Shown while a submit waits for a file the draft save is still uploading, so the #}
+            {# press visibly did something before the page moves on (#2834) #}
+            <span id="submit-waiting" class="text-muted" role="status" hidden>
+              <i class="fa fa-spinner fa-spin fa-fw"></i> Waiting for your file to finish uploading...
+            </span>
           {% endif %}
           {% comment %} TAs can copy the quest from the full submission view too, not just the
              In Progress/Completed tab preview (#141). Shown regardless of the quest's published
@@ -323,13 +328,67 @@
                 // save after it that carries the file: wait for the one in flight to land.
                 // Only for so long, since a save that never comes back would leave this
                 // asking forever; the autosave a minute later carries the file either way.
+                // Once the form is being submitted the file goes with that instead.
                 var waited = 0;
                 (function save_when_free() {
-                    if (save_draft(true)) return;
+                    if (submitting || save_draft(true)) return;
                     waited += 500;
                     if (waited <= 30000) window.setTimeout(save_when_free, 500);
                 })();
             });
+
+            // A submit pressed while a draft save is still uploading files the student chose
+            // would send those files a second time, and wait on both uploads (#2834). So it
+            // waits for that save instead, saying so beside the button, and then goes ahead
+            // without them: the save has stored them and emptied their inputs. If the save
+            // fails, the files are still in their inputs and go with the submit as before. If
+            // the server refuses one, the submit stops there, so the reason under the input
+            // can be read. Caught before the page's other submit handlers (the capture phase,
+            // and stopped there), so the double-submission and unsaved-changes guards only
+            // ever see the submit that really goes. Browsers without requestSubmit(), which
+            // sends the form again as the same button, submit as they always have.
+            var mainForm = document.getElementById('submission-main-form');
+            if (mainForm && mainForm.requestSubmit && $('#save-draft-btn').length) {
+                mainForm.addEventListener('submit', function(event) {
+                    if (resuming) {
+                        resuming = false;
+                        submitting = true;
+                        return;
+                    }
+                    if (submitWaiting) {
+                        // already waiting: a second press changes nothing
+                        event.preventDefault();
+                        event.stopImmediatePropagation();
+                        return;
+                    }
+                    if (!uploading_chosen_files()) {
+                        submitting = true;
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    // Where listeners at the form run in the order they were added rather than
+                    // capture first, the double-submission guard has seen this one already.
+                    $(mainForm).data('submitted', false);
+                    var submitter = event.submitter || null;
+                    var refused = false;
+                    submitting = true;
+                    submitWaiting = true;
+                    $('#submit-waiting').prop('hidden', false);
+                    draftSave.done(function(json) {
+                        refused = !$.isEmptyObject((json && json.file_errors) || {});
+                    }).always(function() {
+                        submitWaiting = false;
+                        $('#submit-waiting').prop('hidden', true);
+                        if (refused) {
+                            submitting = false;
+                            return;
+                        }
+                        resuming = true;
+                        mainForm.requestSubmit(submitter);
+                    });
+                }, true);
+            }
 
             // autosave every 60 seconds, unattended: a failure here reports itself in the
             // page instead of in a modal the student did not ask for
@@ -338,7 +397,21 @@
 
         });
 
+        // The draft save on its way, and the files it is carrying by input name, from when it
+        // leaves until it lands: what a submit pressed meanwhile waits for (#2834).
+        var draftSave = null;
+        var draftSaveFiles = {};
+        // Set once the form is being submitted: from then on no draft save starts, since the
+        // submit is carrying the whole form, files included.
+        var submitting = false;
+        // Set while a submit waits for the draft save in flight to land.
+        var submitWaiting = false;
+        // Set for the one submit sent again once that wait is over, so it goes straight through.
+        var resuming = false;
+
         function save_draft(pressed) {
+            if (submitting) return false;
+
             // scoped to the main comment form: question answers add their own summernote editors
             $summernoteEditor = $('#main-comment-form div.note-editable')
             draftComment = $summernoteEditor.html()
@@ -394,7 +467,8 @@
                 formData.set('xp_requested', xpRequested || '');
                 formData.set('answers', JSON.stringify(answers));
 
-                $.ajax({
+                draftSaveFiles = sentFiles;
+                draftSave = $.ajax({
                     url : "{% url 'quests:ajax_save_draft' %}",
                     type : "POST", // http method
                     data : formData,
@@ -429,13 +503,18 @@
                             file_note_holder($(this)).find('.draft-file-note-pending').remove();
                         });
                         console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
-                        if (pressed) {
+                        if (pressed && !submitWaiting) {
                             // The student asked for this save, so tell them it did not happen.
                             // A timer's failure is reported only in #draft-error: it retries by
                             // itself, and a modal once a minute would interrupt a whole lesson.
+                            // Nor while a submit waits on it: that submit takes the files itself.
                             alert("ERROR!\n\nSorry, something went wrong and the draft wasn't saved.  \n\nSee the browser console for error details.");
                         }
                     }
+                });
+                draftSave.always(function() {
+                    draftSave = null;
+                    draftSaveFiles = {};
                 });
                 return true;
             }
@@ -489,6 +568,19 @@
             // snapshot) counts as changed, which is the safe answer: it means leave it alone.
             if (!sent || current.length !== sent.length) return false;
             return current.every(function(file, index) { return file === sent[index]; });
+        }
+
+        function uploading_chosen_files() {
+            // Whether the draft save on its way is carrying files still sitting in their
+            // inputs, which a submit sent now would upload a second time (#2834). A file
+            // chosen in place of one the save carries is not on its way, so it doesn't count.
+            if (!draftSave) return false;
+            var carrying = false;
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (chosen.length && same_files(chosen, draftSaveFiles[this.name])) carrying = true;
+            });
+            return carrying;
         }
 
         function show_saved_files(json, sentFiles) {

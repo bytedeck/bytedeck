@@ -7622,7 +7622,7 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
         # a handler that saves nothing would satisfy the line above on its own
-        self.assertContains(response, "if (save_draft(true)) return;")
+        self.assertContains(response, "if (submitting || save_draft(true)) return;")
 
     def test_submission__a_file_too_large_to_upload_is_refused_before_it_is_sent(self):
         """The page loads the browser's size check with the most one upload can carry, and the
