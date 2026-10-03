@@ -7957,6 +7957,15 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         documents = self.submission.draft_comment.document_set.all()
         self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
 
+    def test_ajax_save_draft__a_file_storage_renames_sent_twice_is_stored_once(self):
+        """A retried draft save holds one copy of a file whose name storage changes, such as a
+        recording named with spaces, stored with underscores in their place (#2833)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("Recording 2026-10-02 105801.mp4", b"file_content", content_type="video/mp4"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
     def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
         """Only a file the draft already holds is skipped. A student replacing their work with a
         corrected version of the same name still gets it attached, so nothing is dropped
@@ -8006,6 +8015,31 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_completed)
         published = Comment.objects.all_with_target_object(self.submission)
         self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_storage_renames_is_not_attached_again(self):
+        """A recording named with spaces, already on the draft and sent again with the submit,
+        publishes one copy, stored with underscores for its spaces. A large file is still on its
+        way to the draft when a student presses Submit, so the submit carries it too (#2833)."""
+        name = "Recording 2026-10-02 105801.mp4"
+        self.save_draft(SimpleUploadedFile(name, b"file_content", content_type="video/mp4"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile(name, b"file_content", content_type="video/mp4"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(
+            [document.docfile.name.rsplit('/', 1)[-1] for comment in published for document in comment.document_set.all()],
+            ["Recording_2026-10-02_105801.mp4"],
+        )
 
     def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
         """A file chosen only at submit time still publishes with the comment: skipping applies to

@@ -45,19 +45,21 @@ STORED_NAME_SUFFIX = re.compile(r"_[A-Za-z0-9]{7}$")
 
 
 def chosen_name(stored_name):
-    """Return the name a stored upload was chosen under.
+    """Return the name a stored upload was chosen under, as storage cleaned it.
 
     An upload is stored in a folder of its own (``UploadToOwnFolder``) under the name the
-    student's browser sent, unless storage had to shorten a name too long for the field, which
-    it does by cutting it and adding a suffix like `_Ab3dEf7`. Older attachments sit directly in
-    their day's folder, shared by everyone on the deck, where storage, which will not overwrite,
-    stored a second `photo.jpg` that day as `photo_Ab3dEf7.jpg`. So the stored name is not always
-    the name the student's browser sent, and taking the suffix back off is what lets an upload be
-    recognised as a copy of one already attached.
+    student's browser sent, cleaned as ``name_to_match`` describes, unless storage had to shorten
+    a name too long for the field, which it does by cutting it and adding a suffix like
+    `_Ab3dEf7`. Older attachments sit directly in their day's folder, shared by everyone on the
+    deck, where storage, which will not overwrite, stored a second `photo.jpg` that day as
+    `photo_Ab3dEf7.jpg`. Taking the suffix back off is what lets an upload be recognised as a
+    copy of one already attached.
 
-    A file genuinely named like a suffixed one (`photo_Ab3dEf7.jpg`) reads here as `photo.jpg`.
-    The only consequence is in save_draft_attachments, which also requires an exact size match
-    before it treats two files as the same upload.
+    A file genuinely named like a suffixed one (`Final_Project.pdf`) reads here as `Final.pdf`.
+    ``name_to_match`` reads an upload of that name the same way, so a second copy of it is still
+    recognised. save_draft_attachments also requires an exact size match before it treats two
+    files as the same upload, so a different `Final.pdf` is only taken for it if the two are
+    exactly the same size.
 
     Args:
         stored_name: the value of a stored ``FileField``, a whole media path.
@@ -67,6 +69,25 @@ def chosen_name(stored_name):
     """
     stem, extension = posixpath.splitext(posixpath.basename(stored_name))
     return STORED_NAME_SUFFIX.sub("", stem) + extension
+
+
+def name_to_match(upload_name):
+    """Return an upload's name as it is compared with ``chosen_name`` of the files already stored.
+
+    Storage keeps only letters, digits, dashes, underscores and dots in a file's name
+    (``Storage.get_valid_name``), turning spaces into underscores and dropping anything else, so a
+    recording the student's browser sent as `Recording 2026-10-02 105801.mp4` is stored as
+    `Recording_2026-10-02_105801.mp4`. The name is cleaned the same way here, then read the way
+    ``chosen_name`` reads a stored one, so a second copy of an upload has the name of the first
+    (#2833).
+
+    Args:
+        upload_name (str): the name the student's browser sent.
+
+    Returns:
+        str: the bare file name, as ``chosen_name`` would give it back once the upload is stored.
+    """
+    return chosen_name(Document._meta.get_field("docfile").storage.get_valid_name(upload_name))
 
 
 def save_draft_attachments(form, draft_comment):
@@ -88,9 +109,11 @@ def save_draft_attachments(form, draft_comment):
     page clears a file input only when a draft save comes back successfully, so a save whose
     response the browser never saw (a dropped connection part-way through a photo upload, where
     the server stored the file all the same) leaves that file in the input, and the next autosave
-    a minute later sends it again. Storing it twice puts the same work in front of the teacher
-    twice (#2720). Matched on the name and size the student's browser sent, so a *different* file
-    that happens to share a name, such as a corrected version, is still stored.
+    a minute later sends it again, and a large file still on its way up when the student presses
+    Submit is sent again with the submit. Storing it twice puts the same work in front of the
+    teacher twice (#2720, #2833). Matched on the name, as ``name_to_match`` gives it, and the size
+    the student's browser sent, so a *different* file that happens to share a name, such as a
+    corrected version, is still stored.
 
     Args:
         form: the bound, already-validated submission form (valid or not). Forms without an
@@ -115,12 +138,13 @@ def save_draft_attachments(form, draft_comment):
         for document in draft_comment.document_set.all()
     }
     for upload in uploads:
-        if (upload.name, upload.size) in already_held:
+        held_as = (name_to_match(upload.name), upload.size)
+        if held_as in already_held:
             continue
         document = Document(docfile=upload, comment=draft_comment)
         document.full_clean()
         document.save()
-        # the name the student sent, not the stored one: storage appends a suffix to a name it
-        # already has, so the stored name would no longer match the next copy of this upload
-        already_held.add((upload.name, upload.size))
+        # the upload's own name to match, not the stored one: storage cuts a name too long for the
+        # field short, so the stored name would no longer match the next copy of this upload
+        already_held.add(held_as)
     return len(uploads)
