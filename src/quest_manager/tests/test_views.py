@@ -7569,10 +7569,16 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertContains(
             response,
-            f'upload-size-check.js?v=1.0" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
+            f'upload-size-check.js?v=1.1" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
         )
         soup = BeautifulSoup(response.content, 'html.parser')
-        self.assertEqual(soup.select_one('input[name="attachments"]')['data-max-size'], '16777216')
+        attachments = soup.select_one('input[name="attachments"]')
+        self.assertEqual(attachments['data-max-size'], '16777216')
+        # the help text giving the limit is what the input says describes it, so a screen reader
+        # reads it out, ahead of any note the check adds
+        help_text = soup.find(id=attachments['aria-describedby'])
+        self.assertIsNotNone(help_text)
+        self.assertIn('16MB limit per file', help_text.get_text())
 
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
