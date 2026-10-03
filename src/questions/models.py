@@ -13,6 +13,7 @@ from utilities.fields import (
     UNSAFE_UPLOAD_EXTENSIONS,
 )
 from utilities.models import RestrictedFileField
+from utilities.uploads import UploadToOwnFolder
 
 
 class QuestionType(models.TextChoices):
@@ -229,7 +230,9 @@ class QuestionSubmission(models.Model):
     response_file = RestrictedFileField(
         blank=True,
         null=True,
-        upload_to="quest/question/submission/%Y/%m/%d",
+        upload_to=UploadToOwnFolder("quest/question/submission/%Y/%m/%d"),
+        # the dated folder and a folder of its own come before the name; see Document.docfile
+        max_length=255,
         help_text=(
             "A file response to a question. This is what the teacher will "
             "look at when marking the question."

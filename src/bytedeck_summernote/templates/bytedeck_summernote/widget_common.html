@@ -56,6 +56,13 @@ Changes because: fix django-summernote/issues/465 issue, make it possible to use
                          $nEditor = $sn.next();
                          $nCodable = $nEditor.find('.note-codable');
                          recalcHeight($nEditor);
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/783, the image dialog's file input carries the editor's own
+limit on an image, so js/upload-size-check.js refuses one over it as soon as it is chosen.
+{% endcomment %}
+                         $nEditor.find('.note-image-input').attr('data-max-size', {{ config.attachment_filesize_limit }});
+{% comment %} End changes {% endcomment %}
 
 {% if iframe %}
                          // Resize again when the height of note-toolbar changed
@@ -119,6 +126,21 @@ Widgets that set no aria-label are untouched.
                      },
                      {% if not config.disable_attachment %}
                      onImageUpload: function(files) {
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/783, an image dropped or pasted into the editor skips the
+dialog's file input, so its size is checked here, before it is sent. The server would refuse
+one over the limit only after the whole upload, and the web server refuses a request over its
+own cap with an error the editor can only report as "Got an error while uploading images."
+{% endcomment %}
+                         var sizeCheck = window.uploadSizeCheck;
+                         var tooLarge = sizeCheck && sizeCheck.problemWith(
+                             Array.prototype.slice.call(files), {{ config.attachment_filesize_limit }}, 0);
+                         if (tooLarge) {
+                             alert(tooLarge);
+                             return;
+                         }
+{% comment %} End changes {% endcomment %}
                          // custom attachment data
                          var attachmentData = origin.dataset;
                          $nImageInput = $nEditor.find('.note-image-input');

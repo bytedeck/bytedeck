@@ -296,6 +296,13 @@ MIDDLEWARE = [
 # the intended cap. 16 MiB leaves headroom under the nginx limit.
 DATA_UPLOAD_MAX_MEMORY_SIZE = env.int('DATA_UPLOAD_MAX_MEMORY_SIZE', default=16 * 1024 * 1024)
 
+# The most the files chosen in one form may add up to, in bytes. nginx refuses a request body
+# over client_max_body_size (17M, nginx/bytedeck.conf.template) before the app sees it, with a
+# bare 413 page, so the browser holds the files a form is about to send to this and says so
+# instead (js/upload-size-check.js, #783). It sits under nginx's cap to leave room for the rest
+# of the form.
+MAX_UPLOAD_REQUEST_SIZE = env.int('MAX_UPLOAD_REQUEST_SIZE', default=16 * 1024 * 1024)
+
 # LOGGING #########################################################
 #
 # With DEBUG=False (production/staging) Django's built-in logging emits almost
@@ -939,6 +946,26 @@ SUMMERNOTE_CONFIG = {
             ['help', ['help']],
         ],
 
+        # The menus that pop up over a clicked image, link or table. They belong here with the toolbar:
+        # django-summernote hands the editor only this 'summernote' dict (#268). The image menu's size
+        # buttons carry Summernote 0.8.20's names, and "custom" holds the buttons our plugins add.
+        'popover': {
+            'image': [
+                ['custom', ['imageShapes']],
+                ['resize', ['resizeFull', 'resizeHalf', 'resizeQuarter', 'resizeNone']],
+                ['float', ['floatLeft', 'floatRight', 'floatNone']],
+                ['remove', ['removeMedia']]
+            ],
+            'link': [
+                ['link', ['linkDialogShow', 'unlink']]
+            ],
+            'table': [
+                ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
+                ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
+                ['custom', ['tableHeaders', 'tableStyles']]
+            ],
+        },
+
         # You can also add custom settings for external plugins
         # 'print': {
         #     'stylesheetUrl': '/some_static_folder/printable.css',
@@ -1033,23 +1060,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
-
-    'popover': {
-        'image': [
-            ['custom', ['imageShapes']],
-            ['imagesize', ['imageSize100', 'imageSize50', 'imageSize25']],
-            ['float', ['floatLeft', 'floatRight', 'floatNone']],
-            ['remove', ['removeMedia']]
-        ],
-        'link': [
-            ['link', ['linkDialogShow', 'unlink']]
-        ],
-        'table': [
-            ['add', ['addRowDown', 'addRowUp', 'addColLeft', 'addColRight']],
-            ['delete', ['deleteRow', 'deleteCol', 'deleteTable']],
-            ['custom', ['tableHeaders', 'tableStyles']]
-        ],
-    },
 
     # Lazy initialize
     # If you want to initialize summernote at the bottom of page, set this as True

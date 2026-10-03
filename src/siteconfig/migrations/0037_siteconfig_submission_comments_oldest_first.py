@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ("siteconfig", "0034_siteconfig_students_choose_xp_course"),
+        ("siteconfig", "0036_set_default_quest_prerequisite"),
     ]
 
     operations = [

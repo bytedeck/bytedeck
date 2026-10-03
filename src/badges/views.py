@@ -70,29 +70,26 @@ def badge_list(request):
 class BadgePrereqsUpdate(ObjectPrereqsFormView):
     model = Badge
 
-    def form_valid(self, form):
-        """After a teacher saves a badge's prerequisites, prompt them to run a grant-check
-        (rather than auto-granting on every edit, which could grant a badge before it is
-        ready — issue #1157). The prompt links to badge_grant_qualifying, which confirms
-        the count before granting. Only published badges can be auto-granted.
+    def get_updated_message(self):
+        """The base message, and for a published badge a link to check for and grant it to the
+        students who now qualify.
+
+        Granting runs when the teacher asks rather than on every edit, which could grant a badge
+        before it is ready (issue #1157). The link goes to badge_grant_qualifying, which confirms
+        the count first. Only published badges can be granted this way.
+
+        Returns:
+            str: the success message, with the link for a published badge.
         """
-        # Only prompt when the prereqs actually changed — a no-op save shouldn't nag the
-        # teacher to run a grant-check (issue #1980); the base view already skips its own
-        # save/messages in that case.
-        changed = form.has_changed()
-        response = super().form_valid(form)
-        if changed and self.object.published:
-            badge_name = SiteConfig.get().custom_name_for_badge.lower()
-            grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
-            messages.info(
-                self.request,
-                format_html(
-                    'Prerequisites changed. '
-                    '<a href="{}">Check and grant this {} to qualifying students?</a>',
-                    grant_url, badge_name,
-                )
-            )
-        return response
+        message = super().get_updated_message()
+        if not self.object.published:
+            return message
+        badge_name = SiteConfig.get().custom_name_for_badge.lower()
+        grant_url = reverse('badges:grant_qualifying', args=[self.object.id])
+        return format_html(
+            '{} <a href="{}">Check and grant this {} to qualifying students?</a>',
+            message, grant_url, badge_name,
+        )
 
 
 @method_decorator(staff_member_required, name='dispatch')

@@ -13,10 +13,12 @@ or they could be moved into a `test_urls.py` module.
 import re
 
 from bs4 import BeautifulSoup
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
@@ -3004,6 +3006,55 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertRedirects(response, new_quest.get_absolute_url())
         self.assertEqual(new_quest.prereqs().count(), 2)
 
+    def _set_default_quest_prerequisite(self, badge):
+        """Set the deck's default quest prerequisite (Site Configuration) to `badge`, or to none.
+
+        The cached SiteConfig outlives the test's rollback, so it's cleared once the test is done.
+        """
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = badge
+        config.save()
+        self.addCleanup(cache.clear)
+
+    def test_quest_create__starts_with_the_default_prerequisite(self):
+        """The create form comes up with the deck's default quest prerequisite chosen as the new quest's
+        badge prerequisite, for a teacher and for a TA (#276)."""
+        default_badge = baker.make(Badge, name="Default Badge")
+        self._set_default_quest_prerequisite(default_badge)
+
+        for user in (self.test_teacher, self._make_TA()):
+            self.client.force_login(user)
+            response = self.client.get(reverse('quests:quest_create'))
+
+            self.assertEqual(response.context['form'].initial['new_badge_prerequisite'], default_badge)
+            badge_select = BeautifulSoup(response.content, 'html.parser').find('select', attrs={'name': 'new_badge_prerequisite'})
+            self.assertEqual([option['value'] for option in badge_select.find_all('option', selected=True)], [str(default_badge.pk)])
+
+    def test_quest_create__without_a_default_prerequisite(self):
+        """With no default quest prerequisite set, the create form leaves the badge prerequisite empty (#276)."""
+        self._set_default_quest_prerequisite(None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
+    def test_quest_create__default_prerequisite_deleted_while_the_config_is_cached(self):
+        """Deleting the default badge clears the setting without saving the SiteConfig, so the cached
+        config still holds the badge's id: the create form opens anyway, with no badge filled in (#276)."""
+        default_badge = baker.make(Badge)
+        default_badge_id = default_badge.id  # delete() clears the instance's id
+        self._set_default_quest_prerequisite(default_badge)
+        SiteConfig.get()  # cache the config while it names the badge
+        default_badge.delete()
+        self.assertEqual(SiteConfig.get().default_quest_prerequisite_id, default_badge_id)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
     def test_quest_update__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
         self.client.force_login(self.test_teacher)
@@ -3335,6 +3386,20 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         self.assertEqual(list(form_data['tags'].values_list('name', flat=True)), ['tag'])
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+
+    def test_quest_copy__leaves_out_the_default_prerequisite(self):
+        """A copy's prerequisite is the quest it was copied from, so the form doesn't also fill in the
+        deck's default quest prerequisite as a badge prerequisite (#276)."""
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = baker.make(Badge)
+        config.save()
+        self.addCleanup(cache.clear)  # the cached SiteConfig outlives the test's rollback
+        self.client.force_login(self.test_teacher)
+
+        form_data = self.assert200('quests:quest_copy', args=[self.quest.id]).context['form'].initial
+
+        self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+        self.assertNotIn('new_badge_prerequisite', form_data)
 
     def test_quest_copy__teacher_post_creates_copy(self):
         """ values after being saved is the same as copied quest + '- COPY' being appended to name """
@@ -7559,6 +7624,20 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
         # a handler that saves nothing would satisfy the line above on its own
         self.assertContains(response, "if (save_draft(true)) return;")
 
+    def test_submission__a_file_too_large_to_upload_is_refused_before_it_is_sent(self):
+        """The page loads the browser's size check with the most one upload can carry, and the
+        attachments input carries its own 16 MB limit, so a file over either is refused as it is
+        chosen: before the draft save sends it to be turned away, or to nginx's bare 413 page
+        (#783)."""
+        response = self.client.get(self.submission.get_absolute_url())
+
+        self.assertContains(
+            response,
+            f'upload-size-check.js?v=1.0" data-max-request-size="{settings.MAX_UPLOAD_REQUEST_SIZE}"',
+        )
+        soup = BeautifulSoup(response.content, 'html.parser')
+        self.assertEqual(soup.select_one('input[name="attachments"]')['data-max-size'], '16777216')
+
     def test_submission__staff_viewing_a_students_submission_get_no_remove_buttons(self):
         """The buttons belong to the student whose draft it is. Staff marking the submission post
         to the approve view instead, where their own files are handled separately."""
@@ -7878,6 +7957,15 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         documents = self.submission.draft_comment.document_set.all()
         self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
 
+    def test_ajax_save_draft__a_file_storage_renames_sent_twice_is_stored_once(self):
+        """A retried draft save holds one copy of a file whose name storage changes, such as a
+        recording named with spaces, stored with underscores in their place (#2833)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("Recording 2026-10-02 105801.mp4", b"file_content", content_type="video/mp4"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
     def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
         """Only a file the draft already holds is skipped. A student replacing their work with a
         corrected version of the same name still gets it attached, so nothing is dropped
@@ -7886,6 +7974,27 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         self.save_draft(SimpleUploadedFile("my-work.png", b"a longer, corrected version", content_type="image/png"))
 
         self.assertEqual(self.submission.draft_comment.document_set.count(), 2)
+
+    def test_ajax_save_draft__locks_the_submission_before_it_reads_the_drafts_files(self):
+        """The submission row is locked before the draft's files are read, and only that row.
+
+        A large file keeps the save carrying it busy for a while, and a student who presses
+        Submit meanwhile sends the same file again with the submit. The submit takes this row's
+        lock, so the save taking it too is what makes the later of the two wait and then find
+        the earlier one's copy, where both would otherwise find none and store one each (#2804).
+        """
+        with CaptureQueriesContext(connection) as queries:
+            self.save_draft(SimpleUploadedFile("my-work.png", b"file_content", content_type="image/png"))
+
+        statements = [query['sql'] for query in queries]
+        locks = [index for index, sql in enumerate(statements) if 'FOR UPDATE' in sql]
+        reads_of_files = [index for index, sql in enumerate(statements) if 'FROM "comments_document"' in sql]
+
+        self.assertEqual(len(locks), 1, 'the submission is locked exactly once')
+        self.assertIn('FOR UPDATE OF "quest_manager_questsubmission"', statements[locks[0]])
+        self.assertTrue(reads_of_files, 'the draft files were read')
+        self.assertLess(locks[0], reads_of_files[0], 'the lock is taken before the files are read')
+        self.assertEqual(self.submission.draft_comment.document_set.count(), 1)
 
     def test_complete__a_file_already_on_the_draft_is_not_attached_again(self):
         """Choosing a file the draft already holds and then submitting publishes one copy of it,
@@ -7906,6 +8015,31 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_completed)
         published = Comment.objects.all_with_target_object(self.submission)
         self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_storage_renames_is_not_attached_again(self):
+        """A recording named with spaces, already on the draft and sent again with the submit,
+        publishes one copy, stored with underscores for its spaces. A large file is still on its
+        way to the draft when a student presses Submit, so the submit carries it too (#2833)."""
+        name = "Recording 2026-10-02 105801.mp4"
+        self.save_draft(SimpleUploadedFile(name, b"file_content", content_type="video/mp4"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile(name, b"file_content", content_type="video/mp4"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(
+            [document.docfile.name.rsplit('/', 1)[-1] for comment in published for document in comment.document_set.all()],
+            ["Recording_2026-10-02_105801.mp4"],
+        )
 
     def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
         """A file chosen only at submit time still publishes with the comment: skipping applies to
