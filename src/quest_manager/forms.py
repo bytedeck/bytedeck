@@ -5,7 +5,7 @@ from bootstrap_datepicker_plus.widgets import DatePickerInput, TimePickerInput
 from crispy_forms.bootstrap import Accordion, AccordionGroup
 from crispy_forms.helper import FormHelper
 from crispy_forms.layout import HTML, Div, Layout
-from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget
+from django_select2.forms import ModelSelect2MultipleWidget, ModelSelect2Widget, Select2Widget
 
 from badges.models import Badge
 from bytedeck_summernote.widgets import ByteDeckSummernoteSafeInplaceWidget, ByteDeckSummernoteAdvancedInplaceWidget
@@ -95,10 +95,13 @@ class QuestForm(forms.ModelForm):
         ),
     )
 
+    # Declared here rather than generated from the model, so Meta.widgets doesn't reach it: its
+    # searchable dropdown is set on the field itself.
     campaign = forms.ModelChoiceField(
         queryset=Category.objects.all(),
         required=False,
-        limit_choices_to={'published': True}
+        limit_choices_to={'published': True},
+        widget=Select2Widget(attrs={'data-theme': 'bootstrap'}),
     )
 
     class Meta:
@@ -148,12 +151,11 @@ class QuestForm(forms.ModelForm):
             'date_expired': DatePickerInput(),
             'time_expired': TimePickerInput(),
 
-            # TODO: Campaign Autocomplete
-            # 'campaign': autocomplete.ModelSelect2(url='quests:category_autocomplete'),
-            # 'common_data': autocomplete.ModelSelect2(url='quests:commondata_autocomplete'),
-            # 'specific_teacher_to_notify': Select2Widget(),
+            # Searchable dropdowns. Their options come with the page, so each field keeps its
+            # queryset: active Common Quest Info only, and staff only for the teacher to notify.
+            'common_data': Select2Widget(attrs={'data-theme': 'bootstrap'}),
+            'specific_teacher_to_notify': Select2Widget(attrs={'data-theme': 'bootstrap'}),
 
-            # dal widgets aren't compatible with django-select2 widget.  Need to convert all to dal.
             'tags': BootstrapTaggitSelect2Widget(attrs={'data-theme': 'bootstrap'})
         }
 

@@ -32,6 +32,17 @@ class SiteConfigForm(forms.ModelForm):
     ]
 
     def __init__(self, *args, **kwargs):
+        """Build the Site Configuration form and its crispy layout.
+
+        Only the deck owner can change the settings in `advanced_fields`, so they're disabled for
+        anyone else. The Google sign-in setting is always disabled on this form, and the two Shared
+        Library settings are labelled as experimental.
+
+        Args:
+            *args: positional arguments passed through to ``forms.ModelForm``.
+            **kwargs: keyword arguments passed through to ``forms.ModelForm``, plus ``is_deck_owner``
+                (bool, default False): whether the user editing the settings is the deck owner.
+        """
         is_deck_owner = kwargs.pop('is_deck_owner', False)
 
         super().__init__(*args, **kwargs)
@@ -71,6 +82,7 @@ class SiteConfigForm(forms.ModelForm):
                 "cap_marks_at_100_percent",
                 "simplified_course_registration",
                 "students_choose_xp_course",
+                "default_quest_prerequisite",
                 "custom_name_for_badge",
                 "custom_name_for_announcement",
                 "custom_name_for_group",

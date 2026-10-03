@@ -6,7 +6,9 @@ import html2text
 import bleach
 import html as html_module
 import re
+from urllib.parse import parse_qs, urlsplit
 
+from bs4 import BeautifulSoup
 from django.utils.html import strip_tags
 
 # Tags that are content in their own right, with no text of their own. A student can answer a
@@ -64,6 +66,86 @@ def textify(html):
     # don't ignore links anymore, I like links
     h.ignore_links = False
     return h.handle(html)
+
+
+# The page a video player's address stands for, for the players the editor embeds, so a link
+# opens the video's own page rather than a bare player: (pattern for the player's address, with
+# the video's id as its group; the video's page, formatted with that id; how the page is told to
+# start part-way through, formatted with the seconds the player starts at, or None when the
+# editor gives the player no start time).
+_VIDEO_PAGES = (
+    (
+        re.compile(r"^https?://(?:www\.)?youtube(?:-nocookie)?\.com/embed/([\w-]+)"),
+        "https://www.youtube.com/watch?v={}", "&t={}s",
+    ),
+    (re.compile(r"^https?://player\.vimeo\.com/video/(\d+)"), "https://vimeo.com/{}", None),
+    (re.compile(r"^https?://(?:www\.)?dailymotion\.com/embed/video/(\w+)"), "https://www.dailymotion.com/video/{}", None),
+)
+
+# an opening <iframe> or <video> tag, however it's written
+_EMBED_TAG_RE = re.compile(r"<\s*(?:iframe|video)\b", re.IGNORECASE)
+
+# a player's start time: whole seconds in plain digits, up to 999999 (over 277 hours)
+_START_SECONDS_RE = re.compile(r"[0-9]{1,6}")
+
+
+def link_embeds(html, root_url=""):
+    """Put a link in place of each video or page embedded in a fragment of HTML.
+
+    An email client shows no embedded player: it drops an <iframe>, and few play a <video>. So a
+    video in an announcement left nothing behind in its email (#1249). Each one becomes a line
+    linking to it: "Watch the video:" and the video's own page for a YouTube, Vimeo or Dailymotion
+    player (from the time a YouTube player was set to start at), its file for a <video>, and
+    "Open the embedded page:" and its address for anything else embedded, such as a slide deck. The line is inline, as the embed was, since the editor
+    puts an embed inside a paragraph.
+
+    An embed is left as it is when there's no web page to send a reader to: no address, one that
+    isn't http(s), or one on the deck itself when `root_url` isn't given.
+
+    Args:
+        html (str or None): a fragment of HTML, such as an announcement's content.
+        root_url (str): the deck's root URL, which makes an address on the deck itself
+            (/media/...) one that opens from an inbox.
+
+    Returns:
+        str or None: the fragment with each embed replaced, or exactly as it was when nothing
+        is embedded in it.
+    """
+    if not html or not _EMBED_TAG_RE.search(html):
+        return html  # nothing embedded, so the HTML goes out exactly as written
+
+    soup = BeautifulSoup(html, "html.parser")
+    for embed in soup.find_all(["iframe", "video"]):
+        source = embed.find("source", src=True) if embed.name == "video" else None
+        address = (embed.get("src") or (source["src"] if source else "")).strip()
+        if address.startswith("//"):
+            address = f"https:{address}"  # the editor writes a player's address without its scheme
+        elif address.startswith("/"):
+            address = f"{root_url.rstrip('/')}{address}" if root_url else ""
+        if not address.lower().startswith(("http://", "https://")):
+            continue
+
+        label = "Watch the video" if embed.name == "video" else "Open the embedded page"
+        for player, page, start_at in _VIDEO_PAGES:
+            match = player.match(address)
+            if match:
+                # the start time the editor's Embed Video dialog gives a YouTube player, in whole
+                # seconds; anything else (more digits than a video runs to, or a character that
+                # only looks like a digit) is left out of the link
+                start = parse_qs(urlsplit(address).query).get("start", [""])[0]
+                page = page.format(match.group(1))
+                if start_at and _START_SECONDS_RE.fullmatch(start) and int(start):
+                    page += start_at.format(int(start))
+                address, label = page, "Watch the video"
+                break
+
+        line = soup.new_tag("span")
+        line.append(f"{label}: ")
+        link = soup.new_tag("a", href=address)
+        link.string = address
+        line.append(link)
+        embed.replace_with(line)
+    return str(soup)
 
 
 # Regular expression to match list prefixes like "1." or "a."

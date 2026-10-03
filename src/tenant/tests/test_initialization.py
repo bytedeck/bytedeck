@@ -159,6 +159,12 @@ class TenantInitializationTest(ByteDeckTenantTestCase):
         self.assertEqual(b_intro.count(), 1)
         self.assertTrue(b_intro.filter(name="ByteDeck Proficiency").exists())
 
+    def test_create_initial_badges__default_quest_prerequisite(self):
+        """A new deck's default quest prerequisite is the ByteDeck Proficiency badge, which its orientation
+        quests lead to, so the quests its teachers create start out requiring it (#276)."""
+        # read from the database, since a cached SiteConfig can hold another test's setting
+        self.assertEqual(SiteConfig.objects.get().default_quest_prerequisite, Badge.objects.get(name="ByteDeck Proficiency"))
+
     def test_initialization__site_config_created(self):
         """ Test that the SiteConfig object exists and the Deck name has expected defaults.
         """
