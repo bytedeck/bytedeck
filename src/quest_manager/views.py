@@ -42,7 +42,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from utilities.html import is_empty_html
+from utilities.html import is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -1599,15 +1599,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             new_assertion = BadgeAssertion.objects.create_assertion(
                 self.submission.user, badge, self.request.user, course=self.submission.course
             )
-            messages.success(
-                self.request,
-                (
-                    "Badge "
-                    + str(new_assertion)
-                    + " granted to "
-                    + str(new_assertion.user)
-                ),
-            )
+            messages.success(self.request, format_html(
+                "{} {} granted to {}",
+                SiteConfig.get().custom_name_for_badge, link_to(new_assertion.badge),
+                link_to(new_assertion.user.profile, new_assertion.user.username),
+            ))
             rarity_icon = badge.get_rarity_icon()
             comment_text_addition += (
                 "<p></br>"
@@ -2654,8 +2650,7 @@ def start(request, quest_id):
                 request,
                 format_html(
                     "<strong>{}</strong> is on hold until you finish {}.",
-                    quest.name,
-                    ", ".join(blocker.name for blocker in blocking_quests),
+                    link_to(quest), link_list(blocking_quests),
                 ),
             )
             return redirect(quest)
@@ -2678,7 +2673,7 @@ def start(request, quest_id):
                 format_html(
                     "You already have <strong>{}</strong> in progress: "
                     "finish this one before starting it again.",
-                    quest.name,
+                    link_to(sub, quest.name),
                 ),
             )
             return redirect(sub)
@@ -2695,7 +2690,7 @@ def hide(request, quest_id):
 
     messages.warning(
         request,
-        format_html("<strong>{}</strong> has been added to your list of hidden quests.", quest.name),
+        format_html("<strong>{}</strong> has been added to your list of hidden quests.", link_to(quest)),
     )
 
     return redirect("quests:quests")
@@ -2709,7 +2704,7 @@ def unhide(request, quest_id):
 
     messages.success(
         request,
-        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", quest.name),
+        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", link_to(quest)),
     )
 
     return redirect("quests:available_all")
@@ -3256,7 +3251,13 @@ def flag(request, submission_id):
     sub.flagged_by = request.user
     sub.save()
 
-    messages.success(request, "Submission flagged for future follow up.")
+    messages.success(
+        request,
+        format_html(
+            "Submission {} flagged for future follow up.",
+            link_to(sub, format_html("{} by {}", sub.quest_name(), sub.user)),
+        ),
+    )
 
     return redirect("quests:approvals")
 
