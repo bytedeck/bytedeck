@@ -10,7 +10,7 @@ from django.urls import reverse
 
 from model_bakery import baker
 
-from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from hackerspace_online.tests.utils import ByteDeckTenantTestCase, TempMediaRootMixin
 from quest_manager.models import Quest, QuestSubmission
 from questions.forms import QuestionSubmissionFormsetFactory, SHORT_ANSWER_MAX_LENGTH
 from questions.models import Question, QuestionSubmission
@@ -932,6 +932,95 @@ class DraftSaveRacesSubmitTest(QuestionSubmissionFlowTestBase):
         row.refresh_from_db()
         self.assertEqual(row.comment_id, comment.id, "the published answer must stay published")
         self.assertEqual(row.response_text, "my website")
+
+
+class AnswerPortfolioButtonTest(TempMediaRootMixin, QuestionSubmissionFlowTestBase):
+    """A published file answer offers Add to Portfolio exactly where a comment's file does (#2573)."""
+
+    def publish_answers(self):
+        """Complete the submission so its answers are published with a comment."""
+        self.client.post(
+            reverse("quests:complete", args=[self.submission.id]),
+            data={"complete": True, "comment_text": "", **self.formset_data()})
+        self.submission.refresh_from_db()
+
+    def published_answer(self):
+        """The published answer row for the short question.
+
+        Returns:
+            QuestionSubmission: the row carrying the comment it was published with.
+        """
+        return QuestionSubmission.objects.get(
+            quest_submission=self.submission, question=self.short_question, comment__isnull=False)
+
+    def store_answer_file(self, uploaded_file):
+        """Give the published answer a stored file, and return the row.
+
+        Args:
+            uploaded_file: the file to store on the answer.
+
+        Returns:
+            QuestionSubmission: the answer, saved with the file.
+        """
+        answer = self.published_answer()
+        answer.response_file = uploaded_file
+        answer.save()
+        return answer
+
+    def test_display__image_answer_offers_add_to_portfolio(self):
+        """An image answer gets the button, linking the route that adds it (#2573).
+
+        The same picture attached to the comment box one section lower offers this button, so
+        an answer offering none would make asking for the work as a question the one way of
+        handing it in that keeps it out of a portfolio.
+        """
+        self.publish_answers()
+        answer = self.store_answer_file(
+            SimpleUploadedFile("artwork.png", b"png-bytes", content_type="image/png"))
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, "Add to Portfolio")
+        self.assertContains(response, reverse("portfolios:art_add_answer", args=[answer.id]))
+
+    def test_display__a_text_answer_offers_no_portfolio_button(self):
+        """Text answers are not artwork, so nothing is offered for them."""
+        self.publish_answers()
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertContains(response, "question-answers")  # the answers really are on the page
+        self.assertNotContains(response, "Add to Portfolio")
+
+    def test_display__a_non_media_file_answer_offers_no_portfolio_button(self):
+        """A file answer of some other kind is not artwork either."""
+        self.publish_answers()
+        self.store_answer_file(
+            SimpleUploadedFile("notes.txt", b"not media", content_type="text/plain"))
+
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        self.assertNotContains(response, "Add to Portfolio")
+
+    def test_display__a_teachers_solution_file_offers_no_portfolio_button(self):
+        """The button is on the student's answer and never on the question's solution file.
+
+        comment_answers.html includes questions/snippets/question_file.html twice, once for the
+        answer and once for the teacher's solution, so a button placed inside that snippet
+        would offer to put the teacher's model answer into the student's portfolio. Only staff
+        see solution files, so this checks the page a marker gets.
+        """
+        self.short_question.solution_file = SimpleUploadedFile(
+            "solution.png", b"png-bytes", content_type="image/png")
+        self.short_question.save()
+        self.publish_answers()
+
+        self.client.force_login(self.test_teacher)
+        response = self.assert200("quests:submission", args=[self.submission.id])
+
+        # the solution file really is rendered on this page, so the absence below means something
+        self.assertContains(response, self.short_question.solution_file.url)
+        self.assertNotContains(response, "Add to Portfolio")
 
 
 class AnswerDisplayTest(QuestionSubmissionFlowTestBase):
