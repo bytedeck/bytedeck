@@ -386,6 +386,22 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
+    def get_initial(self):
+        """Start the new quest with the deck's default prerequisite as its badge prerequisite (#276).
+
+        A quest with no prerequisite is available to every student once it's published, so a deck
+        can name a badge (Site Configuration's Default quest prerequisite) that its new quests
+        require until the teacher changes or removes it under Basic Prerequisites.
+
+        Returns:
+            dict: the form's initial data, with `new_badge_prerequisite` when the deck has a default.
+        """
+        initial = super().get_initial()
+        default_prerequisite = SiteConfig.get().get_default_quest_prerequisite()
+        if default_prerequisite:
+            initial["new_badge_prerequisite"] = default_prerequisite
+        return initial
+
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
@@ -427,14 +443,26 @@ class QuestPrereqsUpdate(ObjectPrereqsFormView):
 
 class QuestCopy(QuestCreate):
     def get_form_kwargs(self):
+        """Fill the create form with a copy of the quest being copied.
+
+        The form is bound to an unsaved copy of that quest, named with " - COPY" and given a new
+        import_id, and starts with the quest's tags and with the quest itself as the copy's
+        prerequisite.
+
+        Returns:
+            dict: the quest form's keyword arguments, with `instance` the unsaved copy and `initial`
+            holding its tags and prerequisite.
+        """
         kwargs = super().get_form_kwargs()
 
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
-        # Set initial tags and prerequisite for the form
+        # Set initial tags and prerequisite for the form. The quest it was copied from is the copy's
+        # prerequisite, so the deck's default badge prerequisite (QuestCreate.get_initial) is left out.
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
+        kwargs["initial"].pop("new_badge_prerequisite", None)
 
         # Create a new Quest instance based on the copied quest
         new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
@@ -2870,6 +2898,7 @@ def ajax_delete_draft_attachment(request, document_id):
 @xml_http_request_required
 @non_public_only_view
 @login_required
+@transaction.atomic
 def ajax_save_draft(request):
     """Autosave the requesting student's own draft comment, answers, and chosen files.
 
@@ -2900,7 +2929,18 @@ def ajax_save_draft(request):
         except (TypeError, ValueError):
             raise Http404("No valid submission id provided.")
 
-        sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
+        # Locked for the rest of the request, as the submit (complete) and the draft file
+        # delete lock it. A chosen file is stored only if the draft doesn't hold a copy yet,
+        # and a student who presses Submit while this save is still uploading a large file
+        # sends that file again with the submit. Without the lock each request looks before
+        # the other has stored anything, and both store it (#2804); with it, the second one
+        # waits and finds the first one's copy. of=("self",) and include_related=False for
+        # the reasons complete gives.
+        sub = get_object_or_404(
+            QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+            pk=submission_id,
+            user=request.user,
+        )
         # if there is no draft comment, then the quest is not in progress
         if not sub.draft_comment:
             raise Http404("No draft comment found. The quest is not in progress.")

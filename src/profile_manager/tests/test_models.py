@@ -375,6 +375,18 @@ class ProfileTestModel(ByteDeckTenantTestCase):
         self.assertEqual(self.profile.xp_cached, 50)
         self.assertEqual(self.profile.mark_cached, 10)
 
+    def test_xp_invalidate_cache__caches_the_mark_as_it_is_shown(self):
+        """The cached mark decides the student's mark range, so it is the mark as they are shown
+        it, to one decimal place with a half rounded up (#2826): 72.44996% is shown as 72.4% and
+        cached as 72.4, short of a 72.5% range, and 72.45% is shown and cached as 72.5. The
+        instance holds the same value as the saved row."""
+        for mark, cached in ((72.44996, Decimal('72.4')), (72.45, Decimal('72.5'))):
+            with self.subTest(mark=mark), patch('profile_manager.models.Profile.mark', return_value=mark):
+                self.profile.xp_invalidate_cache()
+                self.assertEqual(self.profile.mark_cached, cached)
+                self.profile.refresh_from_db()
+                self.assertEqual(self.profile.mark_cached, cached)
+
     def test_xp_invalidate_cache__names_the_patch_behind_a_mark_that_is_not_a_number(self):
         """A mark that is not a number cannot be stored, and the error says why.
 
@@ -572,10 +584,28 @@ class ProfileNameMethodsTest(ByteDeckTenantTestCase):
         self.profile = self.user.profile
 
     def test_str__includes_preferred_name_and_alias(self):
-        """__str__ shows 'First (Preferred) Last, aka <clipped alias>' when all are set."""
+        """__str__ shows 'Preferred (First) Last, aka <clipped alias>' when all are set: the
+        preferred name leads, as it does everywhere else the student is named (#2807)."""
         self.profile.preferred_name = "Janey"
         self.profile.alias = "JD"
-        self.assertEqual(str(self.profile), "Jane (Janey) Doe, aka JD")
+        self.assertEqual(str(self.profile), "Janey (Jane) Doe, aka JD")
+
+    def test_teacher_name__first_and_last_without_a_preferred_name(self):
+        """With no preferred name there is nothing to put in brackets."""
+        self.assertEqual(self.profile.teacher_name(), "Jane Doe")
+
+    def test_teacher_name__no_trailing_space_without_a_last_name(self):
+        """A student who has given only first names is named by those alone."""
+        self.user.last_name = ""
+        self.profile.preferred_name = "Janey"
+        self.assertEqual(self.profile.teacher_name(), "Janey (Jane)")
+
+    def test_teacher_name__username_before_a_first_name_is_given(self):
+        """A new student with no names yet is shown by their username, alias or not."""
+        self.user.first_name = ""
+        self.profile.alias = "JD"
+        self.assertEqual(self.profile.teacher_name(), self.user.username)
+        self.assertEqual(str(self.profile), self.user.username)
 
     def test_get_preferred_name__prefers_preferred_over_first_name(self):
         """get_preferred_name returns the preferred name when one is set."""

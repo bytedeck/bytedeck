@@ -27,7 +27,17 @@ def random_name():
 
 
 def generate_students(num=100, quiet=False):
-    """ Generates 100 students for the current deck (is_staff=False)
+    """Generate students (non-staff users) for the current deck.
+
+    Each gets a random first and last name, the username `firstname.lastname` in lower case,
+    and the email `<username>@example.com`. A username already taken gets the next free number
+    after it (`john.smith2`, `john.smith3`, ...): the names are drawn at random, so a common
+    pair comes up twice now and then (#2782).
+
+    Args:
+        num (int): how many students to create. Defaults to 100.
+        quiet (bool): True to print nothing; by default each student is printed as it is made.
+
     Run with:
 
     python src/manage.py tenant_command shell
@@ -44,7 +54,13 @@ def generate_students(num=100, quiet=False):
         # firstname.lastname
         first = names.get_first_name()
         last = names.get_last_name()
-        username = f"{first.lower()}.{last.lower()}"
+        # Names are drawn from census frequencies, so a common pair comes up twice now and then,
+        # and usernames are unique: a name already taken gets a number after it (#2782).
+        username = base = f"{first.lower()}.{last.lower()}"
+        suffix = 1
+        while User.objects.filter(username=username).exists():
+            suffix += 1
+            username = f"{base}{suffix}"
         email = f"{username}@example.com"
         user = User.objects.create(username=username, email=email, first_name=first, last_name=last)
 

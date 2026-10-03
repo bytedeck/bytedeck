@@ -127,6 +127,7 @@ class MarkRangeForm(forms.ModelForm):
                 'name',
                 'minimum_mark',
                 'active',
+                'color_headers',
                 Accordion(
                     AccordionGroup(
                         "Advanced",
@@ -145,7 +146,7 @@ class MarkRangeForm(forms.ModelForm):
 
     class Meta:
         model = MarkRange
-        fields = ['name', 'minimum_mark', 'active', 'color_light', 'color_dark', 'days', 'courses']
+        fields = ['name', 'minimum_mark', 'active', 'color_headers', 'color_light', 'color_dark', 'days', 'courses']
 
 
 class CourseStudentForm(forms.ModelForm):

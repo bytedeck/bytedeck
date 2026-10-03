@@ -10,7 +10,8 @@
 
 {% block content %}
 <p>Mark ranges have two uses: they can be used to change the color of the header of your deck when a student reaches a certain mark; and,
-   they will show up as reference lines on the graph in the Mark Calculations page.</p>
+   they will show up as reference lines on the graph in the Mark Calculations page. A range with "Use this color in student headers"
+   unchecked only shows on the graph, and its students' headers take the color of the next checked range below it.</p>
     {% include 'snippets/table_loading.html' %}
     <table {% include 'snippets/list_table_attrs.html' %}>
       <thead>
@@ -22,6 +23,7 @@
           <th data-field="color" data-searchable="false">Color</th>
           <th data-field="courses" data-sortable="true">Courses</th>
           <th data-field="active" data-sortable="true">Active</th>
+          <th data-field="color_headers" data-sortable="true">In Headers</th>
           <th data-field="action" data-searchable="false">Action</th>
         </tr>
       </thead>
@@ -47,6 +49,7 @@
               {% endif %}
             </td>
             <td>{{object.active}}</td>
+            <td>{{object.color_headers}}</td>
             <td>
               <a class="btn btn-warning" href="{% url 'courses:markrange_update' object.id %}" role="button" title="Edit this mark range">
                 <i class="fa fa-fw fa-edit"></i>

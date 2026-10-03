@@ -160,6 +160,25 @@ class AnnouncementTasksTests(ByteDeckTenantTestCase):
         # from_email=None -> EmailMessage substitutes settings.DEFAULT_FROM_EMAIL (here "")
         self.assertEqual(mail.outbox[0].from_email, "")
 
+    def test_send_announcement_emails__links_an_embedded_video(self):
+        """An email client shows no embedded player, so the email links each video embedded in
+        the announcement, in its plain-text version too (#1249)."""
+        mail.outbox = []
+        tasks.send_announcement_emails.apply(
+            kwargs={
+                "content": '<p>This week:</p><p><iframe src="//www.youtube.com/embed/1DKm96Ftfko" class="note-video-clip"></iframe></p>',
+                "root_url": "https://example.com",
+                "absolute_url": "/link/to/announcement/",
+            }
+        )
+        message = mail.outbox[0]
+        html = message.alternatives[0][0]
+        self.assertNotIn("<iframe", html)
+        self.assertIn('Watch the video: <a href="https://www.youtube.com/watch?v=1DKm96Ftfko">', html)
+        # the plain-text version is text, with the video's address in it
+        self.assertNotIn("<p>", message.body)
+        self.assertIn("Watch the video: <https://www.youtube.com/watch?v=1DKm96Ftfko>", message.body)
+
     def test_publish_announcement__clears_draft_and_removes_task(self):
         """Publishing marks the announcement non-draft, disables auto_publish, and removes its periodic task."""
         self.assertTrue(self.announcement.draft)

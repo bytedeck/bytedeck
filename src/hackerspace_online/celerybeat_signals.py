@@ -12,7 +12,7 @@ from django.db.models.signals import pre_delete, pre_save
 from django.dispatch import receiver
 from django.forms import model_to_dict
 
-from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, SolarSchedule
+from django_celery_beat.models import ClockedSchedule, CrontabSchedule, IntervalSchedule, PeriodicTask, PeriodicTasks, SolarSchedule
 from django_tenants.utils import get_public_schema_name, schema_context
 
 PUBLIC_SCHEMA = get_public_schema_name()
@@ -36,7 +36,17 @@ def save_schedule_to_public_schema(sender, instance, **kwargs):
 
 @receiver(pre_save, sender=PeriodicTask)
 def save_task_to_public_schema(sender, instance, **kwargs):
+    """Copy a deck's periodic task into the public schema, where celery beat reads its schedule.
 
+    Runs before the task is saved in the deck's schema. The public copy is found by the task's name, and it
+    takes the public schema's copy of the task's schedule (which save_schedule_to_public_schema made). In the
+    public schema itself this does nothing.
+
+    Args:
+        sender: the PeriodicTask class.
+        instance (PeriodicTask): the task about to be saved in the deck's schema.
+        **kwargs: pre_save's other arguments, which are not used.
+    """
     if connection.schema_name == PUBLIC_SCHEMA:
         return
 
@@ -79,11 +89,16 @@ def save_task_to_public_schema(sender, instance, **kwargs):
 
     with schema_context(PUBLIC_SCHEMA):
         task_qs = PeriodicTask.objects.filter(name=task_name)
-        # Using `update` and `create` here since it doesn't call `.save()` method.
-        # `.save()` method triggers signals and if used here, it would create a maximum recursion depth.
         if task_qs:
             task_qs.update(**task_dict)
+            # A queryset update() skips PeriodicTask.save(), which is what records a change, by calling
+            # PeriodicTasks.changed(). Beat reloads its schedule only when that record moves (or every few
+            # minutes), so without this it keeps running the task at its old time (#820). django_celery_beat
+            # asks for this call after any bulk update.
+            PeriodicTasks.update_changed()
         else:
+            # create() calls PeriodicTask.save(), which records the change itself. This receiver runs again
+            # for that save, and returns at once in the public schema.
             new_values = {'name': task_name}
             new_values.update(task_dict)
             PeriodicTask.objects.create(**new_values)
