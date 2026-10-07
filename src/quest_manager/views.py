@@ -1651,7 +1651,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         Which decision it is comes from the button the form carries (approve, return, comment,
         skip), which `handle_form_button` reads; that also supplies the wording to store when
         the teacher wrote no comment of their own. Any badge granted alongside is appended to
-        the comment, uploaded files are attached to it, and the student is notified.
+        the comment, uploaded files are attached to it, and the student is notified, with a
+        preview of the comment when the teacher wrote one.
 
         Args:
             request: the POST carrying the teacher's comment, any files, any badge, which
@@ -1682,7 +1683,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # what counts as "no comment" is a question about what that markup renders as
             # rather than about the string (#2609). An image on its own is a real comment and
             # is kept: is_empty_html treats embedded media as content.
-            if is_empty_html(comment_text):
+            wrote_comment = not is_empty_html(comment_text)
+            if not wrote_comment:
                 comment_text = blank_comment_text
 
             comment_new = Comment.objects.create_comment(
@@ -1693,6 +1695,13 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             )
 
             self.save_uploaded_files(comment_new)
+
+            # The student's notification previews the teacher's comment and links straight to it,
+            # as a teacher's notification of a comment on an auto-approved quest does (#2848).
+            # The stand-in text for a blank comment, such as the deck's approval text, is left
+            # out: it says nothing the notification's verb doesn't.
+            if wrote_comment:
+                notification_kwargs["action"] = comment_new
 
             #
             notify.send(

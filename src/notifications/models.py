@@ -234,11 +234,7 @@ class Notification(models.Model):
             target_url = self.target_url
         else:
             try:
-                target_url = self.target_object.get_absolute_url()
-
-                # Is this the right place to do this?
-                if 'commented on' in self.verb:
-                    target_url += f'#comment-{self.action_object_id}'
+                target_url = self.target_object.get_absolute_url() + self.get_comment_anchor()
             except AttributeError:
                 target_url = None
 
@@ -297,6 +293,22 @@ class Notification(models.Model):
             url = format_html("{}</a>", url_common_part)  # this is for 'teacher returned/approved ...'
         return url
 
+    def get_comment_anchor(self):
+        """The anchor that takes the notification's link straight to the comment it carries.
+
+        A notification whose action is a comment previews that comment ("... with "Nice work""):
+        a reply on a submission or an announcement, or the comment a teacher left with an
+        approval or a return (#2848). Its link then scrolls the target's page to that comment,
+        which the comment thread renders with the id ``comment-<id>``.
+
+        Returns:
+            str: ``"#comment-<id>"``, or ``""`` when the notification carries no comment.
+        """
+        comment_type = ContentType.objects.get_by_natural_key("comments", "comment")
+        if self.action_object_id is not None and self.action_content_type_id == comment_type.id:
+            return f"#comment-{self.action_object_id}"
+        return ""
+
     def mark_read(self):
         self.unread = False
         self.time_read = timezone.now()
@@ -309,10 +321,7 @@ class Notification(models.Model):
             target_url = self.target_url
         else:
             try:
-                target_url = self.target_object.get_absolute_url()
-
-                if 'commented on' in self.verb:
-                    target_url += f'#comment-{self.action_object_id}'
+                target_url = self.target_object.get_absolute_url() + self.get_comment_anchor()
             except Exception:
                 # no target object, or one without a resolvable page (AttributeError /
                 # NoReverseMatch): fall back to the notifications list
