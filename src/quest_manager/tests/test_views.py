@@ -5450,7 +5450,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f'<p>{comment_text}</p>')
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -5523,6 +5523,26 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(notification.action_object)
         self.assertNotIn(' with "', str(notification))
         self.assertTrue(notification.get_url().endswith(self.sub.get_absolute_url()))
+
+    def test_approve__quick_reply_text_is_saved_in_a_paragraph(self):
+        """A reply typed in the Approvals page's quick reply box arrives as bare text, and is saved
+        in a paragraph like the editor's replies, keeping its line breaks (#2850)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': 'Nice work.\nCheck your spelling next time.', 'approve_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(comment.text, '<p>Nice work.<br/>Check your spelling next time.</p>')
+
+    def test_return__editor_reply_keeps_its_own_paragraphs(self):
+        """A reply from the editor arrives in paragraphs already, and is saved as it came rather
+        than inside another paragraph (#2850, #2713)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Nice work.</p><p>Check your spelling.</p>', 'return_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(comment.text, '<p>Nice work.</p><p>Check your spelling.</p>')
 
     def test_approve__with_badge_quick_reply_form(self):
         """ Test that the badge is granted """
@@ -5763,7 +5783,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f'<p>{comment_text}</p>')
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -5855,7 +5875,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
 
         response = self.client.post(path, data={'comment_button': '', 'comment_text': 'COMMENT TEXT'})
         self.assertRedirects(response, approvals)
-        self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
+        self.assertEqual(Comment.objects.filter(text='<p>COMMENT TEXT</p>').count(), 1)
 
         # no button returns 404
         self.assertEqual(self.client.post(path).status_code, 404)

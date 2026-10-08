@@ -1687,10 +1687,12 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             if not wrote_comment:
                 comment_text = blank_comment_text
 
+            # In a paragraph, as the editor and the stand-in text lay a comment out: the Approvals
+            # page's quick reply box, and the quick-text buttons that fill it, send bare text (#2850).
             comment_new = Comment.objects.create_comment(
                 user=self.request.user,
                 path=self.submission.get_absolute_url(),
-                text=comment_text + comment_text_addition,
+                text=in_a_paragraph(comment_text) + comment_text_addition,
                 target=self.submission,
             )
 
