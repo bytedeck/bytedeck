@@ -679,6 +679,13 @@ DEFAULT_SUPERUSER_EMAIL = env('DEFAULT_SUPERUSER_EMAIL', default='')
 TENANT_MODEL = "tenant.Tenant"
 TENANT_DOMAIN_MODEL = "tenant.TenantDomain"
 
+# The ByteDeck User Guide, built from docs/ and published to GitHub Pages by
+# .github/workflows/docs.yml. The app links to it for help: from the Admin menu, the new-deck
+# welcome email, and the Shared Library's pages and setting. A constant rather than an env var,
+# since a model's help text quotes it and a different value per environment would read as a
+# model change to makemigrations.
+USER_GUIDE_URL = 'https://bytedeck.github.io/bytedeck/'
+
 TENANT_DEFAULT_ADMIN_USERNAME = env('TENANT_DEFAULT_ADMIN_USERNAME')
 TENANT_DEFAULT_ADMIN_PASSWORD = env('TENANT_DEFAULT_ADMIN_PASSWORD')
 TENANT_DEFAULT_ADMIN_EMAIL = env('TENANT_DEFAULT_ADMIN_EMAIL', default='')

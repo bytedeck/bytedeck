@@ -11,6 +11,7 @@ from django.db import IntegrityError, connection
 from django.http import Http404
 from django.template.loader import get_template
 from django.test import RequestFactory
+from django.conf import settings
 from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_exists
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
@@ -1279,6 +1280,17 @@ class LibraryOverviewTestsCase(LibraryTenantTestCaseMixin):
 
         # "Quests" should be the active tab
         self.assertEqual(response.context['tab'], 'quests')
+
+    def test_library_overview__links_the_user_guide(self):
+        """Both of the Library's tabs point to the User Guide's Shared Library page (#2109)."""
+        self.client.force_login(self.test_teacher)
+        guide = f'{settings.USER_GUIDE_URL}quests/shared-library/'
+
+        for name in ('library:quest_list', 'library:category_list'):
+            with self.subTest(name):
+                response = self.client.get(reverse(name))
+                self.assertContains(response, f'<a href="{guide}">User Guide</a>')
+                self.assertNotContains(response, '/wiki/Library')
 
     def test_library_overview__quests_tab_is_paginated(self):
         """The quests tab sends one page of quests, not the whole Library (#2379).

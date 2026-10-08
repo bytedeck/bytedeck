@@ -1508,6 +1508,11 @@ class SubscriptionDetailViewTest(ByteDeckTenantTestCase):
         self.assertContains(response, reverse('decks:subscription'))
         self.assertContains(response, 'Subscription')
 
+    def test_menu__admin_dropdown_links_the_user_guide(self):
+        """The Admin menu's ByteDeck section links the User Guide (#2109)."""
+        response = self.client.get(reverse('quests:quests'))
+        self.assertContains(response, f'href="{settings.USER_GUIDE_URL}"><i class="fa fa-fw fa-book"></i>&nbsp;User Guide</a>', html=False)
+
 
 class SubscriptionCheckoutTest(ByteDeckTenantTestCase):
     """Stripe checkout/portal flow tests for the subscription page (epic #1729 PR 6).

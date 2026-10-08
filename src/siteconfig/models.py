@@ -226,9 +226,10 @@ class SiteConfig(models.Model):
 
     allow_staff_export = models.BooleanField(
         verbose_name="Allow staff to export quests to the library", default=False,
-        help_text="If enabled, staff will be able to export quests and campaigns to the Shared Library; \
-            otherwise only the owner can export quests. \
-            See the <a href=\"https://github.com/bytedeck/bytedeck/wiki/Library#sharing-to-the-library\" target=\"blank\">help page</a> for details."
+        help_text="If enabled, staff will be able to export quests and campaigns to the Shared Library; "
+                  "otherwise only the owner can export quests. "
+                  f"See the <a href=\"{settings.USER_GUIDE_URL}quests/shared-library/#share-to-the-library\" "
+                  "target=\"_blank\">User Guide</a> for details."
     )
 
 

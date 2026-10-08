@@ -56,6 +56,20 @@ def group_name():
 
 
 @register.simple_tag
+def user_guide_url(page=''):
+    """The address of the User Guide, or of one of its pages (#2109).
+
+    Args:
+        page (str): the page's path within the guide, such as 'quests/shared-library/', with
+            an optional '#section'. Empty for the guide's home page.
+
+    Returns:
+        str: the full address, from settings.USER_GUIDE_URL.
+    """
+    return settings.USER_GUIDE_URL + page
+
+
+@register.simple_tag
 def max_upload_request_size():
     """The most the files chosen in one form may add up to, in bytes, for the browser's check
     of a file's size before it is uploaded (js/upload-size-check.js, #783).

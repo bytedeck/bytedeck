@@ -130,6 +130,25 @@ class WelcomeEmailTest(ByteDeckTenantTestCase):
         self.assertIn('change your password', message)
         self.assertIn('alt="[Logo]"', message)  # the standard sigblock, logo included
 
+    def test_send_welcome_email__links_the_user_guide(self):
+        """The welcome email points a new owner to the User Guide for help (#2109)."""
+        from unittest.mock import patch
+
+        from django.conf import settings
+        from django.contrib.auth import get_user_model
+
+        from model_bakery import baker
+
+        from tenant.utils import DeckRequestService
+
+        user = baker.make(get_user_model(), first_name='Jane', last_name='Doe', email='jane@example.com')
+        with patch('tenant.utils.send_email_message.apply_async') as mock_apply:
+            DeckRequestService.send_welcome_email(user, self.tenant, 'pw-secret-123')
+
+        message = mock_apply.call_args.kwargs['args'][1]
+        self.assertIn(f'User guide: <a href="{settings.USER_GUIDE_URL}">{settings.USER_GUIDE_URL}</a>', message)
+        self.assertNotIn('/wiki', message)
+
     def test_send_welcome_email__sigblock_shows_the_wordmark_at_half_size(self):
         """The welcome sigblock logo is the platform wordmark by ABSOLUTE URL at
         half its natural size (maintainer request, 2026-08-08). A new deck's

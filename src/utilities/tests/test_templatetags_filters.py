@@ -4,7 +4,9 @@ from django.template import Template, Context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
-from utilities.templatetags.utility_tags import checkcross, favicon_url, max_upload_request_size, public_email_logo_url
+from utilities.templatetags.utility_tags import (
+    checkcross, favicon_url, max_upload_request_size, public_email_logo_url, user_guide_url,
+)
 
 
 class CheckcrossFilterTest(SimpleTestCase):
@@ -76,3 +78,13 @@ class PublicEmailLogoUrlTagTest(SimpleTestCase):
         which has no SiteConfig."""
         with self.settings(PUBLIC_EMAIL_LOGO_URL='https://cdn.example.com/wordmark.png'):
             self.assertEqual(public_email_logo_url(), 'https://cdn.example.com/wordmark.png')
+
+
+class UserGuideUrlTagTest(SimpleTestCase):
+    """Tests for the user_guide_url tag, the address the app's help links use (#2109)."""
+
+    @override_settings(USER_GUIDE_URL='https://guide.example/')
+    def test_user_guide_url__the_guide_or_one_of_its_pages(self):
+        """Without a page it's the guide's home page; with one, that page within the guide."""
+        self.assertEqual(user_guide_url(), 'https://guide.example/')
+        self.assertEqual(user_guide_url('quests/shared-library/'), 'https://guide.example/quests/shared-library/')

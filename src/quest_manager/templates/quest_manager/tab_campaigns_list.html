@@ -1,3 +1,4 @@
+{% load utility_tags %}
 {% load quest_tags %}
 {# asked once here, not per row: every campaign row offers the same export action #}
 {% can_export_to_library as can_export %}
@@ -5,7 +6,7 @@
   <p>
     <span class="text-danger">EXPERIMENTAL!</span>
     The Library contains quests created and shared by Bytedeck and its community, for you to use by importing them into your own deck.
-    Documentation for this feature can be found on the <a href="https://github.com/bytedeck/bytedeck/wiki/Library">Bytedeck Wiki</a>.
+    How it works is in the <a href="{% user_guide_url 'quests/shared-library/' %}">User Guide</a>.
   </p>
 {% endif %}
 {% include 'snippets/table_loading.html' %}

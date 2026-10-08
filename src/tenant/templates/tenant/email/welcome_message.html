@@ -1,3 +1,4 @@
+{% load utility_tags %}
 <p>Hello {{ user.get_full_name|default:user.username }},</p>
 
 <p>Thank you for confirming your email address. Use these credentials to log in to your
@@ -11,6 +12,6 @@
 <p>You should change your password after logging in for the first time.</p>
 
 <p>Help forum: <a href="https://github.com/bytedeck/bytedeck/discussions">https://github.com/bytedeck/bytedeck/discussions</a><br>
-  Documentation: <a href="https://github.com/bytedeck/bytedeck/wiki">https://github.com/bytedeck/bytedeck/wiki</a></p>
+  User guide: <a href="{% user_guide_url %}">{% user_guide_url %}</a></p>
 
 {% include "tenant/email/_email_footer.html" %}
