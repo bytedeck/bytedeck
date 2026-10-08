@@ -47,6 +47,26 @@ class ProfileViewTypes:
     STAFF = 2
     INACTIVE = 3
     BLOCK = 4
+    YOURS = 5
+    TAS = 6
+
+
+def offers_yours_list(user):
+    """Whether the Students page offers `user` the Yours list, the students in their own groups.
+
+    Only when it differs from Current and isn't empty (#2136): the user teaches a group, and
+    some group has another teacher or none. When they are the only teacher with groups, Yours
+    and Current hold the same students, so the Quest Approvals page leaves out its "My groups"
+    button on the same test.
+
+    Args:
+        user: the requesting staff member.
+
+    Returns:
+        bool: True when the Yours list holds some current students but not all of them.
+    """
+    teachers = Block.objects.grouped_teachers_blocks().keys()
+    return user.id in teachers and len(teachers) > 1
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -296,6 +316,8 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         context = super().get_context_data(**kwargs)
         context['VIEW_TYPES'] = ProfileViewTypes
         context['view_type'] = self.view_type
+        if self.request.user.is_staff:
+            context['show_yours_list'] = offers_yours_list(self.request.user)
 
         sort, order = self.get_sort()
         context['search_query'] = self.get_search_query()
@@ -347,6 +369,50 @@ class ProfileListCurrent(ProfileList):
 
 
 @method_decorator(staff_member_required, name='dispatch')
+class ProfileListYours(ProfileList):
+    """The students in the requesting teacher's own groups (#2136): registered in a course in an
+    open semester, in a group they are the teacher of."""
+    view_type = ProfileViewTypes.YOURS
+
+    def get_base_queryset(self):
+        """The current students registered in one of the requesting teacher's groups.
+
+        The group and the semester are matched on the same registration, as on a group's own
+        list, so a student in an open semester for one course and in the teacher's group only
+        through an archived one is not listed.
+
+        Returns:
+            QuerySet[Profile]: those students' profiles, each appearing once.
+        """
+        in_your_groups = CourseStudent.objects.get_queryset().in_open_semesters().filter(
+            block__current_teacher=self.request.user,
+        ).values_list('user_id', flat=True)
+        return Profile.objects.all_in_open_semesters().filter(user_id__in=in_your_groups)
+
+    def get_block_filter_choices(self):
+        """Only the requesting teacher's own groups: any other would filter this list down to nobody.
+
+        Returns:
+            QuerySet[Block]: their groups running in an open semester, ordered by name.
+        """
+        return super().get_block_filter_choices().filter(current_teacher=self.request.user)
+
+
+@method_decorator(staff_member_required, name='dispatch')
+class ProfileListTAs(ProfileList):
+    """The non-archived students with the TA flag turned on, who can draft quests (#2136)."""
+    view_type = ProfileViewTypes.TAS
+
+    def get_base_queryset(self):
+        """The All list's students, narrowed to the TAs.
+
+        Returns:
+            QuerySet[Profile]: the non-archived student profiles flagged as TAs.
+        """
+        return super().get_base_queryset().filter(is_TA=True)
+
+
+@method_decorator(staff_member_required, name='dispatch')
 class ProfileListBlock(ProfileList):
     """lists all students in a given block, is accessed through the block list view and acts as a hybrid profile list and block detail view"""
     view_type = ProfileViewTypes.BLOCK
@@ -391,7 +457,12 @@ class ProfileListStaff(ProfileList):
     show_block_filter = False
 
     def get_base_queryset(self):
-        return Profile.objects.filter(user__is_staff=True)
+        """The non-archived staff accounts: an archived one is listed under Archived (#2136).
+
+        Returns:
+            QuerySet[Profile]: the profiles of the staff who can still sign in.
+        """
+        return Profile.objects.filter(user__is_staff=True).get_active()
 
 
 @method_decorator(staff_member_required, name='dispatch')
@@ -803,7 +874,7 @@ def profile_archive(request, profile_id):
     """Archive a student by deactivating their account (``User.is_active = False``).
 
     Archiving is the safe, reversible replacement for deleting a student
-    (issue #2182): the student can no longer log in and moves to the Inactive
+    (issue #2182): the student can no longer log in and moves to the Archived
     list, but all of their data is kept and staff can later restore or delete
     them from there. Staff-only; staff accounts can't be archived this way.
     """
@@ -820,7 +891,7 @@ def profile_archive(request, profile_id):
     messages.success(
         request,
         format_html(
-            "<a href='{}'>{}</a> has been archived. You can restore or delete them from the Inactive list.",
+            "<a href='{}'>{}</a> has been archived. You can restore or delete them from the Archived list.",
             profile.get_absolute_url(),
             user.username,
         ),

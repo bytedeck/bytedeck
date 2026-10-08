@@ -2,6 +2,7 @@
 {% load crispy_forms_tags %}
 {% load static %}
 {% load utility_tags %}
+{% load profile_tags %}
 
 {% block head %}
 <link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
@@ -26,18 +27,37 @@
     <!-- end of custom block user list header -->
 
     {% if request.user.is_staff and view_type != VIEW_TYPES.BLOCK %}
+        {% comment %}
+          Three sets of lists (#2136): the students, each list holding the one before it; the
+          staff and the TAs; and the archived accounts. Each button's hover text says who its
+          list holds, in the same words wherever the app offers that list. Yours is left out
+          where it would match Current or be empty (offers_yours_list), unless it is the list
+          being shown.
+        {% endcomment %}
         <div class="btn-group">
-            <a href="{% url 'profiles:profile_list_current' %}"
-            class="btn {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+            {% if show_yours_list or view_type == VIEW_TYPES.YOURS %}
+            <a href="{% url 'profiles:profile_list_yours' %}" title="{% people_list_description 'yours' %}"
+            class="btn {% if view_type == VIEW_TYPES.YOURS %}btn-primary{% else %}btn-default{% endif %}">Yours</a>
+            {% endif %}
 
-            <a href="{% url 'profiles:profile_list' %}"
-            class="btn {% if view_type == VIEW_TYPES.LIST %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+            <a href="{% url 'profiles:profile_list_current' %}" title="{% people_list_description 'current' %}"
+            class="btn {% if view_type == VIEW_TYPES.CURRENT %}btn-primary{% else %}btn-default{% endif %}">Current</a>
 
-            <a href="{% url 'profiles:profile_list_inactive' %}"
-            class="btn {% if view_type == VIEW_TYPES.INACTIVE %}btn-primary{% else %}btn-default{% endif %}">Inactive</a>
+            <a href="{% url 'profiles:profile_list' %}" title="{% people_list_description 'all' %}"
+            class="btn {% if view_type == VIEW_TYPES.LIST %}btn-primary{% else %}btn-default{% endif %}">All</a>
+        </div>
 
-            <a href="{% url 'profiles:profile_list_staff' %}"
+        <div class="btn-group">
+            <a href="{% url 'profiles:profile_list_staff' %}" title="{% people_list_description 'staff' %}"
             class="btn {% if view_type == VIEW_TYPES.STAFF %}btn-primary{% else %}btn-default{% endif %}">Staff</a>
+
+            <a href="{% url 'profiles:profile_list_tas' %}" title="{% people_list_description 'tas' %}"
+            class="btn {% if view_type == VIEW_TYPES.TAS %}btn-primary{% else %}btn-default{% endif %}">TAs</a>
+        </div>
+
+        <div class="btn-group">
+            <a href="{% url 'profiles:profile_list_inactive' %}" title="{% people_list_description 'archived' %}"
+            class="btn {% if view_type == VIEW_TYPES.INACTIVE %}btn-primary{% else %}btn-default{% endif %}">Archived</a>
         </div>
     {% endif %}
     <i class="fa fa-users pull-right"></i>
