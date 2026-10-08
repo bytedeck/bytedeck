@@ -9,7 +9,7 @@ import re
 from urllib.parse import parse_qs, urlsplit
 
 from bs4 import BeautifulSoup
-from django.utils.html import strip_tags
+from django.utils.html import format_html, format_html_join, strip_tags
 
 # Tags that are content in their own right, with no text of their own. A student can answer a
 # question with nothing but a pasted screenshot or an embedded video, so `is_empty_html` has to
@@ -94,6 +94,39 @@ def textify(html):
     # don't ignore links anymore, I like links
     h.ignore_links = False
     return h.handle(html)
+
+
+def link_to(obj, text=None):
+    """A link to an object's own page, for a message that names it (#2808).
+
+    A message that names a quest, a badge or a student links the name, so the teacher or student
+    reading it can go straight to the thing it is about.
+
+    Args:
+        obj: anything with a `get_absolute_url()`, such as a quest, a badge or a student's profile.
+        text (str or None): what the link reads, escaped unless already safe. The object's own
+            `str()` when not given.
+
+    Returns:
+        SafeString: the <a> element.
+    """
+    return format_html('<a href="{}">{}</a>', obj.get_absolute_url(), obj if text is None else text)
+
+
+def link_list(objects, separator=", ", text=None):
+    """Several objects, each as a link to its own page, joined into one fragment of a message.
+
+    Args:
+        objects (iterable): objects with a `get_absolute_url()`.
+        separator (str): what goes between two links.
+        text (callable or None): what each link reads, given its object. The object's own
+            `str()` when not given.
+
+    Returns:
+        SafeString: the links, joined.
+    """
+    return format_html_join(
+        separator, "{}", ((link_to(obj, None if text is None else text(obj)),) for obj in objects))
 
 
 # The page a video player's address stands for, for the players the editor embeds, so a link

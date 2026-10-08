@@ -2174,6 +2174,24 @@ class LibraryImportNameCollisionTests(LibraryTenantTestCaseMixin):
             f"expected the new name to be given, got {self._message_texts(response)}",
         )
 
+    def test_import_quest__rename_message_links_both_quests(self):
+        """The rename message links the teacher's own quest and the copy that arrived, so the
+        copy to rename is a click away (#2808)."""
+        local = baker.make(Quest, name="Contested Name")
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:import_quest', args=[self.library_quest.import_id]), follow=True,
+        )
+
+        imported = Quest.objects.all_including_archived().get(import_id=self.library_quest.import_id)
+        texts = self._message_texts(response)
+        expected = (
+            f"""called '<a href="{local.get_absolute_url()}">Contested Name</a>', so the copy that just arrived is """
+            f"""called '<a href="{imported.get_absolute_url()}">{imported.name}</a>'"""
+        )
+        self.assertTrue(any(expected in text for text in texts), f"expected {expected}, got {texts}")
+
     def test_import_quest__says_nothing_about_renaming_when_the_name_was_free(self):
         """An import with no clash keeps the message to the two steps that always apply."""
         self.client.force_login(self.test_teacher)
@@ -2837,6 +2855,22 @@ class LibrarySharerWarningTests(LibraryTenantTestCaseMixin):
             shared = set(Quest.objects.all_including_archived().values_list('import_id', flat=True))
         self.assertIn(active.import_id, shared)
         self.assertNotIn(archived.import_id, shared)
+
+    def test_export_category__links_the_archived_quest_left_out(self):
+        """The archived quest named as left behind links to its page, where it can be unarchived (#2808)."""
+        campaign = baker.make(Category, published=True)
+        baker.make(Quest, name="Still Active Quest", campaign=campaign, published=True)
+        archived = baker.make(Quest, name="Retired Quest", campaign=campaign, published=True, archived=True)
+        self._allow_staff_export()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('library:export_category', args=[campaign.import_id]), {'agree_license': 'on'}, follow=True,
+        )
+
+        texts = self._message_texts(response)
+        link = f'<a href="{archived.get_absolute_url()}">Retired Quest</a>'
+        self.assertTrue(any(link in text for text in texts), f"expected {link}, got {texts}")
 
     def test_export_category__does_not_name_an_archived_quest_that_is_also_a_draft(self):
         """A draft is not reported as left behind, because unarchiving would not send it.
@@ -3654,7 +3688,8 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
         # The teacher is told, exactly as on the ordinary path.
         messages = [message.message for message in get_messages(response.wsgi_request)]
         self.assertTrue(
-            any("already had a different campaign called 'Studio Habits'" in message for message in messages),
+            any(f"""already had a different campaign called '<a href="{mine.get_absolute_url()}">Studio Habits</a>'"""
+                in message for message in messages),
             f"no message named the renamed campaign: {messages}",
         )
 
@@ -3700,13 +3735,14 @@ class LibraryCampaignTitleClashTests(LibraryTenantTestCaseMixin):
 
     def test_ImportCampaignView__the_teacher_is_told_the_campaign_was_renamed(self):
         """The rename is announced, since the teacher is looking for the Library's title."""
-        baker.make(Category, title="Studio Habits")
+        mine = baker.make(Category, title="Studio Habits")
 
         response = self._import()
 
         texts = [str(message) for message in response.context['messages']]
         self.assertTrue(
-            any("already had a different campaign called 'Studio Habits'" in text for text in texts),
+            any(f"""already had a different campaign called '<a href="{mine.get_absolute_url()}">Studio Habits</a>'"""
+                in text for text in texts),
             f"expected the rename to be announced, got {texts}",
         )
 

@@ -3,7 +3,7 @@ import warnings
 from bs4 import MarkupResemblesLocatorWarning
 from django.test import SimpleTestCase
 from html.parser import HTMLParser
-from utilities.html import EMBEDDED_CONTENT_TAGS, in_a_paragraph, is_empty_html, link_embeds, textify, urlize
+from utilities.html import EMBEDDED_CONTENT_TAGS, in_a_paragraph, is_empty_html, link_embeds, link_list, link_to, textify, urlize
 from comments.models import clean_html
 
 
@@ -454,3 +454,52 @@ class LinkEmbedsTests(SimpleTestCase):
         ):
             with self.subTest(html=html):
                 self.assertEqual(link_embeds(html), html)
+
+
+class _Page:
+    """Something with a page of its own, standing in for a quest or a badge."""
+
+    def __init__(self, name, url):
+        """Remember the name and the page's address.
+
+        Args:
+            name (str): what the object calls itself.
+            url (str): where its page is.
+        """
+        self.name = name
+        self.url = url
+
+    def __str__(self):
+        """The object's own name."""
+        return self.name
+
+    def get_absolute_url(self):
+        """The object's page."""
+        return self.url
+
+
+class LinkToTests(SimpleTestCase):
+    """link_to and link_list, which link the objects a message names to their pages (#2808)."""
+
+    def test_link_to__links_the_object_by_its_own_name(self):
+        """With no text given, the link reads as the object's own name."""
+        self.assertEqual(link_to(_Page("Lab Safety", "/quests/7/")), '<a href="/quests/7/">Lab Safety</a>')
+
+    def test_link_to__reads_as_the_text_given(self):
+        """Given text replaces the name, as for a student linked by their username."""
+        self.assertEqual(link_to(_Page("ignored", "/profiles/3/"), "ana"), '<a href="/profiles/3/">ana</a>')
+
+    def test_link_to__escapes_the_name(self):
+        """A name holding markup is shown as text, since a message renders its links."""
+        self.assertEqual(
+            link_to(_Page("<b>Bold</b> & Co", "/q/")), '<a href="/q/">&lt;b&gt;Bold&lt;/b&gt; &amp; Co</a>')
+
+    def test_link_list__joins_the_links(self):
+        """Several objects come out as links, joined by the separator, each reading as asked."""
+        pages = [_Page("First", "/1/"), _Page("Second", "/2/")]
+
+        self.assertEqual(link_list(pages), '<a href="/1/">First</a>, <a href="/2/">Second</a>')
+        self.assertEqual(
+            link_list(pages, "; ", text=lambda page: page.name.upper()),
+            '<a href="/1/">FIRST</a>; <a href="/2/">SECOND</a>',
+        )

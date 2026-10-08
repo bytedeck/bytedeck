@@ -231,6 +231,69 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         self.test_student1.profile.refresh_from_db()
         self.assertEqual(self.test_student1.profile.xp_cached, xp_initial)
 
+    def _messages(self, response):
+        """The messages a request queued, as they render.
+
+        Args:
+            response (HttpResponse): the response whose request queued them.
+
+        Returns:
+            list[str]: the message bodies.
+        """
+        return [str(message) for message in response.wsgi_request._messages]
+
+    def _link(self, obj, text):
+        """The link a message makes to an object's page.
+
+        Args:
+            obj: what is linked: a badge, or a student's profile.
+            text (str): what the link reads.
+
+        Returns:
+            str: the <a> element.
+        """
+        return f'<a href="{obj.get_absolute_url()}">{text}</a>'
+
+    def test_assertion_create__message_links_the_badge_and_the_student(self):
+        """Granting a badge says which badge to whom, each linked to its page (#2808)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id},
+        )
+
+        self.assertEqual(self._messages(response), [
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} "
+            f"granted to {self._link(self.test_student1.profile, self.test_student1.username)}"
+        ])
+
+    def test_assertion_create__message_escapes_the_badge_name(self):
+        """A badge name holding markup reaches the message as text inside its link."""
+        self.test_badge.name = "<b>Bold</b> Badge"
+        self.test_badge.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(
+            reverse('badges:grant', kwargs={'user_id': self.test_student1.id, 'badge_id': self.test_badge.id}),
+            data={'badge': self.test_badge.id, 'user': self.test_student1.id},
+        )
+
+        self.assertIn(self._link(self.test_badge, "&lt;b&gt;Bold&lt;/b&gt; Badge"), self._messages(response)[0])
+
+    def test_assertion_delete__message_links_the_badge_and_the_student(self):
+        """Revoking a badge says which badge from whom, each linked to its page, under the deck's
+        own name for badges (#2808)."""
+        assertion = BadgeAssertion.objects.create_assertion(self.test_student1, self.test_badge)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:revoke', args=[assertion.id]))
+
+        self.assertEqual(self._messages(response), [
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} "
+            f"revoked from {self._link(self.test_student1.profile, self.test_student1.username)}"
+        ])
+
     def test_assertion_delete__the_revoke_and_the_xp_it_takes_back_are_one_transaction(self):
         """Revoking is all or nothing, which is what keeps the Available tab honest (#2722).
 
@@ -409,6 +472,24 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         badge_assertions_after = BadgeAssertion.objects.all().count()
         self.assertEqual(badge_assertions_after, badge_assertions_before + 2)
 
+    def test_bulk_assertion_create__message_links_the_badge_and_each_student(self):
+        """Granting a badge in bulk links the badge and every student it went to (#2808)."""
+        self.client.force_login(self.test_teacher)
+        baker.make('courses.CourseStudent', user=self.test_student1, semester=self.sem)
+        baker.make('courses.CourseStudent', user=self.test_student2, semester=self.sem)
+
+        response = self.client.post(reverse('badges:bulk_grant'), data={
+            'badge': self.test_badge.id,
+            'students': [self.test_student1.profile.id, self.test_student2.profile.id],
+        })
+
+        message = self._messages(response)[0]
+        self.assertTrue(message.startswith(
+            f"{SiteConfig.get().custom_name_for_badge} {self._link(self.test_badge, self.test_badge.name)} granted to "))
+        for student in (self.test_student1, self.test_student2):
+            self.assertIn(self._link(student.profile, student.profile.preferred_full_name()), message)
+        self.assertEqual(message.count("; "), 1)
+
     def test_badge_grant_qualifying__GET_lists_qualifying_students(self):
         """The grant-qualifying page lists current students who meet the badge's prereqs
         but haven't been granted it yet, and offers a confirm button (issue #1157).
@@ -460,6 +541,16 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         task.assert_called_once_with(
             kwargs={'badge_id': self.test_badge.id, 'start_from_user_id': 1}, queue='default'
         )
+
+    @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
+    def test_badge_grant_qualifying__message_links_the_badge(self, task):
+        """Granting a badge to everyone who qualifies links the badge in the message saying so (#2808)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.post(reverse('badges:grant_qualifying', args=[self.test_badge.id]))
+
+        self.assertIn(f'"{self._link(self.test_badge, self.test_badge.name)}" to all qualifying students',
+                      self._messages(response)[0])
 
     @patch('badges.views.grant_badge_assertions_for_badge.apply_async')
     def test_badge_grant_qualifying__unpublished_badge_does_not_grant(self, task):
@@ -527,7 +618,10 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         messages = [str(m) for m in response.wsgi_request._messages]
         about_the_save = [m for m in messages if "Prerequisites have been updated" in m or grant_url in m]
         self.assertEqual(len(about_the_save), 1)
-        self.assertIn(f"Prerequisites have been updated for {self.test_badge}.", about_the_save[0])
+        self.assertIn(
+            f'Prerequisites have been updated for <a href="{self.test_badge.get_absolute_url()}">{self.test_badge}</a>.',
+            about_the_save[0],
+        )
         self.assertIn(grant_url, about_the_save[0])
 
     def test_badge_prereqs_update__unpublished_badge_not_prompted_to_grant(self):

@@ -11,6 +11,7 @@ from prerequisites.forms import PrereqFormInline, PrereqFormsetHelper
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 from djcytoscape.models import CytoScape
+from utilities.html import link_to
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.edit import FormView
 from django.utils.html import format_html
@@ -70,10 +71,11 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
         """The message shown once changed prerequisites are saved.
 
         Returns:
-            str: the success message. A subclass can add to it, as BadgePrereqsUpdate does, so
-            the teacher still gets a single message.
+            SafeString: the success message, naming the object with a link to its page (#2808). A
+            subclass can add to it, as BadgePrereqsUpdate does, so the teacher still gets a
+            single message.
         """
-        return f"Prerequisites have been updated for {self.object}."
+        return format_html("Prerequisites have been updated for {}.", link_to(self.object))
 
     def get_success_url(self):
         return self.object.get_absolute_url()

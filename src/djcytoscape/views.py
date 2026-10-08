@@ -20,6 +20,7 @@ from hackerspace_online.decorators import staff_member_required
 from badges.models import BadgeAssertion
 from quest_manager.models import QuestSubmission, Quest
 from siteconfig.models import SiteConfig
+from utilities.html import link_to
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
 
 from .models import CytoScape
@@ -260,7 +261,7 @@ class ScapeGenerateMap(NonPublicOnlyViewMixin, FormView):
         self.object = form.save()
         messages.success(
             self.request,
-            f"New map {self.object.name} was successfully generated."
+            format_html("New map {} was successfully generated.", link_to(self.object, self.object.name)),
         )
         return HttpResponseRedirect(self.get_success_url())
 
