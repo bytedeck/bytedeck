@@ -44,6 +44,7 @@ That's the whole loop: your students sign up, join a course, work through quests
 * write more quests, and group them into **campaigns** (Admin > Campaigns);
 * decide which quests open up after which with **prerequisites**, and see the result on the quest **Maps**;
 * make **badges** for students to earn, and adjust the **ranks** they climb (Admin > Ranks);
-* post **announcements** to your whole class.
+* post **announcements** to your whole class;
+* add [custom pages and links](../your-deck/custom-pages.md) for the things students keep asking for.
 
 More of this guide is on its way. Until then, the [ByteDeck wiki](https://github.com/bytedeck/bytedeck/wiki) covers semesters, groups and courses, quest creation, submission questions, the Shared Library, marks, maps and more.

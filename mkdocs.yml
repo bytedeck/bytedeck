@@ -64,3 +64,7 @@ nav:
       - Invite your students: quick-start/invite-students.md
       - Your first quests: quick-start/first-quests.md
       - Review submissions: quick-start/review-submissions.md
+  - Quests:
+      - Submission questions: quests/submission-questions.md
+  - Your deck:
+      - Custom pages and links: your-deck/custom-pages.md

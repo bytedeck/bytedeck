@@ -45,6 +45,9 @@ Instructor notes
 
 Press **Create** to save the quest.
 
+!!! tip "Ask for specific answers"
+    To give each thing you want back its own answer field (a short answer, a long answer or a file), add [submission questions](../quests/submission-questions.md) to the quest once it's saved.
+
 !!! warning "New quests wait for the ByteDeck Proficiency badge"
     Under **Basic Prerequisites** at the bottom of the form, every new quest starts with the **ByteDeck Proficiency** badge as its prerequisite, so students see it only after they finish the Orientation campaign. To make a quest available as soon as a student joins, clear that badge before you press Create. To change the starting prerequisite for all new quests, use **Default quest prerequisite** in Site Configuration.
 
