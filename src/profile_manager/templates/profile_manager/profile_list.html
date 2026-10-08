@@ -168,8 +168,8 @@ data-classes="table table-no-bordered table-hover"
                 </th>
             {% endif %}
 
-            <th data-field='last_login' data-visible="false">
-                {% include 'snippets/sortable_header.html' with field='last_login' label='Last Login' %}
+            <th data-field='last_active' data-visible="false">
+                {% include 'snippets/sortable_header.html' with field='last_active' label='Last Active' %}
             </th>
 
             <th data-field='username'>
@@ -253,9 +253,9 @@ data-classes="table table-no-bordered table-hover"
                     {% endif %}
 
                     <td>
-                        {% if object.user.last_login %}
-                            {{ object.user.last_login|date:'y/m/d' }}<br>
-                            <small>{{ object.user.last_login|timesince }} ago</small>
+                        {% if object.last_active %}
+                            {{ object.last_active|date:'y/m/d' }}<br>
+                            <small>{{ object.last_active|timesince }} ago</small>
                         {% else %}
                             &nbsp;Never
                         {% endif %}
