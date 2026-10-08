@@ -299,6 +299,42 @@ class NotificationModelTest(ByteDeckTenantTestCase):
         self.assertIn(comment_hash, notification.get_url())
         self.assertIn(comment_hash, str(notification))
 
+    def test_get_comment_anchor__a_comment_carried_with_any_verb(self):
+        """A notification carrying a comment links straight to it whatever its verb, such as a
+        teacher's approval with a comment (#2848)."""
+        submission = baker.make('quest_manager.QuestSubmission')
+        comment = baker.make(
+            'comments.Comment',
+            target_content_type=ContentType.objects.get_for_model(submission), target_object_id=submission.id,
+        )
+        new_notification(self.teacher, action=comment, target=submission, recipient=self.student, verb="approved")
+
+        notification = self.student.notifications.get()
+        anchored = f"{submission.get_absolute_url()}#comment-{comment.id}"
+        self.assertEqual(notification.get_comment_anchor(), f"#comment-{comment.id}")
+        self.assertTrue(notification.get_url().endswith(anchored))
+        self.assertIn(f"?next={anchored}'", str(notification))
+
+    def test_get_comment_anchor__none_without_a_comment(self):
+        """A notification carrying no comment links to its target's page as it is, even when its
+        verb is "commented on", as for a teacher who pressed Comment with nothing written."""
+        submission = baker.make('quest_manager.QuestSubmission')
+        new_notification(self.teacher, target=submission, recipient=self.student, verb="commented on")
+
+        notification = self.student.notifications.get()
+        self.assertEqual(notification.get_comment_anchor(), "")
+        self.assertTrue(notification.get_url().endswith(submission.get_absolute_url()))
+        self.assertNotIn("#comment-", str(notification))
+
+    def test_get_comment_anchor__none_for_an_action_that_is_not_a_comment(self):
+        """An action of another kind, such as the quest a Library share sends, adds no anchor."""
+        quest = baker.make('quest_manager.Quest')
+        new_notification(self.teacher, action=quest, target=quest, recipient=self.student, verb="shared")
+
+        notification = self.student.notifications.get()
+        self.assertEqual(notification.get_comment_anchor(), "")
+        self.assertNotIn("#comment-", notification.get_url())
+
     def test_get_sender_display__support_admin_renders_as_bytedeck(self):
         """A notification sent by the deck's ByteDeck support account displays its
         actor as "Bytedeck" (the raw `admin` username would read like any other

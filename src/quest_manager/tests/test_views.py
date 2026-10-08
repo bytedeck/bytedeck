@@ -5439,6 +5439,66 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         # self.assertEqual(len(messages), 1)
         # self.assertEqual(messages[0].tags, 'success')
 
+    def _decision_notification(self, verb):
+        """The student's notification of the teacher's decision, for the preview tests below.
+
+        Args:
+            verb (str): the decision, such as "approved" or "returned".
+
+        Returns:
+            Notification: the one the student got.
+        """
+        return Notification.objects.get(recipient=self.test_student, verb=verb)
+
+    def test_approve__notification_previews_the_teachers_comment(self):
+        """The student's notification of an approval previews the comment the teacher wrote, as a
+        teacher's notification of a comment does, and links straight to it (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Great work on the <b>diagram</b>!</p>', 'approve_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        notification = self._decision_notification('approved')
+        self.assertEqual(notification.action_object, comment)
+        self.assertIn('with "Great work on the diagram!"', str(notification))
+        self.assertIn('with "Great work on the diagram!"', notification.get_link())
+        self.assertTrue(notification.get_url().endswith(f'{self.sub.get_absolute_url()}#comment-{comment.id}'))
+
+    def test_return__notification_previews_the_teachers_comment(self):
+        """Returning a submission with a comment previews the comment in the student's
+        notification too (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Please add a screenshot of your code.</p>', 'return_button': True,
+        })
+
+        notification = self._decision_notification('returned')
+        self.assertEqual(notification.action_object, Comment.objects.all_with_target_object(self.sub).get())
+        self.assertIn('with "Please add a screenshot of your code."', str(notification))
+
+    def test_approve__notification_previews_an_image_as_a_thumbnail(self):
+        """An image in the teacher's comment shows in the preview as a thumbnail, at the height a
+        teacher's notifications give one (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Like this: <img src="/media/example.png" style="width: 900px;"></p>',
+            'approve_button': True,
+        })
+
+        image = BeautifulSoup(str(self._decision_notification('approved')), 'html.parser').find('img')
+        self.assertEqual(image['src'], '/media/example.png')
+        self.assertEqual(image['height'], '20px')
+
+    def test_approve__blank_comment_leaves_the_notification_without_a_preview(self):
+        """With nothing written, the comment holds the deck's approval text, which the
+        notification leaves out since it only repeats the verb; the link goes to the submission."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p><br></p>', 'approve_button': True,
+        })
+
+        notification = self._decision_notification('approved')
+        self.assertIsNone(notification.action_object)
+        self.assertNotIn(' with "', str(notification))
+        self.assertTrue(notification.get_url().endswith(self.sub.get_absolute_url()))
+
     def test_approve__with_badge_quick_reply_form(self):
         """ Test that the badge is granted """
         test_badge = baker.make('badges.Badge')
