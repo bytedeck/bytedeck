@@ -10,6 +10,7 @@ from model_bakery import baker
 from unittest.mock import patch
 
 from djcytoscape.models import CytoElement, CytoScape
+from djcytoscape.views import map_ids_redrawn_for
 
 from profile_manager.models import Profile
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
@@ -535,6 +536,35 @@ class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
             any("being updated" in str(m) for m in response.context['messages']),
             "no map-update message should be shown when map_auto_update is off",
         )
+
+
+    def test_form_valid__deleting_names_the_map_it_was_on(self):
+        """Deleting a quest drawn on a map names that map, found before the quest is gone (#2847)."""
+        from quest_manager.models import Quest
+        from siteconfig.models import SiteConfig
+
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.save()
+        origin = baker.make(Quest, name="Origin")
+        doomed = baker.make(Quest, name="Doomed")
+        doomed.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Origin Map")
+        self.assertTrue(CytoScape.objects.get_related_maps(doomed).exists())
+
+        with patch('djcytoscape.signals.regenerate_map.apply_async'):
+            response = self.client.post(reverse('quests:quest_delete', args=[doomed.id]), follow=True)
+
+        self.assertFalse(Quest.objects.filter(id=doomed.id).exists())
+        self.assertTrue(any("being updated" in str(m) and scape.name in str(m) for m in response.context['messages']))
+
+    def test_map_ids_redrawn_for__nothing_for_a_deleted_object(self):
+        """A deleted object has no pk left, so no map is found for it."""
+        from quest_manager.models import Quest
+
+        quest = baker.make(Quest)
+        quest.delete()
+        self.assertEqual(map_ids_redrawn_for(quest), set())
 
 
 class PrimaryViewTests(ByteDeckTenantTestCase):
