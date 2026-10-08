@@ -10,12 +10,12 @@ This guide is for the people who run a deck: the deck owner and the teachers who
 :   The minimum to get up and running, step by step: request a deck, set it up, invite your students, give them quests and review their work. Start here if your deck is new.
 
 **Quests**
-:   More of what a quest can do: [submission questions](quests/submission-questions.md) that give each answer its own field.
+:   More of what a quest can do: [submission questions](quests/submission-questions.md) that give each answer its own field, and [the Shared Library](quests/shared-library.md) for borrowing and sharing quests between decks.
 
 **Your deck**
 :   Making the deck your own: [custom pages and links](your-deck/custom-pages.md).
 
-More sections, covering the other advanced and optional features (semesters, groups and courses, campaigns and prerequisites, badges and ranks, quest maps, marks, the Shared Library), are on their way. Until they arrive, the [ByteDeck wiki](https://github.com/bytedeck/bytedeck/wiki) covers several of them.
+More sections, covering the other advanced and optional features (semesters, groups and courses, campaigns and prerequisites, badges and ranks, quest maps, marks), are on their way. Until they arrive, the [ByteDeck wiki](https://github.com/bytedeck/bytedeck/wiki) covers several of them.
 
 ## Words you'll see
 

@@ -66,5 +66,6 @@ nav:
       - Review submissions: quick-start/review-submissions.md
   - Quests:
       - Submission questions: quests/submission-questions.md
+      - The Shared Library: quests/shared-library.md
   - Your deck:
       - Custom pages and links: your-deck/custom-pages.md
