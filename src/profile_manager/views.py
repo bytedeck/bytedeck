@@ -74,7 +74,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
         'xp': 'xp_cached',
         'mark': 'mark_cached',
         'last_sub': 'time_of_last_submission',
-        'last_login': 'user__last_login',
+        'last_active': 'last_active',
         'username': 'user__username',
     }
     DEFAULT_SORT = 'first'
@@ -83,7 +83,7 @@ class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
     # Sort keys a non-staff viewer may use. ProfileListCurrent is open to any
     # authenticated user, so this is limited to the always-visible name columns:
     # XP/Mark are per-student privacy-gated (an eye-slash for students who opt
-    # out) and Last Quest/Last Login/Username are only rendered to staff, so
+    # out) and Last Quest/Last Active/Username are only rendered to staff, so
     # letting a student sort by them would leak the ordering of values they
     # can't actually see. See get_allowed_sort_fields().
     NON_STAFF_SORT_FIELDS = ('first', 'preferred', 'last', 'alias', 'custom_profile_field')
