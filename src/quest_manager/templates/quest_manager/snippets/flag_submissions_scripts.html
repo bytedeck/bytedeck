@@ -9,45 +9,55 @@
 
     });
 
+    // The Unflag button, as the page draws it for a flagged submission (#824), with a
+    // placeholder where each submission's own unflag URL goes.
+    var UNFLAG_BUTTON = '{% filter escapejs %}{% include "quest_manager/snippets/unflag_button.html" with unflag_url="__UNFLAG_URL__" %}{% endfilter %}';
+
     function flag_submission(btn) {
-        $btn = $(btn);
+        var $btn = $(btn);
 
-        $iconOriginal = $btn.find('i')
-        $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>')
-        $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>')
+        var $iconOriginal = $btn.find('i');
+        var $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>');
+        var $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>');
 
-        if($btn.find($iconSpin).length == 0 && $btn.find($iconSuccess).length == 0) {
+        // a click while this button's flag is already on its way does nothing
+        if ($btn.find('.fa-spinner, .fa-check').length == 0) {
 
-            $iconOriginal.hide(0)
-            $btn.append($iconSpin)
-            $btn.append($iconSuccess)
-
-            sub_id = $btn.data('sub-id')
+            $iconOriginal.hide(0);
+            $btn.append($iconSpin);
+            $btn.append($iconSuccess);
 
             $.ajax({
                 url : "{% url 'quests:ajax_flag' %}",
                 type : "POST", // http method
                 data : {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
-                    submission_id: sub_id
+                    submission_id: $btn.data('sub-id')
                 }, // data sent with the post request
 
                 // handle a successful response
                 success : function(json) {
-                    // fade out spinner and fade in check, then replace check with original icon after a couple seconds
+                    // fade the spinner out and the tick in, then, the submission being flagged
+                    // now, turn its Flag buttons into Unflag buttons, as a reload would show
+                    // them: every one, since a submission's own page draws two
                     $iconSpin.fadeOut(400, function() {
-                    $iconSuccess.fadeIn(400, function() {
-                        window.setTimeout(
-                        function(){ $iconSuccess.remove(); $iconOriginal.show(0); $iconSpin.remove()},
-                        2000
-                        )
-                    });
+                        $iconSuccess.fadeIn(400, function() {
+                            window.setTimeout(function() {
+                                $('.btn-flag-submission[data-sub-id="' + $btn.data('sub-id') + '"]').each(function() {
+                                    $(this).replaceWith(UNFLAG_BUTTON.replace('__UNFLAG_URL__', $(this).data('unflag-url')));
+                                });
+                            }, 1000);
+                        });
                     });
                 },
 
                 // handle a non-successful response
                 error : function(xhr,errmsg,err) {
                     console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                    // put the Flag button back as it was, so it can be tried again
+                    $iconSpin.remove();
+                    $iconSuccess.remove();
+                    $iconOriginal.show(0);
                     alert("ERROR!\n\nSorry, something went wrong and the quest wasn't flagged.  \n\nSee the browser console for error details.");
                 }
             });
