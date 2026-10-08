@@ -27,6 +27,7 @@ from siteconfig.models import SiteConfig
 from notifications.models import Notification
 from djcytoscape.models import CytoScape
 from tenant.views import NonPublicOnlyViewMixin, non_public_only_view
+from utilities.html import link_list, link_to
 from djcytoscape.views import UpdateMapMessageMixin
 
 
@@ -125,8 +126,10 @@ class BadgeGrantQualifying(NonPublicOnlyViewMixin, View):
             kwargs={'badge_id': badge.id, 'start_from_user_id': 1}, queue='default')
         messages.success(
             request,
-            f'Granting {SiteConfig.get().custom_name_for_badge.lower()} "{badge}" to all '
-            'qualifying students. This may take a moment to complete.'
+            format_html(
+                'Granting {} "{}" to all qualifying students. This may take a moment to complete.',
+                SiteConfig.get().custom_name_for_badge.lower(), link_to(badge),
+            )
         )
         return redirect(badge.get_absolute_url())
 
@@ -313,12 +316,16 @@ def bulk_assertion_create(request, badge_id=None):
         # TODO: Why does this form use Profile model instead of User model?
         profiles = form.cleaned_data['students']
 
-        result_message = f"{SiteConfig.get().custom_name_for_badge} {str(badge)} granted to "
         for profile in profiles:
             BadgeAssertion.objects.create_assertion(profile.user, badge)
-            result_message += profile.preferred_full_name() + "; "
 
-        messages.success(request, result_message)
+        # the badge and each student linked to their pages, so the teacher can check on any of
+        # them from the list the grant returns to (#2808)
+        messages.success(request, format_html(
+            "{} {} granted to {}",
+            SiteConfig.get().custom_name_for_badge, link_to(badge),
+            link_list(profiles, "; ", text=lambda profile: profile.preferred_full_name()),
+        ))
         return redirect('badges:list')
 
     context = {
@@ -358,7 +365,10 @@ def assertion_create(request, user_id, badge_id):
             new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp,
             course=form.cleaned_data.get('course'),
         )
-        messages.success(request, f"{SiteConfig.get().custom_name_for_badge} {str(new_ass)} granted to {str(new_ass.user)}")
+        messages.success(request, format_html(
+            "{} {} granted to {}",
+            SiteConfig.get().custom_name_for_badge, link_to(new_ass.badge), link_to(new_ass.user.profile, new_ass.user.username),
+        ))
         return redirect('badges:list')
 
     context = {
@@ -389,9 +399,10 @@ def assertion_delete(request, assertion_id):
                  "</span>",
             verb='revoked')
 
-        messages.success(request,
-                         ("Badge " + str(assertion) + " revoked from " + str(assertion.user)
-                          ))
+        messages.success(request, format_html(
+            "{} {} revoked from {}",
+            SiteConfig.get().custom_name_for_badge, link_to(assertion.badge), link_to(user.profile, user.username),
+        ))
         # Revoking and the XP it takes back go together, in one transaction: deleting the
         # assertion queues the rebuild of this student's cache of available quests, held
         # back until commit by prerequisites.tasks.TransactionAwareTask. So the transaction

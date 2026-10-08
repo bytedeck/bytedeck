@@ -18,6 +18,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.contrib.auth.models import AnonymousUser
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import connection
@@ -222,6 +223,21 @@ class QuestViewQuickTests(ByteDeckTenantTestCase):
         self.assertEqual(self.quest1.questsubmission_set.count(), 1)
         # the view should have redirect to the same submission:
         self.assertRedirects(response, sub.get_absolute_url())
+
+    def test_start__in_progress_message_links_the_submission(self):
+        """Starting a quest already in progress names it, linked to the submission to finish (#2808)."""
+        self.client.force_login(self.test_student1)
+        self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+        sub = self.quest1.questsubmission_set.get(user=self.test_student1)
+
+        response = self.client.get(reverse('quests:start', args=[self.quest1.pk]))
+
+        messages = [message.message for message in get_messages(response.wsgi_request)]
+        self.assertIn(
+            f'You already have <strong><a href="{sub.get_absolute_url()}">{self.quest1.name}</a></strong> in progress: '
+            'finish this one before starting it again.',
+            messages,
+        )
 
     def test_student_no_quests_help_text__varies_by_situation(self):
         """
@@ -3005,6 +3021,55 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         self.assertRedirects(response, new_quest.get_absolute_url())
         self.assertEqual(new_quest.prereqs().count(), 2)
 
+    def _set_default_quest_prerequisite(self, badge):
+        """Set the deck's default quest prerequisite (Site Configuration) to `badge`, or to none.
+
+        The cached SiteConfig outlives the test's rollback, so it's cleared once the test is done.
+        """
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = badge
+        config.save()
+        self.addCleanup(cache.clear)
+
+    def test_quest_create__starts_with_the_default_prerequisite(self):
+        """The create form comes up with the deck's default quest prerequisite chosen as the new quest's
+        badge prerequisite, for a teacher and for a TA (#276)."""
+        default_badge = baker.make(Badge, name="Default Badge")
+        self._set_default_quest_prerequisite(default_badge)
+
+        for user in (self.test_teacher, self._make_TA()):
+            self.client.force_login(user)
+            response = self.client.get(reverse('quests:quest_create'))
+
+            self.assertEqual(response.context['form'].initial['new_badge_prerequisite'], default_badge)
+            badge_select = BeautifulSoup(response.content, 'html.parser').find('select', attrs={'name': 'new_badge_prerequisite'})
+            self.assertEqual([option['value'] for option in badge_select.find_all('option', selected=True)], [str(default_badge.pk)])
+
+    def test_quest_create__without_a_default_prerequisite(self):
+        """With no default quest prerequisite set, the create form leaves the badge prerequisite empty (#276)."""
+        self._set_default_quest_prerequisite(None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
+    def test_quest_create__default_prerequisite_deleted_while_the_config_is_cached(self):
+        """Deleting the default badge clears the setting without saving the SiteConfig, so the cached
+        config still holds the badge's id: the create form opens anyway, with no badge filled in (#276)."""
+        default_badge = baker.make(Badge)
+        default_badge_id = default_badge.id  # delete() clears the instance's id
+        self._set_default_quest_prerequisite(default_badge)
+        SiteConfig.get()  # cache the config while it names the badge
+        default_badge.delete()
+        self.assertEqual(SiteConfig.get().default_quest_prerequisite_id, default_badge_id)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:quest_create'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('new_badge_prerequisite', response.context['form'].initial)
+
     def test_quest_update__with_new_prereqs(self):
         """ Add a quest and badge prereq during quest editing, also overwrite existing prereqs with new ones on update """
         self.client.force_login(self.test_teacher)
@@ -3337,6 +3402,20 @@ class QuestCopyViewTest(ByteDeckTenantTestCase):
         # And by default form should have prereq set
         self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
 
+    def test_quest_copy__leaves_out_the_default_prerequisite(self):
+        """A copy's prerequisite is the quest it was copied from, so the form doesn't also fill in the
+        deck's default quest prerequisite as a badge prerequisite (#276)."""
+        config = SiteConfig.get()
+        config.default_quest_prerequisite = baker.make(Badge)
+        config.save()
+        self.addCleanup(cache.clear)  # the cached SiteConfig outlives the test's rollback
+        self.client.force_login(self.test_teacher)
+
+        form_data = self.assert200('quests:quest_copy', args=[self.quest.id]).context['form'].initial
+
+        self.assertEqual(form_data['new_quest_prerequisite'], self.quest)
+        self.assertNotIn('new_badge_prerequisite', form_data)
+
     def test_quest_copy__teacher_post_creates_copy(self):
         """ values after being saved is the same as copied quest + '- COPY' being appended to name """
         self.client.force_login(self.test_teacher)
@@ -3556,7 +3635,7 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
 
         response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), follow=True)
 
-        self.assertContains(response, "<strong>A Quest To Hide</strong>")
+        self.assertContains(response, f'<strong><a href="{self.quest.get_absolute_url()}">A Quest To Hide</a></strong>')
 
     def test_hide__adds_the_quest_to_the_students_hidden_list(self):
         """Hiding a quest hides it for that student and sends them back to their quests page."""
@@ -3569,7 +3648,7 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         self.assertTrue(self.test_student.profile.is_quest_hidden(self.quest))
         self.assertWarningMessage(response)
         self.assertIn(
-            f'{self.quest.name}</strong> has been added to your list of hidden quests.',
+            f'<a href="{self.quest.get_absolute_url()}">{self.quest.name}</a></strong> has been added to your list of hidden quests.',
             self.get_message_list(response)[0].message,
         )
 
@@ -3593,7 +3672,7 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         self.assertFalse(self.test_student.profile.is_quest_hidden(self.quest))
         self.assertSuccessMessage(response)
         self.assertIn(
-            f'{self.quest.name}</strong> has been removed from your list of hidden quests.',
+            f'<a href="{self.quest.get_absolute_url()}">{self.quest.name}</a></strong> has been removed from your list of hidden quests.',
             self.get_message_list(response)[0].message,
         )
 
@@ -3636,6 +3715,18 @@ class FlagSubmissionViewTests(ByteDeckTenantTestCase):
         self.submission.refresh_from_db()
         self.assertEqual(self.submission.flagged_by, self.other_teacher)
         self.assertSuccessMessage(response)
+
+    def test_flag__message_links_the_submission(self):
+        """Flagging names the submission it flagged, linked to it, as unflagging does (#2808)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:flag', args=[self.submission.pk]))
+
+        self.assertEqual(
+            self.get_message_list(response)[0].message,
+            f'Submission <a href="{self.submission.get_absolute_url()}">{self.quest.name} by {self.test_student}</a> '
+            'flagged for future follow up.',
+        )
 
     def test_unflag__clears_the_flag_and_says_which_submission(self):
         """Unflagging clears the flag and reports the quest and student, so the right one is confirmed."""
@@ -5348,6 +5439,66 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         # self.assertEqual(len(messages), 1)
         # self.assertEqual(messages[0].tags, 'success')
 
+    def _decision_notification(self, verb):
+        """The student's notification of the teacher's decision, for the preview tests below.
+
+        Args:
+            verb (str): the decision, such as "approved" or "returned".
+
+        Returns:
+            Notification: the one the student got.
+        """
+        return Notification.objects.get(recipient=self.test_student, verb=verb)
+
+    def test_approve__notification_previews_the_teachers_comment(self):
+        """The student's notification of an approval previews the comment the teacher wrote, as a
+        teacher's notification of a comment does, and links straight to it (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Great work on the <b>diagram</b>!</p>', 'approve_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        notification = self._decision_notification('approved')
+        self.assertEqual(notification.action_object, comment)
+        self.assertIn('with "Great work on the diagram!"', str(notification))
+        self.assertIn('with "Great work on the diagram!"', notification.get_link())
+        self.assertTrue(notification.get_url().endswith(f'{self.sub.get_absolute_url()}#comment-{comment.id}'))
+
+    def test_return__notification_previews_the_teachers_comment(self):
+        """Returning a submission with a comment previews the comment in the student's
+        notification too (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Please add a screenshot of your code.</p>', 'return_button': True,
+        })
+
+        notification = self._decision_notification('returned')
+        self.assertEqual(notification.action_object, Comment.objects.all_with_target_object(self.sub).get())
+        self.assertIn('with "Please add a screenshot of your code."', str(notification))
+
+    def test_approve__notification_previews_an_image_as_a_thumbnail(self):
+        """An image in the teacher's comment shows in the preview as a thumbnail, at the height a
+        teacher's notifications give one (#2848)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Like this: <img src="/media/example.png" style="width: 900px;"></p>',
+            'approve_button': True,
+        })
+
+        image = BeautifulSoup(str(self._decision_notification('approved')), 'html.parser').find('img')
+        self.assertEqual(image['src'], '/media/example.png')
+        self.assertEqual(image['height'], '20px')
+
+    def test_approve__blank_comment_leaves_the_notification_without_a_preview(self):
+        """With nothing written, the comment holds the deck's approval text, which the
+        notification leaves out since it only repeats the verb; the link goes to the submission."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p><br></p>', 'approve_button': True,
+        })
+
+        notification = self._decision_notification('approved')
+        self.assertIsNone(notification.action_object)
+        self.assertNotIn(' with "', str(notification))
+        self.assertTrue(notification.get_url().endswith(self.sub.get_absolute_url()))
+
     def test_approve__with_badge_quick_reply_form(self):
         """ Test that the badge is granted """
         test_badge = baker.make('badges.Badge')
@@ -5371,6 +5522,22 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         # check that badge was awarded
         badges_earned = self.test_student.badgeassertion_set.filter(badge=test_badge)
         self.assertEqual(badges_earned.count(), 1)
+
+    def test_approve__badge_message_links_the_badge_and_the_student(self):
+        """A badge granted with an approval is named in a message linked to its page, with the
+        student it went to linked to theirs, under the deck's own name for badges (#2808)."""
+        test_badge = baker.make('badges.Badge')
+
+        response = self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': "Lorum Ipsum", 'approve_button': True, 'award': test_badge.id,
+        })
+
+        messages = [message.message for message in get_messages(response.wsgi_request)]
+        self.assertIn(
+            f'{SiteConfig.get().custom_name_for_badge} <a href="{test_badge.get_absolute_url()}">{test_badge.name}</a> '
+            f'granted to <a href="{self.test_student.profile.get_absolute_url()}">{self.test_student.username}</a>',
+            messages,
+        )
 
     def test_approve__other_teachers_student_notifies_current_teacher(self):
         """ When a teacher approves/rejects/comments on another teacher's student
@@ -7558,7 +7725,7 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertContains(response, """$('#submission-main-form input[type="file"]').on('change'""")
         # a handler that saves nothing would satisfy the line above on its own
-        self.assertContains(response, "if (save_draft(true)) return;")
+        self.assertContains(response, "if (submitting || save_draft(true)) return;")
 
     def test_submission__a_file_too_large_to_upload_is_refused_before_it_is_sent(self):
         """The page loads the browser's size check with the most one upload can carry, and the
@@ -7830,6 +7997,17 @@ class BlockingQuestStartTests(ByteDeckTenantTestCase):
         self.assertContains(response, "Read this first")
         self.assertFalse(QuestSubmission.objects.filter(user=self.student, quest=self.quest).exists())
 
+    def test_start__message_links_the_quest_and_the_one_holding_it_back(self):
+        """The quest held back and the blocking quest to finish first are both linked (#2808)."""
+        response = self.client.get(reverse('quests:start', args=[self.quest.id]))
+
+        messages = [message.message for message in get_messages(response.wsgi_request)]
+        self.assertIn(
+            f'<strong><a href="{self.quest.get_absolute_url()}">{self.quest.name}</a></strong> is on hold until you '
+            f'finish <a href="{self.blocker.get_absolute_url()}">{self.blocker.name}</a>.',
+            messages,
+        )
+
     def test_start__the_blocking_quest_itself_can_be_started(self):
         """What the student is being sent to do, so the block cannot trap them with nothing to do."""
         self.client.get(reverse('quests:start', args=[self.blocker.id]))
@@ -7893,6 +8071,15 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         documents = self.submission.draft_comment.document_set.all()
         self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
 
+    def test_ajax_save_draft__a_file_storage_renames_sent_twice_is_stored_once(self):
+        """A retried draft save holds one copy of a file whose name storage changes, such as a
+        recording named with spaces, stored with underscores in their place (#2833)."""
+        for _ in range(2):
+            self.save_draft(SimpleUploadedFile("Recording 2026-10-02 105801.mp4", b"file_content", content_type="video/mp4"))
+
+        documents = self.submission.draft_comment.document_set.all()
+        self.assertEqual(documents.count(), 1, [document.docfile.name for document in documents])
+
     def test_ajax_save_draft__a_different_file_of_the_same_name_is_still_stored(self):
         """Only a file the draft already holds is skipped. A student replacing their work with a
         corrected version of the same name still gets it attached, so nothing is dropped
@@ -7942,6 +8129,31 @@ class DuplicateDraftAttachmentTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_completed)
         published = Comment.objects.all_with_target_object(self.submission)
         self.assertEqual(sum(comment.document_set.count() for comment in published), 1)
+
+    def test_complete__a_file_storage_renames_is_not_attached_again(self):
+        """A recording named with spaces, already on the draft and sent again with the submit,
+        publishes one copy, stored with underscores for its spaces. A large file is still on its
+        way to the draft when a student presses Submit, so the submit carries it too (#2833)."""
+        name = "Recording 2026-10-02 105801.mp4"
+        self.save_draft(SimpleUploadedFile(name, b"file_content", content_type="video/mp4"))
+
+        with patch('profile_manager.models.Profile.current_teachers', return_value=[]):
+            self.client.post(
+                reverse('quests:complete', args=[self.submission.id]),
+                data={
+                    'complete': True,
+                    'comment_text': "<p>here it is</p>",
+                    'attachments': SimpleUploadedFile(name, b"file_content", content_type="video/mp4"),
+                },
+            )
+
+        self.submission.refresh_from_db()
+        self.assertTrue(self.submission.is_completed)
+        published = Comment.objects.all_with_target_object(self.submission)
+        self.assertEqual(
+            [document.docfile.name.rsplit('/', 1)[-1] for comment in published for document in comment.document_set.all()],
+            ["Recording_2026-10-02_105801.mp4"],
+        )
 
     def test_complete__a_file_not_yet_on_the_draft_is_attached(self):
         """A file chosen only at submit time still publishes with the comment: skipping applies to

@@ -393,6 +393,22 @@ class ViewTests(ByteDeckTenantTestCase):
         # assert redirects to quest_map page
         self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[map_.pk]))
 
+    def test_ScapeGenerateMap__message_links_the_new_map(self):
+        """Generating a map says so with the new map's name linked to it (#2808)."""
+        from djcytoscape.forms import GenerateQuestMapForm
+
+        self.client.force_login(self.test_teacher)
+        form_data = generate_form_data(model_form=GenerateQuestMapForm, name='Linked Map')
+        form_data.update({'initial_content_object': f'{self.quest_ct.id}-{baker.make("quest_manager.Quest").id}'})
+
+        response = self.client.post(reverse('djcytoscape:generate_unseeded'), data=form_data)
+
+        map_ = CytoScape.objects.get(name='Linked Map')
+        self.assertIn(
+            f'New map <a href="{map_.get_absolute_url()}">Linked Map</a> was successfully generated.',
+            [str(message) for message in response.wsgi_request._messages],
+        )
+
     def test_ScapeUpdateView__POST(self):
         """ Assert a teacher can update a map using ScapeGenerateMapView """
         from djcytoscape.forms import QuestMapForm

@@ -124,6 +124,37 @@ class SaveDraftAttachmentsTest(ByteDeckTenantTestCase):
         documents = self.draft_comment.document_set.all()
         self.assertEqual([document.docfile.name.rsplit("/", 1)[-1] for document in documents], [name])
 
+    def test_save_draft_attachments__a_file_storage_renames_sent_twice_is_stored_once(self):
+        """A file whose name storage changes is still recognised when it arrives again (#2833).
+
+        Storage keeps only letters, digits, dashes, underscores and dots in a file's name, and
+        turns spaces into underscores, so a recording the browser sends as
+        `Recording 2026-10-02 105801.mp4` is stored as `Recording_2026-10-02_105801.mp4`.
+        """
+        for _ in range(2):
+            save_draft_attachments(
+                self.bound_form(
+                    [SimpleUploadedFile("Recording 2026-10-02 105801.mp4", b"file_content", content_type="video/mp4")]),
+                self.draft_comment,
+            )
+
+        documents = self.draft_comment.document_set.all()
+        self.assertEqual(
+            [document.docfile.name.rsplit("/", 1)[-1] for document in documents], ["Recording_2026-10-02_105801.mp4"])
+
+    def test_save_draft_attachments__a_file_named_like_a_suffixed_one_sent_twice_is_stored_once(self):
+        """A name ending in an underscore and seven letters or digits is still recognised when it
+        arrives again (#2833). `Final_Project.pdf` ends like storage's collision suffix, so its
+        stored copy reads as `Final.pdf` (chosen_name), and the upload has to be read the same
+        way to match it."""
+        for _ in range(2):
+            save_draft_attachments(
+                self.bound_form([SimpleUploadedFile("Final_Project.pdf", b"file_content", content_type="application/pdf")]),
+                self.draft_comment,
+            )
+
+        self.assertEqual(self.draft_comment.document_set.count(), 1)
+
     def test_save_draft_attachments__stores_a_different_file_of_the_same_name(self):
         """Only a copy of what the draft already holds is skipped. A student attaching a corrected
         version under the same name still gets it stored, so nothing is dropped silently."""
