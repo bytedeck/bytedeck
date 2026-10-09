@@ -50,6 +50,14 @@ class QuestFormTest(ByteDeckTenantTestCase):
         form = QuestForm(data=self.minimal_valid_data)
         self.assertTrue(form.is_valid())
 
+    def test_QuestForm__quest_details_say_how_to_name_a_setting(self):
+        """Quest Details tell a teacher how to write in one of the deck's settings, since nothing
+        else in the form shows that the quest's text can (#435)."""
+        help_text = QuestForm().fields['instructions'].help_text
+
+        self.assertIn('[[Site Name, Short]]', help_text)
+        self.assertIn('[[Banner Image]]', help_text)
+
     def test_QuestForm__saves_quick_reply(self):
         """QuestForm exposes the quest-specific quick_reply field and saves it on the quest (#161)."""
         form_data = dict(self.minimal_valid_data)

@@ -1,4 +1,7 @@
+import re
 from copy import copy
+from html import unescape
+
 from allauth.socialaccount.models import SocialApp
 from allauth.socialaccount.providers.google.provider import GoogleProvider
 from django.contrib.auth import get_user_model
@@ -10,6 +13,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.shortcuts import get_object_or_404
 from django.templatetags.static import static
+from django.utils.html import escape
 from django.conf import settings
 
 from django_tenants.utils import get_public_schema_name, schema_context
@@ -19,6 +23,25 @@ from library.utils import get_library_schema_name
 from utilities.models import RestrictedFileField
 
 User = get_user_model()
+
+# a setting named in a quest's text, between double square brackets: [[site_name_short]] (#435)
+SETTING_TAG = re.compile(r'\[\[([^\[\]]+)\]\]')
+
+
+def _setting_key(name):
+    """Return a setting's name the way a [[...]] tag is matched against it.
+
+    In lower case, with its spacing evened out and each comma followed by one space, so
+    [[Site Name, Short]], [[site name,short]] and [[Site Name , Short]] all match the label
+    "Site Name, Short".
+
+    Args:
+        name (str): a setting's field name or label, or the text between a tag's brackets.
+
+    Returns:
+        str: the name as it is looked up.
+    """
+    return ' '.join(re.sub(r'\s*,\s*', ', ', name).split()).lower()
 
 
 def get_default_deck_owner():
@@ -349,6 +372,66 @@ class SiteConfig(models.Model):
             return self.banner_image.url
         else:
             return static('img/banner.png')
+
+    # The settings a quest's text can name between double square brackets, so that content
+    # shared through the Library reads right in whichever deck shows it (#435): the deck's names,
+    # its custom names for things, and its images, written in as their address. Settings meant
+    # for staff alone, like the access code students sign up with, can't be named, because a
+    # quest written in one deck is shown to another deck's students.
+    FILLABLE_TEXT_FIELDS = (
+        'site_name', 'site_name_short', 'custom_name_for_announcement', 'custom_name_for_badge',
+        'custom_name_for_group', 'custom_name_for_student', 'custom_name_for_tag',
+    )
+    FILLABLE_IMAGE_FIELDS = {
+        'banner_image': 'get_banner_image_url',
+        'banner_image_dark': 'get_banner_image_dark_url',
+        'site_logo': 'get_site_logo_url',
+        'default_icon': 'get_default_icon_url',
+        'favicon': 'get_favicon_url',
+    }
+
+    def fill_in_settings(self, text):
+        """Quest text with each setting it names between double square brackets written in (#435).
+
+        A setting is named by its field name or its label, in any case and with any spacing, so
+        [[site_name_short]], [[site name short]] and [[Site Name, Short]] all give this deck's
+        short name. An image gives its address, so <img src="[[Banner Image]]"> shows this deck's
+        banner. Anything else between double square brackets is left as it is.
+
+        Args:
+            text (str or None): HTML from a quest, such as its Quest Details.
+
+        Returns:
+            str or None: the HTML with each named setting written in, escaped. None stays None.
+        """
+        if not text or '[[' not in text:
+            return text  # nothing named, so nothing to look up
+
+        values = {}
+        for name in self.FILLABLE_TEXT_FIELDS + tuple(self.FILLABLE_IMAGE_FIELDS):
+            if name in self.FILLABLE_IMAGE_FIELDS:
+                value = getattr(self, self.FILLABLE_IMAGE_FIELDS[name])()
+            else:
+                value = getattr(self, name)
+            label = str(self._meta.get_field(name).verbose_name)
+            for key in (name, name.replace('_', ' '), label):
+                values[_setting_key(key)] = value
+
+        def fill(match):
+            """Return what a [[...]] tag is replaced with.
+
+            Args:
+                match (re.Match): a tag found by SETTING_TAG, with the text between its
+                    brackets as its first group.
+
+            Returns:
+                str: the setting it names, escaped, or the tag as written when it names none.
+            """
+            # the editor stores a space typed between words as &nbsp; at times
+            key = _setting_key(unescape(match.group(1)))
+            return escape(values[key]) if key in values else match.group(0)
+
+        return SETTING_TAG.sub(fill, text)
 
     def get_default_quest_prerequisite(self):
         """The badge a quest created on this deck starts with as its prerequisite (#276).
