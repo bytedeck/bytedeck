@@ -112,3 +112,27 @@ class PortfolioButtonTitleTests(TestCase):
         rendered = self.render(file_field_mock)
 
         self.assertEqual(rendered, '<a title="Add bad&quot; onmouseover=&quot;alert(1).png to your portfolio.">')
+
+
+class SanitizeCommentHtmlFilterTests(TestCase):
+    """Tests for the comment_tags.sanitize_comment_html template filter."""
+
+    def test_sanitize_comment_html__keeps_a_link_and_drops_script(self):
+        """The filter keeps a link as HTML and takes off what could run script, as a saved
+        comment's text is sanitized."""
+        from comments.templatetags.comment_tags import sanitize_comment_html
+
+        cleaned = sanitize_comment_html(
+            'See <a href="https://youtu.be/abc?t=360">6:00</a><img src="x" onerror="alert(1)"><script>alert(2)</script>')
+
+        self.assertIn('<a href="https://youtu.be/abc?t=360">6:00</a>', cleaned)
+        self.assertIn('<img src="x">', cleaned)
+        self.assertNotIn('onerror', cleaned)
+        self.assertNotIn('<script>', cleaned)
+
+    def test_sanitize_comment_html__output_is_escaped_in_a_template(self):
+        """The result isn't marked safe, so a template escapes it, as an attribute needs."""
+        rendered = Template('{% load comment_tags %}<b data-x="{{ value|sanitize_comment_html }}">').render(
+            Context({'value': '<a href="https://example.com">here</a>'}))
+
+        self.assertEqual(rendered, '<b data-x="&lt;a href=&quot;https://example.com&quot;&gt;here&lt;/a&gt;">')

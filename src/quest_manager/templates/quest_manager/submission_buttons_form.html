@@ -1,3 +1,4 @@
+{% load comment_tags %}
   <div class="btn-group" role="group">
 
     {% if not s.is_approved %}
@@ -19,8 +20,12 @@
       </button>
     {% endif %}
 
+    {% comment %} The quick reply buttons carry their text, sanitized, in data-quick-reply, which the page's
+       script inserts into the reply as HTML, so a link in it arrives as a link. The tooltips show it
+       without its tags. {% endcomment %}
     <button type="button" class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quick_text{{s.id}}"
-       title='ADD TEXT: "{{ quick_reply_text }}" (This text can be customized in your Site Configuration.)'
+       data-quick-reply="{{ quick_reply_text|sanitize_comment_html }}"
+       title='ADD TEXT: "{{ quick_reply_text|striptags }}" (This text can be customized in your Site Configuration.)'
        aria-label="Insert the site-wide quick reply text into your response">
        <i class="fa fa-fw fa-commenting-o fa-flip-horizontal"></i>
     </button>
@@ -29,8 +34,8 @@
        Carries this quest's text in a data attribute (empty when unset); the handler no-ops on empty,
        and the tooltip then explains how to set it on the quest form. {% endcomment %}
     <button type="button" class="btn btn-warning" data-target="#quick_reply{{s.id}}" id="btn_quest_quick_text{{s.id}}"
-       data-quick-reply="{{ s.quest.quick_reply }}"
-       {% if s.quest.quick_reply %}title='ADD QUEST-SPECIFIC TEXT: "{{ s.quest.quick_reply }}"'{% else %}title='ADD TEXT: (Add quest-specific quick-reply text by changing the "Quick Reply Text" field when editing the quest)'{% endif %}
+       data-quick-reply="{{ s.quest.quick_reply|sanitize_comment_html }}"
+       {% if s.quest.quick_reply %}title='ADD QUEST-SPECIFIC TEXT: "{{ s.quest.quick_reply|striptags }}"'{% else %}title='ADD TEXT: (Add quest-specific quick-reply text by changing the "Quick Reply Text" field when editing the quest)'{% endif %}
        aria-label="Insert this quest's quick reply text into your response">
        <i class="fa fa-fw fa-commenting fa-flip-horizontal"></i>
     </button>
