@@ -518,6 +518,41 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
         self.assertContains(response, "Add quest-specific quick-reply text by changing")
 
+    def test_submission_view__quest_quick_reply_carries_sanitized_html(self):
+        """The quest's quick reply button carries its text as sanitized HTML for the page to insert,
+        so a link in it is kept and anything that could run script is not; its tooltip shows the
+        text without tags."""
+        self.quest1.quick_reply = (
+            'Please take a look at <a href="https://youtu.be/J8MH-k0Fa6Y?t=360">6:00</a> of the video.'
+            '<img src="x" onerror="alert(1)">'
+        )
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(
+            response,
+            'data-quick-reply="Please take a look at &lt;a href=&quot;https://youtu.be/J8MH-k0Fa6Y?t=360&quot;&gt;6:00&lt;/a&gt; '
+            'of the video.&lt;img src=&quot;x&quot;&gt;"',
+        )
+        self.assertNotContains(response, 'onerror')
+        self.assertContains(response, 'title=\'ADD QUEST-SPECIFIC TEXT: "Please take a look at 6:00 of the video."\'')
+
+    def test_submission_view__site_wide_quick_reply_carries_sanitized_html(self):
+        """The site-wide quick reply button carries the Site Configuration's text as sanitized HTML,
+        and its tooltip shows it without tags."""
+        config = SiteConfig.get()
+        config.submission_quick_text = 'Read the <a href="https://example.com/rubric">rubric</a> first.'
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(
+            response, 'data-quick-reply="Read the &lt;a href=&quot;https://example.com/rubric&quot;&gt;rubric&lt;/a&gt; first."')
+        self.assertContains(response, 'title=\'ADD TEXT: "Read the rubric first." (This text can be customized')
+
     def test_submission_view__site_wide_quick_reply_tooltip_mentions_config(self):
         """The site-wide quick-reply button tooltip notes the text is customizable in Site Configuration (#2114)."""
         self.client.force_login(self.test_teacher)

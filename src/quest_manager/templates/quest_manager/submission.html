@@ -248,25 +248,15 @@
                 }, 1000);
             {% endif %}
 
-            // Copied from quest_approvals.html
-            // scoped to the main comment form: question answers add their own editors
-            $('[id^=btn_quick_text]').on('click', function () {
-                var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('#main-comment-form div.note-editable');
-                if (text_area.html() == "<p><br></p>") // default empty summernote text area
-                  text_area.html(msg)
-                else
-                  text_area.append(msg);
-            });
-
-            // Quest-specific quick reply (#161): text comes from the button's data-quick-reply attribute.
-            // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
-            $('[id^=btn_quest_quick_text]').on('click', function () {
-                var raw = $(this).attr('data-quick-reply');
-                if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
-                // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
-                var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
-                var msg = '<p>' + escaped + '<br></p>';
+            // The quick reply buttons: the site-wide one and the quest's own (#161). Each carries its
+            // text in data-quick-reply, already sanitized on the server, so it goes in as HTML and a
+            // link in it arrives as a link. Read with .attr(), since .data() would turn text like
+            // "true" or "12" into other types. An empty text (a quest without one, #2114) adds nothing.
+            $('[id^=btn_quick_text], [id^=btn_quest_quick_text]').on('click', function () {
+                var html = $(this).attr('data-quick-reply');
+                if (!html) return;
+                // newlines become <br> so multi-line text keeps its lines in the HTML editor
+                var msg = '<p>' + html.replace(/\r\n|\r|\n/g, '<br>') + '<br></p>';
                 // scoped to the main comment form: question answers add their own editors
                 var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
