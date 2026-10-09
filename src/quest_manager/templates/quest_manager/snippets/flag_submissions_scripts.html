@@ -13,15 +13,22 @@
     // placeholder where each submission's own unflag URL goes.
     var UNFLAG_BUTTON = '{% filter escapejs %}{% include "quest_manager/snippets/unflag_button.html" with unflag_url="__UNFLAG_URL__" %}{% endfilter %}';
 
+    // The submissions whose flag is on its way, by id. Kept per submission rather than per
+    // button: a submission's own page draws two Flag buttons, and a second request still on its
+    // way after the first had turned them into Unflag could flag the submission again.
+    var flagsOnTheirWay = {};
+
     function flag_submission(btn) {
         var $btn = $(btn);
+        var subId = $btn.data('sub-id');
 
         var $iconOriginal = $btn.find('i');
         var $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>');
         var $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>');
 
-        // a click while this button's flag is already on its way does nothing
-        if ($btn.find('.fa-spinner, .fa-check').length == 0) {
+        // a click while this submission's flag is already on its way does nothing
+        if (!flagsOnTheirWay[subId]) {
+            flagsOnTheirWay[subId] = true;
 
             $iconOriginal.hide(0);
             $btn.append($iconSpin);
@@ -32,7 +39,7 @@
                 type : "POST", // http method
                 data : {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
-                    submission_id: $btn.data('sub-id')
+                    submission_id: subId
                 }, // data sent with the post request
 
                 // handle a successful response
@@ -43,7 +50,7 @@
                     $iconSpin.fadeOut(400, function() {
                         $iconSuccess.fadeIn(400, function() {
                             window.setTimeout(function() {
-                                $('.btn-flag-submission[data-sub-id="' + $btn.data('sub-id') + '"]').each(function() {
+                                $('.btn-flag-submission[data-sub-id="' + subId + '"]').each(function() {
                                     $(this).replaceWith(UNFLAG_BUTTON.replace('__UNFLAG_URL__', $(this).data('unflag-url')));
                                 });
                             }, 1000);
@@ -55,6 +62,7 @@
                 error : function(xhr,errmsg,err) {
                     console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
                     // put the Flag button back as it was, so it can be tried again
+                    delete flagsOnTheirWay[subId];
                     $iconSpin.remove();
                     $iconSuccess.remove();
                     $iconOriginal.show(0);

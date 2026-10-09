@@ -135,6 +135,15 @@ class FlagSubmissionRenderTest(ByteDeckTenantTestCase):
         self.assertIn(f"submission_id={self.submission_id}", self.flags[0])
         self.assertEqual(self.dialogs, [])
 
+    def test_flag__both_buttons_pressed_at_once_send_one_flag(self):
+        """Pressing the submission's two Flag buttons before the first flag is answered sends one
+        flag, not two: a second still on its way after the buttons became Unflag could flag the
+        submission again after the teacher unflagged it."""
+        self.page.evaluate("document.querySelectorAll('.btn-flag-submission').forEach(button => button.click())")
+
+        self.page.wait_for_function("document.querySelectorAll('.btn-unflag-submission').length === 2", timeout=10000)
+        self.assertEqual(len(self.flags), 1)
+
     def test_flag__a_failed_flag_leaves_the_flag_button(self):
         """A flag the server refuses says so, and leaves the Flag button as it was, so it can be
         pressed again."""
