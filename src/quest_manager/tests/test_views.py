@@ -2489,6 +2489,23 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
             self.assertEqual(breakdown['Returned'][group]['percent'], "33%")
             self.assertEqual(breakdown['Awaiting Approval'][group]['percent'], "33%")
 
+    def test_quest_user_status__lists_named_as_on_the_students_page(self):
+        """The page's three lists of students carry the Students page's names, Yours, Current
+        and All, with the same descriptions as their hover text (#2136)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        for scope, name, description in (
+            ('my_blocks', 'Yours', 'in a group you are assigned to as the teacher'),
+            ('current', 'Current', 'All students registered in a course in an open semester'),
+            ('active', 'All', 'All non-archived students'),
+        ):
+            with self.subTest(name):
+                self.assertRegex(
+                    response.content.decode(),
+                    rf'href="\?scope={scope}" role="button" title="[^"]*{re.escape(description)}[^"]*" class="[^"]*">{name}</a>',
+                )
+        self.assertNotContains(response, 'My blocks')
+
     def test_quest_user_status__users_with_no_submission_show_not_started(self):
         """Students without a submission are listed with the 'Not Started' status and no submission."""
         url = reverse('quests:quest_user_status', args=[self.quest.id])

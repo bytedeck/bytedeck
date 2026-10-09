@@ -18,6 +18,7 @@ from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
 from profile_manager.models import Profile
+from profile_manager.views import offers_yours_list
 
 from hackerspace_online.tests.utils import generate_form_data
 
@@ -83,6 +84,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_current')
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
+        self.assertRedirectsLogin('profiles:profile_list_yours')
+        self.assertRedirectsLogin('profiles:profile_list_tas')
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
         self.assertRedirectsLogin('profiles:profile_delete', args=[1])
 
@@ -104,6 +107,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert403('profiles:profile_list')
         self.assert403('profiles:profile_list_inactive')
         self.assert403('profiles:profile_list_staff')
+        self.assert403('profiles:profile_list_yours')
+        self.assert403('profiles:profile_list_tas')
         self.assert403('profiles:profile_list_block', args='1')
         self.assert403('profiles:profile_delete', args=[s_pk])
 
@@ -129,6 +134,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert200('profiles:profile_list')
         self.assert200('profiles:profile_list_current')
         self.assert200('profiles:profile_list_staff')
+        self.assert200('profiles:profile_list_yours')
+        self.assert200('profiles:profile_list_tas')
         self.assert200('profiles:profile_list_block', args='1')
         # profile_list_block should 404 with invalid pk kwarg, accessed via kwarg dict instead of arg or else bad request raises error
         self.assert404("profiles:profile_list_block", kwargs={"pk": "999"})
@@ -634,6 +641,140 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].STAFF)
 
         self.assertEqual(response.context['paginator'].count, 3)  # self.test_teacher, deck_owner, admin
+
+    def test_profile_list_staff__leaves_out_archived_staff(self):
+        """Staff lists the staff who can still sign in: an archived teacher is under Archived (#2136)."""
+        archived_teacher = baker.make(get_user_model(), is_staff=True, is_active=False)
+        self.client.force_login(self.test_teacher)
+
+        staff = self.client.get(reverse('profiles:profile_list_staff'))
+        archived = self.client.get(reverse('profiles:profile_list_inactive'))
+
+        self.assertNotIn(archived_teacher.profile, staff.context['object_list'])
+        self.assertIn(archived_teacher.profile, archived.context['object_list'])
+
+    def _register(self, student, block, semester=None):
+        """Register `student` in a new course in `block`.
+
+        Args:
+            student (User): the student to register.
+            block (Block): the group the registration is in.
+            semester (Semester): the registration's semester; the active semester when left out.
+        """
+        baker.make(CourseStudent, user=student, block=block, course=baker.make(Course), semester=semester or self.active_sem)
+
+    def test_profile_list_yours__lists_the_current_students_in_the_teachers_groups(self):
+        """Yours is the students registered in a course in an open semester, in a group the
+        requesting teacher teaches (#2136): not another teacher's group, nor the teacher's own
+        group in an archived semester."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=other_teacher)
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        last_year = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        former = baker.make(get_user_model())
+        self._register(former, yours, semester=last_year)
+        self._register(former, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].YOURS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_profile_list_yours__group_filter_offers_only_the_teachers_groups(self):
+        """Another teacher's group would filter Yours down to nobody, so it isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(list(response.context['block_filter_choices']), [yours])
+
+    def test_profile_list_tas__lists_the_non_archived_tas(self):
+        """TAs is the non-archived students with the TA flag turned on (#2136)."""
+        Profile.objects.filter(user=self.test_student1).update(is_TA=True)
+        archived_ta = baker.make(get_user_model(), is_active=False)
+        Profile.objects.filter(user=archived_ta).update(is_TA=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_tas'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].TAS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_offers_yours_list__only_when_it_differs_from_current_and_holds_someone(self):
+        """Yours is offered when it holds some of the current students but not all of them (#2136):
+        it would otherwise be empty, or the same list as Current."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        cases = (
+            # (case, the teacher of each of test_student1's and test_student2's groups, expected)
+            ('teaches no group', [other_teacher, other_teacher], False),
+            ("the teacher's group holds no current student", [other_teacher, other_teacher, self.test_teacher], False),
+            ("the teacher's groups hold every current student", [self.test_teacher, self.test_teacher], False),
+            ('another teacher has a current student', [self.test_teacher, other_teacher], True),
+            ("a group without a teacher has a current student", [self.test_teacher, None], True),
+        )
+        for case, teachers, expected in cases:
+            with self.subTest(case):
+                CourseStudent.objects.all().delete()
+                Block.objects.all().delete()
+                for student, teacher in zip((self.test_student1, self.test_student2), teachers):
+                    self._register(student, baker.make(Block, current_teacher=teacher))
+                for teacher in teachers[2:]:
+                    baker.make(Block, current_teacher=teacher)  # a group with nobody in it
+                self.assertEqual(offers_yours_list(self.test_teacher), expected)
+
+    def test_offers_yours_list__not_when_the_students_are_in_both_teachers_groups(self):
+        """A student registered in another teacher's group as well as yours is on both lists, so
+        Yours is the same as Current and isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student1, theirs)
+
+        self.assertFalse(offers_yours_list(self.test_teacher))
+
+    def test_profile_list__yours_button_follows_offers_yours_list(self):
+        """The Yours button is left out where the list isn't offered, unless it is the list on show."""
+        Block.objects.all().delete()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self.client.force_login(self.test_teacher)
+        yours_url = reverse('profiles:profile_list_yours')
+
+        self.assertNotContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+        self.assertContains(self.client.get(yours_url), f'href="{yours_url}"')
+
+        self._register(self.test_student2, baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True)))
+        self.assertContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+
+    def test_profile_list__each_list_button_says_who_it_holds(self):
+        """The buttons are named as on every page that offers these lists, each with its
+        description as hover text in the deck's own words (#2136)."""
+        config = SiteConfig.get()
+        config.custom_name_for_student = 'Learner'
+        config.custom_name_for_group = 'Block'
+        config.save()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self._register(self.test_student2, baker.make(Block, current_teacher=None))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_current'))
+
+        for name, description in (
+            ('Yours', 'Learners registered in a course in an open semester, in a block you are assigned to as the teacher'),
+            ('Current', 'All learners registered in a course in an open semester (includes all of yours)'),
+            ('All', 'All non-archived learners (includes all current learners)'),
+            ('Staff', 'All non-archived staff accounts'),
+            ('TAs', 'All learners with the TA (Teaching Assistant) flag turned on, who can draft quests'),
+            ('Archived', 'Archived accounts, staff and learners.'),
+        ):
+            with self.subTest(name):
+                self.assertRegex(response.content.decode(), rf'title="{re.escape(description)}[^"]*"\s+class="btn [^"]*">{name}</a>')
 
     def test_profile_list_block__get_queryset(self):
         """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
