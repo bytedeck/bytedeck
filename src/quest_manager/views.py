@@ -42,7 +42,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from utilities.html import is_empty_html, link_list, link_to
+from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -411,7 +411,9 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         return context
 
 
-class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
+# UpdateMapMessageMixin comes before QuestFormViewMixin so that it wraps the prerequisites the form
+# sets after saving the quest: the maps it names include the one a new prerequisite puts the quest on.
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -1687,10 +1689,12 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             if not wrote_comment:
                 comment_text = blank_comment_text
 
+            # In a paragraph, as the editor and the stand-in text lay a comment out: the Approvals
+            # page's quick reply box, and the quick-text buttons that fill it, send bare text (#2850).
             comment_new = Comment.objects.create_comment(
                 user=self.request.user,
                 path=self.submission.get_absolute_url(),
-                text=comment_text + comment_text_addition,
+                text=in_a_paragraph(comment_text) + comment_text_addition,
                 target=self.submission,
             )
 
@@ -2476,7 +2480,10 @@ def complete(request, submission_id):
     # at the end of this view when `mark_completed` is called on the submission,
     # so make sure the draft comment is set properly with the form's latest comment text.
     draft_comment = submission.draft_comment
-    draft_text = f"<p>{comment_text}</p>" + choices_html
+    # The comment, then the choices below their rule. The editor lays the comment out in
+    # paragraphs already, so only bare text (the quick reply box's, or the placeholder above) is
+    # given one (#2713).
+    draft_text = in_a_paragraph(comment_text) + choices_html
     if draft_comment:
         # update all comment fields
         #

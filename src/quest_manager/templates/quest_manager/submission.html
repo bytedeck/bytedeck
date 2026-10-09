@@ -248,25 +248,15 @@
                 }, 1000);
             {% endif %}
 
-            // Copied from quest_approvals.html
-            // scoped to the main comment form: question answers add their own editors
-            $('[id^=btn_quick_text]').on('click', function () {
-                var msg = '<p>{{ quick_reply_text }}<br></p>';
-                var text_area = $('#main-comment-form div.note-editable');
-                if (text_area.html() == "<p><br></p>") // default empty summernote text area
-                  text_area.html(msg)
-                else
-                  text_area.append(msg);
-            });
-
-            // Quest-specific quick reply (#161): text comes from the button's data-quick-reply attribute.
-            // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
-            $('[id^=btn_quest_quick_text]').on('click', function () {
-                var raw = $(this).attr('data-quick-reply');
-                if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
-                // Escape first (injection-safe), then turn newlines into <br> so multi-line text survives in the HTML editor.
-                var escaped = $('<div>').text(raw).html().replace(/\r\n|\r|\n/g, '<br>');
-                var msg = '<p>' + escaped + '<br></p>';
+            // The quick reply buttons: the site-wide one and the quest's own (#161). Each carries its
+            // text in data-quick-reply, already sanitized on the server, so it goes in as HTML and a
+            // link in it arrives as a link. Read with .attr(), since .data() would turn text like
+            // "true" or "12" into other types. An empty text (a quest without one, #2114) adds nothing.
+            $('[id^=btn_quick_text], [id^=btn_quest_quick_text]').on('click', function () {
+                var html = $(this).attr('data-quick-reply');
+                if (!html) return;
+                // newlines become <br> so multi-line text keeps its lines in the HTML editor
+                var msg = '<p>' + html.replace(/\r\n|\r|\n/g, '<br>') + '<br></p>';
                 // scoped to the main comment form: question answers add their own editors
                 var text_area = $('#main-comment-form div.note-editable');
                 if (text_area.html() == "<p><br></p>") // default empty summernote text area
@@ -474,6 +464,17 @@
                     data : formData,
                     processData : false, // hand jQuery the FormData as-is
                     contentType : false, // let the browser set the multipart boundary
+                    // Report how much of the request has gone up, under the note of each file
+                    // it carries, so a student attaching a large file sees it moving (#784).
+                    xhr : function() {
+                        var xhr = $.ajaxSettings.xhr();
+                        if (xhr.upload) {
+                            xhr.upload.addEventListener('progress', function(event) {
+                                if (event.lengthComputable) show_upload_progress(sentFiles, event.loaded, event.total);
+                            });
+                        }
+                        return xhr;
+                    },
 
                     // handle a successful response
                     success : function(json) {
@@ -581,6 +582,30 @@
                 if (chosen.length && same_files(chosen, draftSaveFiles[this.name])) carrying = true;
             });
             return carrying;
+        }
+
+        function show_upload_progress(sentFiles, loaded, total) {
+            // The share of a draft save sent so far, shown as a bar and a percentage in the
+            // "Attaching" note of each input whose files went with it (#784). The share is of
+            // the whole request, which a file being attached is nearly all of. An input holding
+            // something else by now was chosen again while this save was away, so its note is
+            // about another file and is left alone.
+            var percent = Math.min(100, Math.round(loaded / total * 100));
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (!chosen.length || !same_files(chosen, sentFiles[this.name])) return;
+                var note = file_note_holder($(this)).find('.draft-file-note-pending');
+                if (!note.length) return;
+                var bar = note.find('.draft-upload-progress');
+                if (!bar.length) {
+                    bar = $('<span class="progress draft-upload-progress">' +
+                            '<span class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></span>' +
+                            '</span>');
+                    note.append(' <span class="draft-upload-percent"></span>').append(bar);
+                }
+                bar.find('.progress-bar').css('width', percent + '%').attr('aria-valuenow', percent);
+                note.find('.draft-upload-percent').text(percent + '%');
+            });
         }
 
         function show_saved_files(json, sentFiles) {

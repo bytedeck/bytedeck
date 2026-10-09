@@ -115,6 +115,18 @@ class BadgeViewTests(ByteDeckTenantTestCase):
         response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
         self.assertNotContains(response, 'One btn-group keeps every action button')
 
+    def test_badge_detail__lists_named_as_on_the_students_page(self):
+        """The toggle between the badge's current and all holders carries the Students page's
+        names, Current and All, with the same descriptions as their hover text (#2136)."""
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('badges:badge_detail', args=[self.test_badge.pk]))
+
+        self.assertContains(response, 'title="All students registered in a course in an open semester (includes all of yours)"')
+        self.assertContains(response, 'title="All non-archived students (includes all current students)"')
+        self.assertNotContains(response, 'All Active')
+        self.assertNotContains(response, 'Current Semester')
+
     def test_badge_detail_all__login_required_and_renders_for_authenticated_users(self):
         """badge_detail_all (assertions of all students) redirects anonymous users to login and renders for any logged-in user."""
         b_pk = self.test_badge.pk

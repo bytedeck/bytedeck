@@ -1,7 +1,9 @@
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 from allauth.socialaccount.models import SocialApp
+from bs4 import BeautifulSoup
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.messages import constants as messages_constants
@@ -279,3 +281,22 @@ class MessagesSnippetEscapingTest(ByteDeckTenantTestCase):
             'these templates render a message themselves instead of including _message_body.html: '
             + ', '.join(offenders),
         )
+
+
+class PublicFlatpageTemplateTest(ByteDeckTenantTestCase):
+    """The public tenant's custom-page templates (public/flatpage.html and public/flatpage-wide.html)."""
+
+    def test_public_flatpage_templates__wrap_the_page_content_in_bd_flatpage(self):
+        """Both templates put a page's content inside .BD-flatpage.
+
+        The public stylesheet gives a plain <p> and <h1> the lead and h1-BD looks only inside
+        .BD-flatpage, so a page written without those classes still matches the site (#1213).
+        """
+        flatpage = SimpleNamespace(title="Style check", content="<h1>How it works</h1><p>Quests.</p>")
+
+        for template in ["public/flatpage.html", "public/flatpage-wide.html"]:
+            with self.subTest(template=template):
+                soup = BeautifulSoup(render_to_string(template, {"flatpage": flatpage}), "html.parser")
+
+                self.assertEqual([h1.get_text() for h1 in soup.select(".BD-flatpage h1")], ["How it works"])
+                self.assertEqual([p.get_text() for p in soup.select(".BD-flatpage p")], ["Quests."])

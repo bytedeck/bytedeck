@@ -30,23 +30,56 @@ from .tasks import regenerate_all_maps
 User = get_user_model()
 
 
+def map_ids_redrawn_for(object_):
+    """The ids of the maps a change to `object_` rebuilds, as things stand.
+
+    These are the maps the map signals queue (`CytoScapeManager.get_maps_to_regenerate_for`):
+    the ones drawing the object, and the ones drawing its prerequisites, where it joins a map.
+
+    Args:
+        object_: a Quest, Badge or Rank.
+
+    Returns:
+        set: the map ids; empty for an object just deleted, which has no pk left.
+    """
+    if object_.pk is None:
+        return set()
+    return set(CytoScape.objects.get_maps_to_regenerate_for(object_).values_list('id', flat=True))
+
+
+def message_maps_being_updated(request, map_ids):
+    """Tell the teacher which maps are being rebuilt, each name linked to its map.
+
+    Args:
+        request (HttpRequest): the request to add the message to.
+        map_ids (set): the maps being rebuilt; no message when empty.
+    """
+    if map_ids:
+        maps = CytoScape.objects.filter(id__in=map_ids)
+        messages.success(request, format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()))
+
+
 class UpdateMapMessageMixin:
-    """ Should be used for models that have signals which update related maps when modified/deleted
-    ie. badges, quests, ranks, prerequisites (not applicable since overridden)
+    """For the forms that change or delete something maps draw (a badge, quest or rank), whose
+    saves rebuild maps through the map signals: names the maps being rebuilt in a message.
     """
     def form_valid(self, *args, **kwargs):
-        """ Upon successful form, adds a success message listing related maps that are updated.
-        returns a response object.
-        """
+        """Save as the view does, then name every map the change is rebuilding.
 
-        if SiteConfig.get().map_auto_update:
-            maps = CytoScape.objects.get_related_maps(self.object)
-            if maps:
-                messages.success(
-                    self.request,
-                    format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()),
-                )
-        return super().form_valid(*args, **kwargs)
+        Those are the maps from before the change and after it (#2847). Before, for the maps the
+        object leaves or is deleted from; after, for the maps it joins through a prerequisite it
+        has just been given, which drew nothing of it until now.
+
+        Returns:
+            HttpResponse: the view's own response.
+        """
+        if not SiteConfig.get().map_auto_update:
+            return super().form_valid(*args, **kwargs)
+
+        map_ids = map_ids_redrawn_for(self.object)
+        response = super().form_valid(*args, **kwargs)
+        message_maps_being_updated(self.request, map_ids | map_ids_redrawn_for(self.object))
+        return response
 
 
 @method_decorator(staff_member_required, name='dispatch')

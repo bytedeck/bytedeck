@@ -518,6 +518,41 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertContains(response, f'btn_quest_quick_text{self.sub1.id}')
         self.assertContains(response, "Add quest-specific quick-reply text by changing")
 
+    def test_submission_view__quest_quick_reply_carries_sanitized_html(self):
+        """The quest's quick reply button carries its text as sanitized HTML for the page to insert,
+        so a link in it is kept and anything that could run script is not; its tooltip shows the
+        text without tags."""
+        self.quest1.quick_reply = (
+            'Please take a look at <a href="https://youtu.be/J8MH-k0Fa6Y?t=360">6:00</a> of the video.'
+            '<img src="x" onerror="alert(1)">'
+        )
+        self.quest1.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(
+            response,
+            'data-quick-reply="Please take a look at &lt;a href=&quot;https://youtu.be/J8MH-k0Fa6Y?t=360&quot;&gt;6:00&lt;/a&gt; '
+            'of the video.&lt;img src=&quot;x&quot;&gt;"',
+        )
+        self.assertNotContains(response, 'onerror')
+        self.assertContains(response, 'title=\'ADD QUEST-SPECIFIC TEXT: "Please take a look at 6:00 of the video."\'')
+
+    def test_submission_view__site_wide_quick_reply_carries_sanitized_html(self):
+        """The site-wide quick reply button carries the Site Configuration's text as sanitized HTML,
+        and its tooltip shows it without tags."""
+        config = SiteConfig.get()
+        config.submission_quick_text = 'Read the <a href="https://example.com/rubric">rubric</a> first.'
+        config.save()
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('quests:submission', args=[self.sub1.pk]))
+
+        self.assertContains(
+            response, 'data-quick-reply="Read the &lt;a href=&quot;https://example.com/rubric&quot;&gt;rubric&lt;/a&gt; first."')
+        self.assertContains(response, 'title=\'ADD TEXT: "Read the rubric first." (This text can be customized')
+
     def test_submission_view__site_wide_quick_reply_tooltip_mentions_config(self):
         """The site-wide quick-reply button tooltip notes the text is customizable in Site Configuration (#2114)."""
         self.client.force_login(self.test_teacher)
@@ -1559,6 +1594,31 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
             )
         return response
 
+    def test_complete__keeps_the_editors_paragraphs_as_they_are(self):
+        """The editor lays a comment out in paragraphs already, so the published comment is that
+        markup rather than those paragraphs nested inside another one (#2713)."""
+        self.post_complete(submission_comment="<p>Done!</p><p>Second paragraph.</p>")
+
+        published = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(published.text, "<p>Done!</p><p>Second paragraph.</p>")
+
+    def test_complete__puts_a_plain_comment_in_a_paragraph(self):
+        """Text with no markup of its own, as the quick reply box posts it, gets its paragraph."""
+        self.post_complete(submission_comment="thanks")
+
+        self.assertEqual(Comment.objects.all_with_target_object(self.sub).get().text, "<p>thanks</p>")
+
+    def test_complete__puts_the_placeholder_text_in_a_paragraph(self):
+        """The text the view writes for a quest handed in with no comment is a paragraph too."""
+        self.sub.quest.verification_required = False
+        self.sub.quest.save()
+
+        self.post_complete(submission_comment="<p><br></p>")
+
+        self.assertEqual(
+            Comment.objects.all_with_target_object(self.sub).get().text, "<p>(submitted without comment)</p>"
+        )
+
     def test_complete__quick_reply_form(self):
         """ Students can complete quests that are available to them.  Form is submitted with the 'complete' button
         Are redirected to their available quests page, submission is marked completed and has a completion time.
@@ -2429,6 +2489,23 @@ class QuestUserStatusViewTests(ByteDeckTenantTestCase):
             self.assertEqual(breakdown['Returned'][group]['percent'], "33%")
             self.assertEqual(breakdown['Awaiting Approval'][group]['percent'], "33%")
 
+    def test_quest_user_status__lists_named_as_on_the_students_page(self):
+        """The page's three lists of students carry the Students page's names, Yours, Current
+        and All, with the same descriptions as their hover text (#2136)."""
+        response = self.client.get(reverse('quests:quest_user_status', args=[self.quest.id]))
+
+        for scope, name, description in (
+            ('my_blocks', 'Yours', 'in a group you are assigned to as the teacher'),
+            ('current', 'Current', 'All students registered in a course in an open semester'),
+            ('active', 'All', 'All non-archived students'),
+        ):
+            with self.subTest(name):
+                self.assertRegex(
+                    response.content.decode(),
+                    rf'href="\?scope={scope}" role="button" title="[^"]*{re.escape(description)}[^"]*" class="[^"]*">{name}</a>',
+                )
+        self.assertNotContains(response, 'My blocks')
+
     def test_quest_user_status__users_with_no_submission_show_not_started(self):
         """Students without a submission are listed with the 'Not Started' status and no submission."""
         url = reverse('quests:quest_user_status', args=[self.quest.id])
@@ -2814,6 +2891,27 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         # Confrim quest was updated
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
+
+    def test_quest_update__new_prerequisite_names_the_map_the_quest_joins(self):
+        """Giving a quest a prerequisite that sits on a map puts the quest on that map, so the
+        message names that map, though nothing of the quest is drawn there yet (#2847)."""
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.full_clean()
+        config.save()
+        quest_to_update = baker.make(Quest)
+        prerequisite = baker.make(Quest, name="Intro to Game Design")
+        scape = CytoScape.generate_map(prerequisite, name="Game Design Map")
+        self.assertFalse(CytoScape.objects.get_related_maps(quest_to_update).exists())
+
+        self.minimal_valid_form_data['new_quest_prerequisite'] = prerequisite.id
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), data=self.minimal_valid_form_data,
+        )
+
+        messages = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(any('being updated' in m and scape.name in m for m in messages), messages)
 
     def test_quest_update__ta_can_update_own_draft(self):
         """TAs can update only their own unpublished quests, not published ones or others'."""
@@ -3322,6 +3420,47 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertFalse(any('being updated' in m for m in messages))
+
+    def test_form_valid__map_message_names_the_map_an_or_prerequisite_joins(self):
+        """An OR alternative that sits on a map puts the quest on that map: the message names it,
+        though nothing of the quest is drawn there yet, and the rebuild queued for it draws the
+        quest (#2847)."""
+        from djcytoscape.models import CytoElement
+        from djcytoscape.tasks import regenerate_map
+
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.full_clean()
+        config.save()
+        alternative = baker.make(Quest, name="Intro to Game Design")
+        scape = CytoScape.generate_map(alternative, name='Game Design Map')
+        self.assertFalse(CytoScape.objects.get_related_maps(self.parent_quest).exists())
+        cache.clear()  # no regeneration of the map already claimed
+        self.addCleanup(cache.clear)
+
+        ct = ContentType.objects.get_for_model(self.prereq_quest)
+        data = self.build_formset_data([{
+            "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+            "prereq_count": '1',
+            "or_prereq_object": f"{ct.id}-{alternative.id}",
+            "or_prereq_count": '1',
+            "id": f'{self.existing_prereq.pk}',
+        }], QuestPrereqsUpdate.form_prefix)
+        with patch('djcytoscape.signals.regenerate_map.apply_async') as task:
+            response = self.client.post(
+                reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}), data=data,
+            )
+
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any('being updated' in m and scape.name in m for m in messages), messages)
+
+        # the rebuild the save queued covers the map, and draws the quest on it
+        queued = {map_id for call in task.call_args_list for map_id in call.kwargs['args'][0]}
+        self.assertIn(scape.id, queued)
+        regenerate_map.apply(args=[[scape.id]]).get()
+        labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+        self.assertTrue(any(self.parent_quest.name in (label or '') for label in labels))
 
     def test_form_valid__map_message_when_related_map_exists(self):
         """With map_auto_update on and a map that includes the quest, updating its prereqs adds a
@@ -5425,7 +5564,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f'<p>{comment_text}</p>')
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -5498,6 +5637,26 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertIsNone(notification.action_object)
         self.assertNotIn(' with "', str(notification))
         self.assertTrue(notification.get_url().endswith(self.sub.get_absolute_url()))
+
+    def test_approve__quick_reply_text_is_saved_in_a_paragraph(self):
+        """A reply typed in the Approvals page's quick reply box arrives as bare text, and is saved
+        in a paragraph like the editor's replies, keeping its line breaks (#2850)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': 'Nice work.\nCheck your spelling next time.', 'approve_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(comment.text, '<p>Nice work.<br/>Check your spelling next time.</p>')
+
+    def test_return__editor_reply_keeps_its_own_paragraphs(self):
+        """A reply from the editor arrives in paragraphs already, and is saved as it came rather
+        than inside another paragraph (#2850, #2713)."""
+        self.client.post(reverse('quests:approve', args=[self.sub.id]), data={
+            'comment_text': '<p>Nice work.</p><p>Check your spelling.</p>', 'return_button': True,
+        })
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(comment.text, '<p>Nice work.</p><p>Check your spelling.</p>')
 
     def test_approve__with_badge_quick_reply_form(self):
         """ Test that the badge is granted """
@@ -5738,7 +5897,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         from comments.models import Comment
         comments = Comment.objects.all_with_target_object(self.sub)
         self.assertEqual(comments.count(), 1)
-        self.assertEqual(comments.first().text, comment_text)
+        self.assertEqual(comments.first().text, f'<p>{comment_text}</p>')
 
         # And the student should have a notification
         # get_user_target is a weird method, should probably be refactored or better documented...
@@ -5830,7 +5989,7 @@ class ApproveViewTest(ByteDeckTenantTestCase):
 
         response = self.client.post(path, data={'comment_button': '', 'comment_text': 'COMMENT TEXT'})
         self.assertRedirects(response, approvals)
-        self.assertEqual(Comment.objects.filter(text='COMMENT TEXT').count(), 1)
+        self.assertEqual(Comment.objects.filter(text='<p>COMMENT TEXT</p>').count(), 1)
 
         # no button returns 404
         self.assertEqual(self.client.post(path).status_code, 404)
