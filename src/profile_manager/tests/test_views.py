@@ -864,11 +864,11 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
     def test_profile_list__non_staff_cannot_sort_by_staff_only_columns(self):
         """ProfileListCurrent is open to any authenticated user, so a student may only sort by the
-        always-visible name columns. Requesting a staff-only (last_login/last_sub/username) or
+        always-visible name columns. Requesting a staff-only (last_active/last_sub/username) or
         privacy-gated (xp/mark) column silently falls back to the default sort, so its ordering
         can't leak to students; staff keep full sorting."""
         self.client.force_login(self.test_student1)
-        for forbidden in ('last_login', 'last_sub', 'username', 'xp', 'mark'):
+        for forbidden in ('last_active', 'last_sub', 'username', 'xp', 'mark'):
             response = self.client.get(reverse("profiles:profile_list_current"), {'sort': forbidden, 'order': 'asc'})
             self.assertEqual(response.context['current_sort'], 'first', msg=f"student must not sort by {forbidden}")
 
@@ -878,24 +878,45 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # staff can sort by the staff-only columns
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_login', 'order': 'asc'})
-        self.assertEqual(response.context['current_sort'], 'last_login')
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_active', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last_active')
 
-    def test_profile_list__last_login_never_fallback(self):
-        """The staff Last Login cell shows 'Never' for a student who has never logged in, mirroring
-        the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
+    def test_profile_detail__staff_see_when_the_student_was_last_active(self):
+        """A student's profile shows staff when the student last used the deck rather than when
+        they last signed in, which can be weeks earlier (#2849)."""
+        from datetime import timedelta
+        from django.utils import timezone
+        Profile.objects.filter(user=self.test_student1).update(last_active=timezone.now() - timedelta(days=3))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: ')
+        self.assertContains(response, '3\xa0days ago)')
+        self.assertNotContains(response, 'Last Login')
+
+    def test_profile_detail__never_active_reads_never(self):
+        """A student who has never used the deck shows "Never" for it."""
+        Profile.objects.filter(user=self.test_student1).update(last_active=None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: Never')
+
+    def test_profile_list__last_active_never_fallback(self):
+        """The staff Last Active cell shows 'Never' for a student who has never used the deck,
+        mirroring the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
         from django.utils import timezone
         now = timezone.now()
         # give both students a last submission (Last Quest shows a date, not "Never")
-        # while leaving last_login unset, so the only "Never" comes from Last Login
+        # while leaving last_active unset, so the only "Never" comes from Last Active
         for student in (self.test_student1, self.test_student2):
-            self.assertIsNone(student.last_login)
+            self.assertIsNone(student.profile.last_active)
             student.profile.time_of_last_submission = now
             student.profile.save()
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("profiles:profile_list"))
-        self.assertContains(response, "Never", count=2)  # one per student, from Last Login only
+        self.assertContains(response, "Never", count=2)  # one per student, from Last Active only
 
     def test_profile_list__block_filter_narrows_to_that_group(self):
         """The ?block= filter shows only the students registered in that group, and runs

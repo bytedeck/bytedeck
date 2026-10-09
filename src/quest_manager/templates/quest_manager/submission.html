@@ -474,6 +474,17 @@
                     data : formData,
                     processData : false, // hand jQuery the FormData as-is
                     contentType : false, // let the browser set the multipart boundary
+                    // Report how much of the request has gone up, under the note of each file
+                    // it carries, so a student attaching a large file sees it moving (#784).
+                    xhr : function() {
+                        var xhr = $.ajaxSettings.xhr();
+                        if (xhr.upload) {
+                            xhr.upload.addEventListener('progress', function(event) {
+                                if (event.lengthComputable) show_upload_progress(sentFiles, event.loaded, event.total);
+                            });
+                        }
+                        return xhr;
+                    },
 
                     // handle a successful response
                     success : function(json) {
@@ -581,6 +592,30 @@
                 if (chosen.length && same_files(chosen, draftSaveFiles[this.name])) carrying = true;
             });
             return carrying;
+        }
+
+        function show_upload_progress(sentFiles, loaded, total) {
+            // The share of a draft save sent so far, shown as a bar and a percentage in the
+            // "Attaching" note of each input whose files went with it (#784). The share is of
+            // the whole request, which a file being attached is nearly all of. An input holding
+            // something else by now was chosen again while this save was away, so its note is
+            // about another file and is left alone.
+            var percent = Math.min(100, Math.round(loaded / total * 100));
+            $('#submission-main-form input[type="file"]').each(function() {
+                var chosen = chosen_files(this);
+                if (!chosen.length || !same_files(chosen, sentFiles[this.name])) return;
+                var note = file_note_holder($(this)).find('.draft-file-note-pending');
+                if (!note.length) return;
+                var bar = note.find('.draft-upload-progress');
+                if (!bar.length) {
+                    bar = $('<span class="progress draft-upload-progress">' +
+                            '<span class="progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></span>' +
+                            '</span>');
+                    note.append(' <span class="draft-upload-percent"></span>').append(bar);
+                }
+                bar.find('.progress-bar').css('width', percent + '%').attr('aria-valuenow', percent);
+                note.find('.draft-upload-percent').text(percent + '%');
+            });
         }
 
         function show_saved_files(json, sentFiles) {

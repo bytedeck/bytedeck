@@ -1427,6 +1427,15 @@ table[data-toggle="table"].bt-reveal {
     max-height: 40px;
 }
 
+/* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
+   line of its own, inside the note's paragraph under the file input. */
+.draft-upload-progress {
+    display: block;
+    height: 6px;
+    max-width: 320px;
+    margin: 4px 0 0;
+}
+
 /* The Unflag button's icon (#824): a flag struck through by a red "no" sign, the sign drawn twice
    the flag's size and the pair scaled down to sit in a button beside single icons. */
 .fa-stack.unflag-icon {

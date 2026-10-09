@@ -286,6 +286,9 @@ MIDDLEWARE = [
     # pass back through them and pick up their response headers (review find on #2210).
     'tenant.middleware.OwnerOnlyWhenSuspendedMiddleware',
     'hackerspace_online.middleware.RequestDataTooBigMiddleware',  # after MessageMiddleware
+    # Records when each signed-in person last used their deck (#2849). Needs auth and sessions
+    # above, and sits below the suspension check, so a person it turns away isn't recorded.
+    'profile_manager.middleware.LastActiveMiddleware',
 ]
 
 # Max size (bytes) of a request body Django will parse in memory, EXCLUDING
