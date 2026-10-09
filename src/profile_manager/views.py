@@ -51,13 +51,32 @@ class ProfileViewTypes:
     TAS = 6
 
 
+def your_students(user):
+    """The students on `user`'s Yours list (#2136): registered in a course in an open semester, in
+    a group `user` is the teacher of.
+
+    The group and the semester are matched on the same registration, as on a group's own list, so
+    a student in an open semester for one course and in the teacher's group only through an
+    archived one is not listed.
+
+    Args:
+        user: the teacher.
+
+    Returns:
+        QuerySet[Profile]: those students' profiles, each appearing once.
+    """
+    in_your_groups = CourseStudent.objects.get_queryset().in_open_semesters().filter(
+        block__current_teacher=user,
+    ).values_list('user_id', flat=True)
+    return Profile.objects.all_in_open_semesters().filter(user_id__in=in_your_groups)
+
+
 def offers_yours_list(user):
     """Whether the Students page offers `user` the Yours list, the students in their own groups.
 
-    Only when it differs from Current and isn't empty (#2136): the user teaches a group, and
-    some group has another teacher or none. When they are the only teacher with groups, Yours
-    and Current hold the same students, so the Quest Approvals page leaves out its "My groups"
-    button on the same test.
+    Only when it holds someone and differs from Current (#2136): some current students are in the
+    user's groups and some are not. A teacher whose groups hold none of the current students would
+    get an empty list, and one whose groups hold all of them would get Current again.
 
     Args:
         user: the requesting staff member.
@@ -65,8 +84,8 @@ def offers_yours_list(user):
     Returns:
         bool: True when the Yours list holds some current students but not all of them.
     """
-    teachers = Block.objects.grouped_teachers_blocks().keys()
-    return user.id in teachers and len(teachers) > 1
+    yours = your_students(user)
+    return yours.exists() and Profile.objects.all_in_open_semesters().exclude(pk__in=yours.values('pk')).exists()
 
 
 class ProfileList(NonPublicOnlyViewMixin, UserPassesTestMixin, ListView):
@@ -377,17 +396,10 @@ class ProfileListYours(ProfileList):
     def get_base_queryset(self):
         """The current students registered in one of the requesting teacher's groups.
 
-        The group and the semester are matched on the same registration, as on a group's own
-        list, so a student in an open semester for one course and in the teacher's group only
-        through an archived one is not listed.
-
         Returns:
-            QuerySet[Profile]: those students' profiles, each appearing once.
+            QuerySet[Profile]: those students' profiles, from `your_students`.
         """
-        in_your_groups = CourseStudent.objects.get_queryset().in_open_semesters().filter(
-            block__current_teacher=self.request.user,
-        ).values_list('user_id', flat=True)
-        return Profile.objects.all_in_open_semesters().filter(user_id__in=in_your_groups)
+        return your_students(self.request.user)
 
     def get_block_filter_choices(self):
         """Only the requesting teacher's own groups: any other would filter this list down to nobody.

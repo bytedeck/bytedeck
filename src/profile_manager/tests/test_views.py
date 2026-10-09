@@ -654,7 +654,13 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertIn(archived_teacher.profile, archived.context['object_list'])
 
     def _register(self, student, block, semester=None):
-        """Register `student` in a course in `block`, in the active semester unless told otherwise."""
+        """Register `student` in a new course in `block`.
+
+        Args:
+            student (User): the student to register.
+            block (Block): the group the registration is in.
+            semester (Semester): the registration's semester; the active semester when left out.
+        """
         baker.make(CourseStudent, user=student, block=block, course=baker.make(Course), semester=semester or self.active_sem)
 
     def test_profile_list_yours__lists_the_current_students_in_the_teachers_groups(self):
@@ -702,33 +708,48 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
 
     def test_offers_yours_list__only_when_it_differs_from_current_and_holds_someone(self):
-        """Yours is offered to a teacher who teaches a group when some other group has another
-        teacher or none (#2136). A teacher with no group would get an empty list, and the only
-        teacher with groups would get the same list as Current."""
+        """Yours is offered when it holds some of the current students but not all of them (#2136):
+        it would otherwise be empty, or the same list as Current."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
         cases = (
-            ('teaches no group', [baker.make(get_user_model(), is_staff=True)], False),
-            ('the only teacher with groups', [self.test_teacher, self.test_teacher], False),
-            ('another teacher has a group', [self.test_teacher, baker.make(get_user_model(), is_staff=True)], True),
-            ('another group has no teacher', [self.test_teacher, None], True),
+            # (case, the teacher of each of test_student1's and test_student2's groups, expected)
+            ('teaches no group', [other_teacher, other_teacher], False),
+            ("the teacher's group holds no current student", [other_teacher, other_teacher, self.test_teacher], False),
+            ("the teacher's groups hold every current student", [self.test_teacher, self.test_teacher], False),
+            ('another teacher has a current student', [self.test_teacher, other_teacher], True),
+            ("a group without a teacher has a current student", [self.test_teacher, None], True),
         )
         for case, teachers, expected in cases:
             with self.subTest(case):
+                CourseStudent.objects.all().delete()
                 Block.objects.all().delete()
-                for teacher in teachers:
-                    baker.make(Block, current_teacher=teacher)
+                for student, teacher in zip((self.test_student1, self.test_student2), teachers):
+                    self._register(student, baker.make(Block, current_teacher=teacher))
+                for teacher in teachers[2:]:
+                    baker.make(Block, current_teacher=teacher)  # a group with nobody in it
                 self.assertEqual(offers_yours_list(self.test_teacher), expected)
+
+    def test_offers_yours_list__not_when_the_students_are_in_both_teachers_groups(self):
+        """A student registered in another teacher's group as well as yours is on both lists, so
+        Yours is the same as Current and isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student1, theirs)
+
+        self.assertFalse(offers_yours_list(self.test_teacher))
 
     def test_profile_list__yours_button_follows_offers_yours_list(self):
         """The Yours button is left out where the list isn't offered, unless it is the list on show."""
         Block.objects.all().delete()
-        baker.make(Block, current_teacher=self.test_teacher)
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
         self.client.force_login(self.test_teacher)
         yours_url = reverse('profiles:profile_list_yours')
 
         self.assertNotContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
         self.assertContains(self.client.get(yours_url), f'href="{yours_url}"')
 
-        baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student2, baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True)))
         self.assertContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
 
     def test_profile_list__each_list_button_says_who_it_holds(self):
@@ -738,8 +759,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         config.custom_name_for_student = 'Learner'
         config.custom_name_for_group = 'Block'
         config.save()
-        baker.make(Block, current_teacher=self.test_teacher)
-        baker.make(Block, current_teacher=None)
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self._register(self.test_student2, baker.make(Block, current_teacher=None))
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse('profiles:profile_list_current'))
