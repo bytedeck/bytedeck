@@ -9,45 +9,63 @@
 
     });
 
+    // The Unflag button, as the page draws it for a flagged submission (#824), with a
+    // placeholder where each submission's own unflag URL goes.
+    var UNFLAG_BUTTON = '{% filter escapejs %}{% include "quest_manager/snippets/unflag_button.html" with unflag_url="__UNFLAG_URL__" %}{% endfilter %}';
+
+    // The submissions whose flag is on its way, by id. Kept per submission rather than per
+    // button: a submission's own page draws two Flag buttons, and a second request still on its
+    // way after the first had turned them into Unflag could flag the submission again.
+    var flagsOnTheirWay = {};
+
     function flag_submission(btn) {
-        $btn = $(btn);
+        var $btn = $(btn);
+        var subId = $btn.data('sub-id');
 
-        $iconOriginal = $btn.find('i')
-        $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>')
-        $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>')
+        var $iconOriginal = $btn.find('i');
+        var $iconSpin = $('<i class="fa fa-fw fa-spinner fa-spin"></i>');
+        var $iconSuccess = $('<i style="display:none" class="fa fa-fw fa-check text-success"></i>');
 
-        if($btn.find($iconSpin).length == 0 && $btn.find($iconSuccess).length == 0) {
+        // a click while this submission's flag is already on its way does nothing
+        if (!flagsOnTheirWay[subId]) {
+            flagsOnTheirWay[subId] = true;
 
-            $iconOriginal.hide(0)
-            $btn.append($iconSpin)
-            $btn.append($iconSuccess)
-
-            sub_id = $btn.data('sub-id')
+            $iconOriginal.hide(0);
+            $btn.append($iconSpin);
+            $btn.append($iconSuccess);
 
             $.ajax({
                 url : "{% url 'quests:ajax_flag' %}",
                 type : "POST", // http method
                 data : {
                     csrfmiddlewaretoken: "{{ csrf_token }}",
-                    submission_id: sub_id
+                    submission_id: subId
                 }, // data sent with the post request
 
                 // handle a successful response
                 success : function(json) {
-                    // fade out spinner and fade in check, then replace check with original icon after a couple seconds
+                    // fade the spinner out and the tick in, then, the submission being flagged
+                    // now, turn its Flag buttons into Unflag buttons, as a reload would show
+                    // them: every one, since a submission's own page draws two
                     $iconSpin.fadeOut(400, function() {
-                    $iconSuccess.fadeIn(400, function() {
-                        window.setTimeout(
-                        function(){ $iconSuccess.remove(); $iconOriginal.show(0); $iconSpin.remove()},
-                        2000
-                        )
-                    });
+                        $iconSuccess.fadeIn(400, function() {
+                            window.setTimeout(function() {
+                                $('.btn-flag-submission[data-sub-id="' + subId + '"]').each(function() {
+                                    $(this).replaceWith(UNFLAG_BUTTON.replace('__UNFLAG_URL__', $(this).data('unflag-url')));
+                                });
+                            }, 1000);
+                        });
                     });
                 },
 
                 // handle a non-successful response
                 error : function(xhr,errmsg,err) {
                     console.log(xhr.status + ": " + xhr.responseText); // provide a bit more info about the error to the console
+                    // put the Flag button back as it was, so it can be tried again
+                    delete flagsOnTheirWay[subId];
+                    $iconSpin.remove();
+                    $iconSuccess.remove();
+                    $iconOriginal.show(0);
                     alert("ERROR!\n\nSorry, something went wrong and the quest wasn't flagged.  \n\nSee the browser console for error details.");
                 }
             });
