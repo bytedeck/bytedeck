@@ -13,6 +13,7 @@
  *    data-max-request-size on this script's tag (settings.MAX_UPLOAD_REQUEST_SIZE).
  *
  * A file that breaks either is taken back out of its input and a note under the input says why.
+ * The input is marked invalid and described by the note, for a screen reader to give the reason.
  * The check listens in the capture phase, ahead of the page's own handlers, so a page that saves
  * a file the moment it is chosen (a submission's draft) never sends it. A form is checked again
  * as it is submitted, for files chosen before this script could see them.
@@ -115,24 +116,61 @@ window.uploadSizeCheck = window.uploadSizeCheck || (function () {
     return input.closest(".bt-attachments-add, .form-group") || input.parentNode;
   }
 
+  // gives each note an id of its own, for its input to point to
+  var notesMade = 0;
+
   /**
-   * Where to write why a file input's file was refused, made on first use: the text of a note
-   * under the input, red the way the page's own file errors are.
+   * A note under a file input saying why its file was refused, red the way the page's own file
+   * errors are.
    * @param {HTMLInputElement} input
-   * @returns {HTMLElement}
+   * @returns {HTMLElement} the note, already in the page.
    */
-  function noteFor(input) {
-    var holder = noteHolder(input);
-    var note = holder.querySelector(".upload-size-note");
-    if (!note) {
-      note = document.createElement("p");
-      note.className = "help-block upload-size-note";
-      note.setAttribute("role", "alert");
-      // in a span: a help block's own colour wins over text-danger on the same element
-      note.appendChild(document.createElement("span")).className = "text-danger";
-      holder.appendChild(note);
+  function makeNote(input) {
+    var note = document.createElement("p");
+    note.id = "upload-size-note-" + (++notesMade);
+    note.className = "help-block upload-size-note";
+    note.setAttribute("role", "alert");
+    // in a span: a help block's own colour wins over text-danger on the same element
+    note.appendChild(document.createElement("span")).className = "text-danger";
+    noteHolder(input).appendChild(note);
+    return note;
+  }
+
+  /**
+   * Mark a file input as refused, with the note saying why among the things that describe it,
+   * so a screen reader gives the reason whenever the input is focused; or take that back off.
+   * Descriptions the input already had stay. So does an aria-invalid it already had (the
+   * server's, for an error on the last submit, which is still on the page): taking the refusal
+   * back off puts it back.
+   * @param {HTMLInputElement} input
+   * @param {string} noteId - the id of the input's note.
+   * @param {boolean} refused - whether the input's files were just refused.
+   */
+  function describe(input, noteId, refused) {
+    var ids = (input.getAttribute("aria-describedby") || "").split(/\s+/).filter(function (id) {
+      return id && id !== noteId;
+    });
+    // set only while the input stands refused: its aria-invalid from before ("" if it had none)
+    var invalidBefore = input.dataset.uploadSizeInvalidBefore;
+    if (refused) {
+      ids.push(noteId);
+      if (invalidBefore === undefined) {
+        input.dataset.uploadSizeInvalidBefore = input.getAttribute("aria-invalid") || "";
+      }
+      input.setAttribute("aria-invalid", "true");
+    } else if (invalidBefore !== undefined) {
+      if (invalidBefore) {
+        input.setAttribute("aria-invalid", invalidBefore);
+      } else {
+        input.removeAttribute("aria-invalid");
+      }
+      delete input.dataset.uploadSizeInvalidBefore;
     }
-    return note.firstChild;
+    if (ids.length) {
+      input.setAttribute("aria-describedby", ids.join(" "));
+    } else {
+      input.removeAttribute("aria-describedby");
+    }
   }
 
   /**
@@ -143,13 +181,16 @@ window.uploadSizeCheck = window.uploadSizeCheck || (function () {
    */
   function check(input) {
     var problem = problemWith(filesIn(input), Number(input.dataset.maxSize) || 0, otherBytesInForm(input));
+    var note = noteHolder(input).querySelector(".upload-size-note");
     if (problem) {
       input.value = "";
-      noteFor(input).textContent = problem;
+      note = note || makeNote(input);
+      note.firstChild.textContent = problem;
+      describe(input, note.id, true);
       return true;
     }
-    var note = noteHolder(input).querySelector(".upload-size-note");
     if (note) {
+      describe(input, note.id, false);
       note.remove();
     }
     return false;
