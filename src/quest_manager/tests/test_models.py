@@ -624,6 +624,31 @@ class SubmissionTestModel(ByteDeckTenantTestCase):
         """The submission's absolute URL is reachable and returns 200."""
         self.assertEqual(self.client.get(self.submission.get_absolute_url(), follow=True).status_code, 200)
 
+    def comment_thread(self):
+        """Put three comments on the shared submission, an hour apart, and return them oldest first."""
+        start = timezone.now()
+        comments = []
+        for hour, text in enumerate(["hand-in", "teacher's reply", "resubmission"]):
+            with freeze_time(start + datetime.timedelta(hours=hour)):
+                comments.append(Comment.objects.create_comment(
+                    user=self.student, text=text, target=self.submission, path=self.submission.get_absolute_url(),
+                ))
+        return comments
+
+    def test_get_comments__newest_first_by_default(self):
+        """A submission's comments come newest first, as they always have."""
+        oldest_first = self.comment_thread()
+        self.assertEqual(list(self.submission.get_comments()), oldest_first[::-1])
+
+    def test_get_comments__oldest_first_when_the_deck_asks(self):
+        """With "Sort the comments on a submission with oldest on top" ticked, the thread reads from the hand-in down (#1234)."""
+        oldest_first = self.comment_thread()
+        config = SiteConfig.get()
+        config.submission_comments_oldest_first = True
+        config.save()
+
+        self.assertEqual(list(self.submission.get_comments()), oldest_first)
+
     def test_mark_completed__sets_state_and_clears_draft(self):
         """mark_completed sets completion state, records the submission time, and clears the draft comment."""
         user = baker.make(User)

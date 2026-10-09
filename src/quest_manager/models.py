@@ -1760,10 +1760,15 @@ class QuestSubmission(models.Model):
         documents and its published question answers), so a submission with a long comment
         thread does not cost a query per comment.
 
+        Newest first, unless the deck's Site Configuration asks for the oldest first (#1234).
+
         Returns:
             QuerySet[Comment]: the comments targeting this submission.
         """
-        return Comment.objects.all_with_target_object(self)
+        comments = Comment.objects.all_with_target_object(self)
+        if SiteConfig.get().submission_comments_oldest_first:
+            return comments.order_by('timestamp')
+        return comments
 
     def _fix_ordinal(self):
         # NOTE: There is a rare bug that we are unable to reproduce as of the moment where a QuestSubmission has the same ordinal.
