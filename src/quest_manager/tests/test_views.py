@@ -2815,6 +2815,27 @@ class QuestCRUDViewsTest(ByteDeckTenantTestCase):
         quest_to_update.refresh_from_db()
         self.assertEqual(quest_to_update.name, "Updated Name")
 
+    def test_quest_update__new_prerequisite_names_the_map_the_quest_joins(self):
+        """Giving a quest a prerequisite that sits on a map puts the quest on that map, so the
+        message names that map, though nothing of the quest is drawn there yet (#2847)."""
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.full_clean()
+        config.save()
+        quest_to_update = baker.make(Quest)
+        prerequisite = baker.make(Quest, name="Intro to Game Design")
+        scape = CytoScape.generate_map(prerequisite, name="Game Design Map")
+        self.assertFalse(CytoScape.objects.get_related_maps(quest_to_update).exists())
+
+        self.minimal_valid_form_data['new_quest_prerequisite'] = prerequisite.id
+        response = self.client.post(
+            reverse('quests:quest_update', kwargs={'pk': quest_to_update.pk}), data=self.minimal_valid_form_data,
+        )
+
+        messages = [str(m) for m in get_messages(response.wsgi_request)]
+        self.assertTrue(any('being updated' in m and scape.name in m for m in messages), messages)
+
     def test_quest_update__ta_can_update_own_draft(self):
         """TAs can update only their own unpublished quests, not published ones or others'."""
         # simulate a logged in TA (teaching assistant = a student with extra permissions)
@@ -3322,6 +3343,47 @@ class QuestPrereqsUpdate(ByteDeckTenantTestCase):
         self.assertRedirects(response, self.parent_quest.get_absolute_url())
         messages = [str(m) for m in response.wsgi_request._messages]
         self.assertFalse(any('being updated' in m for m in messages))
+
+    def test_form_valid__map_message_names_the_map_an_or_prerequisite_joins(self):
+        """An OR alternative that sits on a map puts the quest on that map: the message names it,
+        though nothing of the quest is drawn there yet, and the rebuild queued for it draws the
+        quest (#2847)."""
+        from djcytoscape.models import CytoElement
+        from djcytoscape.tasks import regenerate_map
+
+        self.client.force_login(self.test_teacher)
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.full_clean()
+        config.save()
+        alternative = baker.make(Quest, name="Intro to Game Design")
+        scape = CytoScape.generate_map(alternative, name='Game Design Map')
+        self.assertFalse(CytoScape.objects.get_related_maps(self.parent_quest).exists())
+        cache.clear()  # no regeneration of the map already claimed
+        self.addCleanup(cache.clear)
+
+        ct = ContentType.objects.get_for_model(self.prereq_quest)
+        data = self.build_formset_data([{
+            "prereq_object": f"{ct.id}-{self.prereq_quest.id}",
+            "prereq_count": '1',
+            "or_prereq_object": f"{ct.id}-{alternative.id}",
+            "or_prereq_count": '1',
+            "id": f'{self.existing_prereq.pk}',
+        }], QuestPrereqsUpdate.form_prefix)
+        with patch('djcytoscape.signals.regenerate_map.apply_async') as task:
+            response = self.client.post(
+                reverse('quests:quest_prereqs_update', kwargs={'pk': self.parent_quest.pk}), data=data,
+            )
+
+        messages = [str(m) for m in response.wsgi_request._messages]
+        self.assertTrue(any('being updated' in m and scape.name in m for m in messages), messages)
+
+        # the rebuild the save queued covers the map, and draws the quest on it
+        queued = {map_id for call in task.call_args_list for map_id in call.kwargs['args'][0]}
+        self.assertIn(scape.id, queued)
+        regenerate_map.apply(args=[[scape.id]]).get()
+        labels = CytoElement.objects.all_for_scape(scape).values_list('label', flat=True)
+        self.assertTrue(any(self.parent_quest.name in (label or '') for label in labels))
 
     def test_form_valid__map_message_when_related_map_exists(self):
         """With map_auto_update on and a map that includes the quest, updating its prereqs adds a

@@ -411,7 +411,9 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         return context
 
 
-class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
+# UpdateMapMessageMixin comes before QuestFormViewMixin so that it wraps the prerequisites the form
+# sets after saving the quest: the maps it names include the one a new prerequisite puts the quest on.
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
