@@ -4,6 +4,8 @@ LMS originating from Timberline Secondary School's Digital Hackerspace
 [![Flake8 Linting Status](https://github.com/bytedeck/bytedeck/actions/workflows/lint.yml/badge.svg?branch=develop)](https://github.com/bytedeck/bytedeck/actions?query=workflow%3ALint+branch%3Adevelop)
 [![codecov](https://codecov.io/gh/bytedeck/bytedeck/branch/develop/graph/badge.svg)](https://codecov.io/gh/bytedeck/bytedeck)
 
+**Running a deck?** The [ByteDeck User Guide](https://bytedeck.github.io/bytedeck/) walks deck owners and teachers through getting started.
+
 # Hackerspace development environment installation
 
 ## Installing and running the project
@@ -211,6 +213,17 @@ tenant.domains.create(domain='hackerspace.localhost.net', is_primary=False)
 ```
 
 4. Done! You should now be able to access your site via `http://hackerspace.localhost.net:8000/` and use the Google Sign In.  Note that Google Sign In will only work using the `.net` url.
+
+## The User Guide
+
+The [ByteDeck User Guide](https://bytedeck.github.io/bytedeck/) is built from the `docs/` folder with [MkDocs](https://www.mkdocs.org/) and the [Material](https://squidfunk.github.io/mkdocs-material/) theme (`mkdocs.yml` sets the page order). The User Guide workflow checks it on every PR that changes it and publishes it to GitHub Pages when the PR merges to `develop`. To preview your changes:
+
+```bash
+pip install -r docs/requirements.txt
+mkdocs serve --dev-addr 127.0.0.1:8100  # then open http://127.0.0.1:8100/bytedeck/ (Django has 8000)
+```
+
+Pages are Markdown files under `docs/`, and their screenshots live in `docs/images/`. Take screenshots from a real deck, cropped to the part of the page the text talks about.
 
 ## Contributing
 
