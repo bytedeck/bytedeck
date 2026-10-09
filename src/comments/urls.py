@@ -8,4 +8,5 @@ urlpatterns = [
     re_path(r'^(?P<id>\d+)/flag/$', views.flag, name='flag'),
     re_path(r'^(?P<id>\d+)/unflag/$', views.unflag, name='unflag'),
     re_path(r'^(?P<id>\d+)/delete/$', views.delete, name='delete'),
+    re_path(r'^documents/(?P<id>\d+)/download/$', views.document_download, name='document_download'),
 ]
