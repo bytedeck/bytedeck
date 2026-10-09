@@ -1426,3 +1426,12 @@ table[data-toggle="table"].bt-reveal {
     max-width: 100%;
     max-height: 40px;
 }
+
+/* The bar under a file being attached by a draft save (#784): a slim Bootstrap progress bar on a
+   line of its own, inside the note's paragraph under the file input. */
+.draft-upload-progress {
+    display: block;
+    height: 6px;
+    max-width: 320px;
+    margin: 4px 0 0;
+}
