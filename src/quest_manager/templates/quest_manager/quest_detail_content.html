@@ -53,6 +53,17 @@
       </div>
     </div>
 
+    {% comment %} The settings only staff see: the same list the quest list's preview shows (#1073).
+       Left off a Library preview, where the quest is the Library's copy: an imported quest arrives
+       as a draft whatever that copy's Published says, so showing it there would mislead. {% endcomment %}
+    {% if request.user.is_staff and not library_quest %}
+      <hr class="tighter">
+      <p class="text-muted"><small>Visible to staff only</small></p>
+      <ul class="list-unstyled">
+        {% with quest as q %}{% include "quest_manager/snippets/quest_staff_settings.html" %}{% endwith %}
+      </ul>
+    {% endif %}
+
   </div>
 </div>
 

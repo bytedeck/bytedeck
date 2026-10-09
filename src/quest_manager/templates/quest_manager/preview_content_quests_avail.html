@@ -16,15 +16,11 @@
   <div class="row">
     <div class="col-xs-6">
       <ul class="list-unstyled">
-        <li>Available Date: {{q.date_available}}</li>
-        <li>Available Time: {{q.time_available}}</li>
-        <li>Published: {{q.published|yesno}}</li>
-        <li>Requires Approval: {{q.verification_required|yesno}}</li>
+        {% include "quest_manager/snippets/quest_staff_settings.html" %}
       </ul>
     </div>
     <div class="col-xs-6">
       <ul class="list-unstyled">
-      <li>Available without course: {{ q.available_outside_course|yesno }}</li>
       <li>Repeatable: {% if q.max_repeats == 0 %}no
              {% else %}
                {% if q.max_repeats == -1 %} Unlimited

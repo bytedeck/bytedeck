@@ -163,6 +163,20 @@ class QuestLibraryTestsCase(LibraryTenantTestCaseMixin):
         self.assert200('library:quest_list')
         self.assert200('library:import_quest', args=[self.library_quest.import_id])
 
+    def test_import_quest__leaves_out_the_library_copys_settings(self):
+        """The import page shows the Library's quest without the staff-only settings (#1073).
+
+        That quest is the Library's copy, and an imported quest arrives as a draft whatever the
+        copy's Published says, so "Published: yes" there would tell the teacher something the
+        import is about to undo.
+        """
+        self.client.force_login(self.test_teacher)
+
+        response = self.assert200('library:import_quest', args=[self.library_quest.import_id])
+
+        self.assertNotContains(response, "Visible to staff only")
+        self.assertNotContains(response, "Published: ")
+
     def test_quests_library_list__showing_only_library_quests(self):
         """
         Add test that checks if the library quest list view works and does not list the quests from other tenants
