@@ -1,4 +1,5 @@
 <!-- inserted via AJAX into tab_quest_submissions -->
+{% load utility_tags %}
 <li class="list-group-item visible-xs-block">
   <div class="row">
       <div class="col-xs-4">
@@ -52,7 +53,7 @@
       </a>
     {% endif %}
   </div>
-  <div class="user-content">{{s.quest.submission_details|safe}}</div>
+  <div class="user-content">{{s.quest.submission_details|fill_in_settings|safe}}</div>
 </li>
 {% if s.is_returned or completed %}
   <li class="list-group-item list-group-item-info">Submission Comments</li>

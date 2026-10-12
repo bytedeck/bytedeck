@@ -55,6 +55,23 @@ def group_name():
     return SiteConfig.get().custom_name_for_group
 
 
+@register.filter
+def fill_in_settings(text):
+    """Quest text with the settings it names between double square brackets written in from
+    this deck's Site Configuration, such as [[site_name_short]] (#435). See
+    SiteConfig.fill_in_settings().
+
+    Args:
+        text (str or None): HTML from a quest.
+
+    Returns:
+        str or None: the HTML with the named settings written in.
+    """
+    if not text or '[[' not in text:
+        return text  # most text names nothing, so the deck's settings aren't fetched for it
+    return SiteConfig.get().fill_in_settings(text)
+
+
 @register.simple_tag
 def max_upload_request_size():
     """The most the files chosen in one form may add up to, in bytes, for the browser's check

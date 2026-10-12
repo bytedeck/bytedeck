@@ -1,3 +1,4 @@
+{% load utility_tags %}
       <div id="quest-common-{{ q.id }}" class="panel panel-primary panel-top">
         <div class="panel-heading">
           <h3 class="panel-title">{{ q.common_data.title }}<br>
@@ -5,6 +6,6 @@
           </h3>
         </div>
         <div class="panel-body">
-          {{ q.common_data.instructions | safe }}
+          {{ q.common_data.instructions | fill_in_settings | safe }}
         </div>
       </div>
