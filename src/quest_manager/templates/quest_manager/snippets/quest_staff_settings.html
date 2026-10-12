@@ -1,0 +1,9 @@
+{% comment %} A quest's settings that only staff see: when it opens, whether it is published, whether a
+   teacher has to approve it, and whether a student outside a course can take it. One list for the
+   quest list's preview and the quest's own page, so the two cannot drift apart (#1073). `q` is the
+   quest; the including template supplies the <ul>. {% endcomment %}
+<li>Available Date: {{ q.date_available }}</li>
+<li>Available Time: {{ q.time_available }}</li>
+<li>Published: {{ q.published|yesno }}</li>
+<li>Requires Approval: {{ q.verification_required|yesno }}</li>
+<li>Available without course: {{ q.available_outside_course|yesno }}</li>
