@@ -62,6 +62,19 @@
             <small class="text-muted">(downloads)</small>
           {% else %}
             {% include 'questions/snippets/question_file.html' with file=answer.response_file %}
+            {% if answer.is_valid_portfolio_type %}
+              {% comment %} The same action a comment attachment of this file would offer (#2573): a
+                 file_upload question is where a teacher asks for the artwork or screencast a
+                 portfolio exists to show off. It sits here rather than in question_file.html
+                 because that snippet also renders the teacher's solution file. A portfolio takes
+                 only the raster and video types, so nothing script-capable reaches this branch
+                 anyway; keeping the button on this side says so. {% endcomment %}
+              <div>
+                <a title="Add {{ answer.response_file|filename|striptags }} to {% if request.user.is_staff %}this student's{% else %}your{% endif %} portfolio."
+                   href="{% url 'portfolios:art_add_answer' answer.id %}"
+                   class="btn btn-default btn-xs">Add to Portfolio</a>
+              </div>
+            {% endif %}
           {% endif %}
         {% elif answer.response_text %}
           {{ answer.response_text|safe }}
