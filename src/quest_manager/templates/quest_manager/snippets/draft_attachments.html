@@ -17,7 +17,9 @@
 {% if draft_documents %}
   <ul class="file-links">
     {% for document in draft_documents %}
-      <li class="file-link"><a href="{{ document.docfile.url }}" target="_blank">
+      {% comment %} get_download_url, not the storage url: a file that can carry a script is
+         handed over as a download rather than opened in the page (#2726). {% endcomment %}
+      <li class="file-link"><a href="{{ document.get_download_url }}" target="_blank">
         {{ document.docfile|filename }}</a>
         <button type="button" class="btn btn-default btn-xs pull-right draft-attachment-delete"
                 data-delete-url="{% url 'quests:ajax_delete_draft_attachment' document.id %}"
