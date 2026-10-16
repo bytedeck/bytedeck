@@ -8,7 +8,6 @@ from datetime import datetime, timezone as dt_timezone
 from django.utils.html import escape, format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -42,6 +41,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.redirects import redirect_back, safe_local_url, where_from
 from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
@@ -324,9 +324,8 @@ class CategoryPublish(View):
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
-        next_url = request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        next_url = safe_local_url(request, request.POST.get('next'))
+        if next_url:
             return redirect(next_url)
         return redirect(category)
 
@@ -702,7 +701,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
 
         if not quest_ids:
             messages.warning(request, "No quests selected.")
-            return redirect("quests:quests")
+            return redirect_back(request, "quests:quests")
         if action in ["unarchive", "delete"]:
             # Include archived quests for delete and unarchive actions because
             # those target quests excluded from the default queryset.
@@ -735,7 +734,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             )
             messages.success(request, f"{count} quest(s) unarchived.")
 
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:quests")
 
 
 @method_decorator(staff_member_required, name="dispatch")
@@ -1423,11 +1422,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             request that came in over https; None otherwise, which includes a form that posted
             no `next` at all. Anything else would make this view an open redirect.
         """
-        next_url = self.request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
-            return next_url
-        return None
+        return safe_local_url(self.request, self.request.POST.get('next'))
 
     def form_valid(self):
         """Send the teacher back where they were once their decision is recorded.
@@ -2709,7 +2704,7 @@ def hide(request, quest_id):
         format_html("<strong>{}</strong> has been added to your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:quests")
+    return redirect_back(request, "quests:quests")
 
 
 @non_public_only_view
@@ -2723,7 +2718,7 @@ def unhide(request, quest_id):
         format_html("<strong>{}</strong> has been removed from your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:available_all")
+    return redirect_back(request, "quests:available_all")
 
 
 @login_required
@@ -2787,9 +2782,7 @@ def skip(request, submission_id):
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
         )
-        if request.user.is_staff:
-            return redirect("quests:approvals")
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:approvals" if request.user.is_staff else "quests:quests")
     else:
         raise Http404
 
@@ -3125,13 +3118,17 @@ def drop(request, submission_id):
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
+    # Back to the page the quest was dropped from (#2859), but never to the submission's own
+    # page or this confirmation, which are gone with it. The confirmation names the page it was
+    # opened from, since by the time Drop is pressed the browser was sent from the confirmation.
+    gone = {sub.get_absolute_url(), request.path}
     if request.method == "POST":
         if sub.draft_comment:
             sub.draft_comment.delete()
         sub.delete()
         messages.error(request, ("Quest dropped."))
-        return redirect("quests:quests")
-    return render(request, template_name, {"submission": sub})
+        return redirect_back(request, "quests:quests", avoid=gone)
+    return render(request, template_name, {"submission": sub, "next": where_from(request, avoid=gone)})
 
 
 @non_public_only_view
@@ -3275,7 +3272,7 @@ def flag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")
 
 
 @xml_http_request_required
@@ -3308,4 +3305,4 @@ def unflag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")
