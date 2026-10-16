@@ -1425,6 +1425,50 @@ class CourseStudent(models.Model):
                             'A student can only be in one semester at a time.',
             })
 
+    def save(self, *args, **kwargs):
+        """Save the registration, bringing the work that counted toward it along to a new course.
+
+        Work a student assigns to one of their courses counts toward their registration in it
+        (issue #2440), but it is the course the work names, not the registration. A teacher who
+        changes a registration's course, say from Digital Art 12 to Game Design 12, is
+        correcting that registration, and its XP has to stay with it (#2875); left naming the
+        old course, the work would belong to no course the student holds and be shared out
+        between all of them. So the work is moved first, in the same transaction as the save,
+        and the post_save receivers that work out the student's mark again find it where it now
+        counts.
+        """
+        with transaction.atomic():
+            self.carry_work_to_new_course()
+            super().save(*args, **kwargs)
+
+    def carry_work_to_new_course(self):
+        """Move the work counted toward this registration's saved course to the course it has now.
+
+        That is the student's quest submissions and badges from the registration's semester
+        that name the course it is leaving. Nothing moves for a registration being created or
+        keeping its course. Nor for one gaining a course where it had none: it claimed none of
+        the student's work, since their unassigned work is shared between all of their courses.
+        Nor for one losing its course, which leaves the work naming the old course, ready for
+        the course to be put back. And nothing moves while another of the student's
+        registrations in that semester still holds the old course, since the work still counts
+        toward that one.
+        """
+        saved = CourseStudent.objects.filter(pk=self.pk).values('course_id', 'semester_id').first() if self.pk else None
+        if saved is None or saved['course_id'] in (None, self.course_id) or self.course_id is None:
+            return
+
+        work = {'user_id': self.user_id, 'semester_id': saved['semester_id'], 'course_id': saved['course_id']}
+        if CourseStudent.objects.filter(**work).exclude(pk=self.pk).exists():
+            return
+
+        # every submission, including those of quests since archived or unpublished, so the
+        # work is all still together if one of those quests is brought back
+        submissions = QuestSubmission.objects.get_queryset(
+            exclude_archived_quests=False, exclude_quests_not_published=False, include_related=False,
+        )
+        submissions.filter(**work).update(course_id=self.course_id)
+        BadgeAssertion.objects.filter(**work).update(course_id=self.course_id)
+
     # def get_absolute_url(self):
     #     return reverse('courses:list')
     # return reverse('courses:detail', kwargs={'pk': self.pk})

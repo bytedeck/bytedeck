@@ -1627,6 +1627,105 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         self.assertEqual(maths_registration.xp(), 10)
         self.assertEqual(art_registration.xp(), 10)
 
+    def test_save__changing_the_course_keeps_its_work_with_the_registration(self):
+        """A teacher who changes a student's course, say from Digital Art 12 to Game Design 12,
+        is correcting that registration, so the XP that counted toward it still does (#2875).
+        The work assigned to the old course, quests and badges alike, follows it to the new
+        one, rather than being left naming a course the student no longer holds and shared out
+        between all of their courses."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        games = baker.make(Course, title='Game Design 12')
+        registration = self._register(student, art)
+        maths_registration = self._register(student, baker.make(Course, title='Maths'))
+        submission = self._approved(student, xp=40, course=art)
+        assertion = BadgeAssertion.objects.create_assertion(student, baker.make(Badge, xp=20), course=art)
+        self._approved(student, xp=10)  # unassigned, so shared
+        student.profile.xp_invalidate_cache()
+
+        registration.course = games
+        registration.save()
+
+        submission.refresh_from_db()
+        assertion.refresh_from_db()
+        self.assertEqual(submission.course, games)
+        self.assertEqual(assertion.course, games)
+        self.assertEqual(registration.xp(), 65)
+        self.assertEqual(maths_registration.xp(), 5)
+
+    @patch('courses.models.Semester.fraction_complete', return_value=1.0)
+    def test_save__changing_the_course_caches_the_mark_from_the_moved_work(self, fraction_complete):
+        """Saving a registration works the student's cached mark out again, the one the student
+        list sorts and colours by. The work has to have moved by then, or the mark cached is the
+        one from the shared-out XP until something else saves."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12', xp_for_100_percent=100)
+        registration = self._register(student, art)
+        # run on XP alone, so the student's one mark is the changed registration's
+        self._register(student, baker.make(Course, title='Maths', uses_marks=False))
+        self._approved(student, xp=40, course=art)
+        student.profile.xp_invalidate_cache()
+
+        registration.course = baker.make(Course, title='Game Design 12', xp_for_100_percent=100)
+        registration.save()
+
+        student.profile.refresh_from_db()
+        self.assertEqual(student.profile.mark_cached, 40)
+
+    def test_save__changing_the_course_leaves_another_semesters_work_alone(self):
+        """Only the registration's own semester's work counted toward it, so only that moves:
+        a course the student took in an earlier semester keeps the work done in it."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        registration = self._register(student, art)
+        earlier = self._approved(student, xp=40, course=art)
+        earlier.semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        earlier.save()
+
+        registration.course = baker.make(Course, title='Game Design 12')
+        registration.save()
+
+        earlier.refresh_from_db()
+        self.assertEqual(earlier.course, art)
+
+    def test_save__changing_the_course_leaves_work_another_registration_still_counts(self):
+        """A student registered in the same course twice, in two groups, still holds it after
+        one of them changes course, and the work assigned to it keeps counting toward the one
+        left, so it stays where it is."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        registration = self._register(student, art)
+        self._register(student, art)
+        submission = self._approved(student, xp=40, course=art)
+
+        registration.course = baker.make(Course, title='Game Design 12')
+        registration.save()
+
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, art)
+
+    def test_save__giving_a_registration_a_course_leaves_shared_work_shared(self):
+        """A registration with no course claimed none of the student's work: their unassigned
+        work is shared between all of their courses. Giving it a course therefore moves
+        nothing, and clearing a course moves nothing either, so the work assigned to it is
+        there again if the course is put back."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        registration = baker.make(CourseStudent, user=student, block=baker.make(Block), semester=SiteConfig.get().active_semester)
+        self._register(student, baker.make(Course, title='Maths'))
+        unassigned = self._approved(student, xp=10)
+        assigned = self._approved(student, xp=40, course=art)
+
+        registration.course = art
+        registration.save()
+        unassigned.refresh_from_db()
+        self.assertIsNone(unassigned.course)
+
+        registration.course = None
+        registration.save()
+        assigned.refresh_from_db()
+        self.assertEqual(assigned.course, art)
+
     @patch('courses.models.Semester.fraction_complete')
     def test_mark__is_worked_out_from_the_registrations_own_xp(self, fraction_complete):
         """Each course has its own mark, because each has its own XP (issue #2440). A student
