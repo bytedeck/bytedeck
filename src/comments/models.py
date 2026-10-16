@@ -255,20 +255,22 @@ class Comment(models.Model):
 
         Each old file is deleted once the transaction commits, as a removed file is: storage
         isn't transactional, so a rollback must not leave a row naming a file already gone. A
-        file already missing from storage is left as it is.
+        file already missing from storage has nothing to copy, and its row is pointed at the new
+        folder all the same: a row left naming the old folder would offer it to the next upload
+        (see ``Document.shared_folder``), putting a replacement back at the removed file's address.
         """
         field = Document._meta.get_field('docfile')
         folder = field.upload_to.new_folder()
         for document in self.document_set.order_by('pk'):
             storage, old_name = document.docfile.storage, document.docfile.name
-            if not storage.exists(old_name):
-                continue
-            with storage.open(old_name) as stored:
-                new_name = storage.save(posixpath.join(folder, posixpath.basename(old_name)), stored,
-                                        max_length=field.max_length)
+            new_name = posixpath.join(folder, posixpath.basename(old_name))
+            if storage.exists(old_name):
+                with storage.open(old_name) as stored:
+                    new_name = storage.save(new_name, stored, max_length=field.max_length)
+                transaction.on_commit(partial(storage.delete, old_name))
             document.docfile.name = new_name
+            document.full_clean()
             document.save(update_fields=['docfile'])
-            transaction.on_commit(partial(storage.delete, old_name))
 
     def get_children(self):
         if self.is_child():

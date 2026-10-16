@@ -428,16 +428,23 @@ class DocumentFolderTest(ByteDeckTenantTestCase):
         self.assertEqual(len(callbacks), 1)
         self.assertTrue(storage.exists(old_name))
 
-    def test_move_attachments_to_new_folder__leaves_a_missing_file_as_it_is(self):
-        """A file already gone from storage has nothing to move, and its document keeps its name."""
+    def test_move_attachments_to_new_folder__points_a_missing_file_at_the_new_folder_too(self):
+        """A file already gone from storage has nothing to copy, but its row moves with the rest:
+        left naming the old folder, it would offer that folder to the next upload, and a
+        replacement for the removed file would go back to its address."""
+        missing = self.attach("notes.txt")
         page = self.attach("index.html")
-        page.docfile.storage.delete(page.docfile.name)
-        old_name = page.docfile.name
+        missing.docfile.storage.delete(missing.docfile.name)
+        old_folder = self.folder(page)
 
         self.comment.move_attachments_to_new_folder()
+        replacement = self.attach("style.css")
 
         page.refresh_from_db()
-        self.assertEqual(page.docfile.name, old_name)
+        missing.refresh_from_db()
+        self.assertEqual(self.folder(missing), self.folder(page))
+        self.assertNotEqual(self.folder(page), old_folder)
+        self.assertEqual(self.folder(replacement), self.folder(page))
 
 
 class CommentManagerPrefetchTest(ByteDeckTenantTestCase):
