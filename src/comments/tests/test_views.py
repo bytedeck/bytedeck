@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.base import ContentFile
+from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -225,14 +226,26 @@ class DocumentDownloadViewTests(ByteDeckTenantTestCase):
 
         self.assertRedirectsLogin('comments:document_download', args=[document.id])
 
+    @override_settings(MEDIA_URL='/media/')
     def test_get_download_url__script_capable_attachment_goes_through_the_download_view(self):
-        """What the templates link, for the file that must not open in the page."""
+        """What the templates link, for the file that must not open in the page, on a deck that
+        serves uploads from its own site."""
         document = self.attach("drawing.svg")
 
         self.assertEqual(
             document.get_download_url(),
             reverse('comments:document_download', args=[document.id]),
         )
+
+    @override_settings(MEDIA_URL='https://cdn.example.com/media/')
+    def test_get_download_url__served_from_a_site_of_its_own_a_page_opens_in_a_tab(self):
+        """Where uploads are served from a site of their own, as production serves them from its
+        CDN, a script in a student's page can't reach the deck, so the page is linked at its
+        storage url and opens in a tab, styled as the student built it (#2861)."""
+        document = self.attach("index.html", b"<link rel='stylesheet' href='style.css'>")
+
+        self.assertEqual(document.get_download_url(), document.docfile.url)
+        self.assertTrue(document.docfile.url.startswith('https://cdn.example.com/media/'))
 
     def test_get_download_url__an_ordinary_attachment_keeps_its_storage_url(self):
         """Everything else is linked as before, so nothing about marking an image changes."""

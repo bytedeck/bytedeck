@@ -1,5 +1,6 @@
 import os
 import warnings
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from django.conf import settings
@@ -294,14 +295,17 @@ class Document(models.Model):
     def get_download_url(self):
         """The url the app links this attachment at.
 
-        A script-capable file goes through the download view, which hands it over as an
-        attachment instead of opening it in the page. Everything else is linked at its storage
-        url as before, so an image a teacher is marking still opens in a tab (#2726).
+        A script-capable file is handed over as a download, through the download view, when the
+        deck serves uploads from its own site: opened there, a script in it would run as the
+        deck, in the session of whoever opened it, usually the teacher marking the work (#2726).
+        Where uploads are served from a site of their own, as production serves them from its
+        CDN, the script can't reach the deck, so the file opens in a tab like any other: a
+        student's web page shows as they built it, styled by the stylesheet beside it (#2861).
 
         Returns:
             str: the url to link this attachment at.
         """
-        if self.is_script_capable:
+        if self.is_script_capable and not urlparse(settings.MEDIA_URL).netloc:
             return reverse('comments:document_download', args=[self.id])
         return self.docfile.url
 
