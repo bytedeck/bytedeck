@@ -1,8 +1,11 @@
+import posixpath
+import tempfile
+
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from model_bakery import baker
 from model_bakery.recipe import Recipe
@@ -292,6 +295,22 @@ class DocumentModelTest(ByteDeckTenantTestCase):
         self.assertTrue(Document(docfile=SimpleUploadedFile("art.png", b"x")).is_valid_portfolio_type())
         self.assertTrue(Document(docfile=SimpleUploadedFile("clip.mp4", b"x")).is_valid_portfolio_type())
         self.assertFalse(Document(docfile=SimpleUploadedFile("notes.txt", b"x")).is_valid_portfolio_type())
+
+    def test_docfile__a_new_upload_never_takes_a_deleted_files_address(self):
+        """Two students attach files of the same name on the same day, and the first is deleted in
+        between, as a draft attachment is when its student removes it. The second must not be
+        stored at the address the first had: the CDN keeps serving a deleted file there for up to
+        a day, so whoever opened the second student's file got the first's (#2805)."""
+        with tempfile.TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            first = Document.objects.create(docfile=SimpleUploadedFile("New_Piskel_3.gif", b"first student's"))
+            first_address = first.docfile.name
+            first.docfile.storage.delete(first_address)
+            first.delete()
+
+            second = Document.objects.create(docfile=SimpleUploadedFile("New_Piskel_3.gif", b"second student's"))
+
+        self.assertNotEqual(second.docfile.name, first_address)
+        self.assertEqual(posixpath.basename(second.docfile.name), "New_Piskel_3.gif")
 
 
 class CommentManagerPrefetchTest(ByteDeckTenantTestCase):

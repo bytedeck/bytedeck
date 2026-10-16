@@ -414,6 +414,20 @@ class RestrictedFileFormField(forms.FileField):
         self.script_capable_types = kwargs.pop("script_capable_types", NO_SCRIPT_CAPABLE_TYPES)
         super().__init__(*args, **kwargs)
 
+    def widget_attrs(self, widget):
+        """The input's attributes, with this field's size limit for the browser to check a chosen
+        file against before it is uploaded (js/upload-size-check.js, #783).
+
+        Args:
+            widget: the field's widget.
+
+        Returns:
+            dict: the attributes to add to the widget, data-max-size among them.
+        """
+        attrs = super().widget_attrs(widget)
+        attrs["data-max-size"] = self.max_upload_size
+        return attrs
+
     def validate_file(self, file):
         """Refuse an upload this field must not accept.
 

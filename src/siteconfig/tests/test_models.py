@@ -115,6 +115,32 @@ class SiteConfigModelTest(ByteDeckTenantTestCase):
         self.config.banner_image = 'banners/mybanner.png'
         self.assertEqual(self.config.get_banner_image_dark_url(), self.config.banner_image.url)
 
+    def test_get_default_quest_prerequisite__returns_the_badge_or_none(self):
+        """The deck's default quest prerequisite is the badge set for it, and None when none is set (#276)."""
+        badge = baker.make('badges.Badge')
+        self.config.default_quest_prerequisite = badge
+        self.assertEqual(self.config.get_default_quest_prerequisite(), badge)
+
+        self.config.default_quest_prerequisite = None
+        self.assertIsNone(self.config.get_default_quest_prerequisite())
+
+    def test_get_default_quest_prerequisite__badge_deleted_since_the_config_was_cached(self):
+        """Deleting the badge clears the setting in the database but not in a copy of the config read
+        before, as the cached one is: that copy gives None rather than failing to find the badge (#276)."""
+        badge = baker.make('badges.Badge')
+        badge_id = badge.id  # delete() clears the instance's id
+        self.config.default_quest_prerequisite = badge
+        self.config.save()
+        cached_config = SiteConfig.get()
+
+        badge.delete()
+
+        self.assertEqual(cached_config.default_quest_prerequisite_id, badge_id)
+        self.assertIsNone(cached_config.get_default_quest_prerequisite())
+        # while the database row lets go of the badge
+        self.config.refresh_from_db()
+        self.assertIsNone(self.config.default_quest_prerequisite)
+
     @patch('siteconfig.models.cache.get', side_effect=redis_exceptions.ConnectionError)
     def test_invalidate_cache_signal__swallows_redis_connection_error(self, mock_cache_get):
         """If redis is unavailable when the cache-invalidation signal fires (e.g. redis down during

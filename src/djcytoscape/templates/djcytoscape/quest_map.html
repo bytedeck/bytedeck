@@ -56,6 +56,8 @@
   {% endif %}
   <div id="cy"></div>
 
+  {{ elements|json_script:"map-elements" }}
+  {{ class_styles|json_script:"map-class-styles" }}
   {{ approved_quests|json_script:"approved-quest-ids" }}
   {{ awaiting_approval_quests|json_script:"awaiting-approval-quest-ids" }}
   {{ earned_badges|json_script:"earned-badge-ids" }}
@@ -84,8 +86,8 @@
       userZoomingEnabled: false,
       autoungrabify: true,
       autounselectify: true,
-      elements: {{ elements|safe }},
-      style: {{ class_styles|safe }},
+      elements: JSON.parse(document.getElementById('map-elements').textContent),
+      style: JSON.parse(document.getElementById('map-class-styles').textContent),
     });
 
     {% comment %}

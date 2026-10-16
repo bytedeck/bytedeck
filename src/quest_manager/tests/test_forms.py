@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.utils.datastructures import MultiValueDict
 
 from crispy_forms.utils import render_crispy_form
+from django_select2.forms import Select2Widget
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
@@ -22,7 +23,7 @@ from quest_manager.forms import (
     SubmissionReplyForm,
     TAQuestForm,
 )
-from quest_manager.models import Quest
+from quest_manager.models import Category, CommonData, Quest
 
 User = get_user_model()
 
@@ -117,6 +118,37 @@ class QuestFormTest(ByteDeckTenantTestCase):
         for field_name in TA_RESTRICTED_QUEST_FIELDS:
             with self.subTest(field=field_name):
                 self.assertIn(field_name, form.fields)
+
+    def test_QuestForm__campaign_common_info_and_teacher_are_searchable_dropdowns(self):
+        """Campaign, Common Quest Info and the teacher to notify are select2 dropdowns, so a long
+        list of campaigns, info blocks or teachers can be searched by typing (#1076)."""
+        form = QuestForm()
+        for field_name in ('campaign', 'common_data', 'specific_teacher_to_notify'):
+            with self.subTest(field=field_name):
+                self.assertIsInstance(form.fields[field_name].widget, Select2Widget)
+                self.assertIn('django-select2', str(form[field_name]))
+
+    def test_QuestForm__searchable_dropdowns_offer_the_same_choices(self):
+        """The searchable dropdowns offer only what the plain ones did: published campaigns,
+        active Common Quest Info and staff."""
+        baker.make(Category, title="Published Campaign", published=True)
+        baker.make(Category, title="Draft Campaign", published=False)
+        baker.make(CommonData, title="Active Info", active=True)
+        baker.make(CommonData, title="Retired Info", active=False)
+        baker.make(User, username="teacher_one", is_staff=True)
+        baker.make(User, username="student_one", is_staff=False)
+
+        form = QuestForm()
+
+        campaign_html = str(form['campaign'])
+        self.assertIn("Published Campaign", campaign_html)
+        self.assertNotIn("Draft Campaign", campaign_html)
+        common_data_html = str(form['common_data'])
+        self.assertIn("Active Info", common_data_html)
+        self.assertNotIn("Retired Info", common_data_html)
+        teacher_html = str(form['specific_teacher_to_notify'])
+        self.assertIn("teacher_one", teacher_html)
+        self.assertNotIn("student_one", teacher_html)
 
 
 class TAQuestFormTest(ByteDeckTenantTestCase):

@@ -106,7 +106,17 @@ class RequestDataTooBigMiddlewareTestCase(ByteDeckTenantTestCase):
         # check for messages on a response that has no context
         messages = list(get_messages(response.wsgi_request))
         self.assertEqual(len(messages), 1)  # bingo!
-        self.assertIn("requests exceeds the maximum size", str(messages[0]))
+        self.assertIn("Nothing was saved", str(messages[0]))
+
+    @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
+    def test_request_data_too_big__message_says_nothing_was_saved_and_what_to_do(self):
+        """The message tells the user their post was lost, names the limit, and points them to
+        the editor's picture button, since a pasted image is the usual reason for the size (#783)."""
+        response = self.client.post(reverse("empty"), data={"orson": "wells"})
+
+        message = str(list(get_messages(response.wsgi_request))[0])
+        self.assertTrue(message.startswith("Nothing was saved: this page sent more than 8\xa0bytes of text"), message)
+        self.assertIn("Add images with the editor's picture button instead, then try again.", message)
 
     @override_settings(DATA_UPLOAD_MAX_MEMORY_SIZE=8, ROOT_URLCONF=__name__)
     def test_request_data_too_big__with_middleware_skips_files(self):

@@ -10,6 +10,7 @@ from model_bakery import baker
 from unittest.mock import patch
 
 from djcytoscape.models import CytoElement, CytoScape
+from djcytoscape.views import map_ids_redrawn_for
 
 from profile_manager.models import Profile
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
@@ -393,6 +394,22 @@ class ViewTests(ByteDeckTenantTestCase):
         # assert redirects to quest_map page
         self.assertRedirects(response, reverse('djcytoscape:quest_map', args=[map_.pk]))
 
+    def test_ScapeGenerateMap__message_links_the_new_map(self):
+        """Generating a map says so with the new map's name linked to it (#2808)."""
+        from djcytoscape.forms import GenerateQuestMapForm
+
+        self.client.force_login(self.test_teacher)
+        form_data = generate_form_data(model_form=GenerateQuestMapForm, name='Linked Map')
+        form_data.update({'initial_content_object': f'{self.quest_ct.id}-{baker.make("quest_manager.Quest").id}'})
+
+        response = self.client.post(reverse('djcytoscape:generate_unseeded'), data=form_data)
+
+        map_ = CytoScape.objects.get(name='Linked Map')
+        self.assertIn(
+            f'New map <a href="{map_.get_absolute_url()}">Linked Map</a> was successfully generated.',
+            [str(message) for message in response.wsgi_request._messages],
+        )
+
     def test_ScapeUpdateView__POST(self):
         """ Assert a teacher can update a map using ScapeGenerateMapView """
         from djcytoscape.forms import QuestMapForm
@@ -519,6 +536,35 @@ class UpdateMapMessageMixinTests(ByteDeckTenantTestCase):
             any("being updated" in str(m) for m in response.context['messages']),
             "no map-update message should be shown when map_auto_update is off",
         )
+
+
+    def test_form_valid__deleting_names_the_map_it_was_on(self):
+        """Deleting a quest drawn on a map names that map, found before the quest is gone (#2847)."""
+        from quest_manager.models import Quest
+        from siteconfig.models import SiteConfig
+
+        config = SiteConfig.get()
+        config.map_auto_update = True
+        config.save()
+        origin = baker.make(Quest, name="Origin")
+        doomed = baker.make(Quest, name="Doomed")
+        doomed.add_simple_prereqs([origin])
+        scape = CytoScape.generate_map(origin, "Origin Map")
+        self.assertTrue(CytoScape.objects.get_related_maps(doomed).exists())
+
+        with patch('djcytoscape.signals.regenerate_map.apply_async'):
+            response = self.client.post(reverse('quests:quest_delete', args=[doomed.id]), follow=True)
+
+        self.assertFalse(Quest.objects.filter(id=doomed.id).exists())
+        self.assertTrue(any("being updated" in str(m) and scape.name in str(m) for m in response.context['messages']))
+
+    def test_map_ids_redrawn_for__nothing_for_a_deleted_object(self):
+        """A deleted object has no pk left, so no map is found for it."""
+        from quest_manager.models import Quest
+
+        quest = baker.make(Quest)
+        quest.delete()
+        self.assertEqual(map_ids_redrawn_for(quest), set())
 
 
 class PrimaryViewTests(ByteDeckTenantTestCase):
@@ -656,3 +702,57 @@ class RegenerateViewTests(ByteDeckTenantTestCase):
             args=[self.map.initial_content_type_id, self.map.initial_object_id, self.map.id],
         ))
         self.assertEqual(response.status_code, 200)
+
+
+class QuestMapDataBlockTests(ByteDeckTenantTestCase):
+    """How a map's nodes and styles reach its page (#2519)."""
+
+    #: A quest name that would end the script block its label sits in, if it were written there raw.
+    NAME = '</script><b>bold</b>'
+
+    @classmethod
+    def setUpTestData(cls):
+        """A teacher, and a map drawn from a quest whose name holds markup."""
+        cls.teacher = User.objects.create_user('map_data_teacher', is_staff=True)
+        cls.quest = baker.make('quest_manager.Quest', name=cls.NAME, xp=2, xp_can_be_entered_by_students=False)
+        cls.map = CytoScape.generate_map(cls.quest, 'Data block map')
+
+    def setUp(self):
+        """Sign the teacher in: maps are for signed-in users."""
+        super().setUp()
+        self.client.force_login(self.teacher)
+
+    def map_data(self, response, element_id):
+        """Read one of the page's JSON data blocks back into Python.
+
+        Args:
+            response (HttpResponse): the rendered map page.
+            element_id (str): the block's id.
+
+        Returns:
+            The block's parsed contents.
+        """
+        found = re.search(
+            rf'<script id="{element_id}" type="application/json">(.*?)</script>', response.content.decode(), re.S,
+        )
+        self.assertIsNotNone(found, f'no {element_id} block on the page')
+        return json.loads(found.group(1))
+
+    def test_quest_map__a_name_holding_a_closing_script_tag_stays_in_the_data(self):
+        """A name holding "</script>" cannot end the block the map's data sits in, and its label
+        reads back exactly as the name."""
+        response = self.client.get(reverse('djcytoscape:quest_map', args=[self.map.id]))
+
+        self.assertNotContains(response, self.NAME)
+        labels = [node['data'].get('label') for node in self.map_data(response, 'map-elements')['nodes']]
+        self.assertIn(f'{self.NAME} (2)', labels)
+        self.assertEqual(self.map_data(response, 'map-class-styles'), json.loads(self.map.class_styles_json))
+
+    def test_quest_map__a_missing_elements_cache_is_rebuilt(self):
+        """A map whose cached nodes are missing has them rebuilt before its page is drawn, even when
+        its cached styles are there."""
+        CytoScape.objects.filter(id=self.map.id).update(elements_json=None)
+
+        response = self.client.get(reverse('djcytoscape:quest_map', args=[self.map.id]))
+
+        self.assertEqual(self.map_data(response, 'map-elements'), self.map.elements_dict())

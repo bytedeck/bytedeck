@@ -41,7 +41,6 @@ from django.db.models import ProtectedError, Q
 from django.db.models.functions import Greatest
 
 import numpy
-import math
 
 
 # Create your views here.
@@ -113,6 +112,48 @@ def mark_calculations(request, user_id=None):
     return render(request, template_name, context)
 
 
+def _course_markranges(course):
+    """The mark ranges a course's marks are read against, one per grade boundary, lowest first.
+
+    These are the course's own ranges plus the ones assigned to no course, which apply to every
+    course. A course run on XP alone has no percentage, so it has none (#403).
+
+    Args:
+        course (Course or None): the course.
+
+    Returns:
+        list[MarkRange]: the active ranges for the course.
+    """
+    if not (course and course.uses_marks):
+        return []
+    return list(
+        MarkRange.objects.filter(active=True)
+        .filter(Q(courses=course) | Q(courses=None))
+        .order_by('minimum_mark').distinct('minimum_mark')
+    )
+
+
+def _mark_lines(course, days_in_semester):
+    """The line the XP Progress chart draws for each of a course's mark ranges.
+
+    They are worked out on the server, so a line rounds a mark exactly as the rest of the app
+    does: on today's date each line is at the XP that Mark Calculations lists for its range
+    (#2826).
+
+    Args:
+        course (Course or None): the course being charted.
+        days_in_semester (int): the semester's class days.
+
+    Returns:
+        list[dict]: for each range, lowest first, its minimum `mark` and its `xp` on each class
+        day from the first.
+    """
+    return [
+        {"mark": markrange.minimum_mark, "xp": markrange.xp_to_reach_by_day(course.xp_for_100_percent, days_in_semester)}
+        for markrange in _course_markranges(course)
+    ]
+
+
 def _course_pane(registration, xp, fraction_complete):
     """Everything the mark page's tab for one course is written from.
 
@@ -136,20 +177,11 @@ def _course_pane(registration, xp, fraction_complete):
     # a course run on XP alone has no percentage, so no mark and no ranges to head for (#403)
     uses_marks = bool(course and course.uses_marks)
 
-    markranges = []
-    if uses_marks:
-        # this course's own ranges plus the ones assigned to no course, which apply to every
-        # course. One row per grade boundary, lowest first.
-        markranges = list(
-            MarkRange.objects.filter(active=True)
-            .filter(Q(courses=course) | Q(courses=None))
-            .order_by('minimum_mark').distinct('minimum_mark')
-        )
-        for markrange in markranges:
-            # two multiplications, which a template tag cannot do in one go
-            markrange.xp_needed = math.floor(
-                course.xp_for_100_percent * markrange.minimum_mark / 100 * fraction_complete
-            )
+    markranges = _course_markranges(course)
+    for markrange in markranges:
+        # the XP that first gives a mark shown as the range's minimum, so a student holding it
+        # is at the range (#2826)
+        markrange.xp_needed = markrange.xp_to_reach(course.xp_for_100_percent, fraction_complete)
 
     return {
         'registration': registration,
@@ -1196,10 +1228,11 @@ def ajax_progress_chart(request, user_id=0):
         user_id (int): the student to chart, or 0 for the logged-in user.
 
     Returns:
-        HttpResponse: JSON with `days_in_semester` (the student's semester's total class days)
-        and `xp_data` (a point per class day so far, as {'x': day, 'y': xp}). Both are empty
-        when there is nothing to chart: the student is in no open semester, or theirs has no
-        class days behind it yet.
+        HttpResponse: JSON with `days_in_semester` (the student's semester's total class days),
+        `xp_data` (a point per class day so far, as {'x': day, 'y': xp}) and `mark_lines` (the
+        charted course's mark ranges, each with its XP for every class day; see _mark_lines).
+        All three are empty when there is nothing to chart: the student is in no open semester,
+        or theirs has no class days behind it yet.
 
     Raises:
         Http404: for any method other than POST.
@@ -1230,6 +1263,7 @@ def ajax_progress_chart(request, user_id=0):
             return HttpResponse(json.dumps({
                 "days_in_semester": 0,
                 "xp_data": [],
+                "mark_lines": [],
                 "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,
                 "uses_marks": charted_course.uses_marks if charted_course else False,
             }), content_type='application/json')
@@ -1279,9 +1313,13 @@ def ajax_progress_chart(request, user_id=0):
         if difference > 0:
             xp_data[-1]['y'] += difference
 
+        days_in_semester = sem.num_days()
         progress_chart = {
-            "days_in_semester": sem.num_days(),
+            "days_in_semester": days_in_semester,
             "xp_data": xp_data,
+            # the charted course's own mark ranges, each line at the XP that reaches the range on
+            # each class day (#2826)
+            "mark_lines": _mark_lines(charted_course, days_in_semester),
             # the charted course's own scale: courses can be out of different amounts, so the
             # axis and the mark lines have to be redrawn when a student switches (issue #2453)
             "xp_for_100_percent": charted_course.xp_for_100_percent if charted_course else 0,

@@ -23,10 +23,20 @@ class CourseStudentFormTest(ByteDeckTenantTestCase):
         every open semester and the student says which one they are joining, not just the one
         the deck's pointer names."""
         pointed_at = SiteConfig.get().active_semester
-        other = baker.make(Semester, status=Semester.Status.OPEN)
+        # Explicit dates, earlier than the deck's semester. Left to its default, first_day would be
+        # the day the test runs, which ties with the deck's semester only when both are made on the
+        # same date: on a run that crosses midnight this one would be the newer, and the list would
+        # come back reversed (#2725). The name keeps a failure readable, since both semesters would
+        # otherwise print as the same month.
+        other = baker.make(
+            Semester, status=Semester.Status.OPEN, name='Earlier term',
+            first_day=pointed_at.first_day - datetime.timedelta(days=200),
+            last_day=pointed_at.last_day - datetime.timedelta(days=200),
+        )
 
         form = CourseStudentForm()
 
+        # newest term first
         self.assertEqual(list(form.fields['semester'].queryset), [pointed_at, other])
 
     def test_semester_field__defaults_to_the_decks_own_semester(self):

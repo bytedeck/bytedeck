@@ -493,8 +493,8 @@ class BadgeAssertionManager(models.Manager):
         Args:
             badge: the Badge being counted.
             current_students_only (bool): limit to students taking a course right now, in
-                any semester that is open. Otherwise every student with an active profile
-                is counted, including those from past semesters.
+                any semester that is open (the Current list). Otherwise every non-archived
+                student is counted, including those from past semesters (the All list).
 
         Returns:
             QuerySet[User]: the users who hold at least one assertion of the badge, most
@@ -504,7 +504,7 @@ class BadgeAssertionManager(models.Manager):
         if current_students_only:
             users = User.objects.filter(profile__in=Profile.objects.all_in_open_semesters())
         else:
-            users = User.objects.filter(profile__in=Profile.objects.all_students())
+            users = User.objects.filter(profile__in=Profile.objects.all_students().get_active())
 
         users = users.annotate(assertion_count=Count('badgeassertion', filter=Q(badgeassertion__badge_id=badge.id)))
         # the badge detail template reads user.profile per row

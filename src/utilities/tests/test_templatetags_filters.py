@@ -1,10 +1,10 @@
 from django.conf import settings
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.template import Template, Context
 
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 from siteconfig.models import SiteConfig
-from utilities.templatetags.utility_tags import checkcross, favicon_url, public_email_logo_url
+from utilities.templatetags.utility_tags import checkcross, favicon_url, max_upload_request_size, public_email_logo_url
 
 
 class CheckcrossFilterTest(SimpleTestCase):
@@ -29,6 +29,15 @@ class FaviconUrlTagTest(ByteDeckTenantTestCase):
         config.favicon = 'favicon/known_test_favicon.png'
         config.save()  # invalidates the SiteConfig cache via invalidate_siteconfig_cache_signal
         self.assertEqual(favicon_url(), f"{settings.MEDIA_URL}favicon/known_test_favicon.png")
+
+
+class MaxUploadRequestSizeTagTest(SimpleTestCase):
+    """The max_upload_request_size tag hands the browser's upload size check its limit (#783)."""
+
+    @override_settings(MAX_UPLOAD_REQUEST_SIZE=1234)
+    def test_max_upload_request_size__is_the_setting(self):
+        """The tag gives settings.MAX_UPLOAD_REQUEST_SIZE, so the limit can be set per deployment."""
+        self.assertEqual(max_upload_request_size(), 1234)
 
 
 class PossessiveFilterTest(TestCase):

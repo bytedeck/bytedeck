@@ -19,6 +19,13 @@ TODAY = date(2026, 8, 15)
 NOW = "2026-08-15 20:00:00"
 
 
+def limit_period_key():
+    """The period key the limit notices are recorded under: the deck's newest open semester."""
+    from courses.models import Semester
+
+    return f'semester-{Semester.objects.open().first().pk}'
+
+
 @freeze_time(NOW)
 @override_settings(DECK_NOTICES_ENABLED=True)
 class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
@@ -100,20 +107,69 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
         with freeze_time("2027-08-10 20:00:00"):  # 25 days before the renewed deadline
             self.assertEqual(self.due(), [(DeckNotice.KIND_EXPIRY, 'd30', str(renewed))])
 
-    def test_evaluate_deck_notices__limit_warnings_at_80_and_100_re_armed_monthly(self):
-        """The 80% warning fires once per month; hitting 100% fires the stronger notice."""
-        self.set_deck(active_user_count=4)  # trial cap is 5 -> 80%
-        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-08')])
+    def test_evaluate_deck_notices__limit_levels_at_90_95_one_seat_left_and_full(self):
+        """A 120-seat deck is sent a heads-up at 90% (108 students), at 95% (114) and with one
+        seat left (119), then the warning at its cap (120): each level once, as the deck
+        reaches it (#2824)."""
+        self.set_deck(max_active_users=120, active_user_count=107)  # just under 90%
+        self.assertEqual(self.due(), [])
+
+        for count, level in ((108, 'pct90'), (114, 'pct95'), (119, 'one-seat-left'), (120, 'pct100')):
+            self.set_deck(active_user_count=count)
+            self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, level, limit_period_key())], count)
+            process_deck_notices(self.tenant)
+            self.assertEqual(self.due(), [], count)  # once this semester
+
+    def test_evaluate_deck_notices__limit_sends_only_the_most_severe_level_reached(self):
+        """A deck that passes several levels at once is sent only the most severe of them, and
+        dropping back afterwards sends none of the levels it skipped (#2824)."""
+        self.set_deck(max_active_users=120, active_user_count=116)  # past 90% and 95% overnight
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct95', limit_period_key())])
         process_deck_notices(self.tenant)
-        self.assertEqual(self.due(), [])  # once this month
 
-        self.set_deck(active_user_count=5)  # at the cap
-        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
+        self.set_deck(active_user_count=110)  # back to 92%: a 90% heads-up now would be old news
+        self.assertEqual(self.due(), [])
 
-        with freeze_time("2026-09-15 20:00:00"):  # next month re-arms
-            # push the trial deadline far out so its own d30 window doesn't co-fire here
-            self.set_deck(active_user_count=4, trial_end_date=TODAY + timedelta(days=365))
-            self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct80', '2026-09')])
+    def test_evaluate_deck_notices__limit_on_a_small_cap_goes_from_one_seat_left_to_full(self):
+        """On the trial cap of 5 no count lands on 90% or 95%, so the 4th student brings the
+        one-seat heads-up and the 5th the warning. On a cap of 10 the 9th student is at 90%
+        and leaves one seat, and the one-seat level is the one sent. An empty deck on a
+        one-seat cap is sent nothing (#2824)."""
+        self.set_deck(active_user_count=3)
+        self.assertEqual(self.due(), [])
+        self.set_deck(active_user_count=4)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'one-seat-left', limit_period_key())])
+        self.set_deck(active_user_count=5)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', limit_period_key())])
+
+        self.set_deck(max_active_users=10, active_user_count=9)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'one-seat-left', limit_period_key())])
+
+        self.set_deck(max_active_users=1, active_user_count=0)
+        self.assertEqual(self.due(), [])
+
+    def test_evaluate_deck_notices__limit_levels_re_arm_when_a_new_semester_starts(self):
+        """A level sent in one semester is sent again in the next: starting a semester re-arms
+        the levels, since its students join courses afresh (#2824)."""
+        from courses.models import Semester
+
+        self.set_deck(max_active_users=120, active_user_count=110)
+        process_deck_notices(self.tenant)  # this semester's 90% heads-up
+        self.assertEqual(self.due(), [])
+
+        current = Semester.objects.open().first()
+        next_semester = Semester.objects.create(first_day=current.first_day + timedelta(days=1))
+        SiteConfig.get().set_active_semester(next_semester)
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct90', f'semester-{next_semester.pk}')])
+
+    def test_evaluate_deck_notices__no_limit_notice_without_an_open_semester(self):
+        """Between semesters nobody is current, so a cached count left over from the last
+        semester sends no limit notice (#2824)."""
+        from courses.models import Semester
+
+        Semester.objects.open().update(status=Semester.Status.ARCHIVED)
+        self.set_deck(active_user_count=5)  # a stale count at the trial cap
+        self.assertEqual(self.due(), [])
 
     def test_record_and_deliver_payment_failure__muted_by_a_deletion_request(self):
         """The payment-failure webhook notice honors the deletion-request mute too:
@@ -159,7 +215,7 @@ class DeckNoticeCadenceTest(ByteDeckTenantTestCase):
 
         # the same over-cap deck, subscribed again: the warning is due
         self.set_deck(paid_until=TODAY + timedelta(days=90))
-        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', '2026-08')])
+        self.assertEqual(self.due(), [(DeckNotice.KIND_LIMIT, 'pct100', limit_period_key())])
 
     def test_evaluate_deck_notices__auto_renewing_deck_gets_one_renewal_notice_not_the_expiry_cadence(self):
         """An auto-renewing deck never gets the "renew or lose access" cadence:
@@ -386,7 +442,7 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         # page (maintainer request, 2026-08-08: the bare label wasn't actionable)
         self.assertEqual(
             notification.verb,
-            'sent a current-student limit warning: 5 of 5 current-student seats are used. See your')
+            'sent a current-student limit warning: 5 of 5 current-student seats are used, so no more students can join a course. See your')
         self.assertEqual(notification.target_url, reverse('decks:subscription'))
         self.assertEqual(notification.target_link_text, 'subscription details page.')
 
@@ -506,10 +562,13 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process_deck_notices__concurrent_run_race_skips_delivery(self):
         """If another run records the ledger row between evaluation and get_or_create
-        (a lost race), this run skips delivery instead of double-sending."""
+        (a lost race), this run skips delivery instead of double-sending. The notice is an
+        expiry reminder: a limit notice is rechecked under the deck's lock before it gets
+        this far, which test_process_deck_notices__limit_level_below_one_a_concurrent_run_sent_is_skipped
+        covers."""
         from unittest.mock import patch
 
-        notice = (DeckNotice.KIND_LIMIT, 'pct100', '2026-08')
+        notice = (DeckNotice.KIND_EXPIRY, 'd30', str(self.tenant.governing_deadline))
         DeckNotice.objects.create(tenant=self.tenant, kind=notice[0], threshold=notice[1], period_key=notice[2])
         # evaluation normally filters out recorded notices; force it to return the
         # already-recorded one, as if a concurrent run recorded it a moment after
@@ -517,6 +576,29 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
             summary = self.run_engine_with_inline_email()
         self.assertIn('sent 0 notice(s)', summary)
         self.assertEqual(len(mail.outbox), 0)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process_deck_notices__limit_level_below_one_a_concurrent_run_sent_is_skipped(self):
+        """A run that evaluated the 90% heads-up while a concurrent run recorded and sent the full
+        warning rechecks the ledger with the deck's row locked, finds the warning, and sends nothing:
+        a heads-up never follows the warning it is milder than."""
+        from unittest.mock import patch
+
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        key = limit_period_key()
+        DeckNotice.objects.create(tenant=self.tenant, kind=DeckNotice.KIND_LIMIT, threshold='pct100', period_key=key)
+        # evaluation normally filters out covered levels; force it to return the stale one, as if
+        # the concurrent run recorded the warning a moment after this run evaluated
+        with patch('tenant.notices.evaluate_deck_notices', return_value=[(DeckNotice.KIND_LIMIT, 'pct90', key)]):
+            with CaptureQueriesContext(connection) as queries:
+                summary = self.run_engine_with_inline_email()
+
+        self.assertIn('sent 0 notice(s)', summary)
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertFalse(DeckNotice.objects.filter(threshold='pct90').exists())
+        self.assertTrue(any('FOR UPDATE' in query['sql'] for query in queries.captured_queries))
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_process_deck_notices__failed_delivery_rolls_back_ledger_so_next_run_retries(self):
@@ -639,6 +721,58 @@ class DeckNoticeDeliveryTest(ByteDeckTenantTestCase):
         self.assertIn('non-profit Society', html)  # every subscription email carries the Society blurb
         self.assertIn('contact@bytedeck.com', html)  # ...and a contact address for questions
         self.assertIn('alt="[Logo]"', html)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process_deck_notices__limit_heads_up_says_how_many_can_join_and_what_the_limit_blocks(self):
+        """Below the cap the limit notice is a heads-up, and its subject and in-app notice say
+        so. The email opens as a heads-up, says how many more students can join a course, and
+        what the cap will block once it's reached (#2824)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(max_active_users=120, active_user_count=108)
+        self.tenant.refresh_from_db()
+
+        self.run_engine_with_inline_email()
+        email = mail.outbox[0]
+        self.assertEqual(email.subject, f'{SiteConfig.get().site_name_short}: current-student limit heads-up')
+        html = ' '.join(email.alternatives[0][0].split())
+        self.assertIn('<strong>Just a heads-up:</strong> your deck', html)
+        self.assertIn("so <strong>12</strong> more students can join a course before it's full.", html)
+        self.assertIn(
+            "<strong>What happens at the limit:</strong> once the deck has 120 current students, a student who isn't in a"
+            " course this semester can't join one", html)
+        self.assertIn('If you expect more students, you can', html)
+        self.assertIn('Just a heads-up:** your deck', ' '.join(email.body.split()))  # the plain-text part too
+
+        notification = Notification.objects.get(recipient=SiteConfig.get().deck_owner, verb__contains='heads-up')
+        self.assertEqual(
+            notification.verb,
+            'sent a current-student limit heads-up: 108 of 120 current-student seats are used, so 12 more students'
+            ' can join a course. See your')
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process_deck_notices__limit_one_seat_left_heads_up(self):
+        """With one seat left the heads-up says only one more student can join a course (#2824)."""
+        Tenant.objects.filter(pk=self.tenant.pk).update(active_user_count=4)  # of the trial cap of 5
+        self.tenant.refresh_from_db()
+
+        self.run_engine_with_inline_email()
+        self.assertEqual(DeckNotice.objects.get().threshold, 'one-seat-left')
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn("so only <strong>one</strong> more student can join a course before it's full.", html)
+        notification = Notification.objects.get(recipient=SiteConfig.get().deck_owner, verb__contains='heads-up')
+        self.assertIn('4 of 5 current-student seats are used, so 1 more student can join a course.', notification.verb)
+
+    @override_settings(DECK_NOTICES_ENABLED=True)
+    def test_process_deck_notices__limit_reached_email_says_what_it_blocks(self):
+        """At the cap the email is the warning: it says the limit is reached, what that blocks,
+        and that students already in a course carry on as usual (#2824)."""
+        self.run_engine_with_inline_email()  # setUp puts the deck at its cap of 5
+        html = ' '.join(mail.outbox[0].alternatives[0][0].split())
+        self.assertIn('<strong>The current-student limit has been reached:</strong> your deck', html)
+        self.assertIn(
+            "<strong>What this means:</strong> a student who isn't in a course this semester can't join one now", html)
+        self.assertIn("Students already in a course aren't affected: they carry on as usual", html)
+        self.assertNotIn('heads-up', html)
+        self.assertNotIn('If you expect more students', html)
 
     @override_settings(DECK_NOTICES_ENABLED=True)
     def test_deliver__limit_email_names_the_grace_state(self):

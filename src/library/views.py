@@ -25,6 +25,7 @@ from siteconfig.models import SiteConfig
 from tenant.models import Tenant
 from tenant.tasks import send_email_message
 from quest_manager.listing import QUEST_SORT_COLUMNS, search_quests
+from utilities.html import link_to
 from utilities.sorting import apply_sort, resolve_sort
 
 from notifications.signals import notify
@@ -303,6 +304,23 @@ def redirect_already_shared(request, local_object, content_type, redirect_to):
     return redirect(redirect_to)
 
 
+def quest_links(names):
+    """Each named quest on this deck as a link to its page, for a message naming them (#2808).
+
+    A quest's name is unique on a deck, archived quests included, so the name finds the one
+    quest. A name with no quest behind it, which nothing here expects, stays plain text.
+
+    Args:
+        names (iterable[str]): quest names.
+
+    Returns:
+        dict[str, SafeString | str]: each name, and its link or itself.
+    """
+    names = list(names)
+    quests = {quest.name: quest for quest in Quest.objects.all_including_archived().filter(name__in=names)}
+    return {name: link_to(quests[name], name) if name in quests else name for name in names}
+
+
 def tell_importer_about_renamed_campaign(request, renamed_campaign):
     """Tell the importing teacher the campaign arrived under a title of its own.
 
@@ -323,11 +341,17 @@ def tell_importer_about_renamed_campaign(request, renamed_campaign):
         return
 
     wanted, given = renamed_campaign
+    campaigns = {campaign.title: campaign for campaign in Category.objects.filter(title__in=(wanted, given))}
+    wanted_link, given_link = (
+        link_to(campaigns[title], title) if title in campaigns else title for title in (wanted, given))
     messages.info(
         request,
-        f"Your deck already had a different campaign called '{wanted}', and two campaigns "
-        f"cannot share a title, so the one that just arrived is called '{given}'. Your own "
-        "campaign was left alone. Rename the new one to whatever suits your deck."
+        format_html(
+            "Your deck already had a different campaign called '{}', and two campaigns "
+            "cannot share a title, so the one that just arrived is called '{}'. Your own "
+            "campaign was left alone. Rename the new one to whatever suits your deck.",
+            wanted_link, given_link,
+        )
     )
 
 
@@ -351,15 +375,21 @@ def tell_importer_about_renamed_quests(request, renamed_quests):
     if not renamed_quests:
         return
 
-    renames = ', '.join(f"'{wanted}' is now '{given}'" for wanted, given in renamed_quests)
-    messages.info(
-        request,
-        f"Your deck already had a quest called '{renamed_quests[0][0]}', so the copy that "
-        f"just arrived is called '{renamed_quests[0][1]}'. Rename it to whatever suits your deck."
-        if len(renamed_quests) == 1 else
-        f"Your deck already had quests with some of these names, so the arriving copies were "
-        f"renamed: {renames}. Rename them to whatever suits your deck."
-    )
+    names = quest_links([name for pair in renamed_quests for name in pair])
+    if len(renamed_quests) == 1:
+        wanted, given = renamed_quests[0]
+        message = format_html(
+            "Your deck already had a quest called '{}', so the copy that just arrived is called "
+            "'{}'. Rename it to whatever suits your deck.",
+            names[wanted], names[given],
+        )
+    else:
+        message = format_html(
+            "Your deck already had quests with some of these names, so the arriving copies were "
+            "renamed: {}. Rename them to whatever suits your deck.",
+            format_html_join(', ', "'{}' is now '{}'", ((names[wanted], names[given]) for wanted, given in renamed_quests)),
+        )
+    messages.info(request, message)
 
 
 def warn_sharer_about_dropped_common_data(request, dropped_common_data):
@@ -418,15 +448,22 @@ def warn_sharer_about_skipped_quests(request, skipped_quests):
     if not skipped_quests:
         return
 
-    names = ', '.join(f"'{name}'" for name in skipped_quests)
+    links = quest_links(skipped_quests)
+    names = format_html_join(', ', "'{}'", ((links[name],) for name in skipped_quests))
     messages.warning(
         request,
-        f"{names} was not included, because archived quests are not shared. Unarchive it "
-        "and share the campaign again if it should be part of what other decks receive."
+        format_html(
+            "{} was not included, because archived quests are not shared. Unarchive it "
+            "and share the campaign again if it should be part of what other decks receive.",
+            names,
+        )
         if len(skipped_quests) == 1 else
-        f"These quests were not included, because archived quests are not shared: {names}. "
-        "Unarchive them and share the campaign again if they should be part of what other "
-        "decks receive."
+        format_html(
+            "These quests were not included, because archived quests are not shared: {}. "
+            "Unarchive them and share the campaign again if they should be part of what other "
+            "decks receive.",
+            names,
+        )
     )
 
 

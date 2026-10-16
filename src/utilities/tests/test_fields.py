@@ -17,6 +17,7 @@ from utilities.fields import (
     SVG_SCRIPT_CAPABLE_TYPES,
     GFKChoiceField,
     RestrictedFileFormField,
+    RestrictedMultiFileFormField,
     media_kind_of,
 )
 from utilities.models import RestrictedFileField
@@ -163,6 +164,17 @@ class RestrictedFileFormFieldTest(ByteDeckTenantTestCase):
         for content_type in ("audio/wav", "audio/x-wav", "audio/mp4", "audio/x-m4a"):
             with self.subTest(content_type=content_type):
                 field.validate_file(SimpleNamespace(content_type=content_type, size=1))
+
+    def test_widget_attrs__the_input_carries_its_size_limit(self):
+        """The file input carries the field's limit as data-max-size, which the browser checks a
+        chosen file against before it is uploaded (#783). A multi-file field's input does too."""
+        single = RestrictedFileFormField(max_upload_size=1234)
+        several = RestrictedMultiFileFormField(max_upload_size=16777216)
+
+        self.assertIn('data-max-size="1234"', single.widget.render('answer', None))
+        self.assertIn('data-max-size="16777216"', several.widget.render('attachments', None))
+        # the default limit, for a field that names none
+        self.assertIn('data-max-size="512000"', self.default_file_field.widget.render('file', None))
 
     def test_validate_file__raises_when_over_max_size(self):
         """validate_file rejects an acceptable-type file whose size exceeds max_upload_size."""

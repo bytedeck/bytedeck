@@ -324,6 +324,19 @@ class BadgeAssertionManagerTest(ByteDeckTenantTestCase):
         self.assertEqual(qs.get(id=user2.id).assertion_count, 1)
         self.assertNotIn(user3, qs)
 
+    def test_user_badge_assertion_count__all_leaves_out_archived_students(self):
+        """The badge page's All list is every non-archived student, as its name says on every
+        page that offers it (#2136): an archived student who holds the badge is not listed."""
+        badge = baker.make(Badge)
+        archived = baker.make(User, is_active=False)
+        baker.make(BadgeAssertion, user=self.student, badge=badge)
+        baker.make(BadgeAssertion, user=archived, badge=badge)
+
+        qs = BadgeAssertion.objects.user_badge_assertion_count(badge)
+
+        self.assertIn(self.student, qs)
+        self.assertNotIn(archived, qs)
+
     def _granted_on(self, date, xp, course=None):
         """Grant the student a badge worth `xp`, stamped as granted on `date`.
 

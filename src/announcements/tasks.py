@@ -13,6 +13,7 @@ from hackerspace_online.celery import app
 from notifications.signals import notify
 from siteconfig.models import SiteConfig
 from profile_manager.models import Profile
+from utilities.html import link_embeds, textify
 from utilities.mail import deck_from_email
 
 User = get_user_model()
@@ -65,7 +66,10 @@ def send_announcement_emails(content, root_url, absolute_url):
     # the deck's domain (e.g. "deckname.bytedeck.com"); .hostname drops any scheme/port.
     deck_domain = urlsplit(root_url).hostname or root_url
     subject = f'Announcement from {deck_domain}'
-    text_content = content
+    # An email client shows no embedded player, so each video or page embedded in the
+    # announcement goes out as a link to it (#1249), in both the HTML and the plain text.
+    content = link_embeds(content, root_url)
+    text_content = textify(content)
     html_template = get_template('announcements/email_announcement.html')
     html_content = html_template.render({
         'content': content,

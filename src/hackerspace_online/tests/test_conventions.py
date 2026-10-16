@@ -326,6 +326,13 @@ def _list_table_violations(text):
     if re.search(r'<table[^>]*class="table', text):
         problems.append('a <table class="table ..."> is back, so that one is not a bootstrap-table')
 
+    # `row` as a whole class, in a class attribute quoted either way
+    if re.search(r"""<tr\b[^>]*\bclass\s*=\s*(["'])(?:[^"']*\s)?row(?:\s[^"']*)?\1""", text):
+        problems.append(
+            "a <tr> carries Bootstrap's grid class `row`, whose clearfix sits in the row as an extra "
+            "cell and pushes every cell one column right of its heading (#2806)"
+        )
+
     return problems
 
 

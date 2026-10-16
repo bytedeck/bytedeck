@@ -1002,3 +1002,17 @@ class CampaignNodeEmissionTest(ByteDeckTenantTestCase):
         self.assertTrue(nodes)
         for node in nodes:
             self.assertNotIn('campaignOrder', node['data'])
+
+
+class GenerateLabelTest(ByteDeckTenantTestCase):
+    """The text a map node carries for the object it stands for."""
+
+    def test_generate_label__keeps_quotes_as_they_are(self):
+        """A quote in a name reaches the label as the name has it.
+
+        The label goes to the page through json.dumps, which escapes quotes itself, so a
+        backslash added here would be drawn on the map in front of every quote (#2519).
+        """
+        quest = baker.make(Quest, name='Say "hi"', xp=2, xp_can_be_entered_by_students=False)
+
+        self.assertEqual(CytoScape.generate_label(quest), 'Say "hi" (2)')

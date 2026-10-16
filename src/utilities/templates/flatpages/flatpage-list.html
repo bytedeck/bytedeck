@@ -24,14 +24,14 @@
 
         <tbody>
             {% for page in flatpages %}
-                <tr class="row">
-                    <td class="class-sm">
+                <tr>
+                    <td>
                         {{page.title}}
                     </td>
-                    <td class="class-sm">
+                    <td>
                         {{page.registration_required}}
                     </td>
-                    <td class="class-sm">
+                    <td>
                         <a class="btn btn-info" href="{{ page.get_absolute_url }}" role="button" title="View page">
                             <i class="fa fa-eye"></i>
                         </a>

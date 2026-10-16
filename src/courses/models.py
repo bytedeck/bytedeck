@@ -1,5 +1,6 @@
 import math
 from datetime import date, datetime, timedelta
+from decimal import ROUND_CEILING, ROUND_HALF_UP, Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import User
@@ -114,9 +115,52 @@ def whole_xp_shares(registrations, exact_shares):
     return whole
 
 
+def mark_for_xp(xp, fraction_complete, xp_for_100_percent):
+    """The mark, as a percentage, that this much XP gives so far through a course.
+
+    The one place the sum is written, so a student's mark and the XP a mark range is listed as
+    needing come from the same arithmetic.
+
+    Args:
+        xp (float): the XP counting toward the course.
+        fraction_complete (float): how far through the semester it is, above 0.
+        xp_for_100_percent (int): the XP the course is out of, above 0.
+
+    Returns:
+        float: the mark as a percentage.
+    """
+    return xp / fraction_complete * 100 / xp_for_100_percent
+
+
+def mark_as_shown(mark):
+    """A mark the way students see it: to one decimal place, with a half rounded up.
+
+    This is how the floatformat template filter shows a mark, and it is the mark a range is held
+    against, so a mark shown as a range's minimum is at that range (#2826).
+
+    Args:
+        mark (float or Decimal): a percentage.
+
+    Returns:
+        Decimal: the mark to one decimal place.
+    """
+    return Decimal(str(mark)).quantize(Decimal('0.1'), rounding=ROUND_HALF_UP)
+
+
 class MarkRangeManager(models.Manager):
-    def get_range(self, mark, courses=None):
-        """ return the MarkRange encompassed by this mark adn the list of courses """
+    def get_range(self, mark, courses=None, headers_only=False):
+        """The highest active range this mark reaches, among the ranges for every course and those
+        for the given courses.
+
+        Args:
+            mark (float): the mark as a percentage.
+            courses (iterable of Course): the courses whose own ranges count as well.
+            headers_only (bool): count only the ranges that color student headers, so a mark in a
+                range kept out of them finds the next range below it that colors them.
+
+        Returns:
+            MarkRange or None: the highest range the mark qualifies for, if any.
+        """
         self.get_queryset().filter(active=True)
         day = timezone.localtime(timezone.now()).isoweekday()
         # ranges for all courses
@@ -126,11 +170,15 @@ class MarkRangeManager(models.Manager):
                 courses_qs = course.markrange_set.filter(active=True, days__contains=str(day))  # ranges for this course
                 ranges_qs = ranges_qs | courses_qs
 
-        ranges_qs = ranges_qs.filter(minimum_mark__lte=mark)  # filter out ranges that are too high
+        # filter out ranges that are too high. A mark shown as a range's minimum is at that range,
+        # so the mark is compared as it is shown (#2826)
+        ranges_qs = ranges_qs.filter(minimum_mark__lte=mark_as_shown(mark))
+        if headers_only:
+            ranges_qs = ranges_qs.filter(color_headers=True)
 
         return ranges_qs.last()  # return the highest range that qualifies
 
-    def get_range_for_user(self, user):
+    def get_range_for_user(self, user, headers_only=False):
         """The mark range this user's cached mark falls in, or None when they have no mark.
 
         A student can hold a course and still have no mark: a course run on XP alone has none
@@ -140,6 +188,7 @@ class MarkRangeManager(models.Manager):
 
         Args:
             user: the student whose mark range is wanted.
+            headers_only (bool): count only the ranges that color student headers (see get_range).
 
         Returns:
             MarkRange or None: the highest range their mark qualifies for.
@@ -151,7 +200,7 @@ class MarkRangeManager(models.Manager):
         student_course_ids = user.profile.current_courses().values_list('course', flat=True)
         if student_course_ids:
             courses = Course.objects.filter(id__in=student_course_ids)
-            return self.get_range(mark, courses)
+            return self.get_range(mark, courses, headers_only=headers_only)
         else:
             return None
 
@@ -160,6 +209,20 @@ class MarkRange(models.Model):
     name = models.CharField(max_length=50, default="Chillax Line")
     minimum_mark = models.FloatField(default=72.5, help_text="Minimum mark as a percentage from 0 to 100 (or higher)")
     active = models.BooleanField(default=True)
+    # db_default as well as default: during a deploy the outgoing version still inserts ranges
+    # without this column, so the database has to fill it in (CONTRIBUTING.md, "Migrations and
+    # the deploy window").
+    color_headers = models.BooleanField(
+        default=True,
+        db_default=True,
+        verbose_name="Use this color in student headers",
+        help_text=(
+            "Students whose mark is in this range get this color in their header. When unchecked, this "
+            "range only appears on the graph in the Mark Calculations page, and its students get the "
+            "color of the next checked range below it. This has no effect unless “Activate Header "
+            "Colors by Mark” is on in Site Configuration."
+        ),
+    )
     color_light = RGBColorField(default='#BEFFFA', help_text='Color to be used in the light theme')
     color_dark = RGBColorField(default='#337AB7', help_text='Color to be used in the dark theme')
     days = models.CharField(
@@ -182,6 +245,68 @@ class MarkRange(models.Model):
 
     def __str__(self):
         return self.name + " (" + str(self.minimum_mark) + "%)"
+
+    @property
+    def reached_from(self):
+        """The lowest mark that is shown as reaching this range (#2826).
+
+        A mark is shown to one decimal place with a half rounded up, so a 72.5% range is reached
+        from 72.45%, and so is a 72.45% one.
+
+        Returns:
+            float: the lowest such mark, as a percentage.
+        """
+        lowest_shown = Decimal(str(self.minimum_mark)).quantize(Decimal('0.1'), rounding=ROUND_CEILING)
+        return float(lowest_shown - Decimal('0.05'))
+
+    def xp_to_reach(self, xp_for_100_percent, fraction_complete):
+        """The least whole XP that reaches this range by now, in a course out of xp_for_100_percent.
+
+        It is the XP whose mark is first shown as this range's minimum, so a student holding the XP
+        listed for a range is at it, and one point less is not (#2826).
+
+        Args:
+            xp_for_100_percent (int): the XP the course is out of.
+            fraction_complete (float): how far through the semester it is.
+
+        Returns:
+            int: the XP. 0 before the semester's first class day, and for a course out of 0 XP,
+            which have no mark to reach.
+        """
+        if fraction_complete <= 0 or xp_for_100_percent <= 0:
+            return 0
+        minimum = Decimal(str(self.minimum_mark))
+
+        def reaches(xp):
+            return mark_as_shown(mark_for_xp(xp, fraction_complete, xp_for_100_percent)) >= minimum
+
+        # start from the XP the lowest reaching mark works out to, which floating point can leave
+        # a point to either side of the answer, then settle on the exact one
+        xp = max(math.ceil(self.reached_from * xp_for_100_percent * fraction_complete / 100), 0)
+        while xp > 0 and reaches(xp - 1):
+            xp -= 1
+        while not reaches(xp):
+            xp += 1
+        return xp
+
+    def xp_to_reach_by_day(self, xp_for_100_percent, days_in_semester):
+        """The XP that reaches this range on each class day of a semester: its line on the XP
+        Progress chart.
+
+        Each day's XP is xp_to_reach() at that point in the semester, so on today's date the line
+        is at the XP that Mark Calculations lists for the range (#2826).
+
+        Args:
+            xp_for_100_percent (int): the XP the course is out of.
+            days_in_semester (int): the semester's class days.
+
+        Returns:
+            list[int]: the XP for each class day, from the first.
+        """
+        return [
+            self.xp_to_reach(xp_for_100_percent, day / days_in_semester)
+            for day in range(1, days_in_semester + 1)
+        ]
 
 
 def invalidate_ranks_cache():
@@ -1366,7 +1491,7 @@ class CourseStudent(models.Model):
 
         fraction_complete = self.semester.fraction_complete()
         if fraction_complete > 0:
-            return xp / fraction_complete * 100 / self.course.xp_for_100_percent
+            return mark_for_xp(xp, fraction_complete, self.course.xp_for_100_percent)
         else:
             return 0
 

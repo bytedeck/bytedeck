@@ -92,7 +92,7 @@
     {% for mr in pane.markranges %}
     {
       type: 'line',
-      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat:"0" }}%)',
+      label: '{{ mr.name|escapejs }} ({{ mr.minimum_mark|floatformat }}%)',
       mark: {{ mr.minimum_mark }},
       pointRadius: 0,
       backgroundColor: "rgb(0,0,0,0)",
@@ -114,9 +114,6 @@
   var data = {
       datasets: xp_datasets.concat(markranges)
   };
-
-  // need some starting data for the animation to work it seems..
-  generate_mark_lines(100)
 
   var options = {
 
@@ -251,18 +248,16 @@
     }
   }
 
-  function generate_mark_lines(days) {
-    // Mark Line Generation
-    for(let range of markranges) {
-      range.data = [];
-    }
-
-    for (var i = 1; i <= days; i++) {
-        for (let range of markranges) {
-          var point = new DataPoint(i, Math.floor(i * max_xp*range.mark/100 / days))
-          range.data.push(point);
-        }
-
+  // each range's line, as the chart's data gives it: the XP that reaches the range on each class
+  // day, worked out on the server like the XP listed for it below the chart (#2826)
+  function set_mark_lines(mark_lines) {
+    for (let range of markranges) {
+      var line = mark_lines.find(function(candidate) {
+        return candidate.mark === range.mark;
+      });
+      range.data = line ? line.xp.map(function(xp, day) {
+        return new DataPoint(day + 1, xp);
+      }) : [];
     }
   }
 
@@ -320,7 +315,7 @@
         percentAxis.display = data.uses_marks;
 
         generate_trend(data.days_in_semester);
-        generate_mark_lines(data.days_in_semester);
+        set_mark_lines(data.mark_lines);
         myChart.options.scales.xAxes[0].ticks.max = data.days_in_semester;
 
         $('div.loading').remove();

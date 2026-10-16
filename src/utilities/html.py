@@ -6,8 +6,10 @@ import html2text
 import bleach
 import html as html_module
 import re
+from urllib.parse import parse_qs, urlsplit
 
-from django.utils.html import strip_tags
+from bs4 import BeautifulSoup
+from django.utils.html import format_html, format_html_join, strip_tags
 
 # Tags that are content in their own right, with no text of their own. A student can answer a
 # question with nothing but a pasted screenshot or an embedded video, so `is_empty_html` has to
@@ -16,9 +18,37 @@ EMBEDDED_CONTENT_TAGS = frozenset({
     "img", "iframe", "video", "audio", "source", "track", "embed", "object", "svg", "canvas", "math",
 })
 
+# Tags that make a block of their own, which a paragraph cannot hold. A fragment with any of these
+# in it is already laid out in blocks, so `in_a_paragraph` leaves it as it is.
+BLOCK_TAGS = frozenset({
+    "p", "div", "ul", "ol", "li", "dl", "dt", "dd", "table", "caption", "thead", "tbody", "tfoot",
+    "tr", "th", "td", "blockquote", "pre", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "figure",
+    "figcaption", "section", "article", "aside", "header", "footer", "nav", "main", "address",
+    "details", "summary", "fieldset", "form",
+})
+
 # The name of each opening tag in a fragment, e.g. "<p><img src='x'>" -> ["p", "img"]. Only text
 # outside a tag can be escaped, so an `&lt;img&gt;` the user typed is never matched here.
 _OPENING_TAG_RE = re.compile(r"<\s*([a-zA-Z][a-zA-Z0-9:-]*)")
+
+
+def in_a_paragraph(fragment):
+    """The fragment laid out in blocks: in a paragraph of its own when it is only text and inline
+    tags, and as it is when it already has blocks.
+
+    The Summernote editor lays a comment out in paragraphs and lists itself, while a plain
+    textarea, or text the app writes, is bare. Putting the editor's markup inside another
+    paragraph nests a paragraph or a list inside one, which HTML does not allow: a browser closes
+    the outer paragraph early and leaves a stray end tag behind (#2713).
+
+    Args:
+        fragment (str): the HTML fragment, e.g. "done" or "<p>done</p>".
+
+    Returns:
+        str: e.g. "<p>done</p>" for both of those.
+    """
+    tags = {name.lower() for name in _OPENING_TAG_RE.findall(fragment)}
+    return fragment if tags & BLOCK_TAGS else f"<p>{fragment}</p>"
 
 
 def is_empty_html(value):
@@ -64,6 +94,119 @@ def textify(html):
     # don't ignore links anymore, I like links
     h.ignore_links = False
     return h.handle(html)
+
+
+def link_to(obj, text=None):
+    """A link to an object's own page, for a message that names it (#2808).
+
+    A message that names a quest, a badge or a student links the name, so the teacher or student
+    reading it can go straight to the thing it is about.
+
+    Args:
+        obj: anything with a `get_absolute_url()`, such as a quest, a badge or a student's profile.
+        text (str or None): what the link reads, escaped unless already safe. The object's own
+            `str()` when not given.
+
+    Returns:
+        SafeString: the <a> element.
+    """
+    return format_html('<a href="{}">{}</a>', obj.get_absolute_url(), obj if text is None else text)
+
+
+def link_list(objects, separator=", ", text=None):
+    """Several objects, each as a link to its own page, joined into one fragment of a message.
+
+    Args:
+        objects (iterable): objects with a `get_absolute_url()`.
+        separator (str): what goes between two links.
+        text (callable or None): what each link reads, given its object. The object's own
+            `str()` when not given.
+
+    Returns:
+        SafeString: the links, joined.
+    """
+    return format_html_join(
+        separator, "{}", ((link_to(obj, None if text is None else text(obj)),) for obj in objects))
+
+
+# The page a video player's address stands for, for the players the editor embeds, so a link
+# opens the video's own page rather than a bare player: (pattern for the player's address, with
+# the video's id as its group; the video's page, formatted with that id; how the page is told to
+# start part-way through, formatted with the seconds the player starts at, or None when the
+# editor gives the player no start time).
+_VIDEO_PAGES = (
+    (
+        re.compile(r"^https?://(?:www\.)?youtube(?:-nocookie)?\.com/embed/([\w-]+)"),
+        "https://www.youtube.com/watch?v={}", "&t={}s",
+    ),
+    (re.compile(r"^https?://player\.vimeo\.com/video/(\d+)"), "https://vimeo.com/{}", None),
+    (re.compile(r"^https?://(?:www\.)?dailymotion\.com/embed/video/(\w+)"), "https://www.dailymotion.com/video/{}", None),
+)
+
+# an opening <iframe> or <video> tag, however it's written
+_EMBED_TAG_RE = re.compile(r"<\s*(?:iframe|video)\b", re.IGNORECASE)
+
+# a player's start time: whole seconds in plain digits, up to 999999 (over 277 hours)
+_START_SECONDS_RE = re.compile(r"[0-9]{1,6}")
+
+
+def link_embeds(html, root_url=""):
+    """Put a link in place of each video or page embedded in a fragment of HTML.
+
+    An email client shows no embedded player: it drops an <iframe>, and few play a <video>. So a
+    video in an announcement left nothing behind in its email (#1249). Each one becomes a line
+    linking to it: "Watch the video:" and the video's own page for a YouTube, Vimeo or Dailymotion
+    player (from the time a YouTube player was set to start at), its file for a <video>, and
+    "Open the embedded page:" and its address for anything else embedded, such as a slide deck. The line is inline, as the embed was, since the editor
+    puts an embed inside a paragraph.
+
+    An embed is left as it is when there's no web page to send a reader to: no address, one that
+    isn't http(s), or one on the deck itself when `root_url` isn't given.
+
+    Args:
+        html (str or None): a fragment of HTML, such as an announcement's content.
+        root_url (str): the deck's root URL, which makes an address on the deck itself
+            (/media/...) one that opens from an inbox.
+
+    Returns:
+        str or None: the fragment with each embed replaced, or exactly as it was when nothing
+        is embedded in it.
+    """
+    if not html or not _EMBED_TAG_RE.search(html):
+        return html  # nothing embedded, so the HTML goes out exactly as written
+
+    soup = BeautifulSoup(html, "html.parser")
+    for embed in soup.find_all(["iframe", "video"]):
+        source = embed.find("source", src=True) if embed.name == "video" else None
+        address = (embed.get("src") or (source["src"] if source else "")).strip()
+        if address.startswith("//"):
+            address = f"https:{address}"  # the editor writes a player's address without its scheme
+        elif address.startswith("/"):
+            address = f"{root_url.rstrip('/')}{address}" if root_url else ""
+        if not address.lower().startswith(("http://", "https://")):
+            continue
+
+        label = "Watch the video" if embed.name == "video" else "Open the embedded page"
+        for player, page, start_at in _VIDEO_PAGES:
+            match = player.match(address)
+            if match:
+                # the start time the editor's Embed Video dialog gives a YouTube player, in whole
+                # seconds; anything else (more digits than a video runs to, or a character that
+                # only looks like a digit) is left out of the link
+                start = parse_qs(urlsplit(address).query).get("start", [""])[0]
+                page = page.format(match.group(1))
+                if start_at and _START_SECONDS_RE.fullmatch(start) and int(start):
+                    page += start_at.format(int(start))
+                address, label = page, "Watch the video"
+                break
+
+        line = soup.new_tag("span")
+        line.append(f"{label}: ")
+        link = soup.new_tag("a", href=address)
+        link.string = address
+        line.append(link)
+        embed.replace_with(line)
+    return str(soup)
 
 
 # Regular expression to match list prefixes like "1." or "a."

@@ -10,7 +10,8 @@ from tenant.views import NonPublicOnlyViewMixin
 from prerequisites.forms import PrereqFormInline, PrereqFormsetHelper
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
-from djcytoscape.models import CytoScape
+from djcytoscape.views import map_ids_redrawn_for, message_maps_being_updated
+from utilities.html import link_to
 from django.views.generic.detail import SingleObjectMixin
 from django.views.generic.edit import FormView
 from django.utils.html import format_html
@@ -52,22 +53,29 @@ class ObjectPrereqsFormView(NonPublicOnlyViewMixin, SingleObjectMixin, FormView)
         if not form.has_changed():
             return HttpResponseRedirect(self.get_success_url())
 
+        # The maps the change rebuilds: the ones from before it, which the object may be leaving,
+        # and the ones after, which it joins through a prerequisite it has just been given (#2847).
+        map_auto_update = SiteConfig.get().map_auto_update
+        map_ids = map_ids_redrawn_for(self.object) if map_auto_update else set()
+
         form.save()
 
-        messages.success(
-            self.request,
-            f"Prerequisites have been updated for {self.object}."
-        )
+        messages.success(self.request, self.get_updated_message())
 
-        if SiteConfig.get().map_auto_update:
-            maps = CytoScape.objects.get_related_maps(self.object)
-            if maps:
-                messages.success(
-                    self.request,
-                    format_html("These maps are being updated: {} ", maps.get_maps_as_formatted_string()),
-                )
+        if map_auto_update:
+            message_maps_being_updated(self.request, map_ids | map_ids_redrawn_for(self.object))
 
         return HttpResponseRedirect(self.get_success_url())
+
+    def get_updated_message(self):
+        """The message shown once changed prerequisites are saved.
+
+        Returns:
+            SafeString: the success message, naming the object with a link to its page (#2808). A
+            subclass can add to it, as BadgePrereqsUpdate does, so the teacher still gets a
+            single message.
+        """
+        return format_html("Prerequisites have been updated for {}.", link_to(self.object))
 
     def get_success_url(self):
         return self.object.get_absolute_url()

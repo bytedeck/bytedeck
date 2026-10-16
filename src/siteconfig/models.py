@@ -211,6 +211,14 @@ class SiteConfig(models.Model):
                   "evenly shared."
     )
 
+    default_quest_prerequisite = models.ForeignKey(
+        'badges.Badge', null=True, blank=True, on_delete=models.SET_NULL, related_name='+',
+        verbose_name="Default quest prerequisite",
+        help_text="A badge to fill in as the prerequisite of each quest you create, under its Basic Prerequisites, where you "
+                  "can change or remove it. Without one, a new quest you forget to give a prerequisite is available to every "
+                  "student as soon as it's published."
+    )
+
     enable_shared_library = models.BooleanField(
         verbose_name="Enable Shared Library", default=False,
         help_text="If enabled, you can import quests and campaigns from the Shared Library."
@@ -341,6 +349,21 @@ class SiteConfig(models.Model):
             return self.banner_image.url
         else:
             return static('img/banner.png')
+
+    def get_default_quest_prerequisite(self):
+        """The badge a quest created on this deck starts with as its prerequisite (#276).
+
+        Looked up by id rather than through the relation: the instance `SiteConfig.get()` returns
+        comes from the cache, and deleting the badge sets this column to NULL without saving the
+        SiteConfig, so the cached copy can still hold the id of a badge that no longer exists.
+
+        Returns:
+            Badge or None: the default prerequisite, or None when none is set or it was deleted.
+        """
+        if not self.default_quest_prerequisite_id:
+            return None
+        Badge = self._meta.get_field('default_quest_prerequisite').related_model
+        return Badge.objects.filter(pk=self.default_quest_prerequisite_id).first()
 
     def set_active_semester(self, semester):
         """Start `semester`: open it, so students can join a course in it and earn XP.

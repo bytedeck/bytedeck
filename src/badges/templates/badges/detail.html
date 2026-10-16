@@ -2,6 +2,7 @@
 {% load static %}
 {% load crispy_forms_tags %}
 {% load utility_tags %}
+{% load profile_tags %}
 
 {% block head %}
 <link rel="stylesheet" href="{% static 'css/bootstrap-table-1.20.2.min.css' %}">
@@ -26,7 +27,7 @@
         {% if request.user.is_staff %}
         <div class="col-xs-12 col-sm-5 text-right">
           {% comment %} One btn-group keeps every action button the same height and connected (like the
-             Current/All Active toggle below); fa-fw gives the icons a uniform width. The column is
+             Current/All toggle below); fa-fw gives the icons a uniform width. The column is
              col-sm-5 so the six icon buttons fit on one row without wrapping and breaking apart. {% endcomment %}
           <div class="btn-group pull-right" role="group" aria-label="{{ config.custom_name_for_badge }} actions">
             <a class="btn btn-warning" title="Edit" href="{% url 'badges:badge_update' badge.id %}">
@@ -109,11 +110,11 @@
   {% if request.user.is_staff %}
   <h3>Assertions of this {{ config.custom_name_for_badge }}
     <div class="btn-group">
-      <a href="{% url 'badges:badge_detail' badge.id %}"
-      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current Semester</a>
+      <a href="{% url 'badges:badge_detail' badge.id %}" title="{% people_list_description 'current' %}"
+      class="btn {% if current %}btn-primary{% else %}btn-default{% endif %}">Current</a>
 
-      <a href="{% url 'badges:badge_detail_all' badge.id %}"
-      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All Active</a>
+      <a href="{% url 'badges:badge_detail_all' badge.id %}" title="{% people_list_description 'all' %}"
+      class="btn {% if not current %}btn-primary{% else %}btn-default{% endif %}">All</a>
 
     </div>
   </h3>

@@ -42,7 +42,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
-from utilities.html import is_empty_html
+from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
 from .listing import QUEST_SORT_COLUMNS, search_quests, search_submissions
@@ -386,6 +386,22 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
     def test_func(self):
         return is_staff_or_TA(self.request.user)
 
+    def get_initial(self):
+        """Start the new quest with the deck's default prerequisite as its badge prerequisite (#276).
+
+        A quest with no prerequisite is available to every student once it's published, so a deck
+        can name a badge (Site Configuration's Default quest prerequisite) that its new quests
+        require until the teacher changes or removes it under Basic Prerequisites.
+
+        Returns:
+            dict: the form's initial data, with `new_badge_prerequisite` when the deck has a default.
+        """
+        initial = super().get_initial()
+        default_prerequisite = SiteConfig.get().get_default_quest_prerequisite()
+        if default_prerequisite:
+            initial["new_badge_prerequisite"] = default_prerequisite
+        return initial
+
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
@@ -395,7 +411,9 @@ class QuestCreate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixi
         return context
 
 
-class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, QuestFormViewMixin, UpdateMapMessageMixin, UpdateView):
+# UpdateMapMessageMixin comes before QuestFormViewMixin so that it wraps the prerequisites the form
+# sets after saving the quest: the maps it names include the one a new prerequisite puts the quest on.
+class QuestUpdate(NonPublicOnlyViewMixin, UserPassesTestMixin, UpdateMapMessageMixin, QuestFormViewMixin, UpdateView):
     def test_func(self):
         # user self.get_object() because self.object doesn't exist yet
         # https://stackoverflow.com/questions/38544692/django-dry-principle-and-userpassestestmixin
@@ -427,14 +445,26 @@ class QuestPrereqsUpdate(ObjectPrereqsFormView):
 
 class QuestCopy(QuestCreate):
     def get_form_kwargs(self):
+        """Fill the create form with a copy of the quest being copied.
+
+        The form is bound to an unsaved copy of that quest, named with " - COPY" and given a new
+        import_id, and starts with the quest's tags and with the quest itself as the copy's
+        prerequisite.
+
+        Returns:
+            dict: the quest form's keyword arguments, with `instance` the unsaved copy and `initial`
+            holding its tags and prerequisite.
+        """
         kwargs = super().get_form_kwargs()
 
         # by default, set the quest this was copied from as the new_quest_prerequisite
         # If this is changed in the form it will be overwritten in form_valid() from QuestFormViewMixin
         copied_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
-        # Set initial tags and prerequisite for the form
+        # Set initial tags and prerequisite for the form. The quest it was copied from is the copy's
+        # prerequisite, so the deck's default badge prerequisite (QuestCreate.get_initial) is left out.
         kwargs["initial"]["tags"] = copied_quest.tags.all()
         kwargs["initial"]["new_quest_prerequisite"] = copied_quest
+        kwargs["initial"].pop("new_badge_prerequisite", None)
 
         # Create a new Quest instance based on the copied quest
         new_quest = get_object_or_404(Quest, pk=self.kwargs["quest_id"])
@@ -1571,15 +1601,11 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             new_assertion = BadgeAssertion.objects.create_assertion(
                 self.submission.user, badge, self.request.user, course=self.submission.course
             )
-            messages.success(
-                self.request,
-                (
-                    "Badge "
-                    + str(new_assertion)
-                    + " granted to "
-                    + str(new_assertion.user)
-                ),
-            )
+            messages.success(self.request, format_html(
+                "{} {} granted to {}",
+                SiteConfig.get().custom_name_for_badge, link_to(new_assertion.badge),
+                link_to(new_assertion.user.profile, new_assertion.user.username),
+            ))
             rarity_icon = badge.get_rarity_icon()
             comment_text_addition += (
                 "<p></br>"
@@ -1627,7 +1653,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         Which decision it is comes from the button the form carries (approve, return, comment,
         skip), which `handle_form_button` reads; that also supplies the wording to store when
         the teacher wrote no comment of their own. Any badge granted alongside is appended to
-        the comment, uploaded files are attached to it, and the student is notified.
+        the comment, uploaded files are attached to it, and the student is notified, with a
+        preview of the comment when the teacher wrote one.
 
         Args:
             request: the POST carrying the teacher's comment, any files, any badge, which
@@ -1658,17 +1685,27 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # what counts as "no comment" is a question about what that markup renders as
             # rather than about the string (#2609). An image on its own is a real comment and
             # is kept: is_empty_html treats embedded media as content.
-            if is_empty_html(comment_text):
+            wrote_comment = not is_empty_html(comment_text)
+            if not wrote_comment:
                 comment_text = blank_comment_text
 
+            # In a paragraph, as the editor and the stand-in text lay a comment out: the Approvals
+            # page's quick reply box, and the quick-text buttons that fill it, send bare text (#2850).
             comment_new = Comment.objects.create_comment(
                 user=self.request.user,
                 path=self.submission.get_absolute_url(),
-                text=comment_text + comment_text_addition,
+                text=in_a_paragraph(comment_text) + comment_text_addition,
                 target=self.submission,
             )
 
             self.save_uploaded_files(comment_new)
+
+            # The student's notification previews the teacher's comment and links straight to it,
+            # as a teacher's notification of a comment on an auto-approved quest does (#2848).
+            # The stand-in text for a blank comment, such as the deck's approval text, is left
+            # out: it says nothing the notification's verb doesn't.
+            if wrote_comment:
+                notification_kwargs["action"] = comment_new
 
             #
             notify.send(
@@ -2443,7 +2480,10 @@ def complete(request, submission_id):
     # at the end of this view when `mark_completed` is called on the submission,
     # so make sure the draft comment is set properly with the form's latest comment text.
     draft_comment = submission.draft_comment
-    draft_text = f"<p>{comment_text}</p>" + choices_html
+    # The comment, then the choices below their rule. The editor lays the comment out in
+    # paragraphs already, so only bare text (the quick reply box's, or the placeholder above) is
+    # given one (#2713).
+    draft_text = in_a_paragraph(comment_text) + choices_html
     if draft_comment:
         # update all comment fields
         #
@@ -2626,8 +2666,7 @@ def start(request, quest_id):
                 request,
                 format_html(
                     "<strong>{}</strong> is on hold until you finish {}.",
-                    quest.name,
-                    ", ".join(blocker.name for blocker in blocking_quests),
+                    link_to(quest), link_list(blocking_quests),
                 ),
             )
             return redirect(quest)
@@ -2650,7 +2689,7 @@ def start(request, quest_id):
                 format_html(
                     "You already have <strong>{}</strong> in progress: "
                     "finish this one before starting it again.",
-                    quest.name,
+                    link_to(sub, quest.name),
                 ),
             )
             return redirect(sub)
@@ -2667,7 +2706,7 @@ def hide(request, quest_id):
 
     messages.warning(
         request,
-        format_html("<strong>{}</strong> has been added to your list of hidden quests.", quest.name),
+        format_html("<strong>{}</strong> has been added to your list of hidden quests.", link_to(quest)),
     )
 
     return redirect("quests:quests")
@@ -2681,7 +2720,7 @@ def unhide(request, quest_id):
 
     messages.success(
         request,
-        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", quest.name),
+        format_html("<strong>{}</strong> has been removed from your list of hidden quests.", link_to(quest)),
     )
 
     return redirect("quests:available_all")
@@ -2867,6 +2906,7 @@ def ajax_delete_draft_attachment(request, document_id):
 @xml_http_request_required
 @non_public_only_view
 @login_required
+@transaction.atomic
 def ajax_save_draft(request):
     """Autosave the requesting student's own draft comment, answers, and chosen files.
 
@@ -2897,7 +2937,18 @@ def ajax_save_draft(request):
         except (TypeError, ValueError):
             raise Http404("No valid submission id provided.")
 
-        sub = get_object_or_404(QuestSubmission, pk=submission_id, user=request.user)
+        # Locked for the rest of the request, as the submit (complete) and the draft file
+        # delete lock it. A chosen file is stored only if the draft doesn't hold a copy yet,
+        # and a student who presses Submit while this save is still uploading a large file
+        # sends that file again with the submit. Without the lock each request looks before
+        # the other has stored anything, and both store it (#2804); with it, the second one
+        # waits and finds the first one's copy. of=("self",) and include_related=False for
+        # the reasons complete gives.
+        sub = get_object_or_404(
+            QuestSubmission.objects.get_queryset(include_related=False).select_for_update(of=("self",)),
+            pk=submission_id,
+            user=request.user,
+        )
         # if there is no draft comment, then the quest is not in progress
         if not sub.draft_comment:
             raise Http404("No draft comment found. The quest is not in progress.")
@@ -3216,7 +3267,13 @@ def flag(request, submission_id):
     sub.flagged_by = request.user
     sub.save()
 
-    messages.success(request, "Submission flagged for future follow up.")
+    messages.success(
+        request,
+        format_html(
+            "Submission {} flagged for future follow up.",
+            link_to(sub, format_html("{} by {}", sub.quest_name(), sub.user)),
+        ),
+    )
 
     return redirect("quests:approvals")
 

@@ -18,6 +18,7 @@ from siteconfig.models import SiteConfig
 
 from profile_manager.forms import ProfileForm, UserForm
 from profile_manager.models import Profile
+from profile_manager.views import offers_yours_list
 
 from hackerspace_online.tests.utils import generate_form_data
 
@@ -39,7 +40,9 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         # need a teacher before students can be created or the profile creation will fail when trying to notify
         cls.test_teacher = User.objects.create_user('test_teacher', is_staff=True)
         cls.test_student1 = User.objects.create_user('test_student', password=cls.test_password)
-        cls.test_student2 = baker.make(User)
+        # A fixed username: left to model_bakery it is 150 random letters, which the student-list
+        # search tests could match by chance (#2766).
+        cls.test_student2 = User.objects.create_user('test_student2')
 
         # create semester with pk of default semester
         # this seems backward, but no semesters should exist yet in the test, so their shouldn't be any conflicts.
@@ -81,6 +84,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assertRedirectsLogin('profiles:profile_list_current')
         self.assertRedirectsLogin('profiles:profile_list_inactive')
         self.assertRedirectsLogin('profiles:profile_list_staff')
+        self.assertRedirectsLogin('profiles:profile_list_yours')
+        self.assertRedirectsLogin('profiles:profile_list_tas')
         self.assertRedirectsLogin('profiles:profile_list_block', args='1')
         self.assertRedirectsLogin('profiles:profile_delete', args=[1])
 
@@ -102,6 +107,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert403('profiles:profile_list')
         self.assert403('profiles:profile_list_inactive')
         self.assert403('profiles:profile_list_staff')
+        self.assert403('profiles:profile_list_yours')
+        self.assert403('profiles:profile_list_tas')
         self.assert403('profiles:profile_list_block', args='1')
         self.assert403('profiles:profile_delete', args=[s_pk])
 
@@ -127,6 +134,8 @@ class ProfileViewTests(ByteDeckTenantTestCase):
         self.assert200('profiles:profile_list')
         self.assert200('profiles:profile_list_current')
         self.assert200('profiles:profile_list_staff')
+        self.assert200('profiles:profile_list_yours')
+        self.assert200('profiles:profile_list_tas')
         self.assert200('profiles:profile_list_block', args='1')
         # profile_list_block should 404 with invalid pk kwarg, accessed via kwarg dict instead of arg or else bad request raises error
         self.assert404("profiles:profile_list_block", kwargs={"pk": "999"})
@@ -633,6 +642,140 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         self.assertEqual(response.context['paginator'].count, 3)  # self.test_teacher, deck_owner, admin
 
+    def test_profile_list_staff__leaves_out_archived_staff(self):
+        """Staff lists the staff who can still sign in: an archived teacher is under Archived (#2136)."""
+        archived_teacher = baker.make(get_user_model(), is_staff=True, is_active=False)
+        self.client.force_login(self.test_teacher)
+
+        staff = self.client.get(reverse('profiles:profile_list_staff'))
+        archived = self.client.get(reverse('profiles:profile_list_inactive'))
+
+        self.assertNotIn(archived_teacher.profile, staff.context['object_list'])
+        self.assertIn(archived_teacher.profile, archived.context['object_list'])
+
+    def _register(self, student, block, semester=None):
+        """Register `student` in a new course in `block`.
+
+        Args:
+            student (User): the student to register.
+            block (Block): the group the registration is in.
+            semester (Semester): the registration's semester; the active semester when left out.
+        """
+        baker.make(CourseStudent, user=student, block=block, course=baker.make(Course), semester=semester or self.active_sem)
+
+    def test_profile_list_yours__lists_the_current_students_in_the_teachers_groups(self):
+        """Yours is the students registered in a course in an open semester, in a group the
+        requesting teacher teaches (#2136): not another teacher's group, nor the teacher's own
+        group in an archived semester."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=other_teacher)
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        last_year = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        former = baker.make(get_user_model())
+        self._register(former, yours, semester=last_year)
+        self._register(former, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].YOURS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_profile_list_yours__group_filter_offers_only_the_teachers_groups(self):
+        """Another teacher's group would filter Yours down to nobody, so it isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student2, theirs)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_yours'))
+
+        self.assertEqual(list(response.context['block_filter_choices']), [yours])
+
+    def test_profile_list_tas__lists_the_non_archived_tas(self):
+        """TAs is the non-archived students with the TA flag turned on (#2136)."""
+        Profile.objects.filter(user=self.test_student1).update(is_TA=True)
+        archived_ta = baker.make(get_user_model(), is_active=False)
+        Profile.objects.filter(user=archived_ta).update(is_TA=True)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_tas'))
+
+        self.assertEqual(response.context['view_type'], response.context['VIEW_TYPES'].TAS)
+        self.assertEqual(list(response.context['object_list']), [self.test_student1.profile])
+
+    def test_offers_yours_list__only_when_it_differs_from_current_and_holds_someone(self):
+        """Yours is offered when it holds some of the current students but not all of them (#2136):
+        it would otherwise be empty, or the same list as Current."""
+        other_teacher = baker.make(get_user_model(), is_staff=True)
+        cases = (
+            # (case, the teacher of each of test_student1's and test_student2's groups, expected)
+            ('teaches no group', [other_teacher, other_teacher], False),
+            ("the teacher's group holds no current student", [other_teacher, other_teacher, self.test_teacher], False),
+            ("the teacher's groups hold every current student", [self.test_teacher, self.test_teacher], False),
+            ('another teacher has a current student', [self.test_teacher, other_teacher], True),
+            ("a group without a teacher has a current student", [self.test_teacher, None], True),
+        )
+        for case, teachers, expected in cases:
+            with self.subTest(case):
+                CourseStudent.objects.all().delete()
+                Block.objects.all().delete()
+                for student, teacher in zip((self.test_student1, self.test_student2), teachers):
+                    self._register(student, baker.make(Block, current_teacher=teacher))
+                for teacher in teachers[2:]:
+                    baker.make(Block, current_teacher=teacher)  # a group with nobody in it
+                self.assertEqual(offers_yours_list(self.test_teacher), expected)
+
+    def test_offers_yours_list__not_when_the_students_are_in_both_teachers_groups(self):
+        """A student registered in another teacher's group as well as yours is on both lists, so
+        Yours is the same as Current and isn't offered."""
+        yours = baker.make(Block, current_teacher=self.test_teacher)
+        theirs = baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True))
+        self._register(self.test_student1, yours)
+        self._register(self.test_student1, theirs)
+
+        self.assertFalse(offers_yours_list(self.test_teacher))
+
+    def test_profile_list__yours_button_follows_offers_yours_list(self):
+        """The Yours button is left out where the list isn't offered, unless it is the list on show."""
+        Block.objects.all().delete()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self.client.force_login(self.test_teacher)
+        yours_url = reverse('profiles:profile_list_yours')
+
+        self.assertNotContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+        self.assertContains(self.client.get(yours_url), f'href="{yours_url}"')
+
+        self._register(self.test_student2, baker.make(Block, current_teacher=baker.make(get_user_model(), is_staff=True)))
+        self.assertContains(self.client.get(reverse('profiles:profile_list_current')), f'href="{yours_url}"')
+
+    def test_profile_list__each_list_button_says_who_it_holds(self):
+        """The buttons are named as on every page that offers these lists, each with its
+        description as hover text in the deck's own words (#2136)."""
+        config = SiteConfig.get()
+        config.custom_name_for_student = 'Learner'
+        config.custom_name_for_group = 'Block'
+        config.save()
+        self._register(self.test_student1, baker.make(Block, current_teacher=self.test_teacher))
+        self._register(self.test_student2, baker.make(Block, current_teacher=None))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_list_current'))
+
+        for name, description in (
+            ('Yours', 'Learners registered in a course in an open semester, in a block you are assigned to as the teacher'),
+            ('Current', 'All learners registered in a course in an open semester (includes all of yours)'),
+            ('All', 'All non-archived learners (includes all current learners)'),
+            ('Staff', 'All non-archived staff accounts'),
+            ('TAs', 'All learners with the TA (Teaching Assistant) flag turned on, who can draft quests'),
+            ('Archived', 'Archived accounts, staff and learners.'),
+        ):
+            with self.subTest(name):
+                self.assertRegex(response.content.decode(), rf'title="{re.escape(description)}[^"]*"\s+class="btn [^"]*">{name}</a>')
+
     def test_profile_list_block__get_queryset(self):
         """ProfileListBlock view's get queryset method should return a queryset containing only students in active semester and the desired block"""
         self.client.force_login(self.test_teacher)
@@ -727,7 +870,10 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # Fill a whole page with students whose first name sorts ahead of the first-name target
         # below, so that target is pushed onto a later page under the default (first-name) ordering.
-        baker.make(User, first_name='AAAA', _quantity=per_page)
+        # Their usernames are fixed: left to model_bakery each is 150 random letters, and usernames
+        # are searched too, so a short term like "zebed" could turn up inside one by chance (#2766).
+        for i in range(per_page):
+            User.objects.create_user(f'filler{i}', first_name='AAAA')
 
         # One target per searchable column, each carrying a value that collides with nothing else.
         first_target = User.objects.create_user('zzz_first', first_name='Zebediah')
@@ -859,11 +1005,11 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
     def test_profile_list__non_staff_cannot_sort_by_staff_only_columns(self):
         """ProfileListCurrent is open to any authenticated user, so a student may only sort by the
-        always-visible name columns. Requesting a staff-only (last_login/last_sub/username) or
+        always-visible name columns. Requesting a staff-only (last_active/last_sub/username) or
         privacy-gated (xp/mark) column silently falls back to the default sort, so its ordering
         can't leak to students; staff keep full sorting."""
         self.client.force_login(self.test_student1)
-        for forbidden in ('last_login', 'last_sub', 'username', 'xp', 'mark'):
+        for forbidden in ('last_active', 'last_sub', 'username', 'xp', 'mark'):
             response = self.client.get(reverse("profiles:profile_list_current"), {'sort': forbidden, 'order': 'asc'})
             self.assertEqual(response.context['current_sort'], 'first', msg=f"student must not sort by {forbidden}")
 
@@ -873,24 +1019,45 @@ class ProfileViewTests(ByteDeckTenantTestCase):
 
         # staff can sort by the staff-only columns
         self.client.force_login(self.test_teacher)
-        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_login', 'order': 'asc'})
-        self.assertEqual(response.context['current_sort'], 'last_login')
+        response = self.client.get(reverse("profiles:profile_list_current"), {'sort': 'last_active', 'order': 'asc'})
+        self.assertEqual(response.context['current_sort'], 'last_active')
 
-    def test_profile_list__last_login_never_fallback(self):
-        """The staff Last Login cell shows 'Never' for a student who has never logged in, mirroring
-        the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
+    def test_profile_detail__staff_see_when_the_student_was_last_active(self):
+        """A student's profile shows staff when the student last used the deck rather than when
+        they last signed in, which can be weeks earlier (#2849)."""
+        from datetime import timedelta
+        from django.utils import timezone
+        Profile.objects.filter(user=self.test_student1).update(last_active=timezone.now() - timedelta(days=3))
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: ')
+        self.assertContains(response, '3\xa0days ago)')
+        self.assertNotContains(response, 'Last Login')
+
+    def test_profile_detail__never_active_reads_never(self):
+        """A student who has never used the deck shows "Never" for it."""
+        Profile.objects.filter(user=self.test_student1).update(last_active=None)
+        self.client.force_login(self.test_teacher)
+
+        response = self.client.get(reverse('profiles:profile_detail', args=[self.test_student1.profile.pk]))
+        self.assertContains(response, 'Last Active: Never')
+
+    def test_profile_list__last_active_never_fallback(self):
+        """The staff Last Active cell shows 'Never' for a student who has never used the deck,
+        mirroring the Last Quest column, instead of rendering an empty '<br><small> ago</small>'."""
         from django.utils import timezone
         now = timezone.now()
         # give both students a last submission (Last Quest shows a date, not "Never")
-        # while leaving last_login unset, so the only "Never" comes from Last Login
+        # while leaving last_active unset, so the only "Never" comes from Last Active
         for student in (self.test_student1, self.test_student2):
-            self.assertIsNone(student.last_login)
+            self.assertIsNone(student.profile.last_active)
             student.profile.time_of_last_submission = now
             student.profile.save()
         self.client.force_login(self.test_teacher)
 
         response = self.client.get(reverse("profiles:profile_list"))
-        self.assertContains(response, "Never", count=2)  # one per student, from Last Login only
+        self.assertContains(response, "Never", count=2)  # one per student, from Last Active only
 
     def test_profile_list__block_filter_narrows_to_that_group(self):
         """The ?block= filter shows only the students registered in that group, and runs

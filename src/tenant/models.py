@@ -886,9 +886,9 @@ class DeckNotice(models.Model):
     per notice actually sent.
 
     The unique constraint makes every send exactly-once and the cadence
-    self-re-arming: `period_key` carries the deadline (or month) the notice was
-    about, so when a renewal advances `paid_until` (or a new month starts, for
-    limit warnings) the same threshold becomes sendable again with no bespoke
+    self-re-arming: `period_key` carries the deadline (or semester) the notice was
+    about, so when a renewal advances `paid_until` (or a new semester starts, for
+    limit notices) the same threshold becomes sendable again with no bespoke
     reset logic. Date-based predicates plus this ledger also make multi-day beat
     outages catch-up-safe: late, never duplicated.
     """
@@ -909,11 +909,12 @@ class DeckNotice(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES)
     threshold = models.CharField(
         max_length=20,
-        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7'/'d1', 'upcoming', 'pct80'/'pct100', 'suspended', or 'invoice'."
+        help_text="Which step of the cadence fired: 'd30'/'d14'/'d7'/'d1', 'upcoming', 'pct90'/'pct95'/'one-seat-left'/'pct100', "
+                  "'suspended', or 'invoice'."
     )
     period_key = models.CharField(
         max_length=32,
-        help_text="The deadline (expiry/suspension) or month (limit warnings) this notice was about; \
+        help_text="The deadline (expiry/suspension) or semester (limit notices) this notice was about; \
             a new value re-arms the threshold."
     )
     sent_on = models.DateField(auto_now_add=True)

@@ -68,20 +68,16 @@ the filter looks inert: it only takes effect when the search button is pressed a
 
 <script>
 $( document ).ready(function() {
-    // Attach the event to the document and delegate it to elements with ids starting with 'btn_quick_text'
-    $(document).on('click', '[id^=btn_quick_text]', function () {
-        var msg = ' {{ quick_reply_text }} ';
+    // The quick reply buttons: the site-wide one and the quest's own (#161). Each carries its text,
+    // sanitized, in data-quick-reply, and the reply box here is plain text, so the text goes in as
+    // its HTML source, which the comment renders once sent. Delegated from the document, so it
+    // reaches every row's buttons. Read with .attr(), since .data() would turn text like "true" or
+    // "12" into other types. An empty text (a quest without one, #2114) adds nothing.
+    $(document).on('click', '[id^=btn_quick_text], [id^=btn_quest_quick_text]', function () {
+        var text = $(this).attr('data-quick-reply');
+        if (!text) return;
         var textarea = $($(this).data('target')).find('textarea');
-        textarea.val(textarea.val() + msg);
-    });
-
-    // Quest-specific quick reply (#161): the text lives in the button's data-quick-reply attribute.
-    // Read with .attr() (not .data(), which would type-coerce values like "true"/"null"/numbers).
-    $(document).on('click', '[id^=btn_quest_quick_text]', function () {
-        var raw = $(this).attr('data-quick-reply');
-        if (!raw) return;  // no quest-specific text set (#2114): the button still shows, but pastes nothing
-        var textarea = $($(this).data('target')).find('textarea');
-        textarea.val(textarea.val() + ' ' + raw + ' ');
+        textarea.val(textarea.val() + ' ' + text + ' ');
     });
 
 });

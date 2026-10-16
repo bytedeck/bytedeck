@@ -1,5 +1,6 @@
 {% extends "quest_manager/base.html" %}
 {% load utility_tags %}
+{% load profile_tags %}
 
 {% block heading_inner %}Completion Statuses{% endblock %}
 
@@ -69,9 +70,9 @@
     <thead>
       <tr>
         <th>Status</th>
-        <th class="text-right">My blocks <small class="text-muted">({{ totals.my_blocks }})</small></th>
-        <th class="text-right">Current <small class="text-muted">({{ totals.current }})</small></th>
-        <th class="text-right">All <small class="text-muted">({{ totals.active }})</small></th>
+        <th class="text-right" title="{% people_list_description 'yours' %}">Yours <small class="text-muted">({{ totals.my_blocks }})</small></th>
+        <th class="text-right" title="{% people_list_description 'current' %}">Current <small class="text-muted">({{ totals.current }})</small></th>
+        <th class="text-right" title="{% people_list_description 'all' %}">All <small class="text-muted">({{ totals.active }})</small></th>
       </tr>
     </thead>
     <tbody>
@@ -90,11 +91,11 @@
 
   <h3>Status by Student</h3>
 
-  {# Which group of students the table below lists (issue #1973). #}
+  {# Which group of students the table below lists (issue #1973), named as on the Students page (#2136). #}
   <div class="btn-group" role="group" aria-label="Which students to show" style="margin-bottom: 10px;">
-    <a href="?scope=my_blocks" role="button" class="btn btn-{% if scope == 'my_blocks' %}primary{% else %}default{% endif %}">My blocks</a>
-    <a href="?scope=current" role="button" class="btn btn-{% if scope == 'current' %}primary{% else %}default{% endif %}">Current</a>
-    <a href="?scope=active" role="button" class="btn btn-{% if scope == 'active' %}primary{% else %}default{% endif %}">All</a>
+    <a href="?scope=my_blocks" role="button" title="{% people_list_description 'yours' %}" class="btn btn-{% if scope == 'my_blocks' %}primary{% else %}default{% endif %}">Yours</a>
+    <a href="?scope=current" role="button" title="{% people_list_description 'current' %}" class="btn btn-{% if scope == 'current' %}primary{% else %}default{% endif %}">Current</a>
+    <a href="?scope=active" role="button" title="{% people_list_description 'all' %}" class="btn btn-{% if scope == 'active' %}primary{% else %}default{% endif %}">All</a>
   </div>
 
   {% if user_status_list %}

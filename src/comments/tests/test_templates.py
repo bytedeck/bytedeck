@@ -1,6 +1,7 @@
 import os
 import shutil
 import tempfile
+from unittest.mock import patch
 
 from bs4 import BeautifulSoup
 from django.contrib.auth import get_user_model
@@ -10,6 +11,7 @@ from model_bakery import baker
 
 from comments.models import Comment, Document
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
+from siteconfig.models import SiteConfig
 
 User = get_user_model()
 
@@ -97,3 +99,80 @@ class CommentAttachmentsTemplateTests(ByteDeckTenantTestCase):
         self.assertEqual(len(rules), 1)
         self.assertEqual(rules[0].find_next('ul').get_text(strip=True), 'XP requested: 5')
         self.assertEqual(len(comment.select('ul.file-links > li.file-link')), 2)
+
+
+class CommentHeadingTemplateTests(ByteDeckTenantTestCase):
+    """What a teacher sees at the top of a comment: its author's name, as teachers see it, linked
+    to their profile, then in small brackets only their alias and current mark (#2807)."""
+
+    def setUp(self):
+        """A student with a preferred name and an alias comments on their submission, and a
+        teacher signs in to read it."""
+        self.student = baker.make(User, username='jdoe', first_name='Jane', last_name='Doe')
+        self.student.profile.preferred_name = 'Janey'
+        self.student.profile.alias = 'JD'
+        self.student.profile.save()
+        self.submission = baker.make('quest_manager.QuestSubmission', user=self.student)
+        self.comment = self.comment_by(self.student)
+        self.client.force_login(baker.make(User, is_staff=True))
+
+    def comment_by(self, user):
+        """Post a comment on the submission.
+
+        Args:
+            user (User): the comment's author.
+
+        Returns:
+            Comment: the posted comment.
+        """
+        return Comment.objects.create_comment(user=user, path='/some/path/', text='here is my work', target=self.submission)
+
+    def heading(self, comment):
+        """A comment's heading as the submission page draws it for the teacher.
+
+        Args:
+            comment (Comment): the comment whose heading to find.
+
+        Returns:
+            Tag: the comment's heading, parsed.
+        """
+        response = self.client.get(self.submission.get_absolute_url())
+        return BeautifulSoup(response.content, 'html.parser').find(id=f'comment-{comment.id}').find(class_='comment-heading')
+
+    def show_marks(self, shown):
+        """Turn the deck's mark display on or off."""
+        config = SiteConfig.get()
+        config.display_marks_calculation = shown
+        config.save()
+
+    def test_comments__heading_links_the_authors_name_as_teachers_see_it(self):
+        """The link to the student's profile reads as their name does to a teacher, preferred
+        name first, rather than as their username."""
+        link = self.heading(self.comment).find('a', href=self.student.profile.get_absolute_url())
+
+        self.assertEqual(link.get_text(strip=True), 'Janey (Jane) Doe')
+
+    def test_comments__brackets_hold_only_the_alias_and_the_current_mark(self):
+        """The name is in the link, so the brackets hold only what it doesn't say."""
+        self.show_marks(True)
+        # a plain function, not a MagicMock: a template won't call a mock, whose every attribute,
+        # do_not_call_in_templates included, is truthy
+        with patch('profile_manager.models.Profile.mark', new=lambda profile: 87.4):
+            brackets = self.heading(self.comment).find('small')
+
+        self.assertEqual(brackets.get_text(strip=True), '(JD, Current Mark: 87%)')
+
+    def test_comments__brackets_hold_the_alias_alone_when_the_deck_shows_no_marks(self):
+        """With marks hidden, the alias is all the brackets have to say."""
+        self.show_marks(False)
+
+        self.assertEqual(self.heading(self.comment).find('small').get_text(strip=True), '(JD)')
+
+    def test_comments__a_teachers_comment_says_teacher_in_the_brackets(self):
+        """A teacher has no mark, so their brackets say what they are."""
+        teacher_comment = self.comment_by(baker.make(User, is_staff=True, first_name='Tom', last_name='Smith'))
+
+        heading = self.heading(teacher_comment)
+
+        self.assertEqual(heading.find('a').get_text(strip=True), 'Tom Smith')
+        self.assertEqual(heading.find('small').get_text(strip=True), '(Teacher)')
