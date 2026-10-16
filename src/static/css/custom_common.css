@@ -833,6 +833,16 @@ h3.comment-heading {
     overflow-x: auto;
 }
 
+/* The editor's Insert Math button (summernote-math.js) keeps each formula's LaTeX source in a
+   span beside it, so the formula can be opened and edited again. The plugin hides that span
+   with an inline display: none, but the HTML sanitizer doesn't allow "display", so a comment
+   or a submission has lost that style by the time it's shown, and the source would sit next
+   to the formula it draws (#2874). Hiding it here covers what's already saved too, on every
+   page and inside the editor. */
+.note-math .note-latex {
+    display: none;
+}
+
 /***********ACCORDIAN COMMENTS *******************************/
 
 /* lists within list-groups */
