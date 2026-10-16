@@ -205,3 +205,13 @@ a.list-group-item-muted {
     color: #262626;
     background-color: #f5f5f5;
 }
+/* A sidebar row with a "more" menu (see .sidebar-menu-row in custom_common.css) is a div, which
+   Bootstrap gives neither a list link's text colour nor its highlight, so it takes the ones its
+   neighbouring links have (#1133). */
+.list-group-item.sidebar-menu-row:not(.active) {
+    color: #555;
+}
+
+.list-group-item.sidebar-menu-row:not(.active):hover {
+    background-color: #f5f5f5;
+}
