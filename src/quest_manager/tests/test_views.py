@@ -741,6 +741,16 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         response = self.client.post(reverse('quests:drop', args=[sub.id]), HTTP_REFERER=sub.get_absolute_url())
         self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
 
+    def test_drop__a_path_relative_next_goes_to_the_quest_list(self):
+        """A `next` that isn't a path from the site's root would be resolved against the drop's own
+        url, a page that is gone once the quest is dropped, so dropping goes to the quest list."""
+        self.client.force_login(self.test_student1)
+        sub = baker.make(QuestSubmission, user=self.test_student1)
+
+        response = self.client.post(reverse('quests:drop', args=[sub.id]), {'next': '?tab=available'})
+
+        self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
+
     def test_all_submission_pages__teacher_access_codes(self):
         """Teachers can view, flag, unflag, and skip submissions, with 404s for nonexistent ones."""
         # log in a teacher

@@ -13,12 +13,18 @@ def safe_local_url(request, url):
 
     Returns:
         str | None: `url` when it stays on this host and keeps https for a request that came in
-        over https; None otherwise, including for no url at all. Anything else would make the
-        view that redirects to it an open redirect.
+        over https, and is a path from the site's root or a full url; None otherwise, including
+        for no url at all. Another host would make the view that redirects to it an open
+        redirect. A path-relative url, such as "?tab=flagged" or "flagged/", is resolved
+        against the url the browser is on when it follows the redirect, which is the action's
+        own rather than the page the action came from.
     """
-    if url and url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
-        return url
-    return None
+    if not url or not url_has_allowed_host_and_scheme(url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return None
+    parts = urlsplit(url)
+    if not parts.netloc and not parts.path.startswith('/'):
+        return None
+    return url
 
 
 def where_from(request, avoid=()):

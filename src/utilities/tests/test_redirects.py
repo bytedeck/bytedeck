@@ -23,6 +23,13 @@ class SafeLocalUrlTest(SimpleTestCase):
         self.assertIsNone(safe_local_url(self.request, ''))
         self.assertIsNone(safe_local_url(self.request, None))
 
+    def test_safe_local_url__a_path_relative_url_is_refused(self):
+        """A url with no host that doesn't start from the site's root is resolved against the
+        action's own url when the browser follows the redirect, not the page it came from."""
+        self.assertIsNone(safe_local_url(self.request, '?tab=flagged'))
+        self.assertIsNone(safe_local_url(self.request, 'flagged/'))
+        self.assertIsNone(safe_local_url(self.request, '../approvals/'))
+
     def test_safe_local_url__https_is_not_downgraded(self):
         """For a request that came over https, an http url on this host is refused."""
         request = RequestFactory().get('/quests/', secure=True)
