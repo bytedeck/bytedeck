@@ -716,6 +716,41 @@ class SubmissionViewTests(ByteDeckTenantTestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(QuestSubmission.objects.filter(id=sub.id).exists())
 
+    def test_drop__returns_to_the_tab_it_was_dropped_from(self):
+        """Drop asks to confirm first, so the confirmation carries the page it was opened from, and
+        dropping goes back there (#2859)."""
+        self.client.force_login(self.test_student1)
+        sub = baker.make(QuestSubmission, user=self.test_student1)
+        in_progress = reverse('quests:inprogress')
+
+        confirm = self.client.get(reverse('quests:drop', args=[sub.id]), HTTP_REFERER=in_progress)
+        self.assertContains(confirm, f'<input type="hidden" name="next" value="{in_progress}">', html=True)
+
+        response = self.client.post(reverse('quests:drop', args=[sub.id]), {'next': in_progress})
+        self.assertRedirects(response, in_progress, fetch_redirect_response=False)
+
+    def test_drop__never_returns_to_the_dropped_submissions_page(self):
+        """Dropped from its own page, the quest's page is gone with it, so dropping goes to the
+        quest list instead."""
+        self.client.force_login(self.test_student1)
+        sub = baker.make(QuestSubmission, user=self.test_student1)
+
+        confirm = self.client.get(reverse('quests:drop', args=[sub.id]), HTTP_REFERER=sub.get_absolute_url())
+        self.assertIsNone(confirm.context['next'])
+
+        response = self.client.post(reverse('quests:drop', args=[sub.id]), HTTP_REFERER=sub.get_absolute_url())
+        self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
+
+    def test_drop__a_path_relative_next_goes_to_the_quest_list(self):
+        """A `next` that isn't a path from the site's root would be resolved against the drop's own
+        url, a page that is gone once the quest is dropped, so dropping goes to the quest list."""
+        self.client.force_login(self.test_student1)
+        sub = baker.make(QuestSubmission, user=self.test_student1)
+
+        response = self.client.post(reverse('quests:drop', args=[sub.id]), {'next': '?tab=available'})
+
+        self.assertRedirects(response, reverse('quests:quests'), fetch_redirect_response=False)
+
     def test_all_submission_pages__teacher_access_codes(self):
         """Teachers can view, flag, unflag, and skip submissions, with 404s for nonexistent ones."""
         # log in a teacher
@@ -2280,6 +2315,18 @@ class QuestBulkEditViewTests(ByteDeckTenantTestCase):
         self.quest1.refresh_from_db()
         self.assertFalse(self.quest1.published)
 
+    def test_bulk_edit__returns_to_the_tab_it_was_taken_on(self):
+        """Publishing from the Drafts tab leaves the teacher on the Drafts tab, in bulk edit mode
+        as they were (#2859)."""
+        drafts_tab = reverse("quests:drafts") + "?bulk_edit=1"
+
+        response = self.client.post(self.url, {
+            "selected_quests[]": [self.quest1.id],
+            "action": "publish",
+        }, HTTP_REFERER=drafts_tab)
+
+        self.assertRedirects(response, drafts_tab, fetch_redirect_response=False)
+
     def test_bulk_edit__publishes_unpublished_quests(self):
         """
         Should mark unpublished quests as published and clear the editor.
@@ -3825,6 +3872,25 @@ class HideQuestViewTests(ByteDeckTenantTestCase):
         self.assertEqual(self.test_student.profile.get_hidden_quests_as_list(), [])
 
 
+    def test_hide__returns_to_the_tab_it_was_taken_on(self):
+        """Hiding a quest from a tab leaves the student on that tab (#2859)."""
+        self.client.force_login(self.test_student)
+        tab = reverse('quests:completed')
+
+        response = self.client.get(reverse('quests:hide', args=[self.quest.pk]), HTTP_REFERER=tab)
+
+        self.assertRedirects(response, tab, fetch_redirect_response=False)
+
+    def test_unhide__returns_to_the_page_it_was_taken_on(self):
+        """Unhiding a quest leaves the student where they unhid it."""
+        self.client.force_login(self.test_student)
+        page = self.quest.get_absolute_url()
+
+        response = self.client.get(reverse('quests:unhide', args=[self.quest.pk]), HTTP_REFERER=page)
+
+        self.assertRedirects(response, page, fetch_redirect_response=False)
+
+
 class FlagSubmissionViewTests(ByteDeckTenantTestCase):
     """Tests flagging a submission for follow up, and unflagging it again.
 
@@ -3890,6 +3956,38 @@ class FlagSubmissionViewTests(ByteDeckTenantTestCase):
         self.assert404('quests:unflag', args=[0])
 
 
+    def test_unflag__returns_to_the_tab_it_was_taken_on(self):
+        """Unflagging on the Flagged tab leaves the teacher on the Flagged tab, not the first
+        tab of Quest Approvals (#2859)."""
+        self.submission.flagged_by = self.test_teacher
+        self.submission.save()
+        self.client.force_login(self.test_teacher)
+        flagged_tab = reverse('quests:flagged')
+
+        response = self.client.get(reverse('quests:unflag', args=[self.submission.pk]), HTTP_REFERER=flagged_tab)
+
+        self.assertRedirects(response, flagged_tab, fetch_redirect_response=False)
+
+    def test_flag__returns_to_the_page_it_was_taken_on(self):
+        """Flagging leaves the teacher where they flagged it."""
+        self.client.force_login(self.test_teacher)
+        page = self.submission.get_absolute_url()
+
+        response = self.client.get(reverse('quests:flag', args=[self.submission.pk]), HTTP_REFERER=page)
+
+        self.assertRedirects(response, page, fetch_redirect_response=False)
+
+    def test_unflag__goes_to_quest_approvals_without_a_page_on_this_site_to_return_to(self):
+        """With no referring page, or one on another site, unflagging goes to Quest Approvals."""
+        self.client.force_login(self.test_teacher)
+        url = reverse('quests:unflag', args=[self.submission.pk])
+
+        for referer in ({}, {'HTTP_REFERER': 'https://elsewhere.example/'}):
+            with self.subTest(referer):
+                response = self.client.get(url, **referer)
+                self.assertRedirects(response, reverse('quests:approvals'), fetch_redirect_response=False)
+
+
 class SkipQuestViewTests(ByteDeckTenantTestCase):
     """Tests skipping a quest, which approves it as a transfer: done, but worth no XP.
 
@@ -3941,6 +4039,15 @@ class SkipQuestViewTests(ByteDeckTenantTestCase):
         self.assertTrue(self.submission.is_completed)
         self.assertTrue(self.submission.is_approved)
         self.assertSuccessMessage(response)
+
+    def test_skip__returns_to_the_tab_it_was_taken_on(self):
+        """A teacher skipping a submission from a Quest Approvals tab stays on that tab (#2859)."""
+        self.client.force_login(self.test_teacher)
+        in_progress_tab = reverse('quests:in_progress')
+
+        response = self.client.post(reverse('quests:skip', args=[self.submission.pk]), HTTP_REFERER=in_progress_tab)
+
+        self.assertRedirects(response, in_progress_tab, fetch_redirect_response=False)
 
     def test_skip__keeps_the_students_draft_comment(self):
         """Skipping leaves the student's unsubmitted draft comment on the submission (#2431).
