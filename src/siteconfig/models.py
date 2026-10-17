@@ -181,6 +181,12 @@ class SiteConfig(models.Model):
         help_text="Check this if you want to have the quest that have been waiting the longest to appear on top of the list."
     )
 
+    submission_comments_oldest_first = models.BooleanField(
+        verbose_name="Sort the comments on a submission with oldest on top", default=False, db_default=False,
+        help_text="Check this if you want a submission's comments listed in the order they were written, so the thread reads "
+                  "from the first hand-in down to the latest reply. By default the newest comment is on top."
+    )
+
     display_marks_calculation = models.BooleanField(
         verbose_name="Use mark percentages", default=False,
         help_text='By default, the site only uses XP.  Check this if you also want to use percentages for student marks. \
