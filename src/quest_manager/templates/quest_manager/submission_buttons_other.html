@@ -24,20 +24,15 @@
         <i class="fa fa-fw fa-share"></i></a>
     </button>
 
+      {% url 'quests:unflag' s.id as unflag_url %}
       {% if not s.flagged_by %}
         <a href="#" class="btn btn-default btn-flag-submission" role="button"
             title="FLAG this quest for future follow up.  It will appear under the flagged tab. This does not leave a comment or approve the quest."
-            data-sub-id="{{s.id}}">
+            data-sub-id="{{s.id}}" data-unflag-url="{{ unflag_url }}">
             <i class="fa fa-fw fa-flag-o" ></i>
         </a>
       {% else %}
-        <a href="{% url 'quests:unflag' s.id %}" class="btn btn-default" role="button"
-            title="UNFLAG this quest">
-          <span class="fa-stack fa-sm" style="font-size:0.63em;">
-            <i class="fa fa-flag-o fa-stack-1x"></i>
-            <i class="fa fa-ban fa-stack-2x" style="color: tomato"></i>
-          </span>
-        </a>
+        {% include "quest_manager/snippets/unflag_button.html" %}
       {% endif %}
     {% endif %}
   </div>
