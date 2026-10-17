@@ -1,0 +1,5 @@
+/* Screenshots are mostly white, like the page: a thin border and rounded corners set them apart. */
+.md-typeset img {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+}
