@@ -2917,6 +2917,10 @@ def ajax_delete_draft_attachment(request, document_id):
         storage, file_name = document.docfile.storage, document.docfile.name
         document.delete()
         transaction.on_commit(lambda: storage.delete(file_name))
+        # The draft's other files share the removed one's folder (#2861). A replacement chosen
+        # under the same name would be stored at the removed file's address, which the CDN can
+        # still be serving, so they move to a new folder for it to join.
+        submission.draft_comment.move_attachments_to_new_folder()
         return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
 
 

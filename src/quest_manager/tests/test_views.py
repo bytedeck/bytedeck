@@ -10,6 +10,7 @@ or they could be moved into a `test_urls.py` module.
 
 """
 
+import posixpath
 import re
 
 from bs4 import BeautifulSoup
@@ -7875,6 +7876,25 @@ class DeleteDraftAttachmentViewTests(ByteDeckTenantTestCase):
 
         self.assertQuerySetEqual(self.submission.draft_comment.document_set.all(), [kept])
         self.assertIn("keep-this", response.json()['draft_attachments_html'])
+
+    def test_ajax_delete_draft_attachment__a_replacement_joins_the_other_files_at_a_new_address(self):
+        """A student removes the stylesheet their page links to and attaches a corrected one. The
+        rest of the draft's files move to a new folder, and the replacement joins them there: still
+        beside the page (#2861), but not at the removed file's address, which the CDN can go on
+        serving for up to a day (#2805)."""
+        page = self.attach(self.submission, "index.html")
+        stylesheet = self.attach(self.submission, "style.css")
+        removed_address = stylesheet.docfile.name
+        self.assertEqual(posixpath.dirname(removed_address), posixpath.dirname(page.docfile.name))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.delete(stylesheet.id)
+        replacement = self.attach(self.submission, "style.css")
+
+        page.refresh_from_db()
+        self.assertEqual(posixpath.dirname(replacement.docfile.name), posixpath.dirname(page.docfile.name))
+        self.assertNotEqual(replacement.docfile.name, removed_address)
+        self.assertEqual(posixpath.basename(replacement.docfile.name), "style.css")
 
     def test_ajax_delete_draft_attachment__another_students_attachment_is_404(self):
         """A student can only remove their own files: the document has to hang off a draft of
