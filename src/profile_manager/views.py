@@ -17,6 +17,7 @@ from django.views.generic.edit import UpdateView, FormView, DeleteView
 
 from hackerspace_online.decorators import staff_member_required
 from siteconfig.models import SiteConfig
+from utilities.redirects import redirect_back
 
 from .models import Profile
 from .forms import ProfileForm, UserForm
@@ -1001,10 +1002,13 @@ def comment_ban(request, profile_id, toggle=False):
 
 
 def redirect_to_previous_page(request):
-    # http://stackoverflow.com/questions/12758786/redirect-return-to-same-previous-page-in-django
-    return redirect(request.META.get('HTTP_REFERER', '/'))
-    #
-    # if '/profiles/all/' in request.META['HTTP_REFERER']:
-    #     return redirect('profiles:profile_list')
-    # else:
-    #     return redirect('profiles:profile_list_current')
+    """Send staff back to the student list or profile a toggle was clicked on.
+
+    Args:
+        request: the toggle's request.
+
+    Returns:
+        HttpResponseRedirect: to the page it came from, when that is on this site, or to the
+        site's home page (see ``utilities.redirects.redirect_back``).
+    """
+    return redirect_back(request, '/')
