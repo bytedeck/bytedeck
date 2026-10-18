@@ -1435,8 +1435,8 @@ class CourseStudent(models.Model):
         old course, the work would belong to no course the student holds and be shared out
         between all of them. So the work is moved first, in the same transaction as the save,
         and the post_save receivers that work out the student's mark again find it where it now
-        counts. A save limited to other fields (``update_fields`` without ``course``) leaves
-        the saved course as it is, so it moves nothing.
+        counts. A save limited to other fields (``update_fields`` naming neither ``course`` nor
+        its column, ``course_id``) leaves the saved course as it is, so it moves nothing.
 
         Args:
             *args: passed through to ``Model.save``.
@@ -1447,7 +1447,7 @@ class CourseStudent(models.Model):
         """
         update_fields = kwargs.get('update_fields')
         with transaction.atomic():
-            if update_fields is None or 'course' in update_fields:
+            if update_fields is None or {'course', 'course_id'} & set(update_fields):
                 self.carry_work_to_new_course()
             super().save(*args, **kwargs)
 

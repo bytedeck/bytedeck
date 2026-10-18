@@ -1718,6 +1718,26 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         submission.refresh_from_db()
         self.assertEqual(submission.course, art)
 
+    def test_save__changing_only_the_course_moves_its_work_by_field_or_column_name(self):
+        """A save limited to the course moves its work whether ``update_fields`` names the field
+        (``course``) or its column (``course_id``), since Django writes the course either way."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        games = baker.make(Course, title='Game Design 12')
+        drama = baker.make(Course, title='Drama 12')
+        registration = self._register(student, art)
+        submission = self._approved(student, xp=40, course=art)
+
+        registration.course = games
+        registration.save(update_fields=['course'])
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, games)
+
+        registration.course = drama
+        registration.save(update_fields=['course_id'])
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, drama)
+
     def test_save__changing_the_course_leaves_work_another_registration_still_counts(self):
         """A student registered in the same course twice, in two groups, still holds it after
         one of them changes course, and the work assigned to it keeps counting toward the one
