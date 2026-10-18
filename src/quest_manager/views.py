@@ -8,7 +8,6 @@ from datetime import datetime, timezone as dt_timezone
 from django.utils.html import escape, format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -42,6 +41,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.redirects import redirect_back, safe_local_url, where_from
 from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
@@ -324,9 +324,8 @@ class CategoryPublish(View):
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
-        next_url = request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        next_url = safe_local_url(request, request.POST.get('next'))
+        if next_url:
             return redirect(next_url)
         return redirect(category)
 
@@ -627,7 +626,8 @@ class QuestBulkEditView(UserPassesTestMixin, View):
     GET requests redirect to the main quest list with bulk edit mode enabled.
 
     POST requests perform the specified bulk action on the selected quests and
-    redirect back to the quest list with a success or error message.
+    redirect back to the page they were posted from (see `post`) with a success or
+    error message.
 
     Permissions:
         Only users passing `is_staff_or_TA` check are allowed.
@@ -692,17 +692,17 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             - 'selected_quests[]': A list of quest IDs to act upon.
             - 'action': The bulk action to perform (e.g., "delete", "publish").
 
-        Redirects to the quest list view with a success or warning message.
-
         Returns:
-            HttpResponseRedirect: Redirect to the quest list page with feedback.
+            HttpResponseRedirect: back to the page the form was posted from, such as the quest
+            list's tab in bulk edit mode, with a success or warning message; to the quest list
+            when that page isn't on this site or isn't known (see utilities.redirects).
         """
         quest_ids = request.POST.getlist("selected_quests[]")
         action = request.POST.get("action")
 
         if not quest_ids:
             messages.warning(request, "No quests selected.")
-            return redirect("quests:quests")
+            return redirect_back(request, "quests:quests")
         if action in ["unarchive", "delete"]:
             # Include archived quests for delete and unarchive actions because
             # those target quests excluded from the default queryset.
@@ -735,7 +735,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             )
             messages.success(request, f"{count} quest(s) unarchived.")
 
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:quests")
 
 
 @method_decorator(staff_member_required, name="dispatch")
@@ -1423,11 +1423,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             request that came in over https; None otherwise, which includes a form that posted
             no `next` at all. Anything else would make this view an open redirect.
         """
-        next_url = self.request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
-            return next_url
-        return None
+        return safe_local_url(self.request, self.request.POST.get('next'))
 
     def form_valid(self):
         """Send the teacher back where they were once their decision is recorded.
@@ -2701,6 +2697,16 @@ def start(request, quest_id):
 @non_public_only_view
 @login_required
 def hide(request, quest_id):
+    """Add a quest to the user's hidden quests.
+
+    Args:
+        request: the HttpRequest.
+        quest_id: the id of the Quest to hide.
+
+    Returns:
+        HttpResponseRedirect: back to the page the quest was hidden from, or to the quest list
+        when that page isn't on this site or isn't known (see utilities.redirects).
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
     request.user.profile.hide_quest(quest_id)
 
@@ -2709,12 +2715,23 @@ def hide(request, quest_id):
         format_html("<strong>{}</strong> has been added to your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:quests")
+    return redirect_back(request, "quests:quests")
 
 
 @non_public_only_view
 @login_required
 def unhide(request, quest_id):
+    """Take a quest off the user's hidden quests.
+
+    Args:
+        request: the HttpRequest.
+        quest_id: the id of the Quest to unhide.
+
+    Returns:
+        HttpResponseRedirect: back to the page the quest was unhidden from, or to every
+        available quest when that page isn't on this site or isn't known (see
+        utilities.redirects).
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
     request.user.profile.unhide_quest(quest_id)
 
@@ -2723,7 +2740,7 @@ def unhide(request, quest_id):
         format_html("<strong>{}</strong> has been removed from your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:available_all")
+    return redirect_back(request, "quests:available_all")
 
 
 @login_required
@@ -2740,7 +2757,9 @@ def skip(request, submission_id):
         submission_id: the id of the QuestSubmission to transfer.
 
     Returns:
-        An HttpResponseRedirect to the approvals queue for staff, or to the student's quests.
+        An HttpResponseRedirect back to the page the submission was skipped from; when that
+        page isn't on this site or isn't known (see utilities.redirects), to the approvals
+        queue for staff, or to the student's quests.
 
     Raises:
         Http404: when the requester may not skip this submission.
@@ -2787,9 +2806,7 @@ def skip(request, submission_id):
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
         )
-        if request.user.is_staff:
-            return redirect("quests:approvals")
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:approvals" if request.user.is_staff else "quests:quests")
     else:
         raise Http404
 
@@ -2900,6 +2917,10 @@ def ajax_delete_draft_attachment(request, document_id):
         storage, file_name = document.docfile.storage, document.docfile.name
         document.delete()
         transaction.on_commit(lambda: storage.delete(file_name))
+        # The draft's other files share the removed one's folder (#2861). A replacement chosen
+        # under the same name would be stored at the removed file's address, which the CDN can
+        # still be serving, so they move to a new folder for it to join.
+        submission.draft_comment.move_attachments_to_new_folder()
         return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
 
 
@@ -3111,6 +3132,18 @@ def ajax_save_draft(request):
 @non_public_only_view
 @login_required
 def drop(request, submission_id):
+    """Ask the user to confirm dropping a quest, then delete its submission.
+
+    Args:
+        request: the HttpRequest; a GET shows the confirmation, a POST drops the quest.
+        submission_id: the id of the QuestSubmission to drop.
+
+    Returns:
+        HttpResponse: the confirmation, carrying the page it was opened from as `next`.
+        HttpResponseRedirect: once dropped, back to that page, or to the quest list when it is
+        the submission's own page, isn't on this site or isn't known (see utilities.redirects);
+        to the quest list straight away for someone else's submission.
+    """
     # Submission should only be droppable when quest is still not approved
     try:
         sub = QuestSubmission.objects.get(pk=submission_id, is_approved=False)
@@ -3125,13 +3158,17 @@ def drop(request, submission_id):
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
+    # Back to the page the quest was dropped from (#2859), but never to the submission's own
+    # page or this confirmation, which are gone with it. The confirmation names the page it was
+    # opened from, since by the time Drop is pressed the browser was sent from the confirmation.
+    gone = {sub.get_absolute_url(), request.path}
     if request.method == "POST":
         if sub.draft_comment:
             sub.draft_comment.delete()
         sub.delete()
         messages.error(request, ("Quest dropped."))
-        return redirect("quests:quests")
-    return render(request, template_name, {"submission": sub})
+        return redirect_back(request, "quests:quests", avoid=gone)
+    return render(request, template_name, {"submission": sub, "next": where_from(request, avoid=gone)})
 
 
 @non_public_only_view
@@ -3261,6 +3298,16 @@ def ajax_submission_count(request):
 @non_public_only_view
 @staff_member_required
 def flag(request, submission_id):
+    """Flag a submission for the teacher's follow up.
+
+    Args:
+        request: the HttpRequest.
+        submission_id: the id of the QuestSubmission to flag.
+
+    Returns:
+        HttpResponseRedirect: back to the page it was flagged from, or to Quest Approvals when
+        that page isn't on this site or isn't known (see utilities.redirects).
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     # record who raised the flag, so it is attributable on a deck with several teachers
@@ -3275,7 +3322,7 @@ def flag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")
 
 
 @xml_http_request_required
@@ -3295,6 +3342,17 @@ def ajax_flag(request):
 @non_public_only_view
 @staff_member_required
 def unflag(request, submission_id):
+    """Take a submission's flag off.
+
+    Args:
+        request: the HttpRequest.
+        submission_id: the id of the QuestSubmission to unflag.
+
+    Returns:
+        HttpResponseRedirect: back to the page it was unflagged from, such as Quest Approvals'
+        Flagged tab, or to Quest Approvals when that page isn't on this site or isn't known
+        (see utilities.redirects).
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     sub.flagged_by = None
@@ -3308,4 +3366,4 @@ def unflag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")
