@@ -1435,10 +1435,20 @@ class CourseStudent(models.Model):
         old course, the work would belong to no course the student holds and be shared out
         between all of them. So the work is moved first, in the same transaction as the save,
         and the post_save receivers that work out the student's mark again find it where it now
-        counts.
+        counts. A save limited to other fields (``update_fields`` without ``course``) leaves
+        the saved course as it is, so it moves nothing.
+
+        Args:
+            *args: passed through to ``Model.save``.
+            **kwargs: passed through to ``Model.save``, ``update_fields`` among them.
+
+        Returns:
+            None
         """
+        update_fields = kwargs.get('update_fields')
         with transaction.atomic():
-            self.carry_work_to_new_course()
+            if update_fields is None or 'course' in update_fields:
+                self.carry_work_to_new_course()
             super().save(*args, **kwargs)
 
     def carry_work_to_new_course(self):
@@ -1449,15 +1459,30 @@ class CourseStudent(models.Model):
         keeping its course. Nor for one gaining a course where it had none: it claimed none of
         the student's work, since their unassigned work is shared between all of their courses.
         Nor for one losing its course, which leaves the work naming the old course, ready for
-        the course to be put back. And nothing moves while another of the student's
-        registrations in that semester still holds the old course, since the work still counts
-        toward that one.
+        the course to be put back. Nor for one moving to another student or semester, since the
+        work that counted toward it belongs to the student and semester it is leaving. And
+        nothing moves while another of the student's registrations in that semester still holds
+        the old course, since the work still counts toward that one.
+
+        The saved row is read locked, so two edits of the same registration at once can't both
+        decide from the course it had before either of them.
+
+        Returns:
+            None
         """
-        saved = CourseStudent.objects.filter(pk=self.pk).values('course_id', 'semester_id').first() if self.pk else None
+        if not self.pk:
+            return
+        # unordered: the model's ordering goes through the nullable semester join, and Postgres
+        # can't lock a row across one
+        saved = CourseStudent.objects.select_for_update().filter(pk=self.pk).order_by().values(
+            'user_id', 'semester_id', 'course_id',
+        ).first()
         if saved is None or saved['course_id'] in (None, self.course_id) or self.course_id is None:
             return
+        if (saved['user_id'], saved['semester_id']) != (self.user_id, self.semester_id):
+            return
 
-        work = {'user_id': self.user_id, 'semester_id': saved['semester_id'], 'course_id': saved['course_id']}
+        work = {'user_id': self.user_id, 'semester_id': self.semester_id, 'course_id': saved['course_id']}
         if CourseStudent.objects.filter(**work).exclude(pk=self.pk).exists():
             return
 

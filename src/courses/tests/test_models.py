@@ -1688,6 +1688,36 @@ class CourseStudentModelTest(ByteDeckTenantTestCase):
         earlier.refresh_from_db()
         self.assertEqual(earlier.course, art)
 
+    def test_save__moves_nothing_unless_the_course_change_is_what_is_saved(self):
+        """The work moves only when the save writes the new course, for the same student in the
+        same semester: not for a save limited to other fields, and not when the registration
+        moves to another semester or student at the same time, since the work that counted
+        toward it stays with the student and semester it came from."""
+        student = baker.make(User)
+        art = baker.make(Course, title='Digital Art 12')
+        games = baker.make(Course, title='Game Design 12')
+        registration = self._register(student, art)
+        submission = self._approved(student, xp=40, course=art)
+
+        registration.course = games
+        registration.save(update_fields=['xp_adjustment'])
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, art)
+
+        registration.semester = baker.make(Semester, status=Semester.Status.ARCHIVED)
+        registration.save()
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, art)
+
+        registration.refresh_from_db()
+        registration.course = art
+        registration.save()
+        registration.user = baker.make(User)
+        registration.course = games
+        registration.save()
+        submission.refresh_from_db()
+        self.assertEqual(submission.course, art)
+
     def test_save__changing_the_course_leaves_work_another_registration_still_counts(self):
         """A student registered in the same course twice, in two groups, still holds it after
         one of them changes course, and the work assigned to it keeps counting toward the one
