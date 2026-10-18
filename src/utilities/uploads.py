@@ -1,8 +1,28 @@
 import datetime
 import posixpath
+import re
 import secrets
 
 from django.utils.deconstruct import deconstructible
+
+
+#: The name UploadToOwnFolder gives a folder of its own: eight random hex digits.
+OWN_FOLDER_NAME = re.compile(r'^[0-9a-f]{8}$')
+
+
+def is_own_folder(path):
+    """Whether `path` ends in a folder of its own, as UploadToOwnFolder makes one.
+
+    Uploads stored before every upload got a folder of its own sit straight in their day's
+    folder, which ends in the day of the month rather than in a random name.
+
+    Args:
+        path (str): a folder's path, relative to the storage's root.
+
+    Returns:
+        bool: True when its last part is a random folder name.
+    """
+    return bool(OWN_FOLDER_NAME.match(posixpath.basename(path)))
 
 
 @deconstructible
@@ -30,10 +50,18 @@ class UploadToOwnFolder:
         """
         self.folder = folder
 
-    def __call__(self, instance, filename):
-        """Return the path an upload is stored at: the dated folder, a random folder, then its name.
+    def new_folder(self):
+        """Return a new folder of its own: today's dated folder, then a random name.
 
         The date is the server's local date, as it is for a plain ``upload_to`` string.
+
+        Returns:
+            str: the folder's path, relative to the storage's root.
+        """
+        return posixpath.join(datetime.datetime.now().strftime(self.folder), secrets.token_hex(4))
+
+    def __call__(self, instance, filename):
+        """Return the path an upload is stored at: the dated folder, a random folder, then its name.
 
         Args:
             instance: the model instance the file belongs to. Django passes it to every
@@ -43,15 +71,16 @@ class UploadToOwnFolder:
         Returns:
             str: the path, relative to the storage's root.
         """
-        return posixpath.join(datetime.datetime.now().strftime(self.folder), secrets.token_hex(4), filename)
+        return posixpath.join(self.new_folder(), filename)
 
     def __eq__(self, other):
-        """Two are the same when they use the same dated folder, which is what the migrations compare.
+        """Two are the same when they are the same kind and use the same dated folder, which is what
+        the migrations compare.
 
         Args:
             other: the object to compare with.
 
         Returns:
-            bool: True for an UploadToOwnFolder with the same dated folder.
+            bool: True for an ``upload_to`` of the same class with the same dated folder.
         """
-        return isinstance(other, UploadToOwnFolder) and self.folder == other.folder
+        return type(other) is type(self) and self.folder == other.folder
