@@ -53,11 +53,12 @@ class NavbarRankTests(ByteDeckTenantTestCase):
     def test_navbar__lists_a_rank_per_course_for_a_multicourse_student(self):
         """Every course the student holds appears in the dropdown, named, and the icon shown
         while it is closed is their highest rank."""
-        maths = self._register(baker.make(Course, title='Maths')).course
+        maths_registration = self._register(baker.make(Course, title='Maths'))
+        maths = maths_registration.course
         art = self._register(baker.make(Course, title='Art')).course
         quest = baker.make(Quest, xp=60, max_xp=-1)
         baker.make(
-            QuestSubmission, user=self.student, quest=quest, course=maths,
+            QuestSubmission, user=self.student, quest=quest, registration=maths_registration,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
         self.student.profile.xp_invalidate_cache()
@@ -2598,7 +2599,7 @@ class TestAjax_ProgressChart(ByteDeckTenantTestCase):
         baker.make(CourseStudent, user=self.student, semester=self.semester, course=art, block=baker.make(Block))
         quest = baker.make(Quest, xp=40, max_xp=-1)
         baker.make(
-            QuestSubmission, user=self.student, quest=quest, course=self.course, semester=self.semester,
+            QuestSubmission, user=self.student, quest=quest, registration=self.student_course, semester=self.semester,
             is_completed=True, is_approved=True, time_approved=datetime.datetime(2024, 1, 3, tzinfo=self.tz),
         )
         self.student.profile.xp_invalidate_cache()
@@ -2985,7 +2986,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
         quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
         baker.make(
-            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
         self.student.profile.xp_invalidate_cache()
@@ -3015,7 +3016,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
         quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
         baker.make(
-            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
         self.student.profile.xp_invalidate_cache()
@@ -3059,7 +3060,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
         quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
         baker.make(
-            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
         self.student.profile.xp_invalidate_cache()
@@ -3183,7 +3184,7 @@ class MarkCalculationsViewTests(ByteDeckTenantTestCase):
         )
         quest = baker.make('quest_manager.Quest', xp=50, max_xp=-1)
         baker.make(
-            'quest_manager.QuestSubmission', user=self.student, quest=quest, course=self.course,
+            'quest_manager.QuestSubmission', user=self.student, quest=quest, registration=self.stu_course,
             semester=SiteConfig.get().active_semester, is_completed=True, is_approved=True,
         )
         self.student.profile.xp_invalidate_cache()

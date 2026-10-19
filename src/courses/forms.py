@@ -15,6 +15,10 @@ from utilities.fa_icon_widget import FontAwesomeIconPickerWidget, FontAwesomeMod
 class XPCourseChoiceMixin:
     """Asks the student which of their courses this submission's XP counts toward (issue #2440).
 
+    The form's ``registration`` field offers the student's course registrations, each shown as
+    its course. The work is filed against the registration rather than the course, so it stays
+    with that registration if a teacher later changes its course (issue #2875).
+
     They can also decline to choose: "split evenly between my courses" is the first option and
     the one selected by default, so a student who ignores the question gets the even split that
     every submission used to get.
@@ -40,14 +44,17 @@ class XPCourseChoiceMixin:
                 or one where the student is picked on the form itself and so is not yet known.
         """
         super().__init__(*args, **kwargs)
-        registrations = CourseStudent.objects.current_courses(student) if student else None
-        courses = Course.objects.filter(id__in=registrations.values_list('course_id', flat=True)) if student else None
+        # a registration with no course has nothing to show the student, so it is not offered
+        registrations = (
+            CourseStudent.objects.current_courses(student).filter(course__isnull=False).select_related('course')
+            if student else None
+        )
 
-        if not student or not SiteConfig.get().students_choose_xp_course or courses.count() < 2:
-            del self.fields['course']
+        if not student or not SiteConfig.get().students_choose_xp_course or registrations.count() < 2:
+            del self.fields['registration']
             return
 
-        field = self.fields['course']
+        field = self.fields['registration']
         field.label = self.label
         # the label asks the whole question, so a line of help text under it would only repeat it
         field.help_text = ''
@@ -64,7 +71,8 @@ class XPCourseChoiceMixin:
         # student who does not think about the question gets the old behaviour. Assigning the
         # queryset last hands the choices, empty label included, to the widget set above.
         field.empty_label = self.split_evenly_label
-        field.queryset = courses
+        field.queryset = registrations
+        field.label_from_instance = lambda registration: str(registration.course)
 
 
 class NoScriptTagDatePickerInput(DatePickerInput):

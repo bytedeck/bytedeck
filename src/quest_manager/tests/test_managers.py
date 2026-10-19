@@ -1164,30 +1164,34 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         xp = QuestSubmission.objects.calculate_xp_to_date(self.student, datetime(2017, 10, 12, tzinfo=timezone.utc))
         self.assertEqual(xp, 3)
 
-    def _approved_on(self, date, xp, course=None, quest=None, max_xp=-1):
+    def _approved_on(self, date, xp, registration=None, quest=None, max_xp=-1):
         """Give the student an approved, XP-granting submission approved on `date`."""
         quest = quest if quest is not None else baker.make(Quest, xp=xp, max_xp=max_xp, max_repeats=-1)
         return baker.make(
-            QuestSubmission, user=self.student, quest=quest, course=course,
+            QuestSubmission, user=self.student, quest=quest, registration=registration,
             semester=self.active_semester, is_completed=True, is_approved=True, time_approved=date,
         )
 
-    def test_xp_by_course_series__answers_each_date_with_what_had_been_earned_by_then(self):
+    def _registration(self):
+        """Register the student in another course this semester, and return the registration."""
+        return baker.make(CourseStudent, user=self.student, semester=self.active_semester, course=baker.make(Course))
+
+    def test_xp_by_registration_series__answers_each_date_with_what_had_been_earned_by_then(self):
         """Each date gets the split as it stood then, which is what plots a course's line
         through the semester (issue #2459)."""
-        maths = baker.make(Course)
-        art = baker.make(Course)
+        maths = self._registration()
+        art = self._registration()
         monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
-        self._approved_on(monday, xp=10, course=maths)
-        self._approved_on(monday + timedelta(days=2), xp=25, course=art)
+        self._approved_on(monday, xp=10, registration=maths)
+        self._approved_on(monday + timedelta(days=2), xp=25, registration=art)
 
-        series = QuestSubmission.objects.xp_by_course_series(
+        series = QuestSubmission.objects.xp_by_registration_series(
             self.student, [monday - timedelta(days=1), monday, monday + timedelta(days=2)])
 
-        self.assertEqual([entry.by_course for entry in series], [{}, {maths.id: 10}, {maths.id: 10, art.id: 25}])
+        self.assertEqual([entry.by_registration for entry in series], [{}, {maths.id: 10}, {maths.id: 10, art.id: 25}])
         self.assertEqual([entry.total for entry in series], [0, 10, 35])
 
-    def test_xp_by_course_series__caps_a_repeatable_quest_at_each_date(self):
+    def test_xp_by_registration_series__caps_a_repeatable_quest_at_each_date(self):
         """A quest's max_xp caps what it was worth *as of that date*, so a repeatable quest
         that crosses its cap partway through is worth its cap from then on rather than the sum
         of its submissions. That is why each date is capped afresh instead of the series being
@@ -1197,40 +1201,40 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         for day in range(3):
             self._approved_on(monday + timedelta(days=day), xp=10, quest=quest)
 
-        series = QuestSubmission.objects.xp_by_course_series(
+        series = QuestSubmission.objects.xp_by_registration_series(
             self.student, [monday + timedelta(days=day) for day in range(3)])
 
         self.assertEqual([entry.total for entry in series], [10, 15, 15])
-        self.assertEqual([entry.by_course for entry in series], [{None: 10}, {None: 15}, {None: 15}])
+        self.assertEqual([entry.by_registration for entry in series], [{None: 10}, {None: 15}, {None: 15}])
 
-    def test_xp_by_course_series__shares_a_capped_quest_between_the_courses_it_was_put_against(self):
+    def test_xp_by_registration_series__shares_a_capped_quest_between_the_courses_it_was_put_against(self):
         """A repeatable quest spread across two courses cannot earn more than one kept in a
         single course, so its cap is applied to the quest as a whole and each course credited
         in proportion to what it was assigned."""
-        maths = baker.make(Course)
-        art = baker.make(Course)
+        maths = self._registration()
+        art = self._registration()
         monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
         quest = baker.make(Quest, xp=10, max_xp=15, max_repeats=-1)
-        self._approved_on(monday, xp=10, quest=quest, course=maths)
-        self._approved_on(monday, xp=10, quest=quest, course=art)
+        self._approved_on(monday, xp=10, quest=quest, registration=maths)
+        self._approved_on(monday, xp=10, quest=quest, registration=art)
 
-        [entry] = QuestSubmission.objects.xp_by_course_series(self.student, [monday])
+        [entry] = QuestSubmission.objects.xp_by_registration_series(self.student, [monday])
 
         self.assertEqual(entry.total, 15)
-        self.assertEqual(entry.by_course, {maths.id: 7.5, art.id: 7.5})
+        self.assertEqual(entry.by_registration, {maths.id: 7.5, art.id: 7.5})
 
-    def test_xp_by_course_series__leaves_out_a_submission_with_no_approval_time(self):
+    def test_xp_by_registration_series__leaves_out_a_submission_with_no_approval_time(self):
         """An approved submission with no approval time belongs to no date, the same as
         calculate_xp_to_date() leaves it out, so it counts toward no date's figure."""
         monday = datetime(2024, 1, 8, tzinfo=timezone.utc)
         self._approved_on(None, xp=10)
 
-        [entry] = QuestSubmission.objects.xp_by_course_series(self.student, [monday])
+        [entry] = QuestSubmission.objects.xp_by_registration_series(self.student, [monday])
 
         self.assertEqual(entry.total, 0)
-        self.assertEqual(entry.by_course, {})
+        self.assertEqual(entry.by_registration, {})
 
-    def test_xp_by_course_series__costs_the_same_however_many_dates(self):
+    def test_xp_by_registration_series__costs_the_same_however_many_dates(self):
         """Reading the submissions once is the point of the series: charting a course asks for
         a whole semester of class days at a time, and what it costs must not grow with them
         (issue #2459). Pinned as a comparison rather than an absolute count, so the guard
@@ -1240,9 +1244,9 @@ class QuestSubmissionManagerTest(ByteDeckTenantTestCase):
         dates = [monday + timedelta(days=day) for day in range(20)]
 
         with CaptureQueriesContext(connection) as one_date:
-            QuestSubmission.objects.xp_by_course_series(self.student, dates[:1])
+            QuestSubmission.objects.xp_by_registration_series(self.student, dates[:1])
         with CaptureQueriesContext(connection) as every_date:
-            QuestSubmission.objects.xp_by_course_series(self.student, dates)
+            QuestSubmission.objects.xp_by_registration_series(self.student, dates)
 
         self.assertEqual(len(every_date), len(one_date))
 

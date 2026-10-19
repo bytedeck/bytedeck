@@ -1595,7 +1595,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # a badge granted alongside a quest counts toward whichever course the student put
             # that quest against, so the badge and the work it recognises land together (#2440)
             new_assertion = BadgeAssertion.objects.create_assertion(
-                self.submission.user, badge, self.request.user, course=self.submission.course
+                self.submission.user, badge, self.request.user, registration=self.submission.registration
             )
             messages.success(self.request, format_html(
                 "{} {} granted to {}",
@@ -2461,9 +2461,11 @@ def complete(request, submission_id):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")
         # the form asks only a student who has courses to choose between (XPCourseChoiceMixin)
-        if "course" in form.fields:
-            course = form.cleaned_data.get("course")
-            choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
+        if "registration" in form.fields:
+            registration = form.cleaned_data.get("registration")
+            choices.append(
+                f"XP counts toward: {escape(registration.course)}" if registration else "XP split evenly between my courses"
+            )
     # They sit below a rule, apart from what the student wrote, with the comment's attached
     # files following them (comments/comments.html draws no second rule above those).
     choices_html = (
@@ -2556,9 +2558,9 @@ def complete(request, submission_id):
         # an auto-approved quest lands in the right course straight away (issue #2440).
         # Assigned whatever they picked, "split evenly" (None) included: a submission a teacher
         # returned carries its earlier choice, and redoing it has to be able to change that
-        # choice back. The form is seeded with the current course, so this writes back what the
+        # choice back. The form is seeded with the current choice, so this writes back what the
         # student was actually shown.
-        submission.course = form.cleaned_data.get('course')
+        submission.registration = form.cleaned_data.get('registration')
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
@@ -3233,7 +3235,7 @@ def submission(request, submission_id=None, quest_id=None):
 
         # show the course this already counts toward, so a student returning to the page sees
         # their earlier choice rather than the form offering to reset it (issue #2440)
-        initial = {"comment_text": sub.draft_comment.text, "course": sub.course}
+        initial = {"comment_text": sub.draft_comment.text, "registration": sub.registration}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp

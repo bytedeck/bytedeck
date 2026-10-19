@@ -363,7 +363,7 @@ def assertion_create(request, user_id, badge_id):
         new_ass = form.save(commit=False)
         BadgeAssertion.objects.create_assertion(
             new_ass.user, new_ass.badge, transfer=new_ass.do_not_grant_xp,
-            course=form.cleaned_data.get('course'),
+            registration=form.cleaned_data.get('registration'),
         )
         messages.success(request, format_html(
             "{} {} granted to {}",
