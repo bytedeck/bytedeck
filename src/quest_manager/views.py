@@ -1487,7 +1487,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
                 + "</span>"
             )
-            blank_comment_text = "<p>(no comment added)</p>"
+            # nothing stands in: a comment with no text of its own carries a file or a badge,
+            # since one with none of the three is never sent (see has_nothing_to_send)
+            blank_comment_text = ""
         elif "return_button" in self.request.POST:
             note_verb = "returned"
             icon = (
@@ -1531,6 +1533,29 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """ quick helper function to check if any of the valid buttons exist in POST request """
         valid_buttons = ["approve_button", "comment_button", "return_button", "skip_button"]
         return any(btype in self.request.POST for btype in valid_buttons)
+
+    def has_nothing_to_send(self):
+        """Whether the Comment button was pressed with nothing to send (#2882).
+
+        Approving, returning and skipping are messages in themselves, so with no comment the
+        deck's stand-in text goes with them. A comment is only its content: with no text, no
+        file and no badge, it would tell the student their teacher had commented and show them
+        nothing.
+
+        Only the attachments field's files are saved with a comment, so a file posted under any
+        other name is nothing to send.
+
+        Returns:
+            bool: True for the Comment button with an empty reply, no attachment and no badge.
+        """
+        if "comment_button" not in self.request.POST:
+            return False
+        badges = self.form.cleaned_data.get("award") or self.form.cleaned_data.get("awards")
+        return (
+            is_empty_html(self.form.cleaned_data.get("comment_text"))
+            and not self.request.FILES.getlist("attachments")
+            and not badges
+        )
 
     # misc.
     def get_notification_kwargs(self):
@@ -1668,6 +1693,15 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         self.form = self.get_form()
 
         if self.form.is_valid():
+            if self.has_nothing_to_send():
+                # The form doesn't validate, with the reason on its comment box. It's shown as the
+                # staff form the submission's page draws, wherever Comment was pressed, since the
+                # Approvals page's quick reply has no room for an error of its own.
+                self.form = SubmissionFormStaff(self.request.POST, self.request.FILES)
+                self.form.is_valid()
+                self.form.add_error("comment_text", "Write a comment or attach a file, then press Comment.")
+                return self.form_invalid()
+
             notification_kwargs = self.get_notification_kwargs()
 
             #
@@ -1690,7 +1724,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             comment_new = Comment.objects.create_comment(
                 user=self.request.user,
                 path=self.submission.get_absolute_url(),
-                text=in_a_paragraph(comment_text) + comment_text_addition,
+                # no empty paragraph for a comment that is only a file or a badge
+                text=(in_a_paragraph(comment_text) if comment_text else "") + comment_text_addition,
                 target=self.submission,
             )
 

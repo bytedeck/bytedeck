@@ -38,6 +38,7 @@ from courses.models import Block, Rank, Semester
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase, generate_form_data
 from notifications.models import Notification
 from quest_manager.models import Category, CommonData, Quest, QuestSubmission, XPItem
+from quest_manager.forms import SubmissionFormStaff
 from prerequisites.models import Prereq
 from siteconfig.models import SiteConfig
 from comments.models import Comment, Document
@@ -2209,7 +2210,9 @@ class SubmissionCompleteViewTest(ByteDeckTenantTestCase):
         from comments.models import Comment
         comment = Comment.objects.all_with_target_object(self.sub).first()
         self.assertTrue(comment)  # not empty or None etc
-        comment_files_qs = comment.document_set.all()
+        # in the order they were attached: Document has no default ordering, so without one the
+        # database may hand the two back either way round
+        comment_files_qs = comment.document_set.order_by('pk')
         self.assertEqual(comment_files_qs.count(), 2)
 
         # make sure they are the correct
@@ -6011,6 +6014,82 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         # get_user_target is a weird method, should probably be refactored or better documented...
         notification_for_sub = Notification.objects.get_user_target(self.test_student, self.sub)
         self.assertTrue(notification_for_sub)  # not empty or blank or None...etc
+
+    def test_approve__comment_button_with_nothing_to_send_does_not_validate(self):
+        """Comment pressed with nothing in the reply, no file and no badge leaves no comment and
+        no notification (#2882), where it used to tell the student their teacher had commented and
+        show them "(no comment added)". The form doesn't validate: the submission's page comes
+        back with the staff form, and the reason on its comment box."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '<p><br></p>'},  # an untouched editor
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'quest_manager/submission.html')
+        form = response.context['submission_form']
+        self.assertIsInstance(form, SubmissionFormStaff)
+        self.assertEqual(form.errors['comment_text'], ['Write a comment or attach a file, then press Comment.'])
+        self.assertContains(response, 'Write a comment or attach a file, then press Comment.')
+        self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.test_student).exists())
+
+    def test_approve__comment_button_with_a_file_outside_the_attachments_field_does_not_validate(self):
+        """Only the attachments field's files are saved with a comment, so a file posted under any
+        other name doesn't count as something to send: the comment is still refused, rather than
+        going out empty with nothing attached."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '', 'not_attachments': create_two_test_files()[:1]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['submission_form'].errors['comment_text'],
+            ['Write a comment or attach a file, then press Comment.'],
+        )
+        self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
+
+    def test_approve__comment_button_with_nothing_to_send_keeps_the_tab_to_return_to(self):
+        """Pressed in a quick reply on Quest Approvals, the refused comment still carries the tab
+        it came from, so the comment written next returns there."""
+        approvals_tab = reverse('quests:submitted_all')
+
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '', 'next': approvals_tab},
+        )
+
+        self.assertEqual(response.context['next'], approvals_tab)
+
+    def test_approve__comment_button_with_only_a_file_sends_the_file(self):
+        """A file on its own is something to send: the comment carries it, with no stand-in text
+        beside it."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '', 'attachments': create_two_test_files()[:1]},
+        )
+
+        self.assertRedirects(response, reverse('quests:approvals'))
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertEqual(comment.document_set.count(), 1)
+        self.assertEqual(comment.text, '')
+        self.assertTrue(Notification.objects.filter(recipient=self.test_student).exists())
+
+    def test_approve__comment_button_with_only_a_badge_says_the_badge_was_granted(self):
+        """A badge on its own is something to send too: the comment says it was granted, with no
+        stand-in text before it."""
+        badge = baker.make(Badge, name="Bonus Badge")
+
+        self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '', 'award': badge.id},
+        )
+
+        comment = Comment.objects.all_with_target_object(self.sub).get()
+        self.assertIn('Bonus Badge', comment.text)
+        self.assertNotIn('no comment added', comment.text)
+        self.assertNotIn('<p></p>', comment.text)
 
     def test_approve__return_button_marks_returned(self):
         """ The return button should mark the submission as returned """
