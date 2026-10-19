@@ -10,7 +10,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent
+from courses.models import Block, Course, CourseStudent, Grade
 from siteconfig.models import SiteConfig
 from quest_manager.forms import (
     TA_RESTRICTED_QUEST_FIELDS,
@@ -315,6 +315,24 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
         form = SubmissionQuickReplyFormStudent(student=self.student)
 
         self.assertEqual(form.fields['registration'].label_from_instance(self.maths_registration), 'Maths')
+
+    def test_registration_field__names_the_group_of_a_course_held_twice(self):
+        """A student registered in the same course twice (in two groups) would otherwise see two
+        identical choices, so each names its group; a course held once is shown as it is."""
+        student = baker.make(User)
+        for name, grade in (('A block', None), ('B block', baker.make(Grade))):
+            baker.make(
+                CourseStudent, user=student, course=self.maths, block=baker.make(Block, name=name),
+                semester=self.semester, grade_fk=grade,
+            )
+        baker.make(CourseStudent, user=student, course=self.art, block=baker.make(Block, name='C block'), semester=self.semester)
+
+        field = SubmissionQuickReplyFormStudent(student=student).fields['registration']
+
+        self.assertCountEqual(
+            [field.label_from_instance(registration) for registration in field.queryset],
+            ['Maths (A block)', 'Maths (B block)', 'Art'],
+        )
 
     def test_registration_field__leaves_out_a_registration_with_no_course(self):
         """A registration with no course has nothing to show the student, so it is not offered,

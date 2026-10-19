@@ -1,3 +1,5 @@
+from collections import Counter
+
 from django import forms
 from django.forms.formsets import DELETION_FIELD_NAME
 
@@ -46,7 +48,7 @@ class XPCourseChoiceMixin:
         super().__init__(*args, **kwargs)
         # a registration with no course has nothing to show the student, so it is not offered
         registrations = (
-            CourseStudent.objects.current_courses(student).filter(course__isnull=False).select_related('course')
+            CourseStudent.objects.current_courses(student).filter(course__isnull=False).select_related('course', 'block')
             if student else None
         )
 
@@ -72,7 +74,13 @@ class XPCourseChoiceMixin:
         # queryset last hands the choices, empty label included, to the widget set above.
         field.empty_label = self.split_evenly_label
         field.queryset = registrations
-        field.label_from_instance = lambda registration: str(registration.course)
+        # a student registered in the same course twice (in two groups, say) would otherwise see
+        # two identical choices, so those name their group as well
+        counts = Counter(registration.course_id for registration in registrations)
+        field.label_from_instance = lambda registration: (
+            f'{registration.course} ({registration.block})'
+            if counts[registration.course_id] > 1 and registration.block else str(registration.course)
+        )
 
 
 class NoScriptTagDatePickerInput(DatePickerInput):
