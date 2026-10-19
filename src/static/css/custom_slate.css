@@ -308,3 +308,13 @@ input, textarea {
     color: #ffffff;
     background-color: #272b30;
 }
+/* A sidebar row with a "more" menu (see .sidebar-menu-row in custom_common.css) is a div, which
+   Bootstrap gives neither a list link's text colour nor its highlight, so it takes the ones its
+   neighbouring links have (#1133). */
+.list-group-item.sidebar-menu-row:not(.active) {
+    color: #c8c8c8;
+}
+
+.list-group-item.sidebar-menu-row:not(.active):hover {
+    background-color: #3e444c;
+}
