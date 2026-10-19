@@ -14,7 +14,7 @@ from utilities.fields import ALL_SCRIPT_CAPABLE_TYPES, RestrictedMultiFileFormFi
 from tags.forms import BootstrapTaggitSelect2Widget
 
 from courses.forms import XPCourseChoiceMixin
-from courses.models import Course
+from courses.models import CourseStudent
 
 from .models import Category, Quest, CommonData
 
@@ -335,7 +335,7 @@ class SubmissionForm(XPCourseChoiceMixin, SanitizeCommentTextMixin, forms.Form):
 
     # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
     # is worded the same here as it is when a teacher grants a badge
-    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
 
     # The comment's attachments take web files (SVG, HTML, XML, MHTML) as well as everything
     # else. This is the general "hand in your work" box, which whole cohorts of existing quests
@@ -453,7 +453,7 @@ class SubmissionQuickReplyFormStudent(XPCourseChoiceMixin, SanitizeCommentTextMi
 
     # label, help text, widget and choices all come from XPCourseChoiceMixin, so the question
     # is worded the same here as it is when a teacher grants a badge
-    course = forms.ModelChoiceField(queryset=Course.objects.none(), required=False)
+    registration = forms.ModelChoiceField(queryset=CourseStudent.objects.none(), required=False)
 
 
 class CommonDataForm(forms.ModelForm):

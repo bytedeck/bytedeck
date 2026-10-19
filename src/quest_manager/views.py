@@ -8,7 +8,6 @@ from datetime import datetime, timezone as dt_timezone
 from django.utils.html import escape, format_html
 from django.utils.decorators import method_decorator
 from django.utils import timezone
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic.list import ListView
 
 import numpy as np
@@ -42,6 +41,7 @@ from questions.forms import QuestionSubmissionFormsetFactory
 from questions.models import QuestionSubmission, QuestionType
 from questions.utils import discard_draft_question_submissions, save_draft_file_answers, sync_draft_question_submissions
 from courses.models import Block, CourseStudent
+from utilities.redirects import redirect_back, safe_local_url, where_from
 from utilities.html import in_a_paragraph, is_empty_html, link_list, link_to
 from utilities.sorting import apply_sort, resolve_sort
 
@@ -324,9 +324,8 @@ class CategoryPublish(View):
 
         # only follow `next` if it stays on this host (and keeps https when the
         # request came in over https), to prevent open redirects and downgrades
-        next_url = request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        next_url = safe_local_url(request, request.POST.get('next'))
+        if next_url:
             return redirect(next_url)
         return redirect(category)
 
@@ -627,7 +626,8 @@ class QuestBulkEditView(UserPassesTestMixin, View):
     GET requests redirect to the main quest list with bulk edit mode enabled.
 
     POST requests perform the specified bulk action on the selected quests and
-    redirect back to the quest list with a success or error message.
+    redirect back to the page they were posted from (see `post`) with a success or
+    error message.
 
     Permissions:
         Only users passing `is_staff_or_TA` check are allowed.
@@ -692,17 +692,17 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             - 'selected_quests[]': A list of quest IDs to act upon.
             - 'action': The bulk action to perform (e.g., "delete", "publish").
 
-        Redirects to the quest list view with a success or warning message.
-
         Returns:
-            HttpResponseRedirect: Redirect to the quest list page with feedback.
+            HttpResponseRedirect: back to the page the form was posted from, such as the quest
+            list's tab in bulk edit mode, with a success or warning message; to the quest list
+            when that page isn't on this site or isn't known (see utilities.redirects).
         """
         quest_ids = request.POST.getlist("selected_quests[]")
         action = request.POST.get("action")
 
         if not quest_ids:
             messages.warning(request, "No quests selected.")
-            return redirect("quests:quests")
+            return redirect_back(request, "quests:quests")
         if action in ["unarchive", "delete"]:
             # Include archived quests for delete and unarchive actions because
             # those target quests excluded from the default queryset.
@@ -735,7 +735,7 @@ class QuestBulkEditView(UserPassesTestMixin, View):
             )
             messages.success(request, f"{count} quest(s) unarchived.")
 
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:quests")
 
 
 @method_decorator(staff_member_required, name="dispatch")
@@ -1423,11 +1423,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             request that came in over https; None otherwise, which includes a form that posted
             no `next` at all. Anything else would make this view an open redirect.
         """
-        next_url = self.request.POST.get('next')
-        if next_url and url_has_allowed_host_and_scheme(
-                next_url, allowed_hosts={self.request.get_host()}, require_https=self.request.is_secure()):
-            return next_url
-        return None
+        return safe_local_url(self.request, self.request.POST.get('next'))
 
     def form_valid(self):
         """Send the teacher back where they were once their decision is recorded.
@@ -1491,7 +1487,9 @@ class ApproveView(NonPublicOnlyViewMixin, View):
                 + "<i class='fa fa-comment-o fa-stack-2x text-info'></i>"
                 + "</span>"
             )
-            blank_comment_text = "<p>(no comment added)</p>"
+            # nothing stands in: a comment with no text of its own carries a file or a badge,
+            # since one with none of the three is never sent (see has_nothing_to_send)
+            blank_comment_text = ""
         elif "return_button" in self.request.POST:
             note_verb = "returned"
             icon = (
@@ -1535,6 +1533,29 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         """ quick helper function to check if any of the valid buttons exist in POST request """
         valid_buttons = ["approve_button", "comment_button", "return_button", "skip_button"]
         return any(btype in self.request.POST for btype in valid_buttons)
+
+    def has_nothing_to_send(self):
+        """Whether the Comment button was pressed with nothing to send (#2882).
+
+        Approving, returning and skipping are messages in themselves, so with no comment the
+        deck's stand-in text goes with them. A comment is only its content: with no text, no
+        file and no badge, it would tell the student their teacher had commented and show them
+        nothing.
+
+        Only the attachments field's files are saved with a comment, so a file posted under any
+        other name is nothing to send.
+
+        Returns:
+            bool: True for the Comment button with an empty reply, no attachment and no badge.
+        """
+        if "comment_button" not in self.request.POST:
+            return False
+        badges = self.form.cleaned_data.get("award") or self.form.cleaned_data.get("awards")
+        return (
+            is_empty_html(self.form.cleaned_data.get("comment_text"))
+            and not self.request.FILES.getlist("attachments")
+            and not badges
+        )
 
     # misc.
     def get_notification_kwargs(self):
@@ -1599,7 +1620,7 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             # a badge granted alongside a quest counts toward whichever course the student put
             # that quest against, so the badge and the work it recognises land together (#2440)
             new_assertion = BadgeAssertion.objects.create_assertion(
-                self.submission.user, badge, self.request.user, course=self.submission.course
+                self.submission.user, badge, self.request.user, registration=self.submission.registration
             )
             messages.success(self.request, format_html(
                 "{} {} granted to {}",
@@ -1672,6 +1693,15 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         self.form = self.get_form()
 
         if self.form.is_valid():
+            if self.has_nothing_to_send():
+                # The form doesn't validate, with the reason on its comment box. It's shown as the
+                # staff form the submission's page draws, wherever Comment was pressed, since the
+                # Approvals page's quick reply has no room for an error of its own.
+                self.form = SubmissionFormStaff(self.request.POST, self.request.FILES)
+                self.form.is_valid()
+                self.form.add_error("comment_text", "Write a comment or attach a file, then press Comment.")
+                return self.form_invalid()
+
             notification_kwargs = self.get_notification_kwargs()
 
             #
@@ -1694,7 +1724,8 @@ class ApproveView(NonPublicOnlyViewMixin, View):
             comment_new = Comment.objects.create_comment(
                 user=self.request.user,
                 path=self.submission.get_absolute_url(),
-                text=in_a_paragraph(comment_text) + comment_text_addition,
+                # no empty paragraph for a comment that is only a file or a badge
+                text=(in_a_paragraph(comment_text) if comment_text else "") + comment_text_addition,
                 target=self.submission,
             )
 
@@ -2465,9 +2496,11 @@ def complete(request, submission_id):
             xp_requested = form.cleaned_data.get("xp_requested")
             choices.append(f"XP requested: {xp_requested}")
         # the form asks only a student who has courses to choose between (XPCourseChoiceMixin)
-        if "course" in form.fields:
-            course = form.cleaned_data.get("course")
-            choices.append(f"XP counts toward: {escape(course)}" if course else "XP split evenly between my courses")
+        if "registration" in form.fields:
+            registration = form.cleaned_data.get("registration")
+            choices.append(
+                f"XP counts toward: {escape(registration.course)}" if registration else "XP split evenly between my courses"
+            )
     # They sit below a rule, apart from what the student wrote, with the comment's attached
     # files following them (comments/comments.html draws no second rule above those).
     choices_html = (
@@ -2560,9 +2593,9 @@ def complete(request, submission_id):
         # an auto-approved quest lands in the right course straight away (issue #2440).
         # Assigned whatever they picked, "split evenly" (None) included: a submission a teacher
         # returned carries its earlier choice, and redoing it has to be able to change that
-        # choice back. The form is seeded with the current course, so this writes back what the
+        # choice back. The form is seeded with the current choice, so this writes back what the
         # student was actually shown.
-        submission.course = form.cleaned_data.get('course')
+        submission.registration = form.cleaned_data.get('registration')
 
         submission.mark_completed(xp_requested)
         if not submission.quest.verification_required:
@@ -2701,6 +2734,16 @@ def start(request, quest_id):
 @non_public_only_view
 @login_required
 def hide(request, quest_id):
+    """Add a quest to the user's hidden quests.
+
+    Args:
+        request: the HttpRequest.
+        quest_id: the id of the Quest to hide.
+
+    Returns:
+        HttpResponseRedirect: back to the page the quest was hidden from, or to the quest list
+        when that page isn't on this site or isn't known (see utilities.redirects).
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
     request.user.profile.hide_quest(quest_id)
 
@@ -2709,12 +2752,23 @@ def hide(request, quest_id):
         format_html("<strong>{}</strong> has been added to your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:quests")
+    return redirect_back(request, "quests:quests")
 
 
 @non_public_only_view
 @login_required
 def unhide(request, quest_id):
+    """Take a quest off the user's hidden quests.
+
+    Args:
+        request: the HttpRequest.
+        quest_id: the id of the Quest to unhide.
+
+    Returns:
+        HttpResponseRedirect: back to the page the quest was unhidden from, or to every
+        available quest when that page isn't on this site or isn't known (see
+        utilities.redirects).
+    """
     quest = get_object_or_404(Quest, pk=quest_id)
     request.user.profile.unhide_quest(quest_id)
 
@@ -2723,7 +2777,7 @@ def unhide(request, quest_id):
         format_html("<strong>{}</strong> has been removed from your list of hidden quests.", link_to(quest)),
     )
 
-    return redirect("quests:available_all")
+    return redirect_back(request, "quests:available_all")
 
 
 @login_required
@@ -2740,7 +2794,9 @@ def skip(request, submission_id):
         submission_id: the id of the QuestSubmission to transfer.
 
     Returns:
-        An HttpResponseRedirect to the approvals queue for staff, or to the student's quests.
+        An HttpResponseRedirect back to the page the submission was skipped from; when that
+        page isn't on this site or isn't known (see utilities.redirects), to the approvals
+        queue for staff, or to the student's quests.
 
     Raises:
         Http404: when the requester may not skip this submission.
@@ -2787,9 +2843,7 @@ def skip(request, submission_id):
         messages.success(
             request, ("Transfer Successful.  No XP was granted for this quest.")
         )
-        if request.user.is_staff:
-            return redirect("quests:approvals")
-        return redirect("quests:quests")
+        return redirect_back(request, "quests:approvals" if request.user.is_staff else "quests:quests")
     else:
         raise Http404
 
@@ -2900,6 +2954,10 @@ def ajax_delete_draft_attachment(request, document_id):
         storage, file_name = document.docfile.storage, document.docfile.name
         document.delete()
         transaction.on_commit(lambda: storage.delete(file_name))
+        # The draft's other files share the removed one's folder (#2861). A replacement chosen
+        # under the same name would be stored at the removed file's address, which the CDN can
+        # still be serving, so they move to a new folder for it to join.
+        submission.draft_comment.move_attachments_to_new_folder()
         return JsonResponse({"draft_attachments_html": render_draft_attachments(submission)})
 
 
@@ -3111,6 +3169,18 @@ def ajax_save_draft(request):
 @non_public_only_view
 @login_required
 def drop(request, submission_id):
+    """Ask the user to confirm dropping a quest, then delete its submission.
+
+    Args:
+        request: the HttpRequest; a GET shows the confirmation, a POST drops the quest.
+        submission_id: the id of the QuestSubmission to drop.
+
+    Returns:
+        HttpResponse: the confirmation, carrying the page it was opened from as `next`.
+        HttpResponseRedirect: once dropped, back to that page, or to the quest list when it is
+        the submission's own page, isn't on this site or isn't known (see utilities.redirects);
+        to the quest list straight away for someone else's submission.
+    """
     # Submission should only be droppable when quest is still not approved
     try:
         sub = QuestSubmission.objects.get(pk=submission_id, is_approved=False)
@@ -3125,13 +3195,17 @@ def drop(request, submission_id):
     template_name = "quest_manager/questsubmission_confirm_delete.html"
     if sub.user != request.user and not request.user.is_staff:
         return redirect("quests:quests")
+    # Back to the page the quest was dropped from (#2859), but never to the submission's own
+    # page or this confirmation, which are gone with it. The confirmation names the page it was
+    # opened from, since by the time Drop is pressed the browser was sent from the confirmation.
+    gone = {sub.get_absolute_url(), request.path}
     if request.method == "POST":
         if sub.draft_comment:
             sub.draft_comment.delete()
         sub.delete()
         messages.error(request, ("Quest dropped."))
-        return redirect("quests:quests")
-    return render(request, template_name, {"submission": sub})
+        return redirect_back(request, "quests:quests", avoid=gone)
+    return render(request, template_name, {"submission": sub, "next": where_from(request, avoid=gone)})
 
 
 @non_public_only_view
@@ -3196,7 +3270,7 @@ def submission(request, submission_id=None, quest_id=None):
 
         # show the course this already counts toward, so a student returning to the page sees
         # their earlier choice rather than the form offering to reset it (issue #2440)
-        initial = {"comment_text": sub.draft_comment.text, "course": sub.course}
+        initial = {"comment_text": sub.draft_comment.text, "registration": sub.registration}
         if sub.quest.xp_can_be_entered_by_students and not sub.is_approved:
             # Use the xp requested from the submission. Default to quest xp
             initial["xp_requested"] = sub.xp_requested or sub.quest.xp
@@ -3261,6 +3335,16 @@ def ajax_submission_count(request):
 @non_public_only_view
 @staff_member_required
 def flag(request, submission_id):
+    """Flag a submission for the teacher's follow up.
+
+    Args:
+        request: the HttpRequest.
+        submission_id: the id of the QuestSubmission to flag.
+
+    Returns:
+        HttpResponseRedirect: back to the page it was flagged from, or to Quest Approvals when
+        that page isn't on this site or isn't known (see utilities.redirects).
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     # record who raised the flag, so it is attributable on a deck with several teachers
@@ -3275,7 +3359,7 @@ def flag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")
 
 
 @xml_http_request_required
@@ -3295,6 +3379,17 @@ def ajax_flag(request):
 @non_public_only_view
 @staff_member_required
 def unflag(request, submission_id):
+    """Take a submission's flag off.
+
+    Args:
+        request: the HttpRequest.
+        submission_id: the id of the QuestSubmission to unflag.
+
+    Returns:
+        HttpResponseRedirect: back to the page it was unflagged from, such as Quest Approvals'
+        Flagged tab, or to Quest Approvals when that page isn't on this site or isn't known
+        (see utilities.redirects).
+    """
     sub = get_object_or_404(QuestSubmission, pk=submission_id)
 
     sub.flagged_by = None
@@ -3308,4 +3403,4 @@ def unflag(request, submission_id):
         ),
     )
 
-    return redirect("quests:approvals")
+    return redirect_back(request, "quests:approvals")

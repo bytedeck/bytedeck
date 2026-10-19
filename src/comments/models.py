@@ -1,14 +1,17 @@
 import os
+import posixpath
 import warnings
+from functools import partial
 
 from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
 from django.conf import settings
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import models, transaction
+from django.utils.deconstruct import deconstructible
 from django.utils.html import escape
 from utilities.html import urlize
-from utilities.uploads import UploadToOwnFolder
+from utilities.uploads import UploadToOwnFolder, is_own_folder
 
 from notifications.models import deleted_object_receiver
 from django.db.models.signals import pre_delete
@@ -241,6 +244,34 @@ class Comment(models.Model):
         self.full_clean()
         self.save()
 
+    def move_attachments_to_new_folder(self):
+        """Move this comment's attached files, together, into a new folder of their own (#2861).
+
+        Called once one of them has been removed. A student who removes their `style.css` and
+        attaches a corrected one would otherwise store it at the address the removed one had,
+        where the CDN can go on serving the removed file for up to a day (#2805). With the rest
+        moved to a new folder, the replacement joins them at an address no file has had, and
+        their page still finds its stylesheet beside it.
+
+        Each old file is deleted once the transaction commits, as a removed file is: storage
+        isn't transactional, so a rollback must not leave a row naming a file already gone. A
+        file already missing from storage has nothing to copy, and its row is pointed at the new
+        folder all the same: a row left naming the old folder would offer it to the next upload
+        (see ``Document.shared_folder``), putting a replacement back at the removed file's address.
+        """
+        field = Document._meta.get_field('docfile')
+        folder = field.upload_to.new_folder()
+        for document in self.document_set.order_by('pk'):
+            storage, old_name = document.docfile.storage, document.docfile.name
+            new_name = posixpath.join(folder, posixpath.basename(old_name))
+            if storage.exists(old_name):
+                with storage.open(old_name) as stored:
+                    new_name = storage.save(new_name, stored, max_length=field.max_length)
+                transaction.on_commit(partial(storage.delete, old_name))
+            document.docfile.name = new_name
+            document.full_clean()
+            document.save(update_fields=['docfile'])
+
     def get_children(self):
         if self.is_child():
             return None
@@ -263,12 +294,58 @@ class Comment(models.Model):
 
 
 # Document Handler ############################################
+@deconstructible
+class UploadToCommentFolder(UploadToOwnFolder):
+    """An ``upload_to`` that keeps the files attached to one comment together, in a folder of
+    their own (#2861).
+
+    A student handing in a web page attaches its HTML file and the stylesheet it links to by a
+    relative address, such as `style.css`, and the page finds it only if both sit in the same
+    folder. So a file joins the folder of the files already on its comment, whether it came with
+    them or with a later draft save, and only a comment's first file gets a new folder.
+    """
+
+    def __call__(self, instance, filename):
+        """Return the path an upload is stored at: its comment's folder, or a new one, then its name.
+
+        Args:
+            instance (Document): the document the file belongs to.
+            filename (str): the name the file was uploaded under.
+
+        Returns:
+            str: the path, relative to the storage's root.
+        """
+        folder = instance.shared_folder()
+        if folder:
+            return posixpath.join(folder, filename)
+        return super().__call__(instance, filename)
+
+
 class Document(models.Model):
     # 255, not FileField's default 100: the path holds a dated folder and a folder of its own
     # before the name, and a name too long for the rest is cut short (see chosen_name)
-    docfile = models.FileField(upload_to=UploadToOwnFolder('documents/%Y/%m/%d'), max_length=255)
+    docfile = models.FileField(upload_to=UploadToCommentFolder('documents/%Y/%m/%d'), max_length=255)
     # null=True is an artifect from on_delete=models.SET_NULL, can't change until all null values are removed?
     comment = models.ForeignKey(Comment, on_delete=models.CASCADE, null=True)
+
+    def shared_folder(self):
+        """Return the folder this document's file shares with the other files on its comment.
+
+        Only a folder of their own counts. Files stored before every upload got one sit straight
+        in their day's folder (#2805), among everyone's uploads from that day, and a new file
+        must not join them there.
+
+        Returns:
+            str | None: the folder, relative to the storage's root, or None when the comment has
+            no other file in one, or the document is on no comment.
+        """
+        if self.comment_id is None:
+            return None
+        names = Document.objects.filter(comment_id=self.comment_id).exclude(pk=self.pk).order_by('pk')
+        for name in names.values_list('docfile', flat=True):
+            if is_own_folder(posixpath.dirname(name)):
+                return posixpath.dirname(name)
+        return None
 
     def is_valid_portfolio_type(self):
         # import here to prevent circular imports!
