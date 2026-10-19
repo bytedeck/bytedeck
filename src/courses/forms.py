@@ -336,6 +336,24 @@ class ExcludedDateForm(forms.ModelForm):
         return excluded_date.save()  # formset saves the rest in its own function
 
 
+def class_days_changed(semester_form, excluded_date_formsets):
+    """Whether saving a semester's form and its excluded dates changes which days it has class on,
+    and so what share of it has passed: what every mark in it is worked out from (#2899).
+
+    Args:
+        semester_form (ModelForm): the semester's own form, which holds its first and last day.
+        excluded_date_formsets (iterable of BaseFormSet): the formsets of its excluded dates.
+
+    Returns:
+        bool: True when the first or last day changed, or an excluded date was added, edited or
+        removed.
+    """
+    return (
+        bool({'first_day', 'last_day'} & set(semester_form.changed_data))
+        or any(formset.has_changed() for formset in excluded_date_formsets)
+    )
+
+
 class ExcludedDateFormsetHelper(FormHelper):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

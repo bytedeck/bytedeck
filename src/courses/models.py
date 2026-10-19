@@ -730,6 +730,28 @@ class Semester(models.Model):
     def percent_complete(self):
         return self.fraction_complete() * 100.0
 
+    def refresh_cached_marks_on_commit(self):
+        """Have every current student's cached mark worked out again once this save commits.
+
+        A mark is a student's XP over the share of their semester's class days that has passed
+        (CourseStudent.calc_mark()), so moving the first or last day, or excluding a date,
+        changes every mark in the semester at once. Mark Calculations works its marks out as it
+        draws them, but the header color, the student list and the Mark Distribution chart read
+        Profile.mark_cached, which would otherwise keep the old mark until the nightly
+        recalculation or the student's next XP (#2899).
+
+        Only an open semester's registrations count toward a cached mark, so for any other
+        semester there is nothing to do. The recalculation runs in the background, since it
+        works out every current student's XP (#2081), and only once the save has committed, so
+        the worker reads the dates just saved.
+        """
+        if not self.is_open:
+            return
+        # locally, since profile_manager imports this module
+        from profile_manager.tasks import invalidate_profile_xp_cache_on_schema
+
+        transaction.on_commit(lambda: invalidate_profile_xp_cache_on_schema.apply_async(queue='default'))
+
     def get_interim1_date(self):
         return self.get_date(0.25)
 
