@@ -10,7 +10,7 @@ from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 from model_bakery import baker
 
-from courses.models import Block, Course, CourseStudent
+from courses.models import Block, Course, CourseStudent, Grade
 from siteconfig.models import SiteConfig
 from quest_manager.forms import (
     TA_RESTRICTED_QUEST_FIELDS,
@@ -292,30 +292,71 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
         cls.semester = SiteConfig.get().active_semester
         cls.maths = baker.make(Course, title='Maths')
         cls.art = baker.make(Course, title='Art')
-        for course in (cls.maths, cls.art):
+        cls.maths_registration, cls.art_registration = (
             baker.make(CourseStudent, user=cls.student, course=course, block=baker.make(Block), semester=cls.semester)
+            for course in (cls.maths, cls.art)
+        )
 
-    def test_course_field__offers_the_students_own_courses(self):
-        """The choices are the courses this student is actually taking, not every course the
-        deck runs: assigning XP to a course they are not in would be meaningless."""
-        someone_elses_course = baker.make(Course, title='Woodwork')
+    def test_registration_field__offers_the_students_own_registrations(self):
+        """The choices are the courses this student is actually taking, as their registrations,
+        not anyone else's: assigning XP to a course they are not in would be meaningless."""
+        someone_elses = baker.make(
+            CourseStudent, user=baker.make(User), course=baker.make(Course, title='Woodwork'),
+            block=baker.make(Block), semester=self.semester,
+        )
 
         form = SubmissionQuickReplyFormStudent(student=self.student)
 
-        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
-        self.assertNotIn(someone_elses_course, form.fields['course'].queryset)
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
+        self.assertNotIn(someone_elses, form.fields['registration'].queryset)
 
-    def test_course_field__offers_splitting_evenly_and_defaults_to_it(self):
+    def test_registration_field__shows_each_registration_as_its_course(self):
+        """The student is asked about courses, so each choice reads as the course it is for."""
+        form = SubmissionQuickReplyFormStudent(student=self.student)
+
+        self.assertEqual(form.fields['registration'].label_from_instance(self.maths_registration), 'Maths')
+
+    def test_registration_field__names_the_group_of_a_course_held_twice(self):
+        """A student registered in the same course twice (in two groups) would otherwise see two
+        identical choices, so each names its group; a course held once is shown as it is."""
+        student = baker.make(User)
+        for name, grade in (('A block', None), ('B block', baker.make(Grade))):
+            baker.make(
+                CourseStudent, user=student, course=self.maths, block=baker.make(Block, name=name),
+                semester=self.semester, grade_fk=grade,
+            )
+        baker.make(CourseStudent, user=student, course=self.art, block=baker.make(Block, name='C block'), semester=self.semester)
+
+        field = SubmissionQuickReplyFormStudent(student=student).fields['registration']
+
+        self.assertCountEqual(
+            [field.label_from_instance(registration) for registration in field.queryset],
+            ['Maths (A block)', 'Maths (B block)', 'Art'],
+        )
+
+    def test_registration_field__leaves_out_a_registration_with_no_course(self):
+        """A registration with no course has nothing to show the student, so it is not offered,
+        and a student whose other registration has none has only one course to choose from, so
+        is not asked at all."""
+        student = baker.make(User)
+        baker.make(CourseStudent, user=student, course=self.maths, block=baker.make(Block), semester=self.semester)
+        baker.make(CourseStudent, user=student, course=None, block=baker.make(Block), semester=self.semester)
+
+        form = SubmissionQuickReplyFormStudent(student=student)
+
+        self.assertNotIn('registration', form.fields)
+
+    def test_registration_field__offers_splitting_evenly_and_defaults_to_it(self):
         """A student can decline to pick, and that is the default: someone who ignores the
         question gets the even split every submission used to get, rather than having their
         work silently land in whichever course happened to sort first."""
         form = SubmissionQuickReplyFormStudent(student=self.student)
 
-        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
-        self.assertIsNone(form['course'].value())
-        self.assertFalse(form.fields['course'].required)
+        self.assertEqual(form.fields['registration'].empty_label, 'Split evenly between my courses')
+        self.assertIsNone(form['registration'].value())
+        self.assertFalse(form.fields['registration'].required)
 
-    def test_course_field__is_dropped_for_a_student_with_one_course(self):
+    def test_registration_field__is_dropped_for_a_student_with_one_course(self):
         """With a single course there is nothing to ask, so the student is not asked. Their
         submission stays unassigned, which for one course amounts to the same thing."""
         one_course_student = baker.make(User)
@@ -326,9 +367,9 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
 
         form = SubmissionQuickReplyFormStudent(student=one_course_student)
 
-        self.assertNotIn('course', form.fields)
+        self.assertNotIn('registration', form.fields)
 
-    def test_course_field__is_dropped_when_the_deck_turns_the_setting_off(self):
+    def test_registration_field__is_dropped_when_the_deck_turns_the_setting_off(self):
         """Staff can switch the question off, and then every student's XP goes back to being
         shared evenly, so there is nothing to ask even in two courses."""
         config = SiteConfig.get()
@@ -337,36 +378,36 @@ class XPCourseChoiceTest(ByteDeckTenantTestCase):
 
         form = SubmissionQuickReplyFormStudent(student=self.student)
 
-        self.assertNotIn('course', form.fields)
+        self.assertNotIn('registration', form.fields)
 
-    def test_course_field__is_dropped_when_no_student_is_filling_the_form_in(self):
+    def test_registration_field__is_dropped_when_no_student_is_filling_the_form_in(self):
         """A staff member commenting on someone's submission is not choosing where that
         student's XP goes."""
         form = SubmissionQuickReplyFormStudent()
 
-        self.assertNotIn('course', form.fields)
+        self.assertNotIn('registration', form.fields)
 
-    def test_course_field__is_offered_on_the_full_submission_form_too(self):
+    def test_registration_field__is_offered_on_the_full_submission_form_too(self):
         """The submission page renders SubmissionForm, so the picker has to be there and filled
         in on that one as well: it is the form most students actually see."""
         form = SubmissionForm(student=self.student)
 
-        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
-        self.assertEqual(form.fields['course'].empty_label, 'Split evenly between my courses')
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
+        self.assertEqual(form.fields['registration'].empty_label, 'Split evenly between my courses')
 
-    def test_course_field__is_dropped_on_the_staff_form(self):
+    def test_registration_field__is_dropped_on_the_staff_form(self):
         """SubmissionFormStaff extends the same base, and a teacher commenting is not choosing
         where this student's XP goes, so the field must not follow it up the inheritance chain."""
         form = SubmissionFormStaff()
 
-        self.assertNotIn('course', form.fields)
+        self.assertNotIn('registration', form.fields)
 
-    def test_course_field__is_offered_on_the_custom_xp_form_too(self):
+    def test_registration_field__is_offered_on_the_custom_xp_form_too(self):
         """A quest where the student enters their own XP asks the same question: which form
         they get depends on the quest and whether they attached a file, not on the choice."""
         form = SubmissionFormCustomXP(student=self.student)
 
-        self.assertCountEqual(form.fields['course'].queryset, [self.maths, self.art])
+        self.assertCountEqual(form.fields['registration'].queryset, [self.maths_registration, self.art_registration])
 
 
 class SubmissionAttachmentTypesTest(ByteDeckTenantTestCase):

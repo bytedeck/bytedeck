@@ -571,7 +571,7 @@ class BadgeAssertionManager(models.Manager):
     def get_assertion_ordinal(self, user, badge):
         return self.num_assertions(user, badge) + 1
 
-    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None, course=None):
+    def create_assertion(self, user, badge, issued_by=None, transfer=False, active_semester=None, registration=None):
         """Grant a badge to a student, and bring their XP up to date with it.
 
         Args:
@@ -583,8 +583,8 @@ class BadgeAssertionManager(models.Manager):
                 transferred from an earlier semester is granted.
             active_semester (int): the pk of the semester to count the badge toward. Defaults to
                 the student's own semester, and to none at all when they are registered in none.
-            course (Course): the course of theirs the badge counts toward, for a student taking
-                more than one (#2440).
+            registration (CourseStudent): the course registration of theirs the badge counts
+                toward, for a student taking more than one course (#2440).
 
         Returns:
             BadgeAssertion: the granted badge.
@@ -610,7 +610,7 @@ class BadgeAssertionManager(models.Manager):
             issued_by=issued_by,
             do_not_grant_xp=transfer,
             semester_id=active_semester,
-            course=course,
+            registration=registration,
         )
         # Granting and the XP it is worth go together, in one transaction: saving the
         # assertion queues the rebuild of this student's cache of available quests, and
@@ -646,27 +646,27 @@ class BadgeAssertionManager(models.Manager):
         ]
         return by_type
 
-    def xp_by_course(self, user):
-        """How much of this student's badge XP counts toward each of their courses.
+    def xp_by_registration(self, user):
+        """How much of this student's badge XP counts toward each of their course registrations.
 
-        A badge granted alongside a quest carries that quest's course; one granted on its own
-        carries whichever course the teacher chose, or none. Badges with no course are shared
+        A badge granted alongside a quest carries that quest's registration; one granted on its
+        own carries whichever course the teacher chose, or none. Badges with none are shared
         evenly between the student's courses, the same as unassigned quest XP (issue #2440).
 
         Args:
             user: the student whose badge XP is being divided.
 
         Returns:
-            dict: course id to XP, with None collecting everything left unassigned.
+            dict: registration id to XP, with None collecting everything left unassigned.
         """
         qs = self.get_queryset(True, user=user).grant_xp().get_user(user)
-        rows = qs.values('course').annotate(xp_sum=Sum('badge__xp'))
-        return {row['course']: row['xp_sum'] or 0 for row in rows}
+        rows = qs.values('registration').annotate(xp_sum=Sum('badge__xp'))
+        return {row['registration']: row['xp_sum'] or 0 for row in rows}
 
-    def xp_by_course_series(self, user, dates):
-        """How much of this student's badge XP counted toward each course, at each of `dates`.
+    def xp_by_registration_series(self, user, dates):
+        """How much of this student's badge XP counted toward each registration, at each of `dates`.
 
-        What xp_by_course() answers for one date, answered for a whole series off a single
+        What xp_by_registration() answers for one date, answered for a whole series off a single
         query (issue #2459). Charting a course's progress asks it once per class day, and
         asking the database that many times over is the cost this removes.
 
@@ -679,23 +679,23 @@ class BadgeAssertionManager(models.Manager):
             dates: the dates to answer for, in ascending order.
 
         Returns:
-            list[dict]: one course-id-to-XP map per date, in the order the dates were given,
-            with None collecting everything left unassigned.
+            list[dict]: one registration-id-to-XP map per date, in the order the dates were
+            given, with None collecting everything left unassigned.
         """
         assertions = self.get_queryset(True, user=user).grant_xp().get_user(user).order_by(
             'timestamp',
-        ).values('course', 'badge__xp', 'timestamp')
+        ).values('registration', 'badge__xp', 'timestamp')
 
         # one pass over the assertions and one over the dates, walking both forward together
         pending = list(assertions)
         position = 0
-        running = {}  # course -> the XP granted toward it so far
+        running = {}  # registration -> the XP granted toward it so far
         series = []
         for date in dates:
             while position < len(pending) and pending[position]['timestamp'] <= date:
                 row = pending[position]
-                course_id = row['course']
-                running[course_id] = running.get(course_id, 0) + (row['badge__xp'] or 0)
+                registration_id = row['registration']
+                running[registration_id] = running.get(registration_id, 0) + (row['badge__xp'] or 0)
                 position += 1
             series.append(dict(running))
 
@@ -731,12 +731,13 @@ class BadgeAssertion(models.Model):
                                   on_delete=models.SET_NULL)
     do_not_grant_xp = models.BooleanField(default=False, help_text='XP not counted')
     semester = models.ForeignKey('courses.Semester', null=True, blank=True, on_delete=models.SET_NULL)
-    # Which of the student's courses this badge's XP counts toward (issue #2440). Null means it
-    # was never assigned, and unassigned XP is shared evenly between their courses. A badge
-    # granted alongside a quest inherits that submission's course, so the two land together.
-    course = models.ForeignKey(
-        'courses.Course', null=True, blank=True, on_delete=models.SET_NULL,
-        help_text="The course this badge's XP counts toward.",
+    # Which of the student's course registrations this badge's XP counts toward (issue #2440).
+    # Null means it was never assigned, and unassigned XP is shared evenly between their courses.
+    # A badge granted alongside a quest inherits that submission's registration, so the two land
+    # together, and they stay with it if a teacher changes its course (issue #2875).
+    registration = models.ForeignKey(
+        'courses.CourseStudent', null=True, blank=True, on_delete=models.SET_NULL,
+        help_text="The course registration this badge's XP counts toward.",
     )
 
     objects = BadgeAssertionManager()

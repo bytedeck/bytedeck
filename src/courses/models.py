@@ -25,7 +25,7 @@ from utilities.fa_icon import FA_ICON_HELP_TEXT, FA_ICON_VALIDATOR, fa_icon_clas
 from utilities.signals import disable_for_loaddata
 
 
-def split_xp_between_registrations(registrations, total, xp_by_course):
+def split_xp_between_registrations(registrations, total, xp_by_registration):
     """Hand each of a student's registrations the XP that counts toward it.
 
     Work they assigned to one of their current courses counts wholly toward it; everything
@@ -40,8 +40,8 @@ def split_xp_between_registrations(registrations, total, xp_by_course):
             should all be one student's, and from one semester: the shared pool is split by
             how many there are.
         total (int): the student's whole deck-wide XP, including their adjustments.
-        xp_by_course (dict): course id to the XP assigned to it, with None collecting
-            everything left unassigned.
+        xp_by_registration (dict): registration id to the XP assigned to it, with None
+            collecting everything left unassigned.
 
     Returns:
         list[tuple]: (CourseStudent, xp) in the order given, the XP whole in each.
@@ -49,21 +49,16 @@ def split_xp_between_registrations(registrations, total, xp_by_course):
     if len(registrations) <= 1:
         return [(registration, total) for registration in registrations]
 
-    # Only courses the student still holds can claim XP: work assigned to a course whose
-    # registration has since been deleted has nowhere to count, so it stays in the shared
-    # pool rather than being subtracted from it and lost. A registration with no course at
-    # all is not one of those claims: unassigned XP is filed under no course too, and
-    # counting it as claimed would take the student's shared work out of the pool as well.
-    course_ids = {
-        registration.course_id for registration in registrations
-        if registration.course_id is not None
-    }
-    assigned = sum(xp for course_id, xp in xp_by_course.items() if course_id in course_ids)
+    # Only the registrations being divided between can claim XP: work assigned to one that is
+    # not among them (a registration from another semester, say) has nowhere to count here, so
+    # it stays in the shared pool rather than being subtracted from it and lost.
+    registration_ids = {registration.pk for registration in registrations}
+    assigned = sum(xp for registration_id, xp in xp_by_registration.items() if registration_id in registration_ids)
     adjustments = sum(registration.xp_adjustment for registration in registrations)
     shared = (total - assigned - adjustments) / len(registrations)
 
     exact = [
-        (xp_by_course.get(registration.course_id, 0) if registration.course_id else 0)
+        xp_by_registration.get(registration.pk, 0)
         + registration.xp_adjustment
         + shared
         for registration in registrations
@@ -1128,12 +1123,12 @@ class CourseStudentManager(models.Manager):
 
         # the total is the student's deck-wide figure: quest XP, badge XP, and every one of
         # their registrations' adjustments. Take out the parts that belong to a particular
-        # course, share what is left, and hand each registration back its own pieces.
-        xp_by_course = QuestSubmission.objects.xp_by_course(user)
-        for course_id, xp in BadgeAssertion.objects.xp_by_course(user).items():
-            xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
+        # registration, share what is left, and hand each registration back its own pieces.
+        xp_by_registration = QuestSubmission.objects.xp_by_registration(user)
+        for registration_id, xp in BadgeAssertion.objects.xp_by_registration(user).items():
+            xp_by_registration[registration_id] = xp_by_registration.get(registration_id, 0) + xp
 
-        return split_xp_between_registrations(registrations, total, xp_by_course)
+        return split_xp_between_registrations(registrations, total, xp_by_registration)
 
     def xp_across_series(self, user, registrations, dates):
         """The same division as xp_across(), answered for a whole series of dates at once.
@@ -1154,21 +1149,21 @@ class CourseStudentManager(models.Manager):
             list[list[tuple]]: one (CourseStudent, xp) list per date, in the order the dates
             were given, each in the order the registrations were given.
         """
-        quest_series = QuestSubmission.objects.xp_by_course_series(user, dates)
-        badge_series = BadgeAssertion.objects.xp_by_course_series(user, dates)
+        quest_series = QuestSubmission.objects.xp_by_registration_series(user, dates)
+        badge_series = BadgeAssertion.objects.xp_by_registration_series(user, dates)
         # every one of the student's adjustments counts toward the total being divided, the
         # same as calculate_xp() adds them into their deck-wide XP: the registrations given
         # are all of their current ones, so they are already in memory
         adjustments = sum(registration.xp_adjustment for registration in registrations)
 
         series = []
-        for quest_xp, badge_by_course in zip(quest_series, badge_series):
-            xp_by_course = dict(quest_xp.by_course)
-            for course_id, xp in badge_by_course.items():
-                xp_by_course[course_id] = xp_by_course.get(course_id, 0) + xp
+        for quest_xp, badge_by_registration in zip(quest_series, badge_series):
+            xp_by_registration = dict(quest_xp.by_registration)
+            for registration_id, xp in badge_by_registration.items():
+                xp_by_registration[registration_id] = xp_by_registration.get(registration_id, 0) + xp
 
-            total = quest_xp.total + sum(badge_by_course.values()) + adjustments
-            series.append(split_xp_between_registrations(registrations, total, xp_by_course))
+            total = quest_xp.total + sum(badge_by_registration.values()) + adjustments
+            series.append(split_xp_between_registrations(registrations, total, xp_by_registration))
 
         return series
 
