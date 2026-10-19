@@ -1013,7 +1013,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
         os.path.join(STATIC_URL, 'css/custom_summernote_widget.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+        # KaTeX's stylesheet comes from templates/head_css.html on every page
     ),
     'js_for_inplace': (
         os.path.join(STATIC_URL, 'js/fa_icons_4.7.0.js'),  # shared FA 4.7.0 icon list (window.faIcons) the faicon plugin reads
@@ -1025,7 +1025,7 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        # '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js', # included in base template
+        # KaTeX itself, and js/note-math.js, come from templates/javascript.html on every page
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-classes.js'),
         os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
@@ -1044,7 +1044,7 @@ SUMMERNOTE_CONFIG = {
         # os.path.join(STATIC_URL, 'summernote-ext-emoji-ajax/summernote-ext-emoji-ajax.css'),
         os.path.join(STATIC_URL, 'summernote-add-text-tags/summernote-add-text-tags.css'),
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.css'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.css',
+        os.path.join(STATIC_URL, 'katex/katex-0.18.1.min.css'),  # the KaTeX templates/head_css.html loads
     ),
 
     # To use external plugins,
@@ -1059,7 +1059,8 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'summernote-list-styles/summernote-list-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-styles.js'),
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
-        '//cdnjs.cloudflare.com/ajax/libs/KaTeX/0.9.0/katex.min.js',
+        os.path.join(STATIC_URL, 'katex/katex-0.18.1.min.js'),  # the KaTeX templates/javascript.html loads
+        os.path.join(STATIC_URL, 'js/note-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
         os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
