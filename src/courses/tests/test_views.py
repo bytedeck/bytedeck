@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from model_bakery import baker
 from freezegun import freeze_time
+from kombu.exceptions import OperationalError
 
 from courses.forms import CourseStudentStaffForm, ExcludedDateFormset, SemesterForm
 from courses.models import Block, Course, CourseStudent, MarkRange, Semester, Rank, ExcludedDate
@@ -1999,21 +2000,25 @@ class SemesterClassDaysCachedMarkTests(ByteDeckTenantTestCase):
         self.student.profile.refresh_from_db()
         return self.student.profile.mark_cached
 
-    def _post(self, url, data):
+    def _post(self, url, data, queueing=None):
         """Post to url, running any recalculation it queues in place once the save commits, as the
         worker would.
 
         Args:
             url (str): where to post.
             data (dict): the form data.
+            queueing: what queueing the recalculation does instead, e.g. an exception to raise.
 
         Returns:
             tuple: the response, and the mock standing in for queueing the recalculation.
         """
         from profile_manager.tasks import invalidate_profile_xp_cache_on_schema
 
-        with patch.object(invalidate_profile_xp_cache_on_schema, 'apply_async',
-                          side_effect=lambda **kwargs: invalidate_profile_xp_cache_on_schema()) as queue, \
+        if queueing is None:
+            def queueing(**kwargs):
+                return invalidate_profile_xp_cache_on_schema()
+
+        with patch.object(invalidate_profile_xp_cache_on_schema, 'apply_async', side_effect=queueing) as queue, \
                 self.captureOnCommitCallbacks(execute=True):
             response = self.client.post(url, data=data)
         return response, queue
@@ -2067,6 +2072,25 @@ class SemesterClassDaysCachedMarkTests(ByteDeckTenantTestCase):
         self.assertRedirects(response, reverse('courses:semester_list'))
         queue.assert_called_once_with(queue='default')
         self.assertEqual(self._cached_mark(), Decimal('19.5'))
+
+    def test_SemesterUpdate__task_queue_unavailable__still_saves(self):
+        """A task queue that can't take the recalculation is logged, and the save it follows
+        still succeeds: the excluded date is kept, and the cached mark waits for the nightly
+        recalculation."""
+        self.client.force_login(SiteConfig.get().deck_owner)
+
+        with self.assertLogs('django.test', level='ERROR') as logs:
+            response, queue = self._post(
+                reverse('courses:semester_update', args=[self.semester.pk]),
+                self._form_data(self.semester, excluded_dates=[datetime.date(2026, 10, 30)]),
+                queueing=OperationalError('the broker is down'),
+            )
+
+        self.assertRedirects(response, reverse('courses:semester_list'))
+        queue.assert_called_once_with(queue='default')
+        self.assertIn('the broker is down', logs.output[0])
+        self.assertTrue(self.semester.excludeddate_set.filter(date=datetime.date(2026, 10, 30)).exists())
+        self.assertEqual(self._cached_mark(), Decimal('20.0'))
 
     def test_SemesterUpdate__name_only__recalculates_nothing(self):
         """Renaming the semester leaves its class days, and so every mark, as they were, so no

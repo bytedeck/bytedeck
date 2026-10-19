@@ -744,13 +744,17 @@ class Semester(models.Model):
         semester there is nothing to do. The recalculation runs in the background, since it
         works out every current student's XP (#2081), and only once the save has committed, so
         the worker reads the dates just saved.
+
+        Queueing it is robust: the dates are saved by then, so a task queue that can't take the
+        recalculation is logged rather than turning the teacher's save into an error page. The
+        marks then catch up at the nightly recalculation.
         """
         if not self.is_open:
             return
         # locally, since profile_manager imports this module
         from profile_manager.tasks import invalidate_profile_xp_cache_on_schema
 
-        transaction.on_commit(lambda: invalidate_profile_xp_cache_on_schema.apply_async(queue='default'))
+        transaction.on_commit(lambda: invalidate_profile_xp_cache_on_schema.apply_async(queue='default'), robust=True)
 
     def get_interim1_date(self):
         return self.get_date(0.25)
