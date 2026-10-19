@@ -1,6 +1,6 @@
 from django.test import SimpleTestCase
 
-from utilities.uploads import UploadToOwnFolder
+from utilities.uploads import UploadToOwnFolder, is_own_folder
 
 
 class UploadToOwnFolderTest(SimpleTestCase):
@@ -23,3 +23,32 @@ class UploadToOwnFolderTest(SimpleTestCase):
         self.assertEqual(UploadToOwnFolder('documents/%Y'), UploadToOwnFolder('documents/%Y'))
         self.assertNotEqual(UploadToOwnFolder('documents/%Y'), UploadToOwnFolder('portfolios/%Y'))
         self.assertNotEqual(UploadToOwnFolder('documents/%Y'), 'documents/%Y')
+
+    def test_eq__a_subclass_is_not_the_same(self):
+        """A subclass decides folders differently, so swapping one in has to read as a change to
+        makemigrations even with the same dated folder."""
+        class Subclass(UploadToOwnFolder):
+            """A stand-in for an ``upload_to`` built on this one."""
+
+        self.assertNotEqual(UploadToOwnFolder('documents/%Y'), Subclass('documents/%Y'))
+
+    def test_new_folder__a_random_folder_inside_the_dated_one(self):
+        """A new folder is today's dated folder with a random name inside it, a new one each time."""
+        upload_to = UploadToOwnFolder('documents/%Y/%m/%d')
+
+        self.assertRegex(upload_to.new_folder(), r'^documents/\d{4}/\d{2}/\d{2}/[0-9a-f]{8}$')
+        self.assertNotEqual(upload_to.new_folder(), upload_to.new_folder())
+
+
+class IsOwnFolderTest(SimpleTestCase):
+    """is_own_folder, which tells a folder of its own from the day's folder older uploads sit in."""
+
+    def test_is_own_folder__a_random_folder_is(self):
+        """A folder UploadToOwnFolder made is one."""
+        self.assertTrue(is_own_folder(UploadToOwnFolder('documents/%Y/%m/%d').new_folder()))
+
+    def test_is_own_folder__a_day_folder_is_not(self):
+        """The day's folder, which older uploads sit straight in, is not: it holds everyone's files
+        from that day."""
+        self.assertFalse(is_own_folder('documents/2026/09/30'))
+        self.assertFalse(is_own_folder(''))

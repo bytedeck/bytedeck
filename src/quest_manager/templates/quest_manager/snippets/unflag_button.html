@@ -1,0 +1,11 @@
+{% comment %}
+  The Unflag button (#824): drawn for a submission that is flagged, and swapped in by
+  flag_submissions_scripts.html for the Flag button once a flag goes through, so both show the
+  same button. Expects `unflag_url`.
+{% endcomment %}
+<a href="{{ unflag_url }}" class="btn btn-default btn-unflag-submission" role="button" title="UNFLAG this quest">
+  <span class="fa-stack fa-sm unflag-icon">
+    <i class="fa fa-flag-o fa-stack-1x"></i>
+    <i class="fa fa-ban fa-stack-2x"></i>
+  </span>
+</a>

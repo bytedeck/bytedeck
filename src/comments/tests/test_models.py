@@ -12,6 +12,7 @@ from model_bakery.recipe import Recipe
 
 from announcements.models import Announcement
 from comments.models import Comment, Document, clean_html
+from utilities.uploads import is_own_folder
 from hackerspace_online.tests.utils import ByteDeckTenantTestCase
 
 User = get_user_model()
@@ -311,6 +312,139 @@ class DocumentModelTest(ByteDeckTenantTestCase):
 
         self.assertNotEqual(second.docfile.name, first_address)
         self.assertEqual(posixpath.basename(second.docfile.name), "New_Piskel_3.gif")
+
+
+class DocumentFolderTest(ByteDeckTenantTestCase):
+    """The files attached to one comment share a folder of their own, so a student's web page finds
+    the stylesheet it links to beside it (#2861)."""
+
+    def setUp(self):
+        """A comment to attach files to, and a throwaway MEDIA_ROOT to store them in."""
+        media_root = tempfile.TemporaryDirectory()
+        self.addCleanup(media_root.cleanup)
+        media_override = override_settings(MEDIA_ROOT=media_root.name)
+        media_override.enable()
+        self.addCleanup(media_override.disable)
+        self.comment = self.new_comment()
+
+    def new_comment(self):
+        """A comment by a new student, with no target, as a draft submission comment starts out.
+
+        Returns:
+            Comment: the comment.
+        """
+        return Comment.objects.create_comment(user=baker.make(get_user_model()), path="/", text="", target=None)
+
+    def attach(self, name, content=b"x", comment=None):
+        """Attach a file to a comment, as a draft save or a submit does.
+
+        Args:
+            name (str): the file's name.
+            content (bytes): the file's content.
+            comment (Comment): the comment to attach it to; this test's own when left out.
+
+        Returns:
+            Document: the stored attachment.
+        """
+        return Document.objects.create(comment=comment or self.comment, docfile=SimpleUploadedFile(name, content))
+
+    def folder(self, document):
+        """The folder a document's file is stored in.
+
+        Args:
+            document (Document): the attachment.
+
+        Returns:
+            str: its folder, relative to the storage's root.
+        """
+        return posixpath.dirname(document.docfile.name)
+
+    def test_docfile__files_on_one_comment_share_a_folder(self):
+        """A web page and its stylesheet, attached by separate draft saves, land in one folder of
+        their own, so the page's link to `style.css` finds it."""
+        page = self.attach("index.html", b"<link rel='stylesheet' href='style.css'>")
+        stylesheet = self.attach("style.css", b"body { color: teal; }")
+
+        self.assertEqual(self.folder(stylesheet), self.folder(page))
+        self.assertTrue(is_own_folder(self.folder(page)))
+        self.assertEqual(posixpath.basename(stylesheet.docfile.name), "style.css")
+
+    def test_docfile__each_comment_has_its_own_folder(self):
+        """Another comment's files, even under the same names, go in a folder of their own."""
+        mine = self.attach("index.html")
+        theirs = self.attach("index.html", comment=self.new_comment())
+
+        self.assertNotEqual(self.folder(theirs), self.folder(mine))
+
+    def test_docfile__a_file_on_no_comment_gets_its_own_folder(self):
+        """Files on no comment have nothing to share a folder with."""
+        first = Document.objects.create(docfile=SimpleUploadedFile("photo.png", b"x"))
+        second = Document.objects.create(docfile=SimpleUploadedFile("photo.png", b"x"))
+
+        self.assertNotEqual(self.folder(second), self.folder(first))
+        self.assertTrue(is_own_folder(self.folder(second)))
+
+    def test_docfile__does_not_join_a_day_folder(self):
+        """A comment whose earlier file sits straight in its day's folder, from before every
+        upload had a folder of its own, doesn't pull a new file in among everyone's uploads from
+        that day: the new file gets a folder of its own."""
+        Document.objects.create(comment=self.comment, docfile="documents/2026/09/30/index.html")
+
+        stylesheet = self.attach("style.css")
+
+        self.assertTrue(is_own_folder(self.folder(stylesheet)))
+
+    def test_move_attachments_to_new_folder__moves_them_together(self):
+        """The comment's files move, contents and names intact, into one new folder, and the old
+        files go once the transaction commits."""
+        page = self.attach("index.html", b"<p>page</p>")
+        stylesheet = self.attach("style.css", b"body {}")
+        storage, old_folder = page.docfile.storage, self.folder(page)
+        old_names = [page.docfile.name, stylesheet.docfile.name]
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self.comment.move_attachments_to_new_folder()
+
+        page.refresh_from_db()
+        stylesheet.refresh_from_db()
+        self.assertNotEqual(self.folder(page), old_folder)
+        self.assertEqual(self.folder(stylesheet), self.folder(page))
+        self.assertTrue(is_own_folder(self.folder(page)))
+        self.assertEqual(posixpath.basename(page.docfile.name), "index.html")
+        with storage.open(page.docfile.name) as moved:
+            self.assertEqual(moved.read(), b"<p>page</p>")
+        for old_name in old_names:
+            self.assertFalse(storage.exists(old_name))
+
+    def test_move_attachments_to_new_folder__keeps_the_old_files_until_the_commit(self):
+        """The old files are deleted only once the transaction commits, so a rollback can't leave a
+        row naming a file already gone."""
+        page = self.attach("index.html")
+        storage, old_name = page.docfile.storage, page.docfile.name
+
+        with self.captureOnCommitCallbacks() as callbacks:
+            self.comment.move_attachments_to_new_folder()
+
+        self.assertEqual(len(callbacks), 1)
+        self.assertTrue(storage.exists(old_name))
+
+    def test_move_attachments_to_new_folder__points_a_missing_file_at_the_new_folder_too(self):
+        """A file already gone from storage has nothing to copy, but its row moves with the rest:
+        left naming the old folder, it would offer that folder to the next upload, and a
+        replacement for the removed file would go back to its address."""
+        missing = self.attach("notes.txt")
+        page = self.attach("index.html")
+        missing.docfile.storage.delete(missing.docfile.name)
+        old_folder = self.folder(page)
+
+        self.comment.move_attachments_to_new_folder()
+        replacement = self.attach("style.css")
+
+        page.refresh_from_db()
+        missing.refresh_from_db()
+        self.assertEqual(self.folder(missing), self.folder(page))
+        self.assertNotEqual(self.folder(page), old_folder)
+        self.assertEqual(self.folder(replacement), self.folder(page))
 
 
 class CommentManagerPrefetchTest(ByteDeckTenantTestCase):
