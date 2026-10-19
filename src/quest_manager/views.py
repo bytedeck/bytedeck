@@ -1542,13 +1542,20 @@ class ApproveView(NonPublicOnlyViewMixin, View):
         file and no badge, it would tell the student their teacher had commented and show them
         nothing.
 
+        Only the attachments field's files are saved with a comment, so a file posted under any
+        other name is nothing to send.
+
         Returns:
-            bool: True for the Comment button with an empty reply, no file and no badge.
+            bool: True for the Comment button with an empty reply, no attachment and no badge.
         """
         if "comment_button" not in self.request.POST:
             return False
         badges = self.form.cleaned_data.get("award") or self.form.cleaned_data.get("awards")
-        return is_empty_html(self.form.cleaned_data.get("comment_text")) and not self.request.FILES and not badges
+        return (
+            is_empty_html(self.form.cleaned_data.get("comment_text"))
+            and not self.request.FILES.getlist("attachments")
+            and not badges
+        )
 
     # misc.
     def get_notification_kwargs(self):

@@ -6034,6 +6034,22 @@ class ApproveViewTest(ByteDeckTenantTestCase):
         self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
         self.assertFalse(Notification.objects.filter(recipient=self.test_student).exists())
 
+    def test_approve__comment_button_with_a_file_outside_the_attachments_field_does_not_validate(self):
+        """Only the attachments field's files are saved with a comment, so a file posted under any
+        other name doesn't count as something to send: the comment is still refused, rather than
+        going out empty with nothing attached."""
+        response = self.client.post(
+            reverse('quests:approve', args=[self.sub.id]),
+            data={'comment_button': True, 'comment_text': '', 'not_attachments': create_two_test_files()[:1]},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context['submission_form'].errors['comment_text'],
+            ['Write a comment or attach a file, then press Comment.'],
+        )
+        self.assertFalse(Comment.objects.all_with_target_object(self.sub).exists())
+
     def test_approve__comment_button_with_nothing_to_send_keeps_the_tab_to_return_to(self):
         """Pressed in a quick reply on Quest Approvals, the refused comment still carries the tab
         it came from, so the comment written next returns there."""
