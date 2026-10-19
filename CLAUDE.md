@@ -124,7 +124,7 @@ Celery (with `tenant-schemas-celery` for schema awareness) handles background ta
 
 * Commit messages should reference issues where applicable ("Closes #123").
 * **Prefix every commit message and PR title with the type of change**: one of `feat`, `fix`, `chore`, `style`, `refactor`, `docs`, `perf`, `test`, or `ci`, then a colon and a space, then the description (e.g. `fix: guard against a null last_login in the student list (#2199)`). This is [Conventional Commits](https://www.conventionalcommits.org/) style ([primer](https://medium.com/@aslandjc7/git-is-a-powerful-version-control-system-but-writing-clear-and-meaningful-commit-messages-is-48eebc428a00)) and keeps the history and PR list skimmable.
-* **Every PR targets `develop`.** A deploy is the maintainer merging `develop` into `master`; there is no separate release or hotfix branch. A fix that shouldn't wait for the next deploy still targets `develop`: say it's urgent in the PR description and to the user, so the maintainer can merge it and deploy sooner.
+* **PRs target `develop`.** A deploy is the maintainer merging `develop` into `master`; there is no separate release or hotfix branch. A fix that shouldn't wait for the next deploy still targets `develop`: say it's urgent in the PR description and to the user, so the maintainer can merge it and deploy sooner. The one exception is the long-running feature branch below.
 * Long-running feature branches: the Project Competencies epic (#1905) integrates on the `competencies` branch, so its sub-issue PRs target `competencies`, not `develop`. That branch is synced with `develop` (automated daily merge) and will be merged back when ready.
 
 ## Working as a Claude Code Session
