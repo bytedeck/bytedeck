@@ -119,7 +119,20 @@ Widgets that set no aria-label are untouched.
                          });
                      },
                      onBlur: function() {
-                         origin.value = $sn.summernote('code');
+{% comment %} Start changes from source at https://github.com/summernote/django-summernote/blob/main/django_summernote/templates/django_summernote/widget_common.html
+
+Changes because: bytedeck/issues/2902, the editing area's content is read from the editing area
+itself, not through summernote('code'). js/summernote-keep-caret.js keeps the focus in the editing
+area while the toolbar is pressed, so pressing the code view button blurs the editing area only
+once the code view, opening, takes the focus: summernote then counts the code view as open, but
+has not built its CodeMirror yet. summernote('code') saves the code view's CodeMirror into its
+textarea first, and the one it holds at that moment is the one from the last time the code view
+was open, whose text is the content as it was then. Saving it puts that old content in the code
+view, and closing the code view puts it back into the editor. The editing area is what lost the
+focus, so its own HTML is the content.
+{% endcomment %}
+                         origin.value = $nEditor.find('.note-editable').html();
+{% comment %} End changes {% endcomment %}
                      },
                      onBlurCodeview: function() {
                          origin.value = $sn.summernote('code');
