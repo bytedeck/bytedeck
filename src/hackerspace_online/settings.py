@@ -1033,7 +1033,6 @@ SUMMERNOTE_CONFIG = {
         os.path.join(STATIC_URL, 'js/summernote-table-headers.js'),
         # KaTeX itself, and js/note-math.js, come from templates/javascript.html on every page
         os.path.join(STATIC_URL, 'js/summernote-math.js'),
-        os.path.join(STATIC_URL, 'js/summernote-classes.js'),
         os.path.join(STATIC_URL, 'js/summernote-keep-caret.js'),
     ),
 
