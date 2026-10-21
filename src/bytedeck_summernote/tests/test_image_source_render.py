@@ -246,7 +246,8 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
 
     def test_image_source__a_failed_upload_leaves_the_image_as_it_was(self):
         """When the upload fails, the writer is told why, the image keeps its picture, and the
-        dialog stays open to try again."""
+        dialog stays open to try again, with the file input emptied so that choosing the same file
+        again counts as a new choice."""
         self.upload_reply = (400, {"message": "That file is too large."})
         self._write(f'<img src="{OLD_URL}">')
 
@@ -257,6 +258,7 @@ class ImageSourceRenderTest(ByteDeckTenantTestCase):
         self.assertEqual(self.alerts, ["That file is too large."])
         self.assertEqual(self._image('src'), OLD_URL)
         self.assertTrue(self._dialog_is_open())
+        self.assertEqual(self.page.locator('.note-image-source-file').input_value(), '')
 
     def test_image_source__undo_brings_the_old_picture_back(self):
         """Changing the picture is one step the editor can undo."""

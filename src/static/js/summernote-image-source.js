@@ -114,14 +114,19 @@
                 ui.onDialogShown(self.$dialog, function () {
                     context.triggerEvent('dialog.shown');
                     $file.on('change', function () {
-                        if (!this.files || !this.files.length) {
+                        var input = this;
+                        if (!input.files || !input.files.length) {
                             return;
                         }
-                        upload(this.files).done(function (urls) {
+                        upload(input.files).done(function (urls) {
                             if (urls.length) {
                                 self.change($img, urls[0]);
                                 ui.hideDialog(self.$dialog);
                             }
+                        }).fail(function () {
+                            // the same file chosen again would otherwise not count as a change,
+                            // so trying it again would do nothing
+                            input.value = '';
                         });
                     });
                     $url.on('input paste propertychange', function () {
