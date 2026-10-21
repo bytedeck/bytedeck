@@ -2,9 +2,10 @@
 
 Submissions and badge assertions used to say which course their XP counts toward by naming the
 course. They now name the registration, and quest_manager 0058 and badges 0020 copy the old
-stamps across. The models no longer have the course field, but its column is still in the
-database until a later release drops it, so these tests stamp it with SQL and run each
-migration's own SQL, the same as migrate_schemas does.
+stamps across. The models no longer have the course field, and quest_manager 0060 and badges
+0022 drop its column (#2888), so each test puts the column back with those migrations' own
+reverse SQL, and its transaction takes the column away again. The tests stamp the column with
+SQL and run each migration's own SQL, the same as migrate_schemas does.
 """
 from importlib import import_module
 
@@ -22,13 +23,17 @@ from siteconfig.models import SiteConfig
 User = get_user_model()
 link_submissions = import_module("quest_manager.migrations.0058_link_submissions_to_registrations")
 link_assertions = import_module("badges.migrations.0020_link_assertions_to_registrations")
+drop_submission_column = import_module("quest_manager.migrations.0060_drop_questsubmission_course_column")
+drop_assertion_column = import_module("badges.migrations.0022_drop_badgeassertion_course_column")
 
 
 class LinkWorkToRegistrationsMigrationTest(ByteDeckTenantTestCase):
     """The data migrations that link submissions and badge assertions to registrations."""
 
     def setUp(self):
-        """A student in two courses this semester."""
+        """The old course columns, and a student in two courses this semester."""
+        for drop in (drop_submission_column, drop_assertion_column):
+            self._run(drop.Migration.operations[0].reverse_sql)
         self.semester = SiteConfig.get().active_semester
         self.student = baker.make(User)
         self.maths = baker.make(Course, title='Maths')
@@ -154,3 +159,18 @@ class LinkWorkToRegistrationsMigrationTest(ByteDeckTenantTestCase):
         with connection.cursor() as cursor:
             cursor.execute("SELECT course_id FROM badges_badgeassertion WHERE id = %s", [stamped.pk])
             self.assertEqual(cursor.fetchone()[0], self.maths.pk)
+
+
+class DropCourseColumnsMigrationTest(ByteDeckTenantTestCase):
+    """quest_manager 0060 and badges 0022 drop the course columns 0059 and 0021 left behind (#2888)."""
+
+    def test_drop_course_columns__leaves_neither_table_a_course_column(self):
+        """A deck migrated to the latest migrations has no course_id column on submissions or on
+        badge assertions."""
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "SELECT table_name FROM information_schema.columns "
+                "WHERE table_schema = current_schema() AND column_name = 'course_id' "
+                "AND table_name IN ('quest_manager_questsubmission', 'badges_badgeassertion')"
+            )
+            self.assertEqual(cursor.fetchall(), [])
