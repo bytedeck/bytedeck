@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from tenant.admin import NonPublicSchemaOnlyAdminAccessMixin
+from .forms import class_days_changed
 from .models import Semester, ExcludedDate, Block, CourseStudent, Course, Rank, Grade, MarkRange
 
 
@@ -13,6 +14,20 @@ class SemesterAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
     inlines = [
         ExcludedDateInline,
     ]
+
+    def save_related(self, request, form, formsets, change):
+        """Save the semester's excluded dates, then have its students' cached marks worked out
+        again when its class days changed, as the semester form does (#2899).
+
+        Args:
+            request (HttpRequest): the admin's request.
+            form (ModelForm): the semester's form, already saved.
+            formsets (list): the inline formsets, here its excluded dates.
+            change (bool): whether an existing semester was edited.
+        """
+        super().save_related(request, form, formsets, change)
+        if class_days_changed(form, formsets):
+            form.instance.refresh_cached_marks_on_commit()
 
 
 class MarkRangeAdmin(NonPublicSchemaOnlyAdminAccessMixin, admin.ModelAdmin):
